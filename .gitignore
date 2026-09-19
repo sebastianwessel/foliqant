@@ -1,4 +1,5 @@
 .DS_Store
+# Local endpoint configuration and any local extensions must never be committed.
 .env
 .env.*
 !.env.example
@@ -25,3 +26,18 @@ coverage/
 *.pt
 *.pth
 *.ckpt
+
+# Local model setup assets and generated data must never enter version control.
+/.foliqant/
+*.jsonl
+*.ndjson
+*.csv
+*.tsv
+*.parquet
+*.arrow
+*.feather
+*.npy
+*.npz
+*.onnx
+*.h5
+*.bin

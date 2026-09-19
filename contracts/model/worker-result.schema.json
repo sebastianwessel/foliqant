@@ -1,0 +1,674 @@
+{
+  "$defs": {
+    "DoctorWorkerResult": {
+      "additionalProperties": false,
+      "properties": {
+        "metalAvailable": {
+          "title": "Metalavailable",
+          "type": "boolean"
+        },
+        "mlxImportAvailable": {
+          "title": "Mlximportavailable",
+          "type": "boolean"
+        },
+        "mlxLmVersion": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mlxlmversion"
+        },
+        "mlxVersion": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mlxversion"
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unavailablereason"
+        }
+      },
+      "required": [
+        "mlxImportAvailable",
+        "metalAvailable",
+        "mlxVersion",
+        "mlxLmVersion",
+        "unavailableReason"
+      ],
+      "title": "DoctorWorkerResult",
+      "type": "object"
+    },
+    "DoctorWorkerSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "operation": {
+          "const": "doctor",
+          "title": "Operation",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/DoctorWorkerResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "ok",
+        "operation",
+        "result"
+      ],
+      "title": "DoctorWorkerSuccess",
+      "type": "object"
+    },
+    "GenerateWorkerResult": {
+      "additionalProperties": false,
+      "properties": {
+        "elapsedSeconds": {
+          "ge": 0,
+          "title": "Elapsedseconds",
+          "type": "number"
+        },
+        "finishReason": {
+          "enum": [
+            "stop",
+            "length"
+          ],
+          "title": "Finishreason",
+          "type": "string"
+        },
+        "generated": {
+          "title": "Generated",
+          "type": "string"
+        },
+        "generatedTokens": {
+          "minimum": 0,
+          "title": "Generatedtokens",
+          "type": "integer"
+        },
+        "meanTokenLogprob": {
+          "anyOf": [
+            {
+              "maximum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Meantokenlogprob"
+        },
+        "meanTokenLogprobUnavailableReason": {
+          "$ref": "#/$defs/Omitted_Literal__no-generated-tokens___",
+          "default": null
+        }
+      },
+      "required": [
+        "generated",
+        "generatedTokens",
+        "meanTokenLogprob",
+        "finishReason",
+        "elapsedSeconds"
+      ],
+      "title": "GenerateWorkerResult",
+      "type": "object"
+    },
+    "GenerateWorkerSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "operation": {
+          "const": "generate",
+          "title": "Operation",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/GenerateWorkerResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "ok",
+        "operation",
+        "result"
+      ],
+      "title": "GenerateWorkerSuccess",
+      "type": "object"
+    },
+    "GgufExportMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "const": "gguf",
+          "title": "Format",
+          "type": "string"
+        },
+        "ggufVersion": {
+          "minimum": 1,
+          "title": "Ggufversion",
+          "type": "integer"
+        },
+        "metadataKeyCount": {
+          "minimum": 1,
+          "title": "Metadatakeycount",
+          "type": "integer"
+        },
+        "quantizationType": {
+          "minLength": 1,
+          "title": "Quantizationtype",
+          "type": "string"
+        },
+        "tensorCount": {
+          "minimum": 1,
+          "title": "Tensorcount",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "format",
+        "ggufVersion",
+        "tensorCount",
+        "metadataKeyCount",
+        "quantizationType"
+      ],
+      "title": "GgufExportMetadata",
+      "type": "object"
+    },
+    "GgufWorkerResult": {
+      "additionalProperties": false,
+      "properties": {
+        "metadata": {
+          "$ref": "#/$defs/GgufExportMetadata"
+        },
+        "outputPath": {
+          "title": "Outputpath",
+          "type": "string"
+        }
+      },
+      "required": [
+        "outputPath",
+        "metadata"
+      ],
+      "title": "GgufWorkerResult",
+      "type": "object"
+    },
+    "GgufWorkerSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "operation": {
+          "const": "gguf",
+          "title": "Operation",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/GgufWorkerResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "ok",
+        "operation",
+        "result"
+      ],
+      "title": "GgufWorkerSuccess",
+      "type": "object"
+    },
+    "MergeWorkerResult": {
+      "additionalProperties": false,
+      "properties": {
+        "dequantized": {
+          "title": "Dequantized",
+          "type": "boolean"
+        },
+        "outputPath": {
+          "title": "Outputpath",
+          "type": "string"
+        },
+        "tensorCount": {
+          "minimum": 1,
+          "title": "Tensorcount",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "outputPath",
+        "tensorCount",
+        "dequantized"
+      ],
+      "title": "MergeWorkerResult",
+      "type": "object"
+    },
+    "MergeWorkerSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "operation": {
+          "const": "merge",
+          "title": "Operation",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/MergeWorkerResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "ok",
+        "operation",
+        "result"
+      ],
+      "title": "MergeWorkerSuccess",
+      "type": "object"
+    },
+    "Omitted_Literal__no-generated-tokens___": {
+      "const": "no-generated-tokens",
+      "type": "string"
+    },
+    "QuantizeWorkerResult": {
+      "additionalProperties": false,
+      "properties": {
+        "fromPrecision": {
+          "minLength": 1,
+          "title": "Fromprecision",
+          "type": "string"
+        },
+        "outputPath": {
+          "title": "Outputpath",
+          "type": "string"
+        },
+        "tensorCount": {
+          "minimum": 1,
+          "title": "Tensorcount",
+          "type": "integer"
+        },
+        "toPrecision": {
+          "minLength": 1,
+          "title": "Toprecision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "outputPath",
+        "tensorCount",
+        "fromPrecision",
+        "toPrecision"
+      ],
+      "title": "QuantizeWorkerResult",
+      "type": "object"
+    },
+    "QuantizeWorkerSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "operation": {
+          "const": "quantize",
+          "title": "Operation",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/QuantizeWorkerResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "ok",
+        "operation",
+        "result"
+      ],
+      "title": "QuantizeWorkerSuccess",
+      "type": "object"
+    },
+    "TrainWorkerResult": {
+      "additionalProperties": false,
+      "properties": {
+        "adapterConfigPath": {
+          "title": "Adapterconfigpath",
+          "type": "string"
+        },
+        "adapterWeightsPath": {
+          "title": "Adapterweightspath",
+          "type": "string"
+        },
+        "elapsedSeconds": {
+          "ge": 0,
+          "title": "Elapsedseconds",
+          "type": "number"
+        },
+        "finalLoss": {
+          "ge": 0,
+          "title": "Finalloss",
+          "type": "number"
+        },
+        "peakMemoryBytes": {
+          "minimum": 0,
+          "title": "Peakmemorybytes",
+          "type": "integer"
+        },
+        "trainableTensorNames": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Trainabletensornames",
+          "type": "array"
+        },
+        "validation": {
+          "items": {
+            "$ref": "#/$defs/ValidationObservation"
+          },
+          "title": "Validation",
+          "type": "array"
+        }
+      },
+      "required": [
+        "finalLoss",
+        "validation",
+        "peakMemoryBytes",
+        "elapsedSeconds",
+        "adapterWeightsPath",
+        "adapterConfigPath",
+        "trainableTensorNames"
+      ],
+      "title": "TrainWorkerResult",
+      "type": "object"
+    },
+    "TrainWorkerSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "operation": {
+          "const": "train",
+          "title": "Operation",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/TrainWorkerResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "ok",
+        "operation",
+        "result"
+      ],
+      "title": "TrainWorkerSuccess",
+      "type": "object"
+    },
+    "ValidationObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "elapsedSeconds": {
+          "ge": 0,
+          "title": "Elapsedseconds",
+          "type": "number"
+        },
+        "iteration": {
+          "minimum": 0,
+          "title": "Iteration",
+          "type": "integer"
+        },
+        "loss": {
+          "ge": 0,
+          "title": "Loss",
+          "type": "number"
+        }
+      },
+      "required": [
+        "iteration",
+        "loss",
+        "elapsedSeconds"
+      ],
+      "title": "ValidationObservation",
+      "type": "object"
+    },
+    "WorkerError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_REQUEST",
+            "SAFE_LOAD_FAILED",
+            "UNSUPPORTED_ARCHITECTURE",
+            "TOKENIZATION_FAILED",
+            "SEQUENCE_TOO_LONG",
+            "TRAINING_FAILED",
+            "GENERATION_FAILED",
+            "NONFINITE_METRIC",
+            "OUTPUT_INVALID",
+            "INTERRUPTED",
+            "INTERNAL"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "WorkerError",
+      "type": "object"
+    },
+    "WorkerFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/WorkerError"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "operation": {
+          "enum": [
+            "doctor",
+            "train",
+            "generate",
+            "quantize",
+            "merge",
+            "gguf"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "operation",
+        "ok",
+        "error"
+      ],
+      "title": "WorkerFailure",
+      "type": "object"
+    },
+    "WorkerResultValue": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorkerSuccessValue"
+        },
+        {
+          "$ref": "#/$defs/WorkerFailure"
+        }
+      ]
+    },
+    "WorkerSuccessValue": {
+      "discriminator": {
+        "mapping": {
+          "doctor": "#/$defs/DoctorWorkerSuccess",
+          "generate": "#/$defs/GenerateWorkerSuccess",
+          "gguf": "#/$defs/GgufWorkerSuccess",
+          "merge": "#/$defs/MergeWorkerSuccess",
+          "quantize": "#/$defs/QuantizeWorkerSuccess",
+          "train": "#/$defs/TrainWorkerSuccess"
+        },
+        "propertyName": "operation"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DoctorWorkerSuccess"
+        },
+        {
+          "$ref": "#/$defs/TrainWorkerSuccess"
+        },
+        {
+          "$ref": "#/$defs/GenerateWorkerSuccess"
+        },
+        {
+          "$ref": "#/$defs/QuantizeWorkerSuccess"
+        },
+        {
+          "$ref": "#/$defs/MergeWorkerSuccess"
+        },
+        {
+          "$ref": "#/$defs/GgufWorkerSuccess"
+        }
+      ]
+    }
+  },
+  "$id": "https://foliqant.local/contracts/model/worker-result.schema.json",
+  "$ref": "#/$defs/WorkerResultValue",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkerResult"
+}

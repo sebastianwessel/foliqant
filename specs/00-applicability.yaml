@@ -1,0 +1,168 @@
+applicability_version: 1
+concerns:
+  - concern_id: contracts
+    status: applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+  - concern_id: representation_reuse
+    status: applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+  - concern_id: data_integrity
+    status: applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+  - concern_id: security_privacy
+    status: applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+  - concern_id: operations
+    status: applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+  - concern_id: dependency_research
+    status: applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+  - concern_id: documentation
+    status: applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+  - concern_id: local_jobs
+    status: applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+  - concern_id: frontend
+    status: not_applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+    rationale: Local foreground model lifecycle CLI; separate workflow service is
+      outside this goal. See 00-vision.md.
+  - concern_id: hosted_auth
+    status: not_applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+    rationale: Local foreground model lifecycle CLI; separate workflow service is
+      outside this goal. See 00-vision.md.
+  - concern_id: webhooks
+    status: not_applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+    rationale: Local foreground model lifecycle CLI; separate workflow service is
+      outside this goal. See 00-vision.md.
+  - concern_id: queue_acknowledgment
+    status: not_applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+    rationale: Local foreground model lifecycle CLI; separate workflow service is
+      outside this goal. See 00-vision.md.
+  - concern_id: cloud_deployment
+    status: not_applicable
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+    rationale: Local foreground model lifecycle CLI; separate workflow service is
+      outside this goal. See 00-vision.md.

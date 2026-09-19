@@ -1,0 +1,9 @@
+# Conventions and generated contracts
+
+Use typed Python functions and closed Pydantic v2 models with extra fields forbidden. Canonical contract model fields use the public camelCase spelling directly, avoiding a second alias surface. Ordinary Python functions, helpers and local variables use snake_case. No duplicate snake_case input keys are accepted at JSON/YAML boundaries. Inputs are strictly validated, including bool versus int. Do not use Any or untyped mappings at owned boundaries. Third-party library internals may be narrowed in the backend adapter; they must not escape into CLI or durable contracts. JSON model output is an explicitly open content leaf and is validated when a schema is configured.
+
+Greenfield contract-first implementation: canonical typed classes and generated schemas precede behavior. Generate `contracts/model/*.schema.json` from `model/src/foliqant_model/contracts/`; generation is one-way, deterministic, sorted and checked for drift. No handwritten duplicate schema files. The representation catalog owns permitted backend/config/log projections. Handwritten remainder: business validation, filesystem/process supervision, adapter calls and metrics calculations. There is no legacy artifact migration in v1; reject unknown versions rather than guessing.
+
+Keep core data/artifact commands free of import-time MLX dependencies. Prefer small cohesive modules, no generic global helpers package. Use docstrings and examples for non-obvious public functions. Source code must pass strict mypy, Ruff and meaningful pytest checks. Do not silence broad type/lint checks to accommodate avoidable weak contracts.
+
+Schema and contract checks must include unknown fields, missing versus null fields, invalid union combinations, bool-as-number rejection, unsafe paths, exact hash/identity validation and cross-field lineage rules. Publication and financial/regulatory fitness are outside local wheel acceptance.

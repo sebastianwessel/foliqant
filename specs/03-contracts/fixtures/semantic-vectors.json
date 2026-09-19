@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "normalization": [
+    {
+      "input": "Café\r\nNotice",
+      "expected": "Café\nNotice"
+    },
+    {
+      "input": "A  B\rC",
+      "expected": "A  B\nC"
+    }
+  ],
+  "jsonEquality": [
+    {
+      "left": "{\"a\":1,\"b\":[true,null]}",
+      "right": "{\"b\":[true,null],\"a\":1.0}",
+      "expected": true
+    },
+    {
+      "left": "true",
+      "right": "1",
+      "expected": false
+    },
+    {
+      "left": "{\"a\":1}",
+      "right": "{\"a\":1,\"a\":1}",
+      "expected": false
+    },
+    {
+      "left": "[1,2]",
+      "right": "[2,1]",
+      "expected": false
+    },
+    {
+      "left": "NaN",
+      "right": "NaN",
+      "expected": false
+    }
+  ],
+  "evidence": [
+    {
+      "messages": [
+        "Please send the report."
+      ],
+      "value": "the report",
+      "expected": true
+    },
+    {
+      "messages": [
+        "Please send the report."
+      ],
+      "value": [
+        "Please",
+        "the report"
+      ],
+      "expected": true
+    },
+    {
+      "messages": [
+        "Please send the report."
+      ],
+      "value": [],
+      "expected": false
+    },
+    {
+      "messages": [
+        "Please send the report."
+      ],
+      "value": "",
+      "expected": false
+    },
+    {
+      "messages": [
+        "Please send the report."
+      ],
+      "value": 17,
+      "expected": false
+    },
+    {
+      "messages": [
+        "Please send the report."
+      ],
+      "value": "the Report",
+      "expected": false
+    }
+  ],
+  "completionMask": [
+    {
+      "promptOffset": 3,
+      "sequenceLength": 6,
+      "targetPositions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "expected": [
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false
+      ]
+    },
+    {
+      "promptOffset": 2,
+      "sequenceLength": 4,
+      "targetPositions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "expected": [
+        false,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  ],
+  "risk": [
+    {
+      "accepted": 0,
+      "errors": 0,
+      "upperBound": null
+    },
+    {
+      "accepted": 1,
+      "errors": 1,
+      "upperBound": 1.0
+    },
+    {
+      "accepted": 100,
+      "errors": 0,
+      "upperBound": 0.029513049607039925,
+      "absoluteTolerance": 1e-12
+    }
+  ]
+}

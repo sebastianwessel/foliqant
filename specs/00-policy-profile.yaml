@@ -1,0 +1,10 @@
+policy_profile_version: 1
+allowed_default_refs:
+  - POL-LOCAL-REVERSIBLE
+profiles:
+  - id: POL-LOCAL-REVERSIBLE
+    source: 'user goal: implement model building/fine-tuning, specs first, autonomous
+      agents, review and cleanup'
+    defaults: private reversible implementation details only; no paid compute/upload/customer-data
+      use inferred
+    status: delegated execution mandate; concrete contracts pending readiness

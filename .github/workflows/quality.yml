@@ -1,0 +1,37 @@
+name: Quality
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Python quality gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked --group dev
+      - run: uv run --no-sync python -m pytest model/tests -q
+      - run: uv run --no-sync mypy model/src
+      - run: uv run --no-sync ruff format --check model/src model/tests scripts
+      - run: uv run --no-sync ruff check model/src model/tests scripts
+      - run: uv run --no-sync python scripts/generate_model_schemas.py --check contracts/model
+      - run: uv run --no-sync python scripts/check_docs.py
+      - run: uv run --no-sync python scripts/check_tracked_data.py --git git
+      - run: git diff --check

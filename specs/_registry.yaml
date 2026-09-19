@@ -1,0 +1,31 @@
+registry_version: 1
+contracts:
+  - id: CONTRACT-MODEL-V1
+    path: 03-contracts/model-contracts.md
+  - id: CONTRACT-SETUP-V1
+    path: 07-local-setup.md
+  - id: CONTRACT-CURATION-V1
+    path: 08-automated-data-curation.md
+capabilities:
+  - id: CAP-ENV
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-DATA
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-MODEL
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-TRAIN
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-EVAL
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-RISK
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-EXPORT
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-VERIFY
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-GUIDES
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-SETUP
+    path: 02-capabilities/capability-inventory.md
+  - id: CAP-CURATE
+    path: 02-capabilities/capability-inventory.md

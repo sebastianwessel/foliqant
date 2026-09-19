@@ -6,4 +6,4 @@ Pin tested model and runtime versions before adding runnable launch or Compose f
 
 No serving profile is implemented; repository setup does not download weights or start a server.
 
-See [local training and model lineage](../docs/local-training-and-model-lineage.md) for Apple Silicon and sequential adaptation guidance.
+See [local training and model lineage](../specs/research/apple-silicon.md) for Apple Silicon and sequential adaptation guidance.

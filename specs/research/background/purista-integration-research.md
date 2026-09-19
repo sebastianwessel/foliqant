@@ -69,7 +69,7 @@ SemIf's browser worker uses a separate constrained scoring path and pinned quant
 
 ## Fit with the current architecture
 
-The existing ownership boundary is suitable: Harness owns agent/workflow execution; PURISTA owns addressed calls, identity propagation, resources, queues, events, and business guards. See the [integration specification](/Users/sebastianwessel/projekte/@purista/specs/20-agents/88-harness-first-service-integration.md:14).
+The existing ownership boundary is suitable: Harness owns agent/workflow execution; PURISTA owns addressed calls, identity propagation, resources, queues, events, and business guards. See the integration specification (historical source: `/Users/sebastianwessel/projekte/@purista/specs/20-agents/88-harness-first-service-integration.md:14`).
 
 | Need | Existing extension point | Consequence |
 |---|---|---|
@@ -80,18 +80,18 @@ The existing ownership boundary is suitable: Harness owns agent/workflow executi
 | Route background work | Existing queues, commands, events, subscriptions | No second pipeline runtime |
 | Preserve completed decisions on replay | Durable steps / managed tool checkpoints | Stable call IDs and separately idempotent side effects remain necessary |
 
-Verified seams: [resource declaration](/Users/sebastianwessel/projekte/@purista/purista/packages/core/src/ServiceBuilder/ServiceBuilder.impl.ts:505), [host tool builder](/Users/sebastianwessel/projekte/@purista/purista/packages/core/src/ServiceBuilder/ServiceBuilder.impl.ts:369), [workflow context](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/definitions/types.ts:689), [guardrail action definition](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/action.ts:64).
+Verified seams: resource declaration (historical source: `/Users/sebastianwessel/projekte/@purista/purista/packages/core/src/ServiceBuilder/ServiceBuilder.impl.ts:505`), host tool builder (historical source: `/Users/sebastianwessel/projekte/@purista/purista/packages/core/src/ServiceBuilder/ServiceBuilder.impl.ts:369`), workflow context (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/definitions/types.ts:689`), guardrail action definition (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/action.ts:64`).
 
 There are two important DX boundaries:
 
 1. A portable workflow does **not** have arbitrary `context.resources`. Mounted workflows reach a service resource through a declared host tool. A standalone application composes a native tool with its application-owned client.
 2. A guardrail callback does **not** receive the PURISTA command context, tenant/principal, or arbitrary resources. Its context contains protected values, correlation, cancellation/deadline, and explicitly selected object-model handles. An action factory can capture an application-supplied detector; the existing sensitive-data addon demonstrates this composition pattern. Client lifecycle and per-instance isolation then remain application responsibilities. Do not invent `ai.classifiers` or an implicit service resource binding and present it as shipped API.
 
-Evidence: [guardrail context](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/rails.ts:83), [injected detector interface](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/sensitive-data.ts:51), [action factory](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/sensitive-data.ts:140). If reusable static definitions later require a typed runtime detector binding, treat that as a separate, explicit design decision after the experiment.
+Evidence: guardrail context (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/rails.ts:83`), injected detector interface (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/sensitive-data.ts:51`), action factory (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/sensitive-data.ts:140`). If reusable static definitions later require a typed runtime detector binding, treat that as a separate, explicit design decision after the experiment.
 
 ### Do not force this into ModelProvider
 
-The current model port includes structured output, embeddings, and reranking, but no classification/logit operation. A bounded-choice backend cannot promise arbitrary JSON-schema generation. Wrapping either project as a general `object` provider would misrepresent its capabilities. [Current capabilities](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/ports/model-provider.ts:10).
+The current model port includes structured output, embeddings, and reranking, but no classification/logit operation. A bounded-choice backend cannot promise arbitrary JSON-schema generation. Wrapping either project as a general `object` provider would misrepresent its capabilities. Current capabilities (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/ports/model-provider.ts:10`).
 
 Use an ordinary resource/tool first. Consider a dedicated Harness classification capability only if multiple production adapters and consumers demonstrate a shared contract that benefits from automatic requirements inference, model-call accounting, and runtime binding. Such a change would require specs, contract/type tests, provider adapters, mounting/export integration, examples, CLI review, handbook, and skills—not just another union member.
 
@@ -118,7 +118,7 @@ authenticated request → business guard → classify a support message
   dependency failure → explicit fallback or deferred retry, never a fabricated category
 ```
 
-This builds on the [current classification agent](/Users/sebastianwessel/projekte/@purista/purista/examples/banking/chapters/classification-agent/src/service/support/v1/harness/agent/classifySupportMessage/classifySupportMessageAgent.ts:9). Preserve the existing agent as the baseline and fallback. Classify department first; urgency and other tasks can be added only if their labels and evaluation are independently useful.
+This builds on the current classification agent (historical source: `/Users/sebastianwessel/projekte/@purista/purista/examples/banking/chapters/classification-agent/src/service/support/v1/harness/agent/classifySupportMessage/classifySupportMessageAgent.ts:9`). Preserve the existing agent as the baseline and fallback. Classify department first; urgency and other tasks can be added only if their labels and evaluation are independently useful.
 
 Application code maps a validated enum to an allowlisted command/queue. Never let returned text choose a service address, tenant, credential, tool, or model alias. Addressed service calls continue through EventBridge; durable work uses QueueBridge. Bind alternative agent targets explicitly rather than mutating a model alias inside a guardrail.
 
@@ -136,7 +136,7 @@ authorized document → format/size validation → quality/category check
 authorized retrieval → relevance/content checks → answer agent → output rail
 ```
 
-The [existing ingestion workflow](/Users/sebastianwessel/projekte/@purista/purista/examples/banking/chapters/retrieval-ingestion/src/service/knowledge/v1/harness/workflow/ingestKnowledge/ingestKnowledgeWorkflow.ts:13) already owns embedding and storage orchestration. Add a classifier tool around that flow; do not replace Harness embedding support. Retrieval rails already have an explicit [chunk-filtering entry point](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/rails.ts:259).
+The existing ingestion workflow (historical source: `/Users/sebastianwessel/projekte/@purista/purista/examples/banking/chapters/retrieval-ingestion/src/service/knowledge/v1/harness/workflow/ingestKnowledge/ingestKnowledgeWorkflow.ts:13`) already owns embedding and storage orchestration. Add a classifier tool around that flow; do not replace Harness embedding support. Retrieval rails already have an explicit chunk-filtering entry point (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness-guardrails/src/rails.ts:259`).
 
 Potentially useful questions include “is this a support policy?”, “is this chunk relevant to the question?”, and “does the supplied passage support this proposed claim?”. Each is a separate task with its own false-accept/false-reject cost. Compare retrieval relevance against a real reranker; do not assume a generic classifier is better. Preserve authorized source IDs for citations. Never use a relevance score to establish document ownership or permission.
 
@@ -148,9 +148,9 @@ An addon could expose an application-composed factory that adapts classifier res
 
 Keep the classifier and enforcement policy separate: the backend estimates a class; deterministic application policy decides what that estimate means. Business authorization remains in PURISTA guards; tool approval remains in Harness governance. Guardrail uncertainty is not a new approval protocol. If human review is required, route through the existing interrupted/approval or workflow wait mechanisms at the appropriate orchestration boundary.
 
-**Streaming constraint:** use the existing output rail/`beforeOutput` boundary when inspected answer content must not escape. It buffers output before release. `afterModel` alone or a Framework after-guard cannot retract streamed text. Accept the latency trade-off; do not advertise both full-answer protection and immediate uninspected token delivery. [Buffering and release](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/agents/standard-loop.ts:230), [unbuffered deltas](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/agents/standard-loop.ts:391).
+**Streaming constraint:** use the existing output rail/`beforeOutput` boundary when inspected answer content must not escape. It buffers output before release. `afterModel` alone or a Framework after-guard cannot retract streamed text. Accept the latency trade-off; do not advertise both full-answer protection and immediate uninspected token delivery. Buffering and release (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/agents/standard-loop.ts:230`), unbuffered deltas (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/agents/standard-loop.ts:391`).
 
-Direct workflow tool calls do not automatically inherit an agent's guardrails or approval policy. Explicitly apply the required checks in those workflows. This is an existing ownership boundary, not an integration defect. [Execution boundaries](/Users/sebastianwessel/projekte/@purista/ai-harness/specs/01-architecture.md:126).
+Direct workflow tool calls do not automatically inherit an agent's guardrails or approval policy. Explicitly apply the required checks in those workflows. This is an existing ownership boundary, not an integration defect. Execution boundaries (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/specs/01-architecture.md:126`).
 
 ### 4. Asynchronous operational quality review
 
@@ -213,7 +213,7 @@ Bind this as a PURISTA service resource and expose it through a host tool when a
 | Effects | Reauthorize current business state and use idempotent downstream operations; checkpoints do not create exactly-once effects |
 | Client outcomes | Known abstention/review and controlled dependency failures; no new streaming protocol or fake generated explanation |
 
-The replay requirement follows the current [step implementation](/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/runtime/steps.ts:287): a committed result is reused, but the callback executes before its checkpoint is committed. A crash in between can repeat external work.
+The replay requirement follows the current step implementation (historical source: `/Users/sebastianwessel/projekte/@purista/ai-harness/packages/harness/src/runtime/steps.ts:287`): a committed result is reused, but the callback executes before its checkpoint is committed. A crash in between can repeat external work.
 
 For required security checks, failure must not silently allow the protected action. For advisory routing, an explicit fallback can be appropriate. These are different policies and must not share an accidental default. Laya's score types and SemIf's conditional scores should not be compared against one universal threshold.
 

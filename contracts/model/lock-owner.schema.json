@@ -1,0 +1,30 @@
+{
+  "$id": "https://foliqant.local/contracts/model/lock-owner.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "pid": {
+      "minimum": 1,
+      "title": "Pid",
+      "type": "integer"
+    },
+    "runId": {
+      "maxLength": 32,
+      "minLength": 32,
+      "pattern": "^[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "title": "Runid",
+      "type": "string"
+    },
+    "workspacePath": {
+      "title": "Workspacepath",
+      "type": "string"
+    }
+  },
+  "required": [
+    "runId",
+    "pid",
+    "workspacePath"
+  ],
+  "title": "LockOwner",
+  "type": "object"
+}

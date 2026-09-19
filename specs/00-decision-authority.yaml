@@ -1,0 +1,23 @@
+decision_authority_version: 1
+default_allowed_classes:
+  - D0
+  - D1
+decisions:
+  - decision_id: DEC-MODEL-LIFECYCLE
+    class: D2
+    authority: project-owner implementation mandate; architecture author proposes,
+      independent reviewer validates
+    scope_refs:
+      - CAP-ENV
+      - CAP-DATA
+      - CAP-MODEL
+      - CAP-TRAIN
+      - CAP-EVAL
+      - CAP-RISK
+      - CAP-EXPORT
+      - CAP-VERIFY
+      - CAP-GUIDES
+    source_refs:
+      - 00-vision.md
+      - 01-model-lifecycle.md
+    status: proposed

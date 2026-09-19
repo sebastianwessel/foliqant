@@ -1,0 +1,21 @@
+status: draft
+language: en
+human_approval:
+  status: implementation mandate received; no assertion of reviewed contract approval
+open_decisions: []
+evidence:
+  lifecycle_review: ../plans/reviews/model-spec-review.md
+  dependency_qualification: ../plans/reviews/dependency-qualification.md
+  setup_execution: ../plans/reviews/setup-execution.md
+  implementation_verification: ../plans/reviews/final-verification.md
+scope_refs:
+  - CAP-SETUP
+  - CAP-ENV
+  - CAP-DATA
+  - CAP-MODEL
+  - CAP-TRAIN
+  - CAP-EVAL
+  - CAP-RISK
+  - CAP-EXPORT
+  - CAP-VERIFY
+  - CAP-GUIDES

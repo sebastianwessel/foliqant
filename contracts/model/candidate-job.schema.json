@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "Split": {
+      "enum": [
+        "train",
+        "validation",
+        "calibration",
+        "test"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "https://foliqant.local/contracts/model/candidate-job.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable work item whose family and destination were fixed before inference.",
+  "properties": {
+    "familyId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Familyid",
+      "type": "string"
+    },
+    "jobId": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Jobid",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "en",
+        "de"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "operation": {
+      "enum": [
+        "paraphrase",
+        "source-question",
+        "irrelevant-context",
+        "withdrawn-request",
+        "multiple-intents",
+        "missing-evidence",
+        "conflicting-information",
+        "changed-deadline"
+      ],
+      "title": "Operation",
+      "type": "string"
+    },
+    "parentRecordId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Parentrecordid",
+      "type": "string"
+    },
+    "purpose": {
+      "enum": [
+        "training-augmentation",
+        "synthetic-regression"
+      ],
+      "title": "Purpose",
+      "type": "string"
+    },
+    "split": {
+      "$ref": "#/$defs/Split"
+    }
+  },
+  "required": [
+    "jobId",
+    "parentRecordId",
+    "familyId",
+    "split",
+    "language",
+    "purpose",
+    "operation"
+  ],
+  "title": "CandidateJob",
+  "type": "object"
+}

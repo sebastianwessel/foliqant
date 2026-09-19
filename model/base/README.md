@@ -1,9 +1,14 @@
 # Shared model development
 
-Build the reusable Foliqant model by adapting a selected upstream open-weight checkpoint. This is not pretraining a foundation model from scratch.
+Train a reusable adaptation from an upstream open-weight checkpoint. This is not pretraining a foundation model from scratch. Use the `train` command with a verified upstream or shared model and data whose sources permit shared training.
 
-Future contents: source/model manifests, rights-reviewed dataset recipes, shared adaptation configuration, and reproducible training entry points. Record exact parent revision, tokenizer/chat template, training data versions, and evaluation evidence. Keep weights and raw datasets outside Git.
+Read the [step-by-step guide](../../docs/guides/train-and-customize.md). The implementation
+is in `model/src/foliqant_model`; keep downloaded data, weights, adapters,
+predictions and generated artifacts outside Git.
 
-No model is selected and no training recipe is implemented. See [research](../../docs/research-and-concept.md). Customer-specific adapters belong in `model/customization/`.
+To build the bounded diagnostic source corpus without hand-editing records, use
+[automated curation](../../docs/guides/automated-curation.md). Curation
+preparation, optional local-model generation and training are separate commands.
 
-See [local training and model lineage](../../docs/local-training-and-model-lineage.md) for Apple Silicon and sequential adaptation guidance.
+The setup exercise uses a small diagnostic checkpoint. No production financial
+model or quality guarantee is implied by a successful toolchain run.

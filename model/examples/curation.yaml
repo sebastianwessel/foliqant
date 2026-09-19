@@ -1,0 +1,33 @@
+schemaVersion: 1
+name: financial-decisions-en-v1
+sources:
+  - id: banking77
+    maxRecords: 1000
+  - id: typed-decisions
+    maxRecords: 1000
+  - id: wanli
+    maxRecords: 1000
+  - id: multidogo-finance
+    maxRecords: 1000
+  - id: tatqa
+    maxRecords: 1000
+endpoint:
+  baseUrl: http://127.0.0.1:1234/v1
+  timeoutSeconds: 120
+  maxTokens: 2048
+  temperature: 0.3
+  maxResponseBytes: 8388608
+generation:
+  maxCandidates: 100
+  maxAttempts: 2
+  languages:
+    - en
+  scenarios:
+    - withdrawn-request
+    - multiple-intents
+    - missing-evidence
+    - conflicting-information
+    - changed-deadline
+  scenarioFamilies: 20
+  maxInputCharacters: 16000
+seed: 42

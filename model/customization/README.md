@@ -1,9 +1,10 @@
-# Customer and domain customization
+# Customer customization
 
-Adapt a released Foliqant model for a specific organization or domain only when workflow configuration, prompts, catalogs, and retrieval do not meet measured requirements.
+Create a separate customer adapter from a shared merged model with `customize`. Keep each customer dataset and its derived artifacts separate. An adapter records its exact parent, customer identifier and source permissions; customer ancestry cannot enter shared training.
 
-Future recipes must identify the parent release, adaptation method, authorized dataset manifest, shared capability regression results, and customer-specific validation/calibration profile. Do not mix customer datasets or publish customer weights through the shared model pipeline by default.
+Read the [step-by-step guide](../../docs/guides/train-and-customize.md). The implementation
+is in `model/src/foliqant_model`; keep downloaded data, weights, adapters,
+predictions and generated artifacts outside Git.
 
-Deploy a supported merged/exported artifact or a serving-runtime-supported adapter after validation. Dynamic tenant-specific adapter loading is not assumed. No customization pipeline exists yet.
-
-See [local training and model lineage](../../docs/local-training-and-model-lineage.md) for Apple Silicon and sequential adaptation guidance.
+The setup exercise uses a small diagnostic checkpoint. No production financial
+model or quality guarantee is implied by a successful toolchain run.

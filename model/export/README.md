@@ -1,9 +1,10 @@
 # Serving artifact export
 
-Future tooling will merge adapters where appropriate, export compatible checkpoints, convert/quantize for supported runtimes, and run parity/regression checks. Do not assume every architecture supports every exporter or quantization.
+Use `quantize` for supported 4/8-bit MLX models, `merge` to fuse an adapter with its exact parent, and `export` for checkpoint or supported F16 GGUF output. Independent runtime loading is separate release evidence; export does not claim universal compatibility.
 
-An artifact manifest should identify lineage, weights, tokenizer/template, schema/prompt profile, quantization, tested runtime versions, evaluation, and calibration provenance. Store large files outside Git. Export code must not become a required custom inference engine.
+Read the [step-by-step guide](../../docs/guides/export-and-run.md). The implementation
+is in `model/src/foliqant_model`; keep downloaded data, weights, adapters,
+predictions and generated artifacts outside Git.
 
-No export command is implemented yet.
-
-See [local training and model lineage](../../docs/local-training-and-model-lineage.md) for Apple Silicon and sequential adaptation guidance.
+The setup exercise uses a small diagnostic checkpoint. No production financial
+model or quality guarantee is implied by a successful toolchain run.

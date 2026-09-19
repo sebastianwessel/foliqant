@@ -1,39 +1,77 @@
 # Implementation conventions
 
-Version 0.1, 2026-09-19. Applies to the repository foundation. Architecture and execution semantics remain in [docs/architecture.md](../docs/architecture.md); this guide does not approve additional scope.
+The local model lifecycle is implemented in `model/src/foliqant_model`. Its
+canonical requirements are in `specs/`; end-user guides are in `docs/`. The
+configurable workflow service remains a separate proposal. Do not implement it
+or add PURISTA, Harness or Voyage dependencies as part of model-tooling work.
 
-## Modules and dependencies
+## Code and contracts
 
-Use `model/` for the Python model lifecycle, `inference/` for standard-server deployment profiles, and `service/` for the independent workflow application. Keep a single service package initially; do not turn every interface into a published package. Core depends on ports, adapters implement ports, and application startup assembles them. Never import adapters from core.
+Use CPython 3.12, the committed uv lock and strict mypy. Public functions are typed
+and have concise docstrings. Keep MLX imports inside the isolated backend so
+offline commands work without GPU libraries. Do not change global Python or
+operating-system memory settings.
 
-Each file should have one clear responsibility. Prefer modules under approximately 300 lines as a review heuristic, not a reason to fragment cohesive code. Avoid generic `utils` collections. JSON contracts and YAML keys use consistent camelCase; folders and workflow identifiers use kebab-case. Public identifiers and filenames must have stable documented meanings.
+Pydantic classes in `contracts/` within the Python package are canonical. The
+root `contracts/model/` directory contains generated JSON Schema, not a second
+handwritten source. Regenerate reviewed contract changes with
+`scripts/generate_model_schemas.py --maintenance-output contracts/model`, then
+run the drift check. External JSON/YAML must pass strict runtime validation.
 
-## Recommended language conventions
+Use the existing redacted `ModelError` categories. CLI success is one JSON object
+on stdout; failure is a final JSON error on stderr with no success output. Never
+echo raw customer records, provider secrets or arbitrary backend exception text.
 
-If TypeScript is selected: use ESM, strict checking, `noUncheckedIndexedAccess`, and `exactOptionalPropertyTypes`; use `unknown` at untrusted boundaries and validate before narrowing. Avoid `any`, unchecked casts, and cross-layer imports. Document exported types/functions with IDE-friendly TSDoc and small examples for non-obvious behavior.
+## Model execution and provenance
 
-For Python model tooling: use typed functions, explicit config models, structured errors, and independent dependency locks. Choose compatible pinned versions after testing the selected model/training stack. Avoid implicit downloads or training as import-time effects.
+Parent orchestration verifies inputs and outputs. The isolated worker performs
+actual pinned MLX operations with typed request/result contracts, a private log,
+an enforced deadline and process-group cancellation. Child success alone is not
+enough to publish an artifact. Independently inspect its actual output files.
 
-## Contracts and examples
+Use `ArtifactTransaction` for immutable outputs. Preserve recursive parent
+identity, all source-rights fields, precision history and leakage indexes. Never
+add overwrite flags, automatically delete stale locks or silently repair hashes.
+Only setup, fetch and curate download. Curation generation may call the
+configured loopback model endpoint; training and evaluation stay local and
+offline.
 
-Keep language-neutral schemas in `contracts/`. Generate or infer language types from the selected canonical schemas; do not hand-maintain divergent TypeScript and Python copies. External YAML remains runtime-validated even when internal code is typed. Preserve a clear subset if a provider cannot accept the full JSON Schema vocabulary.
+Research/noncommercial data may be used when its terms permit the activity.
+Commercial restrictions remain recorded through ancestry. Private repository
+visibility is not a permission grant. Never accept gated agreements or upload
+data without authorization.
 
-Maintain a public-surface inventory in `service/README.md` as implementation starts. For each endpoint, adapter, or step handler, document validation, side effects, timeout/retry behavior, identity propagation, and durability. Do not introduce arbitrary expression/module-loading escape hatches instead of defining a reviewed extension contract.
+Keep data, weights, adapters, checkpoints, predictions and run logs outside Git.
+Tests construct minimal temporary inputs in code. Do not commit dataset fixtures.
+The tiny setup model tests the toolchain; it is not a financial quality benchmark.
 
-Keep workflow examples focused, self-contained, and versioned, with local prompt references and synthetic input. Distinguish proposed examples from runnable examples. Run contract generation and drift checks when such tooling exists; until then, never claim generated artifacts were checked automatically.
+## Verification
 
-## Errors, security, and persistence
+```sh
+.venv/bin/python -m pytest model/tests
+.venv/bin/mypy model/src
+.venv/bin/ruff check model/src model/tests scripts
+.venv/bin/python scripts/generate_model_schemas.py --check contracts/model
+.venv/bin/python scripts/check_docs.py
+.venv/bin/python scripts/check_tracked_data.py
+git diff --check
+```
 
-Use typed failure categories at layer boundaries and preserve causal errors internally. Business review is an outcome, not a transport exception. Redact secrets and customer content in logs. Treat model outputs and retrieved documents as untrusted. Changes to retry, persistence, approval, or resume behavior require an explicit architecture/contract update.
+Default pytest excludes native integration tests. Run these explicitly in a
+permitted native Metal environment with an approved local model:
 
-Persist workflow/model/schema revisions with runs. Do not silently change the meaning of stored manifests. Do not describe best-effort execution as durable or exactly-once.
+```sh
+FOLIQANT_TEST_SETUP=/absolute/path/to/completed/setup \
+FOLIQANT_TEST_MODEL=/absolute/path/to/completed/setup/downloads/model \
+  .venv/bin/python -m pytest model/tests -m integration
+```
 
-## Testing and verification
+Real lifecycle acceptance must additionally cover the published CLI, shared and
+customer lineage, held-out evaluation, policy selection/audit, merged exports,
+and independent inference. Unit doubles are appropriate for failure boundaries;
+they never replace real acceptance or produce claimed model results. Keep
+observed evidence in `plans/reviews/`, not in end-user setup instructions.
 
-Test observable behavior using fake model, store, clock, and delivery adapters where those ports exist. Prioritize invalid configuration, tenant isolation, invalid/unsupported evidence, timeouts, cancellation, duplicate messages, and recovery behavior. Do not create tests that merely mirror low-impact scaffolding or prose.
-
-Current checks: `git diff --check`; `python3 -m json.tool <schema-or-fixture.json>`. No runtime or integration suite exists yet. Add the real typecheck, lint, unit, and integration commands with executable code and its lockfiles.
-
-## Convention drift
-
-There is no existing implementation to reconcile. Language choice, workflow grammar, storage, and adapter packaging are proposals; update this guide after those decisions rather than pretending they are settled.
+Update contracts, schemas, runnable recipes, guides and skills together. Do not
+document a command until its implementation exists. No compatibility or model
+quality claim is valid without corresponding recorded execution evidence.

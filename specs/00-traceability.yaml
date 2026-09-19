@@ -1,0 +1,513 @@
+traceability_version: 1
+requirements:
+  - requirement_id: REQ-SETUP
+    capability_ids:
+      - CAP-SETUP
+    path_ids:
+      - PATH-SETUP-SUCCESS
+      - PATH-SETUP-FAILURE
+    acceptance_ids:
+      - ACCEPT-SETUP
+  - requirement_id: REQ-ENV
+    capability_ids:
+      - CAP-ENV
+    path_ids:
+      - PATH-ENV-SUCCESS
+      - PATH-ENV-FAILURE
+    acceptance_ids:
+      - ACCEPT-ENV
+  - requirement_id: REQ-DATA
+    capability_ids:
+      - CAP-DATA
+    path_ids:
+      - PATH-DATA-SUCCESS
+      - PATH-DATA-FAILURE
+    acceptance_ids:
+      - ACCEPT-DATA
+  - requirement_id: REQ-MODEL
+    capability_ids:
+      - CAP-MODEL
+    path_ids:
+      - PATH-MODEL-SUCCESS
+      - PATH-MODEL-FAILURE
+    acceptance_ids:
+      - ACCEPT-MODEL
+  - requirement_id: REQ-TRAIN
+    capability_ids:
+      - CAP-TRAIN
+    path_ids:
+      - PATH-TRAIN-SUCCESS
+      - PATH-TRAIN-FAILURE
+    acceptance_ids:
+      - ACCEPT-TRAIN
+  - requirement_id: REQ-EVAL
+    capability_ids:
+      - CAP-EVAL
+    path_ids:
+      - PATH-EVAL-SUCCESS
+      - PATH-EVAL-FAILURE
+    acceptance_ids:
+      - ACCEPT-EVAL
+  - requirement_id: REQ-RISK
+    capability_ids:
+      - CAP-RISK
+    path_ids:
+      - PATH-RISK-SUCCESS
+      - PATH-RISK-FAILURE
+    acceptance_ids:
+      - ACCEPT-RISK
+  - requirement_id: REQ-EXPORT
+    capability_ids:
+      - CAP-EXPORT
+    path_ids:
+      - PATH-EXPORT-SUCCESS
+      - PATH-EXPORT-FAILURE
+    acceptance_ids:
+      - ACCEPT-EXPORT
+  - requirement_id: REQ-VERIFY
+    capability_ids:
+      - CAP-VERIFY
+    path_ids:
+      - PATH-VERIFY-SUCCESS
+      - PATH-VERIFY-FAILURE
+    acceptance_ids:
+      - ACCEPT-VERIFY
+  - requirement_id: REQ-GUIDES
+    capability_ids:
+      - CAP-GUIDES
+    path_ids:
+      - PATH-GUIDES-SUCCESS
+      - PATH-GUIDES-FAILURE
+    acceptance_ids:
+      - ACCEPT-GUIDES
+  - requirement_id: REQ-CURATE
+    capability_ids:
+      - CAP-CURATE
+    path_ids: &id001
+      - PATH-CURATE-SUCCESS
+      - PATH-CURATE-FAILURE
+    acceptance_ids:
+      - ACCEPT-CURATE
+capabilities:
+  - capability_id: CAP-SETUP
+    requirement_ids:
+      - REQ-SETUP
+    path_ids:
+      - PATH-SETUP-SUCCESS
+      - PATH-SETUP-FAILURE
+  - capability_id: CAP-ENV
+    requirement_ids:
+      - REQ-ENV
+    path_ids:
+      - PATH-ENV-SUCCESS
+      - PATH-ENV-FAILURE
+  - capability_id: CAP-DATA
+    requirement_ids:
+      - REQ-DATA
+    path_ids:
+      - PATH-DATA-SUCCESS
+      - PATH-DATA-FAILURE
+  - capability_id: CAP-MODEL
+    requirement_ids:
+      - REQ-MODEL
+    path_ids:
+      - PATH-MODEL-SUCCESS
+      - PATH-MODEL-FAILURE
+  - capability_id: CAP-TRAIN
+    requirement_ids:
+      - REQ-TRAIN
+    path_ids:
+      - PATH-TRAIN-SUCCESS
+      - PATH-TRAIN-FAILURE
+  - capability_id: CAP-EVAL
+    requirement_ids:
+      - REQ-EVAL
+    path_ids:
+      - PATH-EVAL-SUCCESS
+      - PATH-EVAL-FAILURE
+  - capability_id: CAP-RISK
+    requirement_ids:
+      - REQ-RISK
+    path_ids:
+      - PATH-RISK-SUCCESS
+      - PATH-RISK-FAILURE
+  - capability_id: CAP-EXPORT
+    requirement_ids:
+      - REQ-EXPORT
+    path_ids:
+      - PATH-EXPORT-SUCCESS
+      - PATH-EXPORT-FAILURE
+  - capability_id: CAP-VERIFY
+    requirement_ids:
+      - REQ-VERIFY
+    path_ids:
+      - PATH-VERIFY-SUCCESS
+      - PATH-VERIFY-FAILURE
+  - capability_id: CAP-GUIDES
+    requirement_ids:
+      - REQ-GUIDES
+    path_ids:
+      - PATH-GUIDES-SUCCESS
+      - PATH-GUIDES-FAILURE
+  - capability_id: CAP-CURATE
+    requirement_ids:
+      - REQ-CURATE
+    path_ids: *id001
+paths:
+  - path_id: PATH-SETUP-FAILURE
+    capability_ids:
+      - CAP-SETUP
+    requirement_ids:
+      - REQ-SETUP
+    kind: failure
+    contract_refs:
+      - CONTRACT-SETUP-V1
+    acceptance_ids:
+      - ACCEPT-SETUP
+  - path_id: PATH-SETUP-SUCCESS
+    capability_ids:
+      - CAP-SETUP
+    requirement_ids:
+      - REQ-SETUP
+    kind: success
+    contract_refs:
+      - CONTRACT-SETUP-V1
+    acceptance_ids:
+      - ACCEPT-SETUP
+  - path_id: PATH-ENV-SUCCESS
+    capability_ids:
+      - CAP-ENV
+    requirement_ids:
+      - REQ-ENV
+    kind: success
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-ENV
+  - path_id: PATH-ENV-FAILURE
+    capability_ids:
+      - CAP-ENV
+    requirement_ids:
+      - REQ-ENV
+    kind: failure
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-ENV
+  - path_id: PATH-DATA-SUCCESS
+    capability_ids:
+      - CAP-DATA
+    requirement_ids:
+      - REQ-DATA
+    kind: success
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-DATA
+  - path_id: PATH-DATA-FAILURE
+    capability_ids:
+      - CAP-DATA
+    requirement_ids:
+      - REQ-DATA
+    kind: failure
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-DATA
+  - path_id: PATH-MODEL-SUCCESS
+    capability_ids:
+      - CAP-MODEL
+    requirement_ids:
+      - REQ-MODEL
+    kind: success
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-MODEL
+  - path_id: PATH-MODEL-FAILURE
+    capability_ids:
+      - CAP-MODEL
+    requirement_ids:
+      - REQ-MODEL
+    kind: failure
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-MODEL
+  - path_id: PATH-TRAIN-SUCCESS
+    capability_ids:
+      - CAP-TRAIN
+    requirement_ids:
+      - REQ-TRAIN
+    kind: success
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-TRAIN
+  - path_id: PATH-TRAIN-FAILURE
+    capability_ids:
+      - CAP-TRAIN
+    requirement_ids:
+      - REQ-TRAIN
+    kind: failure
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-TRAIN
+  - path_id: PATH-EVAL-SUCCESS
+    capability_ids:
+      - CAP-EVAL
+    requirement_ids:
+      - REQ-EVAL
+    kind: success
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-EVAL
+  - path_id: PATH-EVAL-FAILURE
+    capability_ids:
+      - CAP-EVAL
+    requirement_ids:
+      - REQ-EVAL
+    kind: failure
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-EVAL
+  - path_id: PATH-RISK-SUCCESS
+    capability_ids:
+      - CAP-RISK
+    requirement_ids:
+      - REQ-RISK
+    kind: success
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-RISK
+  - path_id: PATH-RISK-FAILURE
+    capability_ids:
+      - CAP-RISK
+    requirement_ids:
+      - REQ-RISK
+    kind: failure
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-RISK
+  - path_id: PATH-EXPORT-SUCCESS
+    capability_ids:
+      - CAP-EXPORT
+    requirement_ids:
+      - REQ-EXPORT
+    kind: success
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-EXPORT
+  - path_id: PATH-EXPORT-FAILURE
+    capability_ids:
+      - CAP-EXPORT
+    requirement_ids:
+      - REQ-EXPORT
+    kind: failure
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-EXPORT
+  - path_id: PATH-VERIFY-SUCCESS
+    capability_ids:
+      - CAP-VERIFY
+    requirement_ids:
+      - REQ-VERIFY
+    kind: success
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-VERIFY
+  - path_id: PATH-VERIFY-FAILURE
+    capability_ids:
+      - CAP-VERIFY
+    requirement_ids:
+      - REQ-VERIFY
+    kind: failure
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-VERIFY
+  - path_id: PATH-GUIDES-SUCCESS
+    capability_ids:
+      - CAP-GUIDES
+    requirement_ids:
+      - REQ-GUIDES
+    kind: success
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-GUIDES
+  - path_id: PATH-GUIDES-FAILURE
+    capability_ids:
+      - CAP-GUIDES
+    requirement_ids:
+      - REQ-GUIDES
+    kind: failure
+    contract_refs:
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-GUIDES
+  - path_id: PATH-CURATE-SUCCESS
+    capability_ids:
+      - CAP-CURATE
+    requirement_ids:
+      - REQ-CURATE
+    kind: success
+    contract_refs:
+      - CONTRACT-CURATION-V1
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-CURATE
+  - path_id: PATH-CURATE-FAILURE
+    capability_ids:
+      - CAP-CURATE
+    requirement_ids:
+      - REQ-CURATE
+    kind: failure
+    contract_refs:
+      - CONTRACT-CURATION-V1
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-CURATE
+acceptance:
+  - acceptance_id: ACCEPT-SETUP
+    requirement_ids:
+      - REQ-SETUP
+    path_ids:
+      - PATH-SETUP-SUCCESS
+      - PATH-SETUP-FAILURE
+    verification_refs:
+      - 07-local-setup.md
+      - ../plans/reviews/setup-execution.md
+      - ../plans/reviews/final-verification.md
+      - ../model/tests/test_setup.py
+      - ../model/tests/test_acquisition.py
+      - ../model/tests/test_bootstrap_data.py
+  - acceptance_id: ACCEPT-ENV
+    requirement_ids:
+      - REQ-ENV
+    path_ids:
+      - PATH-ENV-SUCCESS
+      - PATH-ENV-FAILURE
+    verification_refs:
+      - 03-flows/e2e-coverage.md
+      - ../plans/reviews/final-verification.md
+      - ../model/tests/test_cli.py
+      - ../model/tests/test_health_schemas.py
+  - acceptance_id: ACCEPT-DATA
+    requirement_ids:
+      - REQ-DATA
+    path_ids:
+      - PATH-DATA-SUCCESS
+      - PATH-DATA-FAILURE
+    verification_refs:
+      - 03-flows/e2e-coverage.md
+      - ../plans/reviews/final-verification.md
+      - ../model/tests/test_data.py
+      - ../model/tests/test_configuration.py
+  - acceptance_id: ACCEPT-MODEL
+    requirement_ids:
+      - REQ-MODEL
+    path_ids:
+      - PATH-MODEL-SUCCESS
+      - PATH-MODEL-FAILURE
+    verification_refs:
+      - 03-flows/e2e-coverage.md
+      - ../plans/reviews/final-verification.md
+      - ../model/tests/test_fetch.py
+      - ../model/tests/test_snapshots.py
+      - ../model/tests/test_transformations.py
+  - acceptance_id: ACCEPT-TRAIN
+    requirement_ids:
+      - REQ-TRAIN
+    path_ids:
+      - PATH-TRAIN-SUCCESS
+      - PATH-TRAIN-FAILURE
+    verification_refs:
+      - 03-flows/e2e-coverage.md
+      - ../plans/reviews/final-verification.md
+      - ../model/tests/test_training.py
+      - ../model/tests/test_adapter_contract.py
+      - ../model/tests/test_execution.py
+      - ../model/tests/test_backend.py
+      - ../plans/reviews/lifecycle-measurements.json
+  - acceptance_id: ACCEPT-EVAL
+    requirement_ids:
+      - REQ-EVAL
+    path_ids:
+      - PATH-EVAL-SUCCESS
+      - PATH-EVAL-FAILURE
+    verification_refs:
+      - 03-flows/e2e-coverage.md
+      - ../plans/reviews/final-verification.md
+      - ../model/tests/test_evaluation.py
+      - ../model/tests/test_evaluation_boundaries.py
+      - ../model/tests/test_scoring.py
+      - ../plans/reviews/lifecycle-measurements.json
+  - acceptance_id: ACCEPT-RISK
+    requirement_ids:
+      - REQ-RISK
+    path_ids:
+      - PATH-RISK-SUCCESS
+      - PATH-RISK-FAILURE
+    verification_refs:
+      - 03-flows/e2e-coverage.md
+      - ../plans/reviews/final-verification.md
+      - ../model/tests/test_risk.py
+      - ../model/tests/test_evaluation_boundaries.py
+      - ../plans/reviews/lifecycle-measurements.json
+  - acceptance_id: ACCEPT-EXPORT
+    requirement_ids:
+      - REQ-EXPORT
+    path_ids:
+      - PATH-EXPORT-SUCCESS
+      - PATH-EXPORT-FAILURE
+    verification_refs:
+      - 03-flows/e2e-coverage.md
+      - ../plans/reviews/final-verification.md
+      - ../model/tests/test_transformations.py
+      - ../model/tests/test_lifecycle_integration.py
+      - ../plans/reviews/lifecycle-measurements.json
+  - acceptance_id: ACCEPT-VERIFY
+    requirement_ids:
+      - REQ-VERIFY
+    path_ids:
+      - PATH-VERIFY-SUCCESS
+      - PATH-VERIFY-FAILURE
+    verification_refs:
+      - 03-flows/e2e-coverage.md
+      - ../plans/reviews/final-verification.md
+      - ../model/tests/test_artifacts.py
+      - ../model/tests/test_contracts.py
+      - ../model/tests/test_lineage.py
+      - ../model/tests/test_boundary_regressions.py
+  - acceptance_id: ACCEPT-GUIDES
+    requirement_ids:
+      - REQ-GUIDES
+    path_ids:
+      - PATH-GUIDES-SUCCESS
+      - PATH-GUIDES-FAILURE
+    verification_refs:
+      - 03-flows/e2e-coverage.md
+      - ../plans/reviews/final-verification.md
+      - ../scripts/check_docs.py
+      - ../docs/README.md
+      - ../skills/foliqant-model/SKILL.md
+  - acceptance_id: ACCEPT-CURATE
+    requirement_ids:
+      - REQ-CURATE
+    path_ids: *id001
+    verification_refs:
+      - 08-automated-data-curation.md
+      - ../model/tests/test_curation_sources.py
+      - ../model/tests/test_curation_endpoint.py
+      - ../model/tests/test_curation_generation.py
+      - ../model/tests/test_curation_runner.py
+      - ../plans/reviews/curation-execution.md

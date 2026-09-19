@@ -2,7 +2,7 @@
 
 Date: 2026-09-19. Status: proposal, not implemented or benchmarked.
 
-Hardware update: the user has M1-family and M5-family Macs with 64 GB unified memory. See [local training and model lineage](local-training-and-model-lineage.md). The 24 GB figures below remain a separate inference comparison budget, not the only available development hardware.
+Hardware update: the user has M1-family and M5-family Macs with 64 GB unified memory. See [local training and model lineage](apple-silicon.md). The 24 GB figures below remain a separate inference comparison budget, not the only available development hardware.
 
 Scope: our own reusable model for interpreting financial emails and threads, identifying multiple intents, assigning priority, matching a supplied catalog, and providing evidence for workflow decisions. The financial domain includes funds, product disclosures, regulations, contracts, and financial reports; correspondence remains the initial operational task. English first; German second; preserve a multilingual foundation. **Development is local first on a 24 GB GPU, using ordinary vLLM, LM Studio, Ollama, or comparable inference engines. No special inference system is required.** Cloud custom-model deployment is a later packaging and operations choice, not the starting architecture.
 

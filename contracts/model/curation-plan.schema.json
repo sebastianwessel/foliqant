@@ -1,0 +1,339 @@
+{
+  "$defs": {
+    "ChatMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "system",
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "ChatMessage",
+      "type": "object"
+    },
+    "DataRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "familyId": {
+          "$ref": "#/$defs/foliqant_model__contracts__base__Omitted_Annotated_str__StringConstraints____1",
+          "default": null
+        },
+        "generation": {
+          "$ref": "#/$defs/Omitted_GenerationProvenance_",
+          "default": null
+        },
+        "groupKeys": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Groupkeys",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "language": {
+          "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
+          "title": "Language",
+          "type": "string"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/ChatMessage"
+          },
+          "maxItems": 256,
+          "minItems": 2,
+          "title": "Messages",
+          "type": "array"
+        },
+        "origin": {
+          "enum": [
+            "human",
+            "synthetic",
+            "teacher"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "reviewed": {
+          "title": "Reviewed",
+          "type": "boolean"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "sourceId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Sourceid",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "sourceId",
+        "language",
+        "groupKeys",
+        "messages",
+        "origin",
+        "reviewed"
+      ],
+      "title": "DataRecord",
+      "type": "object"
+    },
+    "FrozenFamilyAssignment": {
+      "additionalProperties": false,
+      "properties": {
+        "sourceSplits": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Sourcesplits",
+          "type": "array"
+        },
+        "split": {
+          "$ref": "#/$defs/Split"
+        }
+      },
+      "required": [
+        "split",
+        "sourceSplits"
+      ],
+      "title": "FrozenFamilyAssignment",
+      "type": "object"
+    },
+    "GenerationProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "modelId": {
+          "minLength": 1,
+          "title": "Modelid",
+          "type": "string"
+        },
+        "modelIdentitySha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Modelidentitysha256",
+          "type": "string"
+        },
+        "modelWeightsSha256": {
+          "$ref": "#/$defs/foliqant_model__contracts__base__Omitted_Annotated_str__StringConstraints____2",
+          "default": null
+        },
+        "parametersSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Parameterssha256",
+          "type": "string"
+        },
+        "parentRecordIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Parentrecordids",
+          "type": "array"
+        },
+        "promptSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Promptsha256",
+          "type": "string"
+        },
+        "provider": {
+          "const": "openai-compatible",
+          "title": "Provider",
+          "type": "string"
+        },
+        "requestSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Requestsha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "modelId",
+        "modelIdentitySha256",
+        "promptSha256",
+        "parametersSha256",
+        "requestSha256",
+        "parentRecordIds"
+      ],
+      "title": "GenerationProvenance",
+      "type": "object"
+    },
+    "ImportedRecord": {
+      "additionalProperties": false,
+      "description": "Normalized source annotation with its original partition and identity.",
+      "properties": {
+        "originalId": {
+          "minLength": 1,
+          "title": "Originalid",
+          "type": "string"
+        },
+        "originalSplit": {
+          "enum": [
+            "train",
+            "validation",
+            "calibration",
+            "test",
+            "unspecified"
+          ],
+          "title": "Originalsplit",
+          "type": "string"
+        },
+        "record": {
+          "$ref": "#/$defs/DataRecord"
+        },
+        "task": {
+          "enum": [
+            "classification",
+            "entailment",
+            "decision",
+            "question-answering"
+          ],
+          "title": "Task",
+          "type": "string"
+        }
+      },
+      "required": [
+        "record",
+        "originalSplit",
+        "task",
+        "originalId"
+      ],
+      "title": "ImportedRecord",
+      "type": "object"
+    },
+    "Omitted_GenerationProvenance_": {
+      "$ref": "#/$defs/GenerationProvenance"
+    },
+    "Split": {
+      "enum": [
+        "train",
+        "validation",
+        "calibration",
+        "test"
+      ],
+      "type": "string"
+    },
+    "foliqant_model__contracts__base__Omitted_Annotated_str__StringConstraints____1": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "foliqant_model__contracts__base__Omitted_Annotated_str__StringConstraints____2": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://foliqant.local/contracts/model/curation-plan.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Source assignments frozen independently of any generated model response.",
+  "properties": {
+    "catalogSha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Catalogsha256",
+      "type": "string"
+    },
+    "configurationSha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Configurationsha256",
+      "type": "string"
+    },
+    "excludedCounts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "title": "Excludedcounts",
+      "type": "object"
+    },
+    "frozenFamilies": {
+      "patternProperties": {
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$": {
+          "$ref": "#/$defs/FrozenFamilyAssignment"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "title": "Frozenfamilies",
+      "type": "object"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/ImportedRecord"
+      },
+      "title": "Records",
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "configurationSha256",
+    "catalogSha256",
+    "records",
+    "frozenFamilies",
+    "excludedCounts"
+  ],
+  "title": "CurationPlan",
+  "type": "object"
+}

@@ -1,0 +1,666 @@
+catalog_version: 1
+applicability:
+  status: applicable
+  scope_refs:
+    - CAP-ENV
+    - CAP-DATA
+    - CAP-MODEL
+    - CAP-TRAIN
+    - CAP-EVAL
+    - CAP-RISK
+    - CAP-EXPORT
+    - CAP-VERIFY
+    - CAP-SETUP
+    - CAP-CURATE
+shapes:
+  - shape_id: model.data-record
+    representation_class: domain
+    canonical_source: 03-contracts/model-contracts.md#data-input
+    owner: model-contracts
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - data-module
+      - evaluation-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-DATASET-PREPARE
+  - shape_id: model.dataset-config
+    representation_class: command
+    canonical_source: 03-contracts/model-contracts.md#data-input
+    owner: model-contracts
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - data-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-DATASET-PREPARE
+      - MAP-SOURCE-RIGHTS
+  - shape_id: model.dataset-artifact
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#dataset
+    owner: artifacts-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - data-module
+      - training-module
+      - evaluation-module
+      - artifacts-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-DATASET-PREPARE
+      - MAP-SOURCE-RIGHTS
+  - shape_id: model.leakage-index
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#privacy-safe-leakage-records
+    owner: artifacts-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - training-module
+      - evaluation-module
+      - calibration-module
+      - artifacts-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-DATASET-PREPARE
+      - MAP-ADAPTER-LEAKAGE
+  - shape_id: model.train-config
+    representation_class: command
+    canonical_source: 03-contracts/model-contracts.md#training-input
+    owner: model-contracts
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - training-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-TRAIN-WORKER
+  - shape_id: model.evaluation-config
+    representation_class: command
+    canonical_source: 03-contracts/model-contracts.md#evaluation-input
+    owner: model-contracts
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - evaluation-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-EVALUATION-WORKER
+  - shape_id: model.artifact-manifest
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#artifact-envelope-and-lineage
+    owner: artifacts-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - artifacts-module
+      - data-module
+      - training-module
+      - evaluation-module
+      - calibration-module
+      - export-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-PARENT-SNAPSHOT
+      - MAP-ARTIFACT-CLI
+  - shape_id: model.parent-snapshot
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#artifact-envelope-and-lineage
+    owner: artifacts-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - artifacts-module
+      - training-module
+      - evaluation-module
+      - calibration-module
+      - export-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-PARENT-SNAPSHOT
+  - shape_id: model.worker-request
+    representation_class: command
+    canonical_source: 03-contracts/model-contracts.md#offline-worker-contracts
+    owner: backend-module
+    stability: internal
+    open_policy: closed
+    allowed_consumers:
+      - backend-worker
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-TRAIN-WORKER
+      - MAP-EVALUATION-WORKER
+  - shape_id: model.worker-result
+    representation_class: boundary
+    canonical_source: 03-contracts/model-contracts.md#offline-worker-contracts
+    owner: backend-module
+    stability: internal
+    open_policy: closed
+    allowed_consumers:
+      - backend-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-WORKER-DOCTOR
+      - MAP-WORKER-ADAPTER
+      - MAP-WORKER-PREDICTION
+      - MAP-WORKER-MODEL
+  - shape_id: model.adapter-artifact
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#adapter-and-merge
+    owner: training-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - training-module
+      - evaluation-module
+      - export-module
+      - artifacts-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-WORKER-ADAPTER
+      - MAP-ADAPTER-LEAKAGE
+  - shape_id: model.model-artifact
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#checkpoint-and-quantized-model
+    owner: artifacts-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - backend-module
+      - training-module
+      - evaluation-module
+      - export-module
+      - artifacts-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-WORKER-MODEL
+  - shape_id: model.runtime-smoke-report
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#export
+    owner: release-verification-tooling
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - operator
+      - release-review
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-RUNTIME-SMOKE
+  - shape_id: model.prediction
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#evaluation-and-predictions
+    owner: evaluation-module
+    stability: versioned
+    open_policy: open_json_leaf
+    allowed_consumers:
+      - evaluation-module
+      - calibration-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-WORKER-PREDICTION
+      - MAP-EVALUATION-REPORT
+  - shape_id: model.evaluation-artifact
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#evaluation-and-predictions
+    owner: evaluation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - evaluation-module
+      - calibration-module
+      - artifacts-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-EVALUATION-REPORT
+      - MAP-CALIBRATION-POLICY
+      - MAP-AUDIT-RESULT
+  - shape_id: model.policy-artifact
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#policy-and-audit
+    owner: calibration-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - calibration-module
+      - artifacts-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-CALIBRATION-POLICY
+      - MAP-AUDIT-RESULT
+  - shape_id: model.audit-artifact
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#policy-and-audit
+    owner: calibration-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - calibration-module
+      - artifacts-module
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-AUDIT-RESULT
+  - shape_id: model.run-state
+    representation_class: persistence
+    canonical_source: 03-contracts/model-contracts.md#run-state
+    owner: cli-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - cli-module
+      - operator
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-FAILURE-RUN-STATE
+  - shape_id: model.cli-success
+    representation_class: boundary
+    canonical_source: 03-contracts/model-contracts.md#cli-success-and-failure-contracts
+    owner: cli-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - operator
+      - automation
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-WORKER-DOCTOR
+      - MAP-ARTIFACT-CLI
+      - MAP-SETUP-CLI
+  - shape_id: model.cli-failure
+    representation_class: boundary
+    canonical_source: 03-contracts/model-contracts.md#cli-success-and-failure-contracts
+    owner: cli-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - operator
+      - automation
+    source_contract_refs:
+      - CONTRACT-MODEL-V1
+    mapping_refs:
+      - MAP-FAILURE-RUN-STATE
+  - shape_id: model.setup-profile
+    representation_class: command
+    canonical_source: 07-local-setup.md
+    owner: model-contracts
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - setup-module
+    source_contract_refs:
+      - CONTRACT-SETUP-V1
+    mapping_refs:
+      - MAP-SETUP-PREPARE
+  - shape_id: model.setup-receipt
+    representation_class: persistence
+    canonical_source: 07-local-setup.md
+    owner: model-contracts
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - setup-module
+    source_contract_refs:
+      - CONTRACT-SETUP-V1
+    mapping_refs:
+      - MAP-SETUP-PREPARE
+      - MAP-SETUP-CLI
+  - shape_id: model.curation-config
+    representation_class: command
+    canonical_source: 08-automated-data-curation.md
+    owner: curation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - curation-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-CURATION-V1
+    mapping_refs:
+      - MAP-CURATION-PUBLISH
+  - shape_id: model.curation-plan
+    representation_class: persistence
+    canonical_source: 08-automated-data-curation.md
+    owner: curation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - curation-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-CURATION-V1
+    mapping_refs:
+      - MAP-CURATION-PUBLISH
+  - shape_id: model.candidate-job
+    representation_class: persistence
+    canonical_source: 08-automated-data-curation.md
+    owner: curation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - curation-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-CURATION-V1
+    mapping_refs:
+      - MAP-CURATION-PUBLISH
+  - shape_id: model.candidate-outcome
+    representation_class: persistence
+    canonical_source: 08-automated-data-curation.md
+    owner: curation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - curation-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-CURATION-V1
+    mapping_refs:
+      - MAP-CURATION-PUBLISH
+mappings:
+  - mapping_id: MAP-DATASET-PREPARE
+    from_shape: model.data-record
+    to_shape: model.dataset-artifact
+    direction: domain_to_persistence
+    allowed_differences:
+      - normalized-hashes-and-deterministic-split-metadata-added
+    redaction_or_loss_policy: Chat-only files omit record metadata; full-record files retain validated records and leakage index hashes sensitive grouping text.
+    field_operations:
+      - messages:normalize-nfc-lf-for-hash
+      - groupKeys:hash-in-leakage-index
+      - record:assign-component-and-split
+      - chats:write-canonical-id-sorted-fixed-path-jsonl
+      - records:write-canonical-id-sorted-fixed-path-jsonl
+      - canonical-emitted-files:hash-for-order-invariant-content-identity
+    verification:
+      - model/tests/test_data.py
+  - mapping_id: MAP-SOURCE-RIGHTS
+    from_shape: model.dataset-config
+    to_shape: model.dataset-artifact
+    direction: command_to_domain
+    allowed_differences:
+      - local-source-path-omitted-from-durable-rights
+    redaction_or_loss_policy: Original local source paths are not persisted in SourceRight.
+    field_operations:
+      - sources.path:omit
+      - sources:project-to-sourceRights
+    verification:
+      - model/tests/test_contracts.py
+  - mapping_id: MAP-PARENT-SNAPSHOT
+    from_shape: model.artifact-manifest
+    to_shape: model.parent-snapshot
+    direction: custom
+    allowed_differences:
+      - schema-version-omitted-only
+    redaction_or_loss_policy: No lineage, inventory, rights, producer, details, or identity field is lost.
+    field_operations:
+      - schemaVersion:omit
+      - parents:copy-recursively-with-bounds
+    verification:
+      - model/tests/test_artifacts.py
+  - mapping_id: MAP-TRAIN-WORKER
+    from_shape: model.train-config
+    to_shape: model.worker-request
+    direction: command_to_domain
+    allowed_differences:
+      - camel-case-fields-renamed-to-pinned-backend-names
+      - fixed-safe-backend-options-added
+      - verified-private-paths-added
+    redaction_or_loss_policy: Backend request adds only fixed options and verified paths; unknown user metadata is discarded.
+    field_operations:
+      - steps:rename:iters
+      - gradientAccumulation:rename:grad_accumulation_steps
+      - maxSequenceLength:rename:max_seq_length
+      - promptMasking:set:true
+    verification:
+      - model/tests/test_training.py
+  - mapping_id: MAP-EVALUATION-WORKER
+    from_shape: model.evaluation-config
+    to_shape: model.worker-request
+    direction: command_to_domain
+    allowed_differences:
+      - validators-and-timeout-remain-in-parent
+      - validated-output-schema-copied-to-evaluation-artifact
+      - fixed-zero-temperature-added
+      - prompt-and-verified-paths-added
+    redaction_or_loss_policy: The child receives only generation fields, prompt messages, and verified model paths.
+    field_operations:
+      - maxTokens:rename:maxTokens
+      - seed:copy
+      - temperature:set:0
+      - outputSchema:validate-copy-and-hash-in-parent
+    verification:
+      - model/tests/test_backend.py
+  - mapping_id: MAP-WORKER-ADAPTER
+    from_shape: model.worker-result
+    to_shape: model.adapter-artifact
+    direction: boundary_to_domain
+    allowed_differences:
+      - output-files-inspected-and-inventoried
+      - private-worker-paths-removed
+      - lineage-and-rights-added
+    redaction_or_loss_policy: Private workspace paths are excluded from manifest details; referenced outputs are independently verified.
+    field_operations:
+      - train-result:validate-finite-metrics
+      - output-paths:replace-with-file-inventory
+      - backend-namespace:project-path-free-config
+    verification:
+      - model/tests/test_training.py
+  - mapping_id: MAP-ADAPTER-LEAKAGE
+    from_shape: model.leakage-index
+    to_shape: model.adapter-artifact
+    direction: persistence_to_domain
+    allowed_differences:
+      - submitted-train-and-validation-plus-model-and-warm-start-exposure-union-retained
+    redaction_or_loss_policy: Adapter leakage inventory conservatively contains every row submitted for train and validation plus model and warm-start ancestor exposure, and no plaintext grouping data.
+    field_operations:
+      - splits:filter:train-validation
+      - entries:union-current-submission-model-and-warm-start-ancestor
+      - ancestor-indexes:copy-exact-by-artifact-id
+      - duplicate-record-id:require-identical-entry
+      - entries:deduplicate-and-sort
+    verification:
+      - model/tests/test_lineage.py
+  - mapping_id: MAP-WORKER-PREDICTION
+    from_shape: model.worker-result
+    to_shape: model.prediction
+    direction: boundary_to_domain
+    allowed_differences:
+      - reference-and-dataset-identifiers-added
+      - parsed-json-and-validator-results-added
+    redaction_or_loss_policy: Worker generation text and token metrics are preserved exactly; validation is deterministic in the parent.
+    field_operations:
+      - generated:copy
+      - generatedTokens:copy
+      - meanTokenLogprob:copy
+      - finishReason:copy
+      - generated:parse-json-or-null
+      - configured-pointers:record-presence-separately-from-equality
+    verification:
+      - model/tests/test_evaluation.py
+  - mapping_id: MAP-WORKER-MODEL
+    from_shape: model.worker-result
+    to_shape: model.model-artifact
+    direction: boundary_to_domain
+    allowed_differences:
+      - output-files-inspected-and-inventoried
+      - lineage-precision-and-producer-metadata-added
+    redaction_or_loss_policy: Private paths and child diagnostics are omitted; converted bytes and parsed metadata are preserved by hashes.
+    field_operations:
+      - outputPath:replace-with-file-inventory
+      - parsed-metadata:copy
+      - parent:add-verified-snapshot
+      - leakage-index:copy-or-union-into-output-artifact
+      - ancestor-indexes:retain-exact-by-artifact-id
+    verification:
+      - model/tests/test_transformations.py
+  - mapping_id: MAP-RUNTIME-SMOKE
+    from_shape: model.model-artifact
+    to_shape: model.runtime-smoke-report
+    direction: custom
+    allowed_differences:
+      - independent-runtime-observation-added-outside-artifact
+      - executable-command-and-result-identities-added
+    redaction_or_loss_policy: Generated text remains in the private caller-chosen evidence file and is never added to the immutable artifact manifest.
+    field_operations:
+      - artifactId:copy-to-evidence-inputArtifactId
+      - verified-export:run-fixed-bounded-local-generation
+      - command-and-result:hash-canonical-json
+      - report:hash-with-evidenceId-omitted
+    verification:
+      - scripts/verify_checkpoint_runtime.py
+      - scripts/verify_gguf_runtime.py
+  - mapping_id: MAP-EVALUATION-REPORT
+    from_shape: model.prediction
+    to_shape: model.evaluation-artifact
+    direction: domain_to_persistence
+    allowed_differences:
+      - predictions-stored-in-private-inventoried-jsonl
+      - deterministic-aggregates-added
+    redaction_or_loss_policy: Prediction text remains in the private JSONL and is never copied to CLI output or manifest aggregates.
+    field_operations:
+      - predictions:aggregate-count-rates
+      - predictions:group-language-source-slices
+      - representatives:record-deterministic-map
+    verification:
+      - model/tests/test_evaluation.py
+  - mapping_id: MAP-CALIBRATION-POLICY
+    from_shape: model.evaluation-artifact
+    to_shape: model.policy-artifact
+    direction: domain_to_persistence
+    allowed_differences:
+      - only-component-representatives-used
+      - fixed-threshold-or-abstain-all-produced
+    redaction_or_loss_policy: Labels and prediction text are omitted; representative IDs/groups, counts, profile, dataset, and policy parameters are retained.
+    field_operations:
+      - predictions:filter-component-representatives
+      - predictions:filter-risk-eligible
+      - scores:select-threshold
+    verification:
+      - model/tests/test_risk.py
+  - mapping_id: MAP-AUDIT-RESULT
+    from_shape: model.evaluation-artifact
+    to_shape: model.audit-artifact
+    direction: domain_to_persistence
+    allowed_differences:
+      - fixed-policy-applied-to-test-representatives
+      - exact-binomial-summary-added
+    redaction_or_loss_policy: Prediction text and labels are omitted; disjoint representative identities, counts, profile, policy and bound remain.
+    field_operations:
+      - predictions:filter-component-representatives
+      - policy:apply-fixed-threshold
+      - errors:compute-exact-binomial-upper-bound
+    verification:
+      - model/tests/test_risk.py
+  - mapping_id: MAP-ARTIFACT-CLI
+    from_shape: model.artifact-manifest
+    to_shape: model.cli-success
+    direction: domain_to_boundary
+    allowed_differences:
+      - concise-command-specific-projection
+      - content-and-recursive-lineage-omitted
+    redaction_or_loss_policy: CLI output exposes IDs, counts, status and paths only; private content and rights references are never emitted.
+    field_operations:
+      - artifactId:copy
+      - kind:copy
+      - stage:copy
+      - sourceRights:omit
+      - parents:omit
+    verification:
+      - model/tests/test_cli.py
+  - mapping_id: MAP-WORKER-DOCTOR
+    from_shape: model.worker-result
+    to_shape: model.cli-success
+    direction: custom
+    allowed_differences:
+      - request-identity-and-worker-envelope-omitted
+      - parent-platform-and-disk-capabilities-added
+    redaction_or_loss_policy: Import exceptions become a typed unavailable capability with a redacted reason; no child traceback or arbitrary JSON is exposed.
+    field_operations:
+      - mlxImportAvailable:rename:mlxAvailable
+      - metalAvailable:rename:mlxDeviceAvailable
+      - mlxVersion:project-to-components
+      - mlxLmVersion:project-to-components
+    verification:
+      - model/tests/test_health_schemas.py
+  - mapping_id: MAP-FAILURE-RUN-STATE
+    from_shape: model.cli-failure
+    to_shape: model.run-state
+    direction: boundary_to_persistence
+    allowed_differences:
+      - location-and-artifact-context-omitted-from-run-failure
+      - lifecycle-timestamps-and-status-added
+    redaction_or_loss_policy: Durable run failure retains only stable code and redacted message.
+    field_operations:
+      - error.code:copy-to-failure.code
+      - error.message:copy-to-failure.message
+      - error.location:omit
+      - exitCode:map-to-terminal-status
+    verification:
+      - model/tests/test_execution.py
+  - mapping_id: MAP-SETUP-PREPARE
+    from_shape: model.setup-profile
+    to_shape: model.setup-receipt
+    direction: custom
+    allowed_differences:
+      - verified-asset-identities-and-prepared-child-identities
+    redaction_or_loss_policy: Source contents stay in the external workspace; receipt carries hashes and artifact identities.
+    field_operations:
+      - assets:verify-size-and-hash
+      - profile:canonical-digest
+      - prepared-artifacts:verify-identities
+    verification:
+      - model/tests/test_setup.py
+      - plans/reviews/setup-execution.md
+  - mapping_id: MAP-SETUP-CLI
+    from_shape: model.setup-receipt
+    to_shape: model.cli-success
+    direction: custom
+    allowed_differences:
+      - local-paths-and-reuse-counts-added
+    redaction_or_loss_policy: CLI shows no dataset rows, weights or private agreements.
+    field_operations:
+      - profileSha256:copy
+      - artifactIds:resolve-to-verified-local-paths
+    verification:
+      - model/tests/test_cli.py
+      - plans/reviews/setup-execution.md
+  - mapping_id: MAP-CURATION-PUBLISH
+    from_shape: model.curation-plan
+    to_shape: model.dataset-artifact
+    direction: custom
+    allowed_differences:
+      - accepted-derived-records-added-with-inherited-families
+      - unsafe-candidates-quarantined
+    redaction_or_loss_policy: Source records and generated text remain private local artifacts; CLI emits counts and artifact paths only. Automatic acceptance never adds human review.
+    field_operations:
+      - frozenFamilies:preserve
+      - source-rights:conservative-union
+      - generation:attach-observed-provenance
+    verification:
+      - model/tests/test_curation_runner.py
+      - model/tests/test_frozen_families.py

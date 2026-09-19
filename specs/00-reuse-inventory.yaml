@@ -1,0 +1,21 @@
+reuse_inventory_version: 1
+discovery_revision: 0f42de5
+assets:
+  - asset_id: research.model
+    kind: research
+    path: research/model-research.md
+    public_export: none
+    owner: model
+    stability: research
+    consumers:
+      - model-author
+    extension_policy: background only; requirements live in normative specs
+  - asset_id: example.triage
+    kind: schema
+    path: ../contracts/triage-answer.schema.json
+    public_export: illustrative financial-triage answer
+    owner: workflow proposal
+    stability: experimental
+    consumers:
+      - evaluation example
+    extension_policy: do not make it the universal training record contract

@@ -1,7 +1,14 @@
-# Evaluation and calibration
+# Evaluation and acceptance policies
 
-Keep reusable model, customization, and export evaluation here. Maintain separate training, development/calibration, and final audit partitions. Split complete thread/document families, issuer/customer groups, translations, and relevant time periods to prevent leakage.
+Use `evaluate` for actual held-out generation, `calibrate` to select an empirical threshold on calibration data, and `audit` to assess the fixed policy on a separate test split. A generated-token likelihood score is not a probability of correctness.
 
-Measure active-intent accuracy, urgency errors, catalog validity, evidence support, abstention/risk coverage, language slices, structured-output validity, latency, and memory. A model-generated confidence number is not a calibrated probability. Re-evaluate after quantization or template/runtime changes.
+Read the [step-by-step guide](../../docs/guides/evaluate-and-audit.md). The implementation
+is in `model/src/foliqant_model`; keep downloaded data, weights, adapters,
+predictions and generated artifacts outside Git.
 
-Only synthetic public fixtures and code belong in Git; real holdouts need controlled storage. No evaluation harness or calibration artifact is implemented yet.
+Automated curation publishes `synthetic-regression` separately from source and
+augmented training corpora. Treat it as a diagnostic stress population, not as
+representative production validation or human-reviewed evidence.
+
+The setup exercise uses a small diagnostic checkpoint. No production financial
+model or quality guarantee is implied by a successful toolchain run.

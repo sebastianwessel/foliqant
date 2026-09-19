@@ -9,26 +9,28 @@ Date: 2026-09-19. Status: proposed implementation design. The user's approved di
 3. **Inference:** load a released model in an ordinary supported server. Expose its standard HTTP API. No custom inference engine, heads, or runtime forks.
 4. **Workflow service:** load a validated process definition, ask the model bounded questions, validate answers and evidence, apply deterministic decisions, and deliver outcomes through adapters. The service must not import the training environment or load model weights.
 
-See [local training and model lineage](local-training-and-model-lineage.md) for the M1/M5 development profiles and shared-to-customer adaptation chain.
+See [local training and model lineage](apple-silicon.md) for the M1/M5 development profiles and shared-to-customer adaptation chain.
 
 Each release should identify its upstream/model revision, tokenizer/template, adaptation lineage, data-manifest references, evaluation/calibration profile, and export/quantization details. Store large artifacts outside Git. A new model or quantization does not inherit an earlier model's calibration claim.
 
 ## 2. Language recommendation
 
-Use **Python for model development/evaluation** and **strict TypeScript on Node.js LTS for the service**. This is an engineering recommendation based on the existing team's TypeScript experience and the service's integration-heavy workload, not a benchmark result.
+Use **Python for model development/evaluation** and recommend **Go for the production workflow service**. This recommendation reflects the requested small deployment, strong interfaces, efficient concurrency, and independent adapters. It is not a benchmark result or authorization to implement the service in the current model-lifecycle workstream. Do not maintain parallel Go and Node implementations.
 
-| Choice | Strength | Tradeoff for this project |
+| Concern | Recommended implementation | Boundary |
 |---|---|---|
-| Python service | One language across training and orchestration; mature ML tooling | Typed Python is viable, but gradual typing needs enforcement. Keep GPU libraries out of the service environment regardless. |
-| TypeScript + Node.js | Typed adapter authoring, async I/O, familiar ecosystem, straightforward JSON/YAML contracts | Types disappear at runtime; external configuration and model output still require schema validation. A Node runtime is part of deployment. |
-| TypeScript + Bun | Similar authoring experience, standalone executable packaging | The executable includes Bun; it is not runtime-free. Qualify adapter, streaming, tracing, TLS, and shutdown behavior before adopting it. |
-| Go | Compiled interfaces, efficient concurrency, a compact single-binary deployment path | Attractive if deployment footprint is the dominant requirement. Runtime-configured workflows still need validation; dynamic shared-library plugins introduce compatibility constraints. |
+| Training, customization, evaluation, export | Python with an isolated locked environment | Produces versioned model artifacts; never imported by the workflow service. |
+| Workflow execution and deterministic decisions | Go core library | Standard-library types and explicit interfaces; no transport, storage client, inference SDK, or telemetry SDK imports. |
+| HTTP, Redis, model endpoint, persistence, telemetry | Go adapter packages | Compiled into the application and assembled by its startup code. |
+| Model inference | A supported standard inference server | Separate lifecycle and deployment; reached through an endpoint adapter. |
 
-Choose Go instead if a small self-contained service binary or a firm memory budget is a hard requirement. With a remote model endpoint, model latency and execution policy are likely to matter more than the host language's raw throughput; measure before optimizing. Do not maintain Node and Go implementations in parallel.
+Recommend one Go process in one application container initially, containing both the adapter layer and core library. These are independently testable modules, not necessarily independent services. Direct typed calls avoid an internal network hop and protocol. If independent scaling or isolation later requires separate gateway and worker processes, prefer separate containers using the same codebase; specify the delivery protocol before implementing that topology. Two processes inside one container remain possible, but require explicit supervision and share a container failure and deployment boundary. They do not by themselves provide fault tolerance.
 
-Node 24 is currently LTS; use a supported patched LTS release when implementation begins. Separate Python and service dependency locks/images. For Python, use type checking and validation rather than treating the language as inherently untyped. No dependencies or runtime versions are installed by this scaffold.
+The Go executable includes its runtime. A self-contained Linux binary requires compatible dependencies/build settings; TLS trust roots and configuration still need to be supplied. No concrete image-size, memory, or throughput claims are accepted without measurement. Endpoint latency, queueing, batching and concurrency limits will probably matter more than language throughput; benchmark before optimization.
 
-Primary sources: [Node releases](https://nodejs.org/en/about/previous-releases), [TypeScript runtime/type distinction](https://www.typescriptlang.org/docs/handbook/2/classes), [Bun executable packaging](https://bun.com/docs/bundler/executables), [Go plugin limitations](https://pkg.go.dev/plugin).
+Adapters use ordinary Go interfaces and explicit build-time registration. Avoid Go shared-library plugins as the default extension mechanism because of their platform and toolchain compatibility constraints. Workflow YAML selects registered capabilities and validated options, not arbitrary code.
+
+Primary sources: [Go executable/runtime behavior](https://go.dev/doc/faq#Why_is_my_trivial_program_such_a_large_binary), [Go plugin limitations](https://pkg.go.dev/plugin), [Docker process lifecycle](https://docs.docker.com/engine/containers/multi-service_container/).
 
 ## 3. Core and adapters
 
@@ -47,6 +49,20 @@ Start with a small set of interfaces: model access, execution storage, output de
 Use an explicit, typed registry of trusted adapters assembled by the application. Configuration selects a registered adapter ID and supplies validated options. It must not install packages, load arbitrary module paths/URLs, execute shell commands, or evaluate code. In-process adapters are trusted application code, not a security sandbox. Untrusted customization would require a separately designed isolation boundary.
 
 An OpenAI-compatible model adapter is a good first implementation, but compatible endpoints differ in JSON-schema support, streaming, log-probabilities, reasoning settings, and tool calling. Declare required capabilities per workflow and reject unsupported combinations at startup. Use the actual inference endpoint; `/v1/models` is discovery, not an inference call. [vLLM serving documentation](https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/)
+
+### Observability from the first implementation
+
+Pass `context.Context` through every core operation and port for cancellation, deadlines and trace propagation. To keep the core free of external dependencies, expose small typed lifecycle observation hooks at meaningful workflow/step boundaries; the OpenTelemetry adapter implements these hooks and wraps model/storage calls. Do not build a second generic telemetry API or expose SDK-specific types through the core interface.
+
+Application startup owns OpenTelemetry SDK/exporter setup and shutdown. Use standard propagation and OTLP export, with bounded buffering and export timeouts. Trace acceptance, workflow steps, model calls, persistence and delivery; correlate structured logs and expose latency, failures, queue age and in-flight counts. Async processing must persist safe trace context and connect processing spans across retries. Do not use trace baggage as authenticated tenant/principal identity. Avoid customer content, credentials and unbounded identifiers in metric labels. Operational telemetry is separate from any required durable business audit trail.
+
+OpenTelemetry Go currently marks traces and metrics stable and logs release candidate. Keep the log bridge isolated and choose pinned versions when implementing the service. Telemetry delivery failures must not block business processing. [OpenTelemetry Go status](https://opentelemetry.io/docs/languages/go/)
+
+### Durability is separate from module separation
+
+For durable acceptance, persist the request before acknowledging it, use bounded workers with recoverable claims/leases, checkpoint defined execution boundaries, and persist terminal outcome plus delivery intent atomically where possible. Use bounded retries, deduplication and an outbox. In-memory channels only schedule work; they do not survive process termination. External model calls may repeat after a crash, even when completed business results are deduplicated. Do not claim exactly-once end-to-end execution.
+
+The durable database or broker, acknowledgment boundary, lease/fencing rules and recovery tests remain future service-design decisions. One application container may still require external durable infrastructure. This proposal does not add those dependencies to model training.
 
 ## 4. Configuration boundary
 

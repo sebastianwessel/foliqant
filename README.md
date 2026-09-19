@@ -4,13 +4,29 @@ Financial understanding. Decisions supported by evidence.
 
 Foliqant combines a reusable financial decision model with a configurable service for interpreting correspondence and documents. The model produces structured answers and evidence; deterministic workflow rules decide how those answers are used.
 
-**Status:** repository foundation and architecture proposal. No training pipeline, workflow runner, HTTP adapter, or Redis adapter is implemented yet. YAML examples illustrate the proposed configuration; they are not executable today. The recommended language split is Python for model work and TypeScript on Node.js for the service, pending final selection.
+**Available now:** local setup, pinned public-source curation, data preparation,
+LoRA/QLoRA training, customer customization, evaluation, threshold selection,
+independent audit, and model export. The configurable workflow service remains
+a separate proposal.
+
+```sh
+./scripts/setup-model
+./scripts/curate-data --prepare-only
+```
+
+The curation command can continue with a local LM Studio model after source
+preparation. Runtime and model combinations must return final structured content
+matching the requested JSON Schema.
 
 ## Start here
 
-- [Architecture and language recommendation](docs/architecture.md)
-- [Apple Silicon training and model lineage](docs/local-training-and-model-lineage.md)
-- [Model research, datasets, calibration, and hosting](docs/research-and-concept.md)
+- [Model lifecycle specifications](specs/README.md)
+- [User guides](docs/README.md)
+- [Automated public-source curation](docs/guides/automated-curation.md)
+
+- [Architecture and language recommendation](specs/research/workflow-service-proposal.md)
+- [Apple Silicon training and model lineage](specs/research/apple-silicon.md)
+- [Model research, datasets, calibration, and hosting](specs/research/model-research.md)
 - [Illustrative workflow](workflows/financial-triage/workflow.yaml)
 - [Illustrative service configuration](config/service.example.yaml)
 - [Contributor instructions](AGENTS.md)
@@ -31,7 +47,8 @@ service/
 contracts/          Language-neutral data schemas
 workflows/          Versioned processes, prompts, and workflow examples
 config/             Deployment-specific bindings and secret references
-docs/               Architecture, research, and historical context
+docs/               End-user guides
+specs/              Implementation contracts and research
 ```
 
 The workflow service and model server are separately deployed processes. Training libraries and GPU dependencies do not belong in the service image. Model weights, real customer data, credentials, and generated artifacts do not belong in Git.
@@ -48,10 +65,14 @@ The workflow service and model server are separately deployed processes. Trainin
 - Keep model customization separate from workflow configuration. Most new prompts, catalogs, questions, and routes should not require fine-tuning.
 - Keep this repository independent of PURISTA, Harness, and Voyage.
 
-## First implementation slice
+## Current implementation scope
 
-Validate one workflow bundle, call a configurable local model endpoint through a model adapter, validate its structured result, apply a deterministic route, and return the same result through an HTTP adapter. Test the core using a fake model adapter before using real weights. Add durable execution and a Redis Streams adapter before claiming reliable asynchronous processing.
-
-No model or dependency downloads, paid compute, or production deployment have been performed. The research originated in the PURISTA workspace and was moved into this standalone project on 2026-09-19. Historical integration research is retained in [docs/background](docs/background/purista-integration-research.md); it does not override this project's architecture.
+The Python tools cover automated public-source curation, preparation, shared
+adaptation, customer customization, evaluation and export for standard inference.
+Curation preparation downloads and converts pinned assets; optional augmentation
+uses a loopback LM Studio endpoint; training remains a later explicit command.
+The small setup model exercises the lifecycle locally. Selecting and qualifying
+a production financial model is separate from verifying the tooling. The
+configurable workflow service remains a separate proposal.
 
 Foliqant is a working name derived from folio and quant; no trademark or domain availability is claimed. A distribution license has not yet been selected.

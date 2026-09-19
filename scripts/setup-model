@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+if ! command -v uv >/dev/null 2>&1; then
+  echo "Install uv first: https://docs.astral.sh/uv/getting-started/installation/" >&2
+  exit 3
+fi
+for argument in "$@"; do
+  if [[ "$argument" == "--help" || "$argument" == "-h" ]]; then
+    echo "Usage: ./scripts/setup-model [--workspace DIR] [--offline] [--timeout-seconds N]"
+    echo "Creates an isolated environment and prepares pinned local model/data assets."
+    echo "Default data workspace: ~/.local/share/foliqant. Does not start training."
+    exit 0
+  fi
+done
+forwarded=()
+while (( $# )); do
+  case "$1" in
+    --workspace)
+      shift
+      if (( $# == 0 )) || [[ -z "$1" ]]; then
+        echo "--workspace requires a directory" >&2
+        exit 2
+      fi
+      workspace_value="$1"
+      ;;
+    --workspace=*)
+      workspace_value="${1#*=}"
+      if [[ -z "$workspace_value" ]]; then
+        echo "--workspace requires a directory" >&2
+        exit 2
+      fi
+      ;;
+    *)
+      forwarded+=("$1")
+      shift
+      continue
+      ;;
+  esac
+  case "$workspace_value" in
+    /*) ;;
+    "~") workspace_value="$HOME" ;;
+    "~/"*) workspace_value="$HOME/${workspace_value:2}" ;;
+    *) workspace_value="$PWD/$workspace_value" ;;
+  esac
+  forwarded+=(--workspace "$workspace_value")
+  shift
+done
+cd -- "$repo_root"
+sync_args=(sync --locked --extra mlx --group dev)
+for argument in "${forwarded[@]+"${forwarded[@]}"}"; do
+  if [[ "$argument" == "--offline" ]]; then
+    sync_args+=(--offline)
+  fi
+done
+uv "${sync_args[@]}"
+exec uv run --no-sync --locked foliqant-model setup "${forwarded[@]+"${forwarded[@]}"}"

@@ -1,6 +1,6 @@
 # Workflow service
 
-Proposed stack: strict TypeScript on Node.js LTS. No executable service or dependencies are present yet; see the [architecture](../docs/architecture.md) before choosing the implementation stack.
+Proposed stack: Go with a standard-library core and separately wired adapters, including OpenTelemetry. No executable service or dependencies are present yet; see the [architecture](../specs/research/workflow-service-proposal.md) before choosing the implementation stack.
 
 `src/core/` owns graph execution, result validation, and deterministic routing. `src/ports/` owns extension interfaces. `src/adapters/` owns model endpoint, transport, and persistence implementations. Adapter imports must not flow back into core. Application startup will assemble an explicit registry of trusted adapters.
 
