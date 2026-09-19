@@ -27,10 +27,12 @@ from jsonschema.exceptions import (
 )
 from pydantic import (
     Field,
+    StrictBool,
     StrictFloat,
     StrictInt,
     TypeAdapter,
     ValidationError,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -61,8 +63,15 @@ type _SignalHandler = Callable[[int, FrameType | None], object] | int | None
 
 
 class LocalEndpointConfig(ContractModel):
-    """Validated limits and location for one local generation endpoint."""
+    """Validated location and limits for one trusted generation endpoint.
 
+    The default permits only a loopback endpoint.  A numeric RFC1918 or IPv6
+    unique-local address requires the explicit ``allowPrivateNetwork`` opt-in;
+    public addresses, DNS names, credentials, redirects and proxies remain
+    unsupported.
+    """
+
+    allowPrivateNetwork: StrictBool = False
     baseUrl: NonEmptyStr = "http://127.0.0.1:1234/v1"
     model: Omitted[NonEmptyStr] = Field(default=None, exclude_if=lambda value: value is None)
     timeoutSeconds: Annotated[StrictInt, Field(ge=1, le=600)] = 120
@@ -78,8 +87,10 @@ class LocalEndpointConfig(ContractModel):
 
     @field_validator("baseUrl")
     @classmethod
-    def normalize_base_url(cls, value: str) -> str:
-        return _validated_base_url(value)
+    def normalize_base_url(cls, value: str, info: ValidationInfo) -> str:
+        allow_private_network = info.data.get("allowPrivateNetwork", False)
+        assert isinstance(allow_private_network, bool)
+        return _validated_base_url(value, allow_private_network=allow_private_network)
 
 
 class EndpointModelIdentity(ContractModel):
@@ -412,7 +423,7 @@ def _select_model(
     return matches[0]
 
 
-def _validated_base_url(value: str) -> str:
+def _validated_base_url(value: str, *, allow_private_network: bool = False) -> str:
     try:
         parts = urlsplit(value)
         port = parts.port
@@ -424,19 +435,36 @@ def _validated_base_url(value: str) -> str:
         raise ValueError("baseUrl must have an explicit port and the /v1 path")
     host = parts.hostname
     if host is None or "%" in host:
-        raise ValueError("baseUrl must use a loopback host")
+        raise ValueError("baseUrl must use a numeric loopback or private-network address")
     if host.lower() == "localhost":
         host = "127.0.0.1"
     else:
         try:
             address = ipaddress.ip_address(host)
         except ValueError as error:
-            raise ValueError("baseUrl must use a numeric loopback address") from error
-        if not address.is_loopback:
-            raise ValueError("baseUrl must use a loopback address")
+            raise ValueError(
+                "baseUrl must use a numeric loopback or private-network address"
+            ) from error
+        if not address.is_loopback and not (
+            allow_private_network and _is_private_network_address(address)
+        ):
+            raise ValueError(
+                "baseUrl must use a loopback address or an explicitly allowed "
+                "private-network address"
+            )
         host = address.compressed
     netloc = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
     return urlunsplit(SplitResult("http", netloc, "/v1", "", ""))
+
+
+def _is_private_network_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(address, ipaddress.IPv4Address):
+        return (
+            address in ipaddress.IPv4Network("10.0.0.0/8")
+            or address in ipaddress.IPv4Network("172.16.0.0/12")
+            or address in ipaddress.IPv4Network("192.168.0.0/16")
+        )
+    return address in ipaddress.IPv6Network("fc00::/7")
 
 
 def _endpoint_url(base_url: str, path: str) -> str:

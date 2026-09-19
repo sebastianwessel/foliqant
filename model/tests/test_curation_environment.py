@@ -14,6 +14,7 @@ def test_allowlisted_environment_overrides_are_typed_and_bounded() -> None:
             "FOLIQANT_CURATION_ENDPOINT_URL": "http://127.0.0.1:1234/v1",
             "FOLIQANT_CURATION_MODEL": "local-generator",
             "FOLIQANT_CURATION_STRUCTURED_OUTPUT": "prompt",
+            "FOLIQANT_CURATION_ALLOW_PRIVATE_NETWORK": "true",
             "FOLIQANT_CURATION_TIMEOUT_SECONDS": "180",
             "FOLIQANT_CURATION_MAX_TOKENS": "4096",
             "FOLIQANT_CURATION_TEMPERATURE": "0.2",
@@ -24,6 +25,7 @@ def test_allowlisted_environment_overrides_are_typed_and_bounded() -> None:
 
     assert config.endpoint.model == "local-generator"
     assert config.endpoint.structuredOutput == "prompt"
+    assert config.endpoint.allowPrivateNetwork is True
     assert config.endpoint.timeoutSeconds == 180
     assert config.endpoint.maxTokens == 4096
     assert config.endpoint.temperature == 0.2
@@ -38,6 +40,7 @@ def test_allowlisted_environment_overrides_are_typed_and_bounded() -> None:
         ({"FOLIQANT_CURATION_TEMPERATURE": "nan"}, "/endpoint/temperature"),
         ({"FOLIQANT_CURATION_LANGUAGES": "en,"}, "/generation/languages"),
         ({"FOLIQANT_CURATION_STRUCTURED_OUTPUT": "automatic"}, "/endpoint/structuredOutput"),
+        ({"FOLIQANT_CURATION_ALLOW_PRIVATE_NETWORK": "yes"}, "/endpoint/allowPrivateNetwork"),
     ],
 )
 def test_invalid_environment_override_is_rejected_without_coercion(

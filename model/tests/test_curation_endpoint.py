@@ -161,6 +161,7 @@ def _generate(config: LocalEndpointConfig) -> GenerationResponse:
     [
         "https://127.0.0.1:1234/v1",
         "http://example.org:1234/v1",
+        "http://192.168.2.101:1234/v1",
         "http://127.0.0.1:1234/other",
         "http://user:secret@127.0.0.1:1234/v1",
         "http://127.0.0.1/v1",
@@ -174,6 +175,14 @@ def test_config_rejects_nonlocal_or_ambiguous_endpoint(url: str) -> None:
 def test_localhost_is_normalized_without_dns() -> None:
     config = LocalEndpointConfig(baseUrl="http://localhost:1234/v1/")
     assert config.baseUrl == "http://127.0.0.1:1234/v1"
+
+
+def test_config_allows_explicit_rfc1918_endpoint_only() -> None:
+    config = LocalEndpointConfig(baseUrl="http://192.168.2.101:1234/v1", allowPrivateNetwork=True)
+    assert config.baseUrl == "http://192.168.2.101:1234/v1"
+
+    with pytest.raises(ValidationError):
+        LocalEndpointConfig(baseUrl="http://8.8.8.8:1234/v1", allowPrivateNetwork=True)
 
 
 def test_discovery_is_read_only_and_enriches_runtime_metadata() -> None:

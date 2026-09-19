@@ -70,7 +70,8 @@ The workflow service and model server are separately deployed processes. Trainin
 The Python tools cover automated public-source curation, preparation, shared
 adaptation, customer customization, evaluation and export for standard inference.
 Curation preparation downloads and converts pinned assets; optional augmentation
-uses a loopback LM Studio endpoint; training remains a later explicit command.
+uses a loopback endpoint by default or an explicitly allowed trusted private-network
+endpoint; training remains a later explicit command.
 The small setup model exercises the lifecycle locally. Selecting and qualifying
 a production financial model is separate from verifying the tooling. The
 configurable workflow service remains a separate proposal.

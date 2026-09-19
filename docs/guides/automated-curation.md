@@ -17,10 +17,12 @@ still parses and validates the final JSON strictly; malformed output is rejected
 There is no automatic fallback, and internal reasoning is never used as the answer.
 The default `json-schema` mode retains the server-side schema request.
 
-The endpoint must stay on loopback. Foliqant does not use ambient proxies,
-follow redirects, fall back to a cloud service, download models, or manage the
-server. LM Studio may activate an installed selected model when a request arrives,
-according to its own loading settings.
+The endpoint defaults to loopback. A trusted numeric RFC1918 or IPv6 unique-local
+model server needs the explicit `allowPrivateNetwork: true` setting (or
+`FOLIQANT_CURATION_ALLOW_PRIVATE_NETWORK=true` in `.env`). Foliqant rejects public
+addresses, DNS names, credentials, ambient proxies and redirects; it does not fall
+back to a cloud service, download models or manage the server. LM Studio may activate
+an installed selected model when a request arrives, according to its own loading settings.
 
 The wrapper reads the ignored root `.env` and applies the checked allowlist in
 [`.env.example`](../../.env.example). This is the usual place to choose your
@@ -130,7 +132,8 @@ Copy [the example](../../model/examples/curation.yaml) and pass your copy with `
 | Field | Default | Meaning |
 |---|---:|---|
 | `sources[].maxRecords` | `1000` | Per-source cap, 4–100,000, applied without splitting families. |
-| `endpoint.baseUrl` | `http://127.0.0.1:1234/v1` | Local OpenAI-compatible endpoint; only loopback is allowed. |
+| `endpoint.allowPrivateNetwork` | `false` | Explicitly permits a trusted RFC1918 or IPv6 unique-local model server; public endpoints remain rejected. |
+| `endpoint.baseUrl` | `http://127.0.0.1:1234/v1` | Local OpenAI-compatible endpoint; loopback by default or an explicitly allowed private-network address. |
 | `endpoint.structuredOutput` | `json-schema` | Use `prompt` explicitly when server-side guided grammar is incompatible; local schema validation remains mandatory. |
 | `endpoint.model` | omitted | Requires exactly one discovered model. Set an exact ID only when several are served. |
 | `endpoint.timeoutSeconds` | `120` | Total deadline for one endpoint request. |

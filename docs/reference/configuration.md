@@ -118,7 +118,8 @@ the result may be below the requested cap.
 | Field | Type | Default | Rule |
 |---|---|---:|---|
 | `structuredOutput` | string | `json-schema` | `json-schema` sends server-side constraints; `prompt` omits them. Both strictly validate final JSON locally; no automatic fallback. |
-| `baseUrl` | URL | `http://127.0.0.1:1234/v1` | HTTP on an IP loopback address only; no credentials, redirects or ambient proxy. |
+| `allowPrivateNetwork` | boolean | `false` | Allows a numeric RFC1918 IPv4 or IPv6 unique-local endpoint. Set it only for a trusted model server; public addresses, DNS names, credentials, redirects and ambient proxies remain rejected. |
+| `baseUrl` | URL | `http://127.0.0.1:1234/v1` | HTTP on an IP loopback address by default, or an explicitly allowed private-network address; no credentials, redirects or ambient proxy. |
 | `model` | string | omitted | Exact discovered model ID. Omission requires exactly one endpoint model. |
 | `timeoutSeconds` | integer | `120` | 1–600 seconds per request. |
 | `maxTokens` | integer | `2048` | 1–32,768 generated tokens. |

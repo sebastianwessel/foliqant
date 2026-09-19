@@ -59,8 +59,13 @@
     },
     "LocalEndpointConfig": {
       "additionalProperties": false,
-      "description": "Validated limits and location for one local generation endpoint.",
+      "description": "Validated location and limits for one trusted generation endpoint.\n\nThe default permits only a loopback endpoint.  A numeric RFC1918 or IPv6\nunique-local address requires the explicit ``allowPrivateNetwork`` opt-in;\npublic addresses, DNS names, credentials, redirects and proxies remain\nunsupported.",
       "properties": {
+        "allowPrivateNetwork": {
+          "default": false,
+          "title": "Allowprivatenetwork",
+          "type": "boolean"
+        },
         "baseUrl": {
           "default": "http://127.0.0.1:1234/v1",
           "minLength": 1,

@@ -40,6 +40,14 @@ def _number(value: str, pointer: str) -> float:
     return parsed
 
 
+def _boolean(value: str, pointer: str) -> bool:
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    raise _invalid(pointer)
+
+
 def _value(environment: Mapping[str, str], name: str) -> str | None:
     value = environment.get(_PREFIX + name)
     return value if value not in {None, ""} else None
@@ -68,6 +76,8 @@ def apply_curation_environment(
     for name, field, _pointer in values:
         if value := _value(environment, name):
             endpoint[field] = value
+    if value := _value(environment, "ALLOW_PRIVATE_NETWORK"):
+        endpoint["allowPrivateNetwork"] = _boolean(value, "/endpoint/allowPrivateNetwork")
     for name, field, pointer in (
         ("TIMEOUT_SECONDS", "timeoutSeconds", "/endpoint/timeoutSeconds"),
         ("MAX_TOKENS", "maxTokens", "/endpoint/maxTokens"),
