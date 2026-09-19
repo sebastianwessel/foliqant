@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Illustrative model answer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "category",
+    "needsReview",
+    "reason",
+    "evidence"
+  ],
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": [
+        "fund-document-request",
+        "other"
+      ]
+    },
+    "needsReview": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      }
+    }
+  }
+}

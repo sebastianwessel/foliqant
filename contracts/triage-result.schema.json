@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Illustrative workflow result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "route",
+    "decision"
+  ],
+  "properties": {
+    "route": {
+      "type": "string",
+      "enum": [
+        "fund-document-team",
+        "human-review"
+      ]
+    },
+    "decision": {
+      "$ref": "triage-answer.schema.json"
+    }
+  }
+}

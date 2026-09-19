@@ -1,0 +1,43 @@
+# Illustrative proposal. No workflow loader or runner is implemented yet.
+apiVersion: foliqant.dev/v1alpha1
+kind: Workflow
+name: financial-triage
+version: 0.1.0
+inputSchema: ../../contracts/triage-input.schema.json
+outputSchema: ../../contracts/triage-result.schema.json
+start: classify
+steps:
+  classify:
+    type: model
+    model: decision
+    instructions: prompts/classify.md
+    input:
+      from: input
+    outputSchema: ../../contracts/triage-answer.schema.json
+    next: choose-route
+  choose-route:
+    type: decision
+    cases:
+      - when:
+          from: steps.classify
+          path: /needsReview
+          equals: true
+        next: review
+      - when:
+          from: steps.classify
+          path: /category
+          equals: fund-document-request
+        next: fund-documents
+    default: review
+  fund-documents:
+    type: finish
+    output:
+      route: fund-document-team
+      decision:
+        from: steps.classify
+  review:
+    type: finish
+    output:
+      route: human-review
+      decision:
+        from: steps.classify

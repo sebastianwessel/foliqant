@@ -1,0 +1,43 @@
+# Illustrative proposal. Adapter IDs and options are not implemented APIs.
+apiVersion: foliqant.dev/v1alpha1
+kind: Service
+models:
+  decision:
+    adapter: openai-compatible
+    baseUrlFromEnv: FOLIQANT_MODEL_BASE_URL
+    modelFromEnv: FOLIQANT_MODEL_ID
+    apiKeyFromEnv: FOLIQANT_MODEL_API_KEY
+    requiredCapabilities:
+      - structured-output
+workflows:
+  financial-triage:
+    file: ../workflows/financial-triage/workflow.yaml
+limits:
+  maxConcurrentRuns: 2
+  runTimeoutMs: 60000
+  maxInputBytes: 32768
+bindings:
+  local-http:
+    workflow: financial-triage
+    input:
+      adapter: http
+      host: 127.0.0.1
+      port: 8080
+      method: POST
+      path: /v1/triage
+    output:
+      adapter: http-response
+  redis-example:
+    enabled: false
+    workflow: financial-triage
+    input:
+      adapter: redis-streams
+      connectionFromEnv: FOLIQANT_REDIS_URL
+      stream: foliqant.requests
+      consumerGroup: foliqant
+    output:
+      adapter: redis-streams
+      connectionFromEnv: FOLIQANT_REDIS_URL
+      stream: foliqant.results
+# Redis is disabled until durable storage, deduplication, recovery, and outbox
+# delivery are configured. This is not a production authentication profile.
