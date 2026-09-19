@@ -53,6 +53,14 @@ never insert the target label, scenario name or expected answer into its input.
 Do not add special tokenizer tokens or a state prefix without a matched-format
 experiment. The generator request envelope is not the model's training content.
 
+Do not infer generative-task improvements from an embedding model's retrieval
+prefix results. For prefix experiments, freeze the exact formats, original
+validation families, paired request order, decoding controls, metrics and adoption
+rule before inference. Never select calibration or test records for prompt tuning.
+Report regressions and failed outputs as well as gains; retain the current format
+when the bounded experiment does not demonstrate a benefit. An inference-only
+comparison does not establish that training with that prefix improves the model.
+
 The example omits `endpoint.model`, which requires exactly one discovered local
 model. If LM Studio exposes several, copy the YAML and set the exact model ID.
 The wrapper also reads the ignored root `.env` using the allowlisted settings in

@@ -225,6 +225,17 @@ create fresh run identities. Earlier artifacts stay immutable; discovered qualit
 defects are documented in execution evidence and exclude those pilot artifacts
 from training recommendations.
 
+The requested prefix investigation is a separate, inference-only validation
+experiment, not a change to generated training records. The research script
+`scripts/evaluate_task_prefixes.py` freezes three prompt conditions, 24 original
+validation families and 72 serial requests before execution. It uses the existing
+trusted local endpoint adapter, never downloads or trains, preserves source
+artifacts, and stores requests/responses outside Git. Calibration and test records
+are not selected. Full exact correctness remains primary; TAT-QA answer-only
+diagnostics must not silently replace its annotation contract. A prefix requires
+paired evidence and a disjoint validation confirmation before changing defaults.
+Protocol and measured limitations belong in `plans/reviews/`.
+
 ## Explicit structured-output transport mode
 
 LocalEndpointConfig.structuredOutput is json-schema (default) or prompt. The
