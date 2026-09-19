@@ -39,12 +39,31 @@ families. typed-decisions soft targets and MultiDoGO token-aligned slot labels
 remain in the source corpus but are excluded from automatic augmentation because
 the current checker cannot reliably preserve those reference semantics.
 
+Augmentation rewrites only BANKING77 request text, WANLI claims or TAT-QA
+questions. Code retains catalogs, evidence, tables and paragraphs, and preserves
+earlier conversation messages. Scenario wording keeps literal evidence, dates
+and numbers. Do not admit role/message wrappers, copied system rules or changed
+label catalogs to increase the acceptance count. Inspect both accepted and
+quarantined samples: a passed checker is not sufficient evidence of clean input.
+Prompt changes create new run identities; do not relabel earlier artifacts.
+
+Task conditioning belongs in the ordinary system instruction used consistently
+for training, evaluation and inference. A broad task name can guide generation;
+never insert the target label, scenario name or expected answer into its input.
+Do not add special tokenizer tokens or a state prefix without a matched-format
+experiment. The generator request envelope is not the model's training content.
+
 The example omits `endpoint.model`, which requires exactly one discovered local
 model. If LM Studio exposes several, copy the YAML and set the exact model ID.
+The wrapper also reads the ignored root `.env` using the allowlisted settings in
+`.env.example`. Use it for the exact endpoint/model and bounded generation limits.
+`FOLIQANT_CURATION_ALLOW_PRIVATE_NETWORK=true` explicitly allows a trusted
+RFC1918 or IPv6 unique-local server. Loopback is the default; public endpoints,
+DNS names, proxies and redirects remain rejected.
 Rerun with the same configuration and workspace to resume; changing the
 configuration creates a new run, and changed stored model metadata is rejected.
 `--offline` forbids remote asset and dependency downloads but still permits the
-configured loopback endpoint. It succeeds only after every selected asset and uv
+configured local endpoint. It succeeds only after every selected asset and uv
 dependency is cached. Do not replace missing assets with toy records or manually
 edit rejected candidates.
 

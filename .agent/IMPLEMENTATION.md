@@ -33,8 +33,8 @@ Use `ArtifactTransaction` for immutable outputs. Preserve recursive parent
 identity, all source-rights fields, precision history and leakage indexes. Never
 add overwrite flags, automatically delete stale locks or silently repair hashes.
 Only setup, fetch and curate download. Curation generation may call the
-configured loopback model endpoint; training and evaluation stay local and
-offline.
+configured loopback model endpoint or an explicitly authorized private-network
+endpoint; training and evaluation stay local and offline.
 
 Research/noncommercial data may be used when its terms permit the activity.
 Commercial restrictions remain recorded through ancestry. Private repository

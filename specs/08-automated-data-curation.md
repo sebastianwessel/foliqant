@@ -1,8 +1,10 @@
 # Automated local dataset curation
 
-Status: implementation mandate received on 2026-09-19. This extends the completed
-model-tooling scope; it does not claim the new pipeline already works. The user
-will supply a local LM Studio model and requires no manual data preparation or
+Status: implemented with local source and inference evidence; scoped prompt and
+input validation refinements are recorded in
+`plans/reviews/curation-prompt-optimization.md`. This extends the completed
+model-tooling scope. The user supplies a local LM Studio model and requires no
+manual data preparation or
 labeling. No paid API, cloud fallback, private-data upload, model download or
 commercial/financial qualification is authorized by this work.
 
@@ -53,7 +55,7 @@ Add `foliqant-model curate --config <yaml> [--workspace <path>] [--prepare-only]
 [--offline]`. Default workspace is the existing external Foliqant data root.
 `--prepare-only` downloads/converts/splits and produces a ready-to-generate report
 without inference. `--offline` forbids remote dataset downloads; configured
-loopback inference remains allowed. No training begins automatically.
+local inference remains allowed. No training begins automatically.
 
 Configuration and source pins determine the run identity. Model identity is
 resolved before generation and persisted. Resume refuses a changed configuration,
@@ -80,7 +82,9 @@ prove the server has cancelled GPU work; document that boundary.
 
 Use the OpenAI-compatible `/v1/models` and `/v1/chat/completions` interfaces via a
 small typed adapter, not an inference-engine fork. Default baseUrl is
-http://127.0.0.1:1234/v1. Only numeric loopback addresses or localhost are allowed;
+http://127.0.0.1:1234/v1. Numeric loopback addresses or localhost are allowed by
+default; `allowPrivateNetwork: true` explicitly permits a trusted RFC1918 IPv4 or
+IPv6 unique-local endpoint. Public addresses and DNS names remain rejected;
 resolve localhost only to loopback and do not use ambient proxies or redirects.
 No cloud fallback, tools, external URLs or remote model code in generation calls.
 
@@ -196,6 +200,30 @@ rather than using generic repeated turns to bridge unrelated conversation splits
 Same-family duplicates may collapse. A neutral redaction marker must not expose
 the supervised slot label. Conservative source-family rights survive any later
 cross-source duplicate collapse.
+
+## Scoped task input and prompt conditioning
+
+Generation edits only the final user content, preserving earlier conversation
+messages. For BANKING77 only `request` is editable; for WANLI only `claim`; for
+TAT-QA only `question`. Code reconstructs the final user JSON with all other
+fields unchanged. The model never rewrites label catalogs, evidence, tables,
+paragraphs, system instructions or conversation envelopes. Plain authored
+scenarios retain their user text shape and exact quotes. Reject added role and
+generation envelopes and copied rule-map instructions before the checker call.
+Numeric/date checks compare the editable source text to the candidate, excluding
+immutable task metadata and source evidence. Checks must not be relaxed to
+inflate acceptance. The checker receives the reconstructed complete task and
+context without the reference answer or the scenario operation label.
+
+Use a generic `task` identifier in the generation request envelope, derived from
+the input source contract, never from the answer or a target-bearing scenario
+tag. This is conditioning for the generator, not a new tokenizer token or an
+injected training-user prefix. Existing training system instructions define the
+task for consumers. A shared inference/training prefix is a future format change
+requiring matched evaluation, not an assumed quality improvement. Prompt revisions
+create fresh run identities. Earlier artifacts stay immutable; discovered quality
+defects are documented in execution evidence and exclude those pilot artifacts
+from training recommendations.
 
 ## Explicit structured-output transport mode
 

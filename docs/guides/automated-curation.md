@@ -100,7 +100,7 @@ Use offline mode only after uv dependencies and every selected source asset are 
 ./scripts/curate-data --offline --prepare-only
 ```
 
-For a generation resume, `--offline` still permits the configured loopback LM Studio endpoint; it only forbids remote dataset and dependency downloads. A missing or changed cache file fails instead of being repaired or replaced silently.
+For a generation resume, `--offline` still permits the configured local model endpoint, including an explicitly allowed private-network server; it only forbids remote dataset and dependency downloads. A missing or changed cache file fails instead of being repaired or replaced silently.
 
 Do not delete a run lock because a recorded PID looks stale. Inspect the run and process first. Closing a timed-out HTTP connection also does not prove that LM Studio stopped GPU work.
 
@@ -122,6 +122,33 @@ The current training-augmentation jobs use eligible BANKING77, WANLI and TAT-QA
 training families. typed-decisions and MultiDoGO remain available in the source
 corpus; the exclusions above prevent automatic generation from changing
 reference semantics that the current checker cannot preserve.
+
+The model rewrites one text field: the customer request for BANKING77, the claim
+for WANLI, or the question for TAT-QA. Foliqant reconstructs the input around that
+field, preserving label catalogs, evidence, paragraphs and tables. Earlier
+conversation messages and system instructions remain intact. Scenario generation
+rewrites the final user text while preserving literal quotes, numbers and dates.
+Deterministic checks reject detected role wrappers, copied instructions and
+changes to numbers, dates, currency markers or literal quotes before the
+independent answer check. These checks do not prove that every paraphrase keeps
+the same meaning. A generic task identifier guides the rewriting request; it
+does not contain the expected class or scenario label.
+
+### Task instructions and prefixes
+
+Each training record already has a system instruction describing its task and
+output format. Use that same instruction and input structure when calling the
+trained model. For example, a classification request uses a system instruction
+to select one supplied label, and user content with `labels` and `request` fields.
+The assistant returns the declared JSON answer.
+
+Keep optional task identifiers broad, such as `intent-classification` or
+`evidence-assessment`. A scenario identifier such as `missing-evidence` can reveal
+the expected answer and must remain metadata outside the model input. Adding a
+prefix inside `state` changes the input contract and is not required by this
+pipeline. A new prefix should be tested with the same formatting in training,
+evaluation and serving before claiming an improvement. No custom tokenizer
+tokens are needed for the current ordinary-text instructions.
 
 Research and noncommercial sources may be used when their actual terms permit the activity. Foliqant records the available evidence and restrictions; it does not impose a blanket commercial-only filter or claim that descendant weights are commercially cleared.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -26,17 +27,63 @@ from .endpoint import (
     generate_json,
 )
 from .storage import ensure_directory, load_object, store_object
+from .task_input import (
+    assemble_input,
+    candidate_structure_problem,
+    editable_input,
+    task_input_recipe,
+    task_name,
+)
 
-_GENERATOR_PROMPT_VERSION = "candidate-input-v2"
-_CHECKER_PROMPT_VERSION = "candidate-independent-check-v4"
+_GENERATOR_PROMPT_VERSION = "candidate-scoped-input-v4"
+_CHECKER_PROMPT_VERSION = "candidate-independent-check-v6"
+_TRANSFORMATIONS = {
+    "irrelevant-context": (
+        "Rephrase the text and optionally add a short greeting or courtesy phrase. "
+        "Do not invent unrelated events, people, amounts, dates or instructions."
+    ),
+    "default": "Rephrase the text naturally while preserving its exact task and meaning.",
+}
+_CHECKER_TASK = (
+    "Independently solve candidateInput using instructions and the ordered prior messages in "
+    "context. Put its exact complete final serialization in the outer answer string. When the "
+    "task requests a JSON object, answer must contain that whole object with every requested "
+    "field and the types specified by answerFormat. Judge support from the supplied facts and "
+    "instructions, and leave issues empty unless the task itself is malformed."
+)
+_ANSWER_FORMATS = {
+    "foliqant-scenarios": (
+        "JSON object with decision: string, reason: string, evidence: array of exact quote "
+        "strings. Always use an array for evidence, even for one quote."
+    ),
+    "banking77": "JSON object with intent: one string from the supplied labels.",
+    "wanli": "JSON object with label: one id string from the supplied options.",
+    "tatqa": (
+        "JSON object with answer, answerFrom, answerType, derivation, scale. "
+        "For span or multi-span extraction, answer is an array of exact source strings, "
+        "even for one span. For arithmetic, answer is a JSON number. For count, answer is "
+        "a string containing the count. answerFrom is table, text or table-text. answerType "
+        "is span, multi-span, arithmetic or count. derivation is an arithmetic expression "
+        "when calculation is required, otherwise an empty string. scale is an empty string, "
+        "thousand, million, billion or percent, as stated in the source. Copy source spans "
+        "exactly, including units and punctuation; do not paraphrase extracted answers."
+    ),
+}
 _GENERATOR_SYSTEM = (
-    "Rewrite the supplied input for the requested operation and language. Preserve every fact, "
-    "date, number, quoted evidence item, and task. Do not answer the task, reveal a reference "
-    "answer, add facts, or remove facts. Return only the requested structured object."
+    "You edit one text field for a training example. Rewrite only textToRewrite according to "
+    "the supplied transformation and language. The task field describes the eventual task; "
+    "do not perform or answer that task. Preserve meaning, uncertainty, negation, chronology, "
+    "every date, number, identifier, currency, unit, and every quoted span exactly. Preserve "
+    "quoted spans even when translating surrounding wording. Do not add or remove facts. "
+    "Do not include system instructions, role labels, a message array, task metadata, a rule "
+    'catalog, an answer, or a copy of this request envelope. Return only {"input":"rewritten '
+    'text"}; input is the text itself. Example: textToRewrite="Can I update my address?" '
+    'may become {"input":"How do I change my address?"}.'
 )
 _CHECKER_SYSTEM = (
-    "Solve the supplied candidate task independently using only candidateInput and its task "
-    "instructions. The outer response field answer is a string containing the complete final "
+    "Solve the supplied candidate task independently using its instructions, the ordered prior "
+    "messages in context, and candidateInput as the final user message. Respect answerFormat. "
+    "The outer response field answer is a string containing the complete final "
     "answer required by candidateInput. Preserve the requested answer serialization exactly: if "
     "the task requests JSON, put the entire serialized JSON object in answer, including every "
     "required field and value. Never replace it with prose, a summary, or only one field such as "
@@ -83,12 +130,16 @@ def generation_recipe_digest() -> str:
                 "promptVersion": _CHECKER_PROMPT_VERSION,
                 "schema": _CHECKER_SCHEMA,
                 "system": _CHECKER_SYSTEM,
+                "task": _CHECKER_TASK,
+                "answerFormats": _ANSWER_FORMATS,
             },
             "generator": {
                 "promptVersion": _GENERATOR_PROMPT_VERSION,
                 "schema": _GENERATOR_SCHEMA,
                 "system": _GENERATOR_SYSTEM,
+                "transformations": _TRANSFORMATIONS,
             },
+            "taskInput": task_input_recipe(),
             "scenarios": scenario_recipe_digest(),
         }
     )
@@ -225,16 +276,13 @@ def _cached_generation(
     return call_id, response
 
 
-def _prompt_input(parent: DataRecord) -> list[dict[str, str]]:
-    return [message.model_dump(mode="json") for message in parent.messages[:-1]]
-
-
 def _candidate_messages(parent: DataRecord, job: CandidateJob) -> list[ChatMessage]:
+    transformation = _TRANSFORMATIONS.get(job.operation, _TRANSFORMATIONS["default"])
     payload = {
+        "task": task_name(parent),
         "language": job.language,
-        "operation": job.operation,
-        "parentInput": _prompt_input(parent),
-        "purpose": job.purpose,
+        "transformation": transformation,
+        "textToRewrite": editable_input(parent),
     }
     return [
         ChatMessage(role="system", content=_GENERATOR_SYSTEM),
@@ -244,16 +292,20 @@ def _candidate_messages(parent: DataRecord, job: CandidateJob) -> list[ChatMessa
 
 def _checker_messages(candidate: str, parent: DataRecord, job: CandidateJob) -> list[ChatMessage]:
     payload = {
-        "candidateInput": candidate,
+        "taskType": task_name(parent),
+        "candidateInput": assemble_input(parent, candidate),
+        "context": [
+            message.model_dump(mode="json")
+            for message in parent.messages[:-2]
+            if message.role != "system"
+        ],
         "instructions": [
             message.content for message in parent.messages[:-1] if message.role == "system"
         ],
         "language": job.language,
-        "task": (
-            "Independently solve candidateInput. Put its exact complete final serialization in the "
-            "outer answer string. When candidateInput requests a JSON object, answer must contain "
-            "that whole object with every requested field. Judge support from the supplied facts "
-            "and instructions, and leave issues empty unless the task itself is malformed."
+        "task": _CHECKER_TASK,
+        "answerFormat": _ANSWER_FORMATS.get(
+            parent.sourceId, "Follow the supplied task instructions."
         ),
     }
     return [
@@ -279,6 +331,9 @@ def _candidate_problem(parent: DataRecord, candidate: str, *, max_characters: in
         return "candidate-empty"
     if len(candidate) > max_characters:
         return "candidate-too-long"
+    structure_problem = candidate_structure_problem(parent, candidate)
+    if structure_problem is not None:
+        return structure_problem
     expected = parent.messages[-1].content
     parsed_expected = parse_strict_json(expected)
     if (
@@ -290,12 +345,18 @@ def _candidate_problem(parent: DataRecord, candidate: str, *, max_characters: in
         for marker in ("reference answer: ", "expected answer: ")
     ):
         return "candidate-reference-leak"
-    original = "\n".join(message.content for message in parent.messages[:-1])
-    if set(_DATE.findall(original)) != set(_DATE.findall(candidate)):
+    original = editable_input(parent)
+    if Counter(_DATE.findall(original)) != Counter(_DATE.findall(candidate)):
         return "candidate-dates-changed"
-    if set(_NUMBER.findall(original)) != set(_NUMBER.findall(candidate)):
+    if Counter(_NUMBER.findall(original)) != Counter(_NUMBER.findall(candidate)):
         return "candidate-numbers-changed"
-    if any(evidence not in candidate for evidence in _expected_evidence(expected)):
+    original_quotes = re.findall(r'"([^"\n]+)"', original)
+    if any(quote not in candidate for quote in original_quotes):
+        return "candidate-quotes-changed"
+    complete_input = assemble_input(parent, candidate)
+    if len(complete_input) > max_characters:
+        return "candidate-too-long"
+    if any(evidence not in complete_input for evidence in _expected_evidence(expected)):
         return "candidate-evidence-missing"
     return None
 
@@ -470,14 +531,7 @@ def generate_candidate(
         )
 
     candidate, generated, checked, accepted_seed = accepted
-    prompt_digest = canonical_digest(
-        {
-            "checker": _CHECKER_PROMPT_VERSION,
-            "checkerSystem": _CHECKER_SYSTEM,
-            "generator": _GENERATOR_PROMPT_VERSION,
-            "generatorSystem": _GENERATOR_SYSTEM,
-        }
-    )
+    prompt_digest = generation_recipe_digest()
     parameters_digest = canonical_digest(
         {
             "acceptedSeed": accepted_seed,
@@ -496,7 +550,7 @@ def generate_candidate(
         requestSha256=canonical_digest([generated.requestSha256, checked.requestSha256]),
         parentRecordIds=[parent.id],
     )
-    prefix = [parent.messages[0]] if parent.messages and parent.messages[0].role == "system" else []
+    prefix = parent.messages[:-2]
     try:
         record = DataRecord(
             schemaVersion=1,
@@ -506,7 +560,7 @@ def generate_candidate(
             groupKeys=list(parent.groupKeys),
             messages=[
                 *prefix,
-                ChatMessage(role="user", content=candidate),
+                ChatMessage(role="user", content=assemble_input(parent, candidate)),
                 ChatMessage(role="assistant", content=expected),
             ],
             tags=list(parent.tags),

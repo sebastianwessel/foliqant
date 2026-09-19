@@ -255,7 +255,7 @@ def test_changed_facts_are_quarantined_with_distinct_retry_seeds(
         return _response(
             config,
             identity,
-            {"input": parent.messages[-2].content + " Added amount EUR 999999."},
+            {"input": parent.messages[-2].content + " Added quantity 999999."},
             schema,
             f"changed-{seed}",
             messages,
