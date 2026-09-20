@@ -39,6 +39,12 @@ def _parser() -> argparse.ArgumentParser:
     prepare = commands.add_parser("prepare", help="Validate and split local training data")
     prepare.add_argument("--config", type=Path, required=True)
     prepare.add_argument("--output", type=Path, required=True)
+    projections = commands.add_parser(
+        "prepare-source-projections", help="Prepare scoped source decisions without model calls"
+    )
+    projections.add_argument("--from-run", type=Path, required=True)
+    projections.add_argument("--output", type=Path)
+    projections.add_argument("--pilot", action="store_true", help="Prepare 32 new training tasks")
     curate = commands.add_parser("curate", help="Prepare or resume automated dataset curation")
     curate.add_argument("--config", type=Path, required=True)
     curate.add_argument("--workspace", type=Path)
@@ -55,6 +61,8 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         help="Keep completed native outcomes and generate only unfinished jobs in a child run",
     )
+    curate.add_argument("--extend-projections-from", type=Path)
+    curate.add_argument("--projection-plan", type=Path)
     for name in ("train", "customize"):
         operation = commands.add_parser(name, help="Train a shared or customer adapter")
         operation.add_argument("--config", type=Path, required=True)
@@ -123,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
                     "setup",
                     "fetch",
                     "prepare",
+                    "prepare-source-projections",
                     "curate",
                     "train",
                     "customize",
@@ -195,6 +204,12 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 diagnostic=details.diagnostic,
             ).model_dump(mode="json")
+        elif command == "prepare-source-projections":
+            from .curation.projection_preparation import prepare_source_projections
+
+            payload = prepare_source_projections(
+                args.from_run, args.output, pilot=args.pilot
+            ).model_dump(mode="json")
         elif command == "curate":
             from .curation.runner import run_curation
             from .curation.runtime import CurationControl
@@ -207,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
                 offline=args.offline,
                 repair_from=args.repair_from,
                 continue_from=args.continue_from,
+                extend_projections_from=args.extend_projections_from,
+                projection_plan=args.projection_plan,
                 control=curation_control,
             )
             payload = curate_result.model_dump(mode="json")

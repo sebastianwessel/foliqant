@@ -25,6 +25,37 @@ Recipe, task-contract and prompt changes create a fresh run identity. Resume
 only with the exact same recipe, effective `.env` and workspace; never copy or
 edit old request/outcome caches into a repaired run.
 
+The checked-in native recipes retain the default BANKING77/WANLI projection
+policy. Additional typed-decisions, MultiDoGO and TAT-QA mappings require an
+explicit offline plan derived from an existing frozen run:
+
+```sh
+./scripts/prepare-source-projections --from-run /absolute/path/to/run --pilot \
+  --output /absolute/path/to/new-projection-plan
+./scripts/generate-data \
+  --extend-projections-from /absolute/path/to/completed-parent-run \
+  --projection-plan /absolute/path/to/new-projection-plan \
+  --progress always
+```
+
+Plan preparation makes no model request or download, including model discovery.
+It may run while the parent is generating once source snapshots, families and
+splits are frozen; extension execution must wait for parent completion.
+The extension flags must appear together and cannot be combined with
+continuation or repair. `--prepare-only` is allowed after the parent completes
+and also performs no model discovery. Full execution creates only new projection
+verification jobs in an immutable child; prior outcomes remain unchanged. See
+the guide for the exact bounded mappings and exclusions.
+Candidate identity groups are resolved before caps: all new conflicting-target,
+cross-split or cross-family members are excluded, while same-target duplicates
+within one frozen family retain the deterministic smallest-record-ID
+representative. Existing baseline tasks are unchanged.
+The pilot plan is exactly 32 training tasks: eight MultiDoGO, eight TAT-QA and
+16 typed-decisions tasks with four from each workflow. Prepare a full plan
+separately from the same parent by omitting `--pilot`; do not assume its model
+calls can reuse pilot calls. Offline implementation is complete; the live
+projection pilot and quality acceptance remain deferred.
+
 These checked-in recipes contain no data or weights. `curation.yaml` selects the
 five pinned public sources at no more than 1,000 records each and bounds local
 generation to 100 jobs. It omits `endpoint.model`: exactly one model must be

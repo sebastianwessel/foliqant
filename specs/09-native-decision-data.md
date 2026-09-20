@@ -16,6 +16,9 @@ turns the recommendations in
 [input answerability and reliability](research/input-answerability-and-reliability.md)
 into a bounded data-generation contract. It extends, and does not replace,
 [automated data curation](08-automated-data-curation.md).
+The scoped source-projection extension below is implemented and verified through
+offline tests. Its planned live pilot has not run, so this status carries no
+generated-data quality or model-validation acceptance claim.
 
 ## Required outcome
 
@@ -69,6 +72,61 @@ publication rules below may enter a training partition; all other prepared rows
 remain diagnostic. Authored oracle targets, source annotations, a blind model check, or automatic acceptance
 must never be described as human-gold evidence, calibrated answerability,
 production fitness, or permission to automate a financial action.
+
+### Scoped offline source-projection extension
+
+The default native recipes retain the compatibility policy documented below.
+An operator may separately derive a versioned projection plan from the already
+frozen source snapshots and splits of an immutable run:
+
+```text
+./scripts/prepare-source-projections --from-run /absolute/path/to/run [--pilot]
+  [--output /absolute/path/to/new-projection-plan]
+foliqant-model prepare-source-projections --from-run /absolute/path/to/run [--pilot]
+  [--output /absolute/path/to/new-projection-plan]
+```
+
+This command is offline by construction. It may run while generation is active
+once the required source snapshots, families and splits are frozen. It makes zero model requests,
+including endpoint model discovery, performs no source or dependency download,
+and does not alter the source run. It fails closed unless every required source
+snapshot, family assignment, split and integrity envelope can be reused exactly.
+Its output is a new immutable plan directory outside the checkout. Explicit
+selected, projected and excluded counts bind the plan to its inputs and rules.
+`--pilot` selects exactly 32 training projection tasks: eight MultiDoGO tasks,
+eight TAT-QA tasks and 16 typed-decisions tasks, with four typed records from
+each workflow. A plan without `--pilot` is the separate full selection from the
+same parent inputs.
+
+The plan may be applied only through the paired extension flags:
+
+```text
+./scripts/generate-data
+  --extend-projections-from /absolute/path/to/completed-parent-run
+  --projection-plan /absolute/path/to/projection-plan
+  --progress always
+```
+
+`foliqant-model curate` accepts the same paired options. Both are required
+together and are mutually exclusive with `--continue-from` and `--repair-from`.
+The parent must be complete. `--prepare-only` is permitted and creates/verifies
+the child plan and artifacts without model discovery or inference. A full
+extension creates only the new blind-verification jobs after the parent has
+finished. It preserves every prior outcome byte-for-byte, publishes through a
+new immutable child run, and never advances or rewrites the parent. Repeating
+the exact extension command resumes that child.
+
+The first bounded execution uses the 32-task pilot plan with the normal
+extension command above after parent completion. The pilot plan itself may be
+prepared while that parent is still generating. A later full plan is prepared
+separately from that same parent. The full extension makes no promise to reuse
+pilot model calls or outcomes. Model validation of both modes is deferred; no
+projection-extension pilot has run or been accepted yet.
+
+Only an explicit prepared plan enables the additional mappings. An ordinary
+`generate-data`, pilot, continuation or repair retains the legacy projection
+set and does not silently acquire new projection behavior. Plan preparation
+does not train, translate, augment or call a model.
 
 The implementation entrypoint is
 `run_decision_curation(config: CurationConfig, workspace: Path | None, *,
@@ -477,12 +535,18 @@ and fail closed.
 An exact duplicate or a task that differs only through sources unavailable to
 every question cannot increase example, unique-task, template-variant or
 content-family diversity. Duplicate authored cases are construction failures.
-For compatible source projections, deterministic preparation keeps the first
-row in the already frozen order, excludes later rows with the same
-answer-bearing task identity and oracle semantic signature from `native-seeds`
-and jobs, and reports exact-duplicate and unavailable-source-only exclusions
-separately. The normalized raw rows remain unchanged in `source-corpus`; this
-exclusion never rewrites their frozen source family. Paraphrases, translations,
+For compatible source projections, deterministic preparation resolves every
+answer-bearing task-identity group before applying a source cap or pilot quota.
+If new members of a group have conflicting oracle semantic signatures, every
+new member is excluded. If an alias crosses frozen splits or frozen source
+families, every new member is likewise excluded. When all members have the same
+target, frozen family and split, the lexicographically smallest source record ID
+is the deterministic representative; the other new members are reported as
+exact-duplicate or unavailable-source-only exclusions. A match or conflict with
+an existing baseline native task excludes the new projection members and never
+removes or rewrites the baseline task. The normalized raw rows remain unchanged
+in `source-corpus`; this exclusion never rewrites their frozen source family.
+Paraphrases, translations,
 value siblings or other variations inside an allowed source are connected only
 through explicit template/group/family keys supplied before partitioning. The
 implementation does not guess that two allowed texts are semantically equal.
@@ -572,15 +636,60 @@ family and frozen split. It adds the deterministic provenance tag
 `original-source-record:<id>` to identify the source row without misusing model
 generation lineage.
 
-The initial implemented compatibility policy is deliberately narrow:
+The default compatibility policy remains deliberately narrow:
 
 - BANKING77: one `choice` question over the supplied intent catalog;
 - WANLI: one `predicate` question whose true/false/unknown values preserve the
   supported/contradicted/insufficient source semantics;
-- typed-decisions, MultiDoGO and TAT-QA: explicitly unsupported by the current
-  projection. Their records remain in `source-corpus`, and exclusions are
-  counted. No intent-only MultiDoGO task, argmax teacher target, binary TAT-QA
-  predicate or other partial mapping is promised by this version.
+- typed-decisions, MultiDoGO and TAT-QA: not projected by the default recipes.
+  Their records remain in `source-corpus`, and exclusions are counted. The
+  explicit offline plan below is the only path that enables their bounded
+  mappings; default generation still promises no partial mapping.
+
+The explicit offline source-projection plan adds only these mappings:
+
+- **MultiDoGO finance:** one `multiselect` intent question over the fixed
+  18-intent catalog. Only the source-declared intent set becomes a native
+  target. Token-aligned slot labels and the raw redacted turn remain attached to
+  the raw source record and provenance; slot labels are never converted into a
+  native answer or discarded to make the record appear simpler.
+- **typed-decisions:** project all five questions in each eligible record.
+  Source `choice`, `noul`, and `score` questions map respectively to native
+  `choice`, `predicate`, and `ordinal` questions. The deterministic target uses
+  the source's explicit `label`; it never takes an argmax over the teacher
+  distribution. The complete raw distributions remain in `source-corpus` and
+  provenance, but no probability or teacher-agreement value becomes native
+  confidence. The source label is only a proposed answer: an independently
+  blind solve must verify both the answer and answerability before publication.
+- **TAT-QA:** at most one deterministic comparison predicate per source context.
+  Eligibility requires a unique table row and adjacent, unique, explicit
+  year-column headers in the range 1900 through 2099. Both displayed cells must
+  parse as strict signed decimals with matching unit markers: the same currency
+  on both values, or percentage markers on both values.
+  The predicate compares the displayed values directly. It does not implement
+  full financial question answering, infer a derivation, or consult the
+  original TAT-QA gold answer.
+
+All three mappings preserve the source family and exact frozen split. They
+produce English native tasks from the existing English source text only; they
+do not create translations. Every ineligible row receives a stable exclusion
+reason and is included in selected/projected/excluded accounting. All raw source
+records and annotations remain in `source-corpus` even when no native task is
+projected.
+
+Per-source preparation reports include `eligibleMultiIntentRecords` and
+`selectedMultiIntentRecords`: rows with a multiselect reference answer selecting
+more than one option. They expose limited multi-intent availability separately
+from the total number of multiselect questions.
+
+Before caps and pilot quotas, projection preparation groups new candidates by
+answer-bearing task identity. It excludes all new members of a group when their
+targets conflict, when the alias crosses frozen splits, or when it crosses
+frozen families. Same-family, same-split and same-target duplicates retain one
+deterministic representative by source record ID. Existing baseline tasks are
+comparison anchors only and remain unchanged. Under the currently frozen
+inputs, the group-wide conflicting-target rule excludes 24 MultiDoGO rows; this
+is an offline preparation count, not a quality result.
 
 Projected native records use `origin=synthetic` or `origin=teacher`, never
 `human`, because projection creates a novel native task/result even when its
@@ -768,12 +877,23 @@ Implementation verification covers:
   values, counterfactuals, paraphrases, projection, translation, retry and
   resume, plus a rejection proving a same-template train/held-out split cannot
   be published;
-- diversity accounting that rejects exact duplicates, excludes later source
-  projections that differ only through sources unavailable to every question,
-  preserves allowed metadata as answer-bearing, fails on conflicting targets,
+- diversity accounting that rejects exact duplicates, resolves whole projection
+  identity groups before caps, excludes every new conflicting-target,
+  cross-split or cross-family member, deterministically retains one same-target
+  same-family representative, preserves baseline tasks unchanged,
+  preserves allowed metadata as answer-bearing,
   and reports examples, unique tasks, template variants, connected content
   families and both exclusion counts without equating those counts;
 - source projection fixtures with explicit selected/projected/excluded counts;
+- offline projection-plan fixtures proving zero endpoint discovery/inference and
+  zero downloads, exact frozen source/family/split reuse, stable exclusions,
+  MultiDoGO's 18-intent multiselect, all five typed-decisions mappings with
+  explicit labels rather than argmax, and TAT-QA's unique-row/adjacent-year/
+  signed-decimal/unit rules without consulting its original gold answer;
+- extension CLI tests proving the two plan flags are required together,
+  conflict with continuation/repair, require a completed parent, allow
+  prepare-only without discovery, preserve every old outcome byte-for-byte and
+  schedule only new train verification jobs in an immutable child;
 - publication tests proving unattempted/quarantined training parents remain only
   in `native-seeds`, accepted annotate jobs publish the exact parent once with
   no generation provenance, accepted rewrites publish only their required

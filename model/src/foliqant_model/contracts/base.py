@@ -202,6 +202,7 @@ type Command = Literal[
     "setup",
     "fetch",
     "prepare",
+    "prepare-source-projections",
     "curate",
     "quantize",
     "train",

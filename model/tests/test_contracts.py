@@ -317,7 +317,7 @@ def test_field_correctness_does_not_control_applicable_validity() -> None:
 def test_generated_schemas_are_valid_closed_draft_2020_12_documents() -> None:
     schema_dir = Path(__file__).parents[2] / "contracts" / "model"
     paths = sorted(schema_dir.glob("*.schema.json"))
-    assert len(paths) == 23
+    assert len(paths) == 25
     for path in paths:
         schema = json.loads(path.read_text(encoding="utf-8"))
         assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"

@@ -192,7 +192,9 @@ def test_generation_accepts_checked_candidate_and_resumes_from_cache(
         messages: list[ChatMessage],
         schema: dict[str, object],
         seed: int,
+        observed_identity: EndpointModelIdentity,
     ) -> GenerationResponse:
+        assert observed_identity == identity
         calls.append({"messages": messages, "model": model_id, "schema": schema, "seed": seed})
         if schema["required"] == ["input"]:
             output: dict[str, object] = {"input": parent.messages[-2].content}
@@ -340,7 +342,9 @@ def test_changed_facts_are_quarantined_with_distinct_retry_seeds(
         messages: list[ChatMessage],
         schema: dict[str, object],
         seed: int,
+        observed_identity: EndpointModelIdentity,
     ) -> GenerationResponse:
+        assert observed_identity == identity
         del model_id
         seeds.append(seed)
         message_sets.append(messages)
@@ -511,7 +515,9 @@ def test_cache_tampering_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyP
         messages: list[ChatMessage],
         schema: dict[str, object],
         seed: int,
+        observed_identity: EndpointModelIdentity,
     ) -> GenerationResponse:
+        assert observed_identity == identity
         del model_id
         output: dict[str, object]
         if schema["required"] == ["input"]:

@@ -1,5 +1,13 @@
 # Model tool architecture
 
+The scoped source-projection extension has two explicit boundaries. Offline
+preparation reads verified immutable source snapshots and produces a typed,
+hash-bound plan without discovery, downloads, or inference. A separate native
+curation child accepts that plan only after its parent has completed, preserving
+old work and adding new train-only verification jobs. The active run's checkout,
+environment and snapshots are not modified by concurrent preparation. Default
+native recipes retain their original task and request identities.
+
 ```mermaid
 flowchart LR
   CLI[CLI parsing] --> Contracts[Closed typed contracts]

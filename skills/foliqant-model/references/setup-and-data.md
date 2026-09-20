@@ -32,6 +32,80 @@ call identity, and versions both generation recipes. It creates new runs;
 earlier caches and outcomes remain untouched and must not be copied into a new
 run as if generated with its prompts.
 
+### Scoped offline source projections
+
+Default native generation continues to project only the legacy compatible
+sources. typed-decisions, MultiDoGO and TAT-QA native mappings require an
+explicit immutable plan:
+
+```sh
+./scripts/prepare-source-projections --from-run /absolute/path/to/run --pilot \
+  --output /absolute/path/to/new-projection-plan
+```
+
+The package command `foliqant-model prepare-source-projections` accepts the same
+options. Omit `--output` only when the reported default external-workspace path
+is acceptable. Preparation must reuse the exact frozen source snapshots,
+families and splits. It makes zero model requests, including `/v1/models`
+discovery, and performs no downloads. Reject missing, mutable or inconsistent
+inputs instead of reacquiring them.
+
+Preparation may run while generation is active once those source inputs are
+frozen. Resolve whole answer-bearing task groups before applying source caps or
+pilot quotas. Exclude every new member when targets conflict or an alias crosses
+frozen splits or source families. For a same-target group within one family and
+split, retain the member with the smallest source record ID and count the other
+members as duplicate exclusions. Existing baseline native tasks remain
+unchanged; they only cause matching or conflicting new projections to be
+excluded. The current frozen inputs produce 24 MultiDoGO `conflicting-target`
+exclusions. That offline count is not model validation or a quality claim.
+
+`--pilot` selects exactly 32 training tasks: eight MultiDoGO, eight TAT-QA and
+16 typed-decisions tasks, with four typed records per workflow. The plan may be
+prepared before generation ends, but apply it through the normal extension
+command only after parent completion. Prepare the full
+selection independently from the same parent by omitting `--pilot`. Never imply
+that a full extension reuses pilot model calls or outcomes. Model validation is
+deferred, and the live projection pilot has not run. Offline implementation is
+complete; no quality acceptance is claimed.
+
+Apply the plan only after its parent is complete:
+
+```sh
+./scripts/generate-data \
+  --extend-projections-from /absolute/path/to/completed-parent-run \
+  --projection-plan /absolute/path/to/projection-plan \
+  --progress always
+```
+
+Require both extension options. Reject either one alone and reject combinations
+with `--continue-from` or `--repair-from`. `--prepare-only` is valid for a
+completed parent and must not discover or call a model. Full execution creates
+only the new blind-verification jobs in an immutable child. Preserve all parent
+outcomes and published rows byte-for-byte; repeating the same command resumes
+the child. Never enable this behavior implicitly for normal generation.
+
+Keep the mappings exact:
+
+- MultiDoGO: one intent-only native `multiselect` over the fixed 18-intent
+  catalog. Preserve raw redacted text and aligned slot labels in source data;
+  never project slots.
+- typed-decisions: project all five questions. Map source `choice`, `noul` and
+  `score` to native `choice`, `predicate` and `ordinal`. Use the explicit source
+  `label`, never a distribution argmax. Preserve raw teacher distributions, but
+  never convert them or teacher agreement into native confidence. Treat the
+  label as a proposed answer and require blind answerability plus answer
+  verification.
+- TAT-QA: at most one displayed-value comparison per context. Require a unique
+  row, adjacent unique explicit 1900–2099 year headers, strict signed decimals,
+  and matching unit markers (the same currency on both, or percent on both). Do
+  not infer broader financial QA or use the original source gold answer.
+
+Count every exclusion with a stable reason. Preserve all raw English records and
+annotations in `source-corpus`; derived native tasks remain English, inherit the
+frozen family/split, and create no translations. These projections remain
+unreviewed research data.
+
 For an interrupted native run after a generator update, use explicit
 `./scripts/generate-data --continue-from /absolute/path/to/old-run --progress always`.
 It carries completed accepted AND quarantined outcomes unchanged into a child,

@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from foliqant_model.contracts import ChatMessage, canonical_digest
 from foliqant_model.curation.endpoint import (
+    EndpointModelIdentity,
     GenerationRejected,
     GenerationResponse,
     LocalEndpointConfig,
@@ -151,13 +152,16 @@ def _schema() -> dict[str, object]:
     }
 
 
-def _generate(config: LocalEndpointConfig) -> GenerationResponse:
+def _generate(
+    config: LocalEndpointConfig, *, observed_identity: EndpointModelIdentity | None = None
+) -> GenerationResponse:
     return generate_json(
         config,
         model_id="local-model",
         messages=[ChatMessage(role="user", content="Return a test object")],
         schema=_schema(),
         seed=7,
+        observed_identity=observed_identity,
     )
 
 
@@ -243,21 +247,21 @@ def test_config_omits_unspecified_reasoning_effort() -> None:
     assert "reasoningEffort" not in LocalEndpointConfig().model_dump(mode="json")
 
 
-def test_discovery_is_read_only_and_enriches_runtime_metadata() -> None:
+def test_discovery_uses_only_the_openai_compatible_models_endpoint() -> None:
     with _server() as (state, base_url):
         models = discover_models(_config(base_url))
-    assert state.counts == {"/v1/models": 1, "/api/v1/models": 1}
+    assert state.counts == {"/v1/models": 1}
     assert len(models) == 1
     model = models[0]
     assert model.model_dump(mode="json") == {
         "modelId": "local-model",
-        "modelType": "llm",
+        "modelType": "unknown",
         "publisher": "local",
-        "architecture": "qwen",
-        "format": "gguf",
-        "quantization": "Q4_K_M",
-        "sizeBytes": 1024,
-        "maxContextLength": 32768,
+        "architecture": None,
+        "format": None,
+        "quantization": None,
+        "sizeBytes": None,
+        "maxContextLength": None,
         "metadataSha256": model.metadataSha256,
         "immutableRevision": None,
         "structuredOutput": "unknown",
@@ -285,7 +289,6 @@ def test_generation_uses_schema_and_returns_validated_provenance() -> None:
     assert len(response.rawResponseSha256) == 64
     assert state.counts == {
         "/v1/models": 1,
-        "/api/v1/models": 1,
         "/v1/chat/completions": 1,
     }
     assert state.request is not None
@@ -298,6 +301,30 @@ def test_generation_uses_schema_and_returns_validated_provenance() -> None:
     assert isinstance(json_schema, dict)
     assert json_schema["strict"] is True
     assert "usage" not in response.model.model_dump(mode="json")
+
+
+def test_generation_reuses_observed_identity_without_rediscovery() -> None:
+    with _server() as (state, base_url):
+        config = _config(base_url)
+        identity = discover_models(config)[0]
+        state.counts.clear()
+        response = _generate(config, observed_identity=identity)
+    assert response.model.modelId == identity.modelId
+    assert state.counts == {"/v1/chat/completions": 1}
+    assert state.request is not None
+    assert "expectedModel" not in state.request
+    assert "observed_identity" not in state.request
+
+
+def test_generation_rejects_mismatched_observed_identity_before_http() -> None:
+    with _server() as (state, base_url):
+        config = _config(base_url)
+        identity = discover_models(config)[0].model_copy(update={"modelId": "other-model"})
+        state.counts.clear()
+        with pytest.raises(ModelError) as raised:
+            _generate(config, observed_identity=identity)
+    assert raised.value.code == "CONFIG_INVALID"
+    assert state.counts == {}
 
 
 @pytest.mark.parametrize("structured_output", ["json-schema", "prompt"])

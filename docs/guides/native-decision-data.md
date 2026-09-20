@@ -106,6 +106,98 @@ Endpoint values in `.env` override YAML. Optional generation overrides in `.env`
 also override recipe sizes, including pilot sizes. Keep run sizes in the recipes
 unless you deliberately need an override. Configuration changes create new runs.
 
+### Add the scoped source projections
+
+The ordinary full and pilot recipes keep their existing BANKING77 and WANLI
+projection behavior. They do not automatically project typed-decisions,
+MultiDoGO, or TAT-QA into native tasks. To opt into the bounded mappings, first
+prepare a plan from a run whose source snapshots and splits are already frozen:
+
+```sh
+./scripts/prepare-source-projections \
+  --from-run /absolute/path/to/run \
+  --pilot \
+  --output /absolute/path/to/new-projection-plan
+```
+
+The equivalent package command is:
+
+```sh
+uv run --no-sync foliqant-model prepare-source-projections \
+  --from-run /absolute/path/to/run \
+  --pilot \
+  --output /absolute/path/to/new-projection-plan
+```
+
+`--output` may be omitted to use the command's reported external-workspace
+location. Plan preparation reuses the exact frozen source files, families and
+splits. It makes zero model requests, including model discovery, and performs no
+downloads. Missing or changed inputs fail instead of being reacquired. The
+source run remains unchanged. Once those inputs are frozen, you may prepare the
+plan while that run is still generating. Do not execute the extension until the
+parent run completes.
+
+`--pilot` creates exactly 32 training tasks: eight MultiDoGO tasks, eight TAT-QA
+tasks and 16 typed-decisions tasks, using four typed records from each of its
+four workflows. Run the normal extension command below with that pilot plan
+after the parent completes. To cover the full eligible selection later, prepare
+a separate plan from the same parent without `--pilot`. A full plan does not
+promise to reuse any model call or outcome from the pilot.
+
+After the parent run is complete, create an immutable extension child:
+
+```sh
+./scripts/generate-data \
+  --extend-projections-from /absolute/path/to/completed-parent-run \
+  --projection-plan /absolute/path/to/projection-plan \
+  --progress always
+```
+
+The two extension options are a required pair. They cannot be combined with
+`--continue-from` or `--repair-from`. Add `--prepare-only` to validate and stage
+the extension without endpoint discovery or inference. A full extension starts
+only the new blind-verification jobs. Existing outcomes and published records
+remain byte-for-byte unchanged in the parent, while the extension is recorded
+as a new child. Rerun the exact command to resume that child.
+
+The opt-in plan is intentionally narrow:
+
+- MultiDoGO becomes one intent-only `multiselect` question over its fixed
+  18-intent catalog. Raw redacted turns and token-aligned slot labels remain in
+  the auxiliary source record; slot labels are not native targets.
+- typed-decisions contributes all five questions. Source `choice`, `noul`, and
+  `score` map to native `choice`, `predicate`, and `ordinal`. The explicit source
+  label is the proposed answer; the converter never chooses the largest teacher
+  probability. Raw distributions remain preserved as source data and do not
+  become native confidence. Publication requires a blind answer and
+  answerability verification.
+- TAT-QA contributes at most one table comparison per context. It requires one
+  unique row, adjacent unique explicit year headers from 1900 through 2099,
+  strict signed-decimal cells, and matching unit markers: both unmarked, the
+  same currency on both values, or percentage markers on both values. The native predicate
+  compares the displayed values. This does not implement full
+  financial question answering and does not use the original gold answer.
+
+Every excluded item is counted with a stable reason. Projections remain English,
+inherit the exact source family and split, and create no translated siblings.
+Per-source `eligibleMultiIntentRecords` and `selectedMultiIntentRecords` report
+how many tasks actually contain multiple selected intents; a multiselect
+question alone does not imply that its source contains more than one intent.
+Before applying source caps or pilot quotas, preparation groups new candidates
+by answer-bearing task identity. A conflicting-target group excludes every new
+member, as does an alias that crosses frozen splits or source families. A group
+with the same target, family and split keeps the member with the smallest source
+record ID as its deterministic representative. Existing baseline native tasks
+remain unchanged; matching or conflicting new projections are excluded instead.
+The current frozen inputs report 24 MultiDoGO rows excluded by the group-wide
+conflicting-target rule. This is an offline preparation count, not evidence of
+label quality.
+The complete raw English records remain in `source-corpus`, including
+distributions and slot annotations that are not native targets. All proposed
+labels and accepted rows remain unreviewed research data.
+The offline implementation is complete. The 32-task live projection pilot has
+not run, and model validation and quality acceptance remain deferred.
+
 ## Outputs and resume
 
 The final JSON reports `runPath`, artifact paths, accepted/quarantined counts and

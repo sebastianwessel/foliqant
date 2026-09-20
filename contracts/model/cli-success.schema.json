@@ -184,6 +184,7 @@
           "fetch": "#/$defs/FetchSuccess",
           "merge": "#/$defs/MergeSuccess",
           "prepare": "#/$defs/PrepareSuccess",
+          "prepare-source-projections": "#/$defs/ProjectionPreparationSuccess",
           "quantize": "#/$defs/QuantizeSuccess",
           "schema": "#/$defs/SchemaSuccess",
           "setup": "#/$defs/SetupSuccess",
@@ -207,6 +208,9 @@
         },
         {
           "$ref": "#/$defs/PrepareSuccess"
+        },
+        {
+          "$ref": "#/$defs/ProjectionPreparationSuccess"
         },
         {
           "$ref": "#/$defs/CurateSuccess"
@@ -247,6 +251,7 @@
         "setup",
         "fetch",
         "prepare",
+        "prepare-source-projections",
         "curate",
         "quantize",
         "train",
@@ -948,6 +953,87 @@
         "result"
       ],
       "title": "PrepareSuccess",
+      "type": "object"
+    },
+    "ProjectionPreparationResult": {
+      "additionalProperties": false,
+      "description": "Offline source projection paths and candidate counts; no inference is performed.",
+      "properties": {
+        "command": {
+          "const": "prepare-source-projections",
+          "title": "Command",
+          "type": "string"
+        },
+        "eligibleRecords": {
+          "minimum": 0,
+          "title": "Eligiblerecords",
+          "type": "integer"
+        },
+        "planPath": {
+          "title": "Planpath",
+          "type": "string"
+        },
+        "rawRecords": {
+          "minimum": 0,
+          "title": "Rawrecords",
+          "type": "integer"
+        },
+        "reportPath": {
+          "title": "Reportpath",
+          "type": "string"
+        },
+        "selectedFamilies": {
+          "minimum": 0,
+          "title": "Selectedfamilies",
+          "type": "integer"
+        },
+        "selectedRecords": {
+          "minimum": 0,
+          "title": "Selectedrecords",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "planPath",
+        "reportPath",
+        "rawRecords",
+        "eligibleRecords",
+        "selectedRecords",
+        "selectedFamilies"
+      ],
+      "title": "ProjectionPreparationResult",
+      "type": "object"
+    },
+    "ProjectionPreparationSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "prepare-source-projections",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/ProjectionPreparationResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "ProjectionPreparationSuccess",
       "type": "object"
     },
     "QuantizeResult": {

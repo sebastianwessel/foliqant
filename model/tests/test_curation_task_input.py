@@ -332,7 +332,9 @@ def test_accepted_generated_record_preserves_prior_conversation_history(
         messages: list[ChatMessage],
         schema: dict[str, object],
         seed: int,
+        observed_identity: EndpointModelIdentity,
     ) -> GenerationResponse:
+        assert observed_identity == identity
         del model_id
         if schema["required"] == ["input"]:
             output: dict[str, object] = {"input": candidate}

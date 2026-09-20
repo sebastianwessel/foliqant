@@ -361,6 +361,7 @@ def _cached_generation(
                 messages=messages,
                 schema=schema,
                 seed=seed,
+                observed_identity=identity,
             )
         except GenerationRejected as error:
             if error.rejection.requestSha256 != _endpoint_request_sha256(

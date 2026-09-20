@@ -17,5 +17,19 @@ diagnostic seeds, accepted-job publication rules, immutable resume, fresh run
 identity after recipe changes, and the boundary between automatic checks and
 human-reviewed quality.
 
+It also covers the explicit offline source-projection extension. The skill keeps
+plan preparation free of downloads and all model requests, including discovery;
+allows preparation from frozen inputs while generation is active but requires a
+completed parent for execution with the paired extension options; and keeps
+typed-decisions, MultiDoGO and TAT-QA mappings opt-in rather than changing the
+default recipe. Extension runs create new blind-verification jobs in an
+immutable child while preserving every parent outcome.
+Before selection caps, the skill excludes every new member of conflicting-target,
+cross-split and cross-family identity groups, retains a deterministic
+same-family same-target representative, and leaves baseline tasks unchanged.
+Its projection pilot guidance uses preparer `--pilot` for exactly 32 training
+tasks, keeps a later full plan separate, and makes no call-reuse or completed
+model-validation or quality-acceptance claim.
+
 Start with [the model-tool documentation](../README.md) or the focused
 [native decision-data guide](../guides/native-decision-data.md).

@@ -314,6 +314,8 @@ def run_curation(
     offline: bool = False,
     repair_from: Path | None = None,
     continue_from: Path | None = None,
+    extend_projections_from: Path | None = None,
+    projection_plan: Path | None = None,
     control: CurationControl | None = None,
 ) -> CurateResult:
     """Prepare or resume one complete unattended local curation run."""
@@ -326,6 +328,8 @@ def run_curation(
             offline=offline,
             repair_from=repair_from,
             continue_from=continue_from,
+            extend_projections_from=extend_projections_from,
+            projection_plan=projection_plan,
             control=selected_control,
         )
 
@@ -338,6 +342,8 @@ def _run_curation(
     offline: bool,
     repair_from: Path | None,
     continue_from: Path | None,
+    extend_projections_from: Path | None,
+    projection_plan: Path | None,
     control: CurationControl,
 ) -> CurateResult:
     from .sources import source_catalog_digest
@@ -353,8 +359,12 @@ def _run_curation(
             offline=offline,
             repair_from=repair_from,
             continue_from=continue_from,
+            extend_projections_from=extend_projections_from,
+            projection_plan=projection_plan,
             control=control,
         )
+    if extend_projections_from is not None or projection_plan is not None:
+        raise ModelError("ARGUMENT_INVALID", "Projection extension requires native decision data")
     if continue_from is not None:
         raise ModelError("ARGUMENT_INVALID", "Continuation requires native decision curation")
     configuration_digest = canonical_digest(config.model_dump(mode="json"))

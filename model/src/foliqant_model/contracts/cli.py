@@ -44,6 +44,18 @@ class CreatedArtifactResult(ContractModel):
         return self
 
 
+class ProjectionPreparationResult(ContractModel):
+    """Offline source projection paths and candidate counts; no inference is performed."""
+
+    command: Literal["prepare-source-projections"]
+    planPath: LocalPath
+    reportPath: LocalPath
+    rawRecords: NonNegativeInt
+    eligibleRecords: NonNegativeInt
+    selectedRecords: NonNegativeInt
+    selectedFamilies: NonNegativeInt
+
+
 class DoctorResult(ContractModel):
     command: Literal["doctor"]
     pythonVersion: NonEmptyStr
@@ -319,6 +331,11 @@ class PrepareSuccess(_CliSuccessCommon):
     result: PrepareResult
 
 
+class ProjectionPreparationSuccess(_CliSuccessCommon):
+    command: Literal["prepare-source-projections"]
+    result: ProjectionPreparationResult
+
+
 class CurateSuccess(_CliSuccessCommon):
     command: Literal["curate"]
     result: CurateResult
@@ -375,6 +392,7 @@ type CliSuccessValue = Annotated[
     | SetupSuccess
     | FetchSuccess
     | PrepareSuccess
+    | ProjectionPreparationSuccess
     | CurateSuccess
     | QuantizeSuccess
     | TrainSuccess

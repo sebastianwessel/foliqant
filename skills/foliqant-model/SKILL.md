@@ -35,6 +35,24 @@ metadata. Training is a later explicit command. An omitted endpoint model is saf
 only when exactly one local model is exposed; otherwise require the exact model
 ID.
 
+For the opt-in typed-decisions, MultiDoGO and TAT-QA native projections, first
+use `prepare-source-projections` against an existing frozen run, then pass both
+`--extend-projections-from` and `--projection-plan` to `generate-data`/`curate`.
+Plan preparation must be fully offline: zero inference or model-discovery
+requests and zero downloads. It may run after source snapshots, families and
+splits are frozen even if generation is still active; extension execution must
+wait for the completed parent. Resolve whole answer-bearing task groups before
+caps: exclude every new member on conflicting targets, cross-split aliases or
+cross-family aliases; retain the deterministic smallest-record-ID member for a
+same-family, same-target duplicate group. Never modify existing baseline tasks.
+Never imply that the default recipe enables these
+mappings, transplant old outcomes, or combine an extension with continuation or
+repair. Read the scoped projection section in
+[setup and data](references/setup-and-data.md) before operating this path.
+Use preparer `--pilot` for the exact 32-task projection pilot. Prepare a full
+plan separately from the same parent and never promise reuse of pilot model
+calls. Do not describe either mode as model-validated without recorded evidence.
+
 Use `--progress auto|always|never` for the stderr operator display without
 changing run identity or stdout JSON. On the first Ctrl+C, allow the current
 candidate or preparation phase to reach its safe boundary and persist, then

@@ -145,6 +145,9 @@ class GenerationRejected(ModelError):
 class _GenerationRequest(ContractModel):
     config: LocalEndpointConfig
     modelId: NonEmptyStr
+    expectedModel: Omitted[EndpointModelIdentity] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     messages: Annotated[list[ChatMessage], Field(min_length=1, max_length=255)]
     schema_: dict[str, JsonValue] = Field(alias="schema")
     seed: UInt32
@@ -175,8 +178,7 @@ def discover_models(config: LocalEndpointConfig) -> list[EndpointModelIdentity]:
         deadline=deadline,
     )
     entries = _compatibility_entries(compatibility)
-    native = _native_models(config, deadline=deadline)
-    identities = [_model_identity(entry, native) for entry in entries]
+    identities = [_model_identity(entry) for entry in entries]
     ids = [identity.modelId for identity in identities]
     if len(ids) != len(set(ids)):
         raise ModelError("OUTPUT_INVALID", "Local endpoint returned duplicate model identifiers")
@@ -193,14 +195,20 @@ def generate_json(
     messages: list[ChatMessage],
     schema: dict[str, object],
     seed: int,
+    observed_identity: EndpointModelIdentity | None = None,
 ) -> GenerationResponse:
-    """Generate one JSON object in an isolated child with a hard deadline."""
+    """Generate one JSON object, reusing an observed run identity when supplied."""
 
     try:
         request = _GenerationRequest.model_validate(
             {
                 "config": config.model_dump(mode="json"),
                 "modelId": model_id,
+                **(
+                    {"expectedModel": observed_identity.model_dump(mode="json")}
+                    if observed_identity is not None
+                    else {}
+                ),
                 "messages": [message.model_dump(mode="json") for message in messages],
                 "schema": schema,
                 "seed": seed,
@@ -271,10 +279,14 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
     started = time.monotonic()
     if request.config.model is not None and request.config.model != request.modelId:
         raise ModelError("CONFIG_INVALID", "Configured model does not match the requested model")
-    identities = discover_models(request.config)
-    identity = _select_model(request.config, identities)
+    if request.expectedModel is None:
+        identity = _select_model(request.config, discover_models(request.config))
+    else:
+        identity = request.expectedModel
+        if identity.modelType == "embedding":
+            raise ModelError("CONFIG_INVALID", "Observed model is not a generation candidate")
     if identity.modelId != request.modelId:
-        raise ModelError("CONFIG_INVALID", "Resolved model does not match the requested model")
+        raise ModelError("CONFIG_INVALID", "Observed model does not match the requested model")
 
     schema = cast(dict[str, object], request.schema_)
     _reject_external_schema_references(schema)
@@ -646,59 +658,19 @@ def _compatibility_entries(value: object) -> list[Mapping[str, object]]:
     return entries
 
 
-def _native_models(config: LocalEndpointConfig, *, deadline: float) -> list[Mapping[str, object]]:
-    try:
-        value = _request_json(
-            _endpoint_url(config.baseUrl, "/api/v1/models"),
-            method="GET",
-            body=None,
-            max_bytes=config.maxResponseBytes,
-            deadline=deadline,
-        )
-        if not isinstance(value, dict) or not isinstance(value.get("models"), list):
-            return []
-        models = value["models"]
-        if len(models) > _MAX_DISCOVERED_MODELS:
-            return []
-        return [item for item in models if isinstance(item, dict)]
-    except ModelError:
-        return []
-
-
-def _model_identity(
-    compatibility: Mapping[str, object], native_models: list[Mapping[str, object]]
-) -> EndpointModelIdentity:
+def _model_identity(compatibility: Mapping[str, object]) -> EndpointModelIdentity:
     model_id = cast(str, compatibility["id"])
-    matches: list[Mapping[str, object]] = []
-    for native in native_models:
-        keys = {_optional_text(native.get("key"))}
-        loaded = native.get("loaded_instances")
-        if isinstance(loaded, list):
-            keys.update(_optional_text(item.get("id")) for item in loaded if isinstance(item, dict))
-        if model_id in keys:
-            matches.append(native)
-    native = matches[0] if len(matches) == 1 else {}
-    model_type = native.get("type") if native.get("type") in {"llm", "embedding"} else "unknown"
-    quantization_value = native.get("quantization")
-    quantization = None
-    if isinstance(quantization_value, dict):
-        quantization = _optional_text(quantization_value.get("name"))
-    elif isinstance(quantization_value, str):
-        quantization = quantization_value or None
-    format_value = native.get("format")
-    model_format = format_value if format_value in {"gguf", "mlx"} else None
-    publisher = _optional_text(native.get("publisher")) or _optional_text(
-        compatibility.get("owned_by")
-    )
+    model_type: Literal["llm", "embedding", "unknown"] = "unknown"
+    publisher = _optional_text(compatibility.get("owned_by"))
     stable = {
-        "architecture": _optional_text(native.get("architecture")),
-        "format": model_format,
+        "architecture": None,
+        "format": None,
         "id": model_id,
-        "maxContextLength": _optional_nonnegative_int(native.get("max_context_length")),
+        "maxContextLength": None,
         "modelType": model_type,
         "publisher": publisher,
-        "quantization": quantization,
-        "sizeBytes": _optional_nonnegative_int(native.get("size_bytes")),
+        "quantization": None,
+        "sizeBytes": None,
     }
     return EndpointModelIdentity.model_validate(
         {
@@ -706,8 +678,8 @@ def _model_identity(
             "modelType": model_type,
             "publisher": publisher,
             "architecture": stable["architecture"],
-            "format": model_format,
-            "quantization": quantization,
+            "format": None,
+            "quantization": None,
             "sizeBytes": stable["sizeBytes"],
             "maxContextLength": stable["maxContextLength"],
             "metadataSha256": canonical_digest(stable),
@@ -719,10 +691,6 @@ def _model_identity(
 
 def _optional_text(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
-
-
-def _optional_nonnegative_int(value: object) -> int | None:
-    return value if type(value) is int and value >= 0 else None
 
 
 def _assistant_content_and_finish(

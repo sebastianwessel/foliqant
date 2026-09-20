@@ -31,6 +31,7 @@ from .contracts import (
 from .contracts.cli import SchemaResult
 from .curation.contracts import CandidateJob, CandidateOutcome, CurationConfig, CurationPlan
 from .curation.decision_contracts import DecisionInput, DecisionOutput
+from .curation.projection_contracts import ProjectionPlan, ProjectionReport
 from .errors import ModelError
 
 SCHEMAS: dict[str, type[BaseModel]] = {
@@ -51,6 +52,8 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "leakage-entry.schema.json": LeakageEntry,
     "lock-owner.schema.json": LockOwner,
     "prediction.schema.json": Prediction,
+    "projection-plan.schema.json": ProjectionPlan,
+    "projection-report.schema.json": ProjectionReport,
     "run-state.schema.json": RunState,
     "setup-profile.schema.json": SetupProfile,
     "setup-receipt.schema.json": SetupReceipt,

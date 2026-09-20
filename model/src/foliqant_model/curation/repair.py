@@ -157,7 +157,8 @@ def verify_job_plan(repair: RepairPass, planned: list[CandidateJob]) -> None:
     if parent_payloads != planned_payloads:
         raise ModelError("INTEGRITY_FAILED", "Repair job plan differs from its parent run")
     if not any(
-        (repair.parent / name).exists() for name in ("repair.json", "continuation.json")
+        (repair.parent / name).exists()
+        for name in ("repair.json", "continuation.json", "projection-extension.json")
     ) and [job.jobId for job in repair.jobs] != [job.jobId for job in planned]:
         raise ModelError("CONFIG_INVALID", "Repair generation recipe differs from parent")
 

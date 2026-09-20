@@ -30,7 +30,7 @@ load_environment() {
 load_environment
 for argument in "$@"; do
   if [[ "$argument" == "--help" || "$argument" == "-h" ]]; then
-    echo "Usage: ./scripts/curate-data [--config FILE] [--workspace DIR] [--repair-from RUN | --continue-from RUN] [--prepare-only] [--offline] [--progress auto|always|never]"
+    echo "Usage: ./scripts/curate-data [--config FILE] [--workspace DIR] [--repair-from RUN | --continue-from RUN | --extend-projections-from RUN --projection-plan DIR] [--prepare-only] [--offline] [--progress auto|always|never]"
     echo "Prepares pinned public sources and optionally uses one local OpenAI-compatible model."
     echo "Default config: model/examples/curation.yaml"
     echo "Default workspace: ~/.local/share/foliqant. Does not train a model."
@@ -41,7 +41,7 @@ forwarded=()
 config_seen=false
 while (( $# )); do
   case "$1" in
-    --config|--workspace|--repair-from|--continue-from)
+    --config|--workspace|--repair-from|--continue-from|--extend-projections-from|--projection-plan)
       option="$1"
       [[ "$option" == "--config" ]] && config_seen=true
       shift
@@ -51,7 +51,7 @@ while (( $# )); do
       fi
       path_value="$1"
       ;;
-    --config=*|--workspace=*|--repair-from=*|--continue-from=*)
+    --config=*|--workspace=*|--repair-from=*|--continue-from=*|--extend-projections-from=*|--projection-plan=*)
       option="${1%%=*}"
       [[ "$option" == "--config" ]] && config_seen=true
       path_value="${1#*=}"

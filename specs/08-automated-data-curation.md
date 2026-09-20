@@ -152,8 +152,10 @@ not retained cannot be reconstructed or described as original model responses.
 ## Local inference adapter
 
 Use the OpenAI-compatible `/v1/models` and `/v1/chat/completions` interfaces via a
-small typed adapter, not an inference-engine fork. Default baseUrl is
-http://127.0.0.1:1234/v1. Numeric loopback addresses or localhost are allowed by
+small typed adapter, not an inference-engine fork. Discovery uses the standard
+`/v1/models` endpoint once per run; generation workers reuse that observed
+identity and do not probe provider-native model endpoints per request. Default
+baseUrl is http://127.0.0.1:1234/v1. Numeric loopback addresses or localhost are allowed by
 default; `allowPrivateNetwork: true` explicitly permits a trusted RFC1918 IPv4 or
 IPv6 unique-local endpoint. Public addresses and DNS names remain rejected;
 resolve localhost only to loopback and do not use ambient proxies or redirects.
@@ -168,7 +170,9 @@ failure, never arbitrary first-model selection. A configured model must match
 discovery. Capture model/version metadata only where the server provides it.
 
 Adapter functions: discover_models(config), and generate_json(config, model_id,
-messages, schema, seed). Return typed parsed JSON plus safe response metadata.
+messages, schema, seed, observed_identity). Standalone callers may omit the
+observed identity and perform one standard discovery; curation always supplies
+the run identity. Return typed parsed JSON plus safe response metadata.
 JSON Schema constrains output, and local strict parsing validates it again.
 Refusal, truncation, nonfinite/duplicate-key JSON, wrong schema, oversized body,
 HTTP error or changed model are explicit failures. Runner owns bounded retries;

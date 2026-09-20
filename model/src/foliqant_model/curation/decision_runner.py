@@ -16,6 +16,7 @@ from ..contracts.inputs import DataRecord, FrozenFamilyAssignment, ResolvedSourc
 from ..errors import ModelError
 from ..setup import check_workspace_git_policy
 from .continuation import (
+    Continuation,
     continuation_jobs,
     initialize_continuation,
     load_continuation,
@@ -49,6 +50,14 @@ from .decision_seeds import (
 )
 from .endpoint import EndpointModelIdentity, _select_model, discover_models
 from .planning import freeze_sources
+from .projection_extension import (
+    append_projections,
+    extension_jobs,
+    initialize_extension,
+    load_inherited_projection,
+    load_projection_extension,
+    restore_job_order,
+)
 from .runner import _created, _derived_sources, _preserve_family_rights, _publish, _source_batches
 from .runtime import CurationControl, cached_request_count
 from .sources import source_catalog_digest
@@ -357,6 +366,8 @@ def run_decision_curation(
     offline: bool = False,
     repair_from: Path | None = None,
     continue_from: Path | None = None,
+    extend_projections_from: Path | None = None,
+    projection_plan: Path | None = None,
     control: CurationControl | None = None,
 ) -> CurateResult:
     """Publish diagnostic native data; fail the coverage gate without discarding progress."""
@@ -369,6 +380,8 @@ def run_decision_curation(
             offline=offline,
             repair_from=repair_from,
             continue_from=continue_from,
+            extend_projections_from=extend_projections_from,
+            projection_plan=projection_plan,
             control=selected_control,
         )
 
@@ -381,6 +394,8 @@ def _run_decision_curation(
     offline: bool,
     repair_from: Path | None,
     continue_from: Path | None,
+    extend_projections_from: Path | None,
+    projection_plan: Path | None,
     control: CurationControl,
 ) -> CurateResult:
     settings = config.decisionData
@@ -400,6 +415,23 @@ def _run_decision_curation(
     check_workspace_git_policy(root)
     if continue_from is not None and repair_from is not None:
         raise ModelError("ARGUMENT_INVALID", "Choose continuation or rejection repair, not both")
+    if (extend_projections_from is None) != (projection_plan is None):
+        raise ModelError("ARGUMENT_INVALID", "Projection extension requires both parent and plan")
+    if extend_projections_from is not None and (
+        continue_from is not None or repair_from is not None
+    ):
+        raise ModelError("ARGUMENT_INVALID", "Choose projection extension, continuation, or repair")
+    extension = (
+        load_projection_extension(
+            root,
+            extend_projections_from,
+            config,
+            cast(Path, projection_plan),
+            recipe=decision_generation_recipe_digest(),
+        )
+        if extend_projections_from is not None
+        else None
+    )
     continuation = (
         load_continuation(root, continue_from, config, recipe=decision_generation_recipe_digest())
         if continue_from is not None
@@ -425,6 +457,12 @@ def _run_decision_curation(
     )
     if continuation is not None:
         run = root / "curation" / (config.name + "-continue-" + continuation.run_id[:12])
+    if extension is not None:
+        run = root / "curation" / (config.name + "-projections-" + extension.run_id[:12])
+    inherited_parent = repair.parent if repair else continuation.parent if continuation else None
+    supplement = extension.plan if extension is not None else None
+    if inherited_parent is not None and (inherited_parent / "projection-plan.json").exists():
+        supplement = load_inherited_projection(inherited_parent)
     ensure_directory(run)
     control.report("preparing", run)
     with run_lock(run):
@@ -434,10 +472,15 @@ def _run_decision_curation(
 
             initialize_repair_child(run, repair, recipe_sha256=decision_generation_recipe_digest())
             batches = repair.source_batches
-        elif continuation is not None:
+        elif continuation is not None or extension is not None:
+            carried_parent = (
+                continuation
+                if continuation is not None
+                else cast(Continuation, extension.parent if extension else None)
+            )
             batches = [
                 SourceBatch.model_validate(value)
-                for value in cast(dict[str, object], continuation.snapshot["sources"]).values()
+                for value in cast(dict[str, object], carried_parent.snapshot["sources"]).values()
             ]
             for batch in batches:
                 store_object(
@@ -467,6 +510,21 @@ def _run_decision_curation(
         )
         artifacts = [_created(base, run / "datasets/source-corpus")]
         seeds, families, rights, exclusions = _seeds_and_families(config, plan, sources)
+        if extension is not None:
+            if extension.parent.snapshot["native-seeds"] != [
+                seed.model_dump(mode="json") for seed in seeds
+            ] or extension.parent.snapshot["native-families"] != {
+                key: value.model_dump(mode="json") for key, value in sorted(families.items())
+            }:
+                raise ModelError("INTEGRITY_FAILED", "Projection extension changed existing seeds")
+        if supplement is not None:
+            if supplement.sourcePlanSha256 != canonical_digest(plan.model_dump(mode="json")):
+                raise ModelError("INTEGRITY_FAILED", "Projection source plan changed")
+            if supplement.configSha256 != configuration:
+                raise ModelError("CONFIG_INVALID", "Projection configuration changed")
+            seeds, families, rights = append_projections(seeds, families, rights, supplement)
+            store_object(run / "projection-plan.json", supplement.model_dump(mode="json"))
+            store_object(run / "projection-report.json", supplement.report.model_dump(mode="json"))
         for seed in seeds:
             _validate_record(seed, seed.parent)
         diversity = _validate_seed_partitions(seeds, families)
@@ -490,6 +548,12 @@ def _run_decision_curation(
         artifacts.append(_created(seed_manifest, run / "datasets/native-seeds"))
         control.checkpoint()
         jobs = build_decision_jobs(config, seeds, families)
+        if extension is not None:
+            jobs = extension_jobs(
+                extension, build_decision_jobs(config, extension.plan.seeds, families), config
+            )
+        elif supplement is not None and inherited_parent is not None:
+            jobs = restore_job_order(inherited_parent, jobs)
         prior_rejections: dict[str, CandidateOutcome] = {}
         if repair is not None:
             from .repair import repair_jobs, verify_job_plan
@@ -497,6 +561,18 @@ def _run_decision_curation(
             verify_job_plan(repair, jobs)
             jobs, prior_rejections = repair_jobs(repair)
         by_id = {seed.parent.id: seed for seed in seeds}
+        if extension is not None:
+            for job in extension.parent.jobs:
+                _validate_outcome(
+                    by_id[job.parentRecordId],
+                    job,
+                    extension.parent.outcomes[job.jobId],
+                    extension.parent.model,
+                    recipe=extension.parent.recipe_for(
+                        job.jobId, decision_generation_recipe_digest()
+                    ),
+                )
+            initialize_extension(run, extension, recipe=decision_generation_recipe_digest())
         if continuation is not None:
             verify_continuation_inputs(continuation, run)
             jobs = continuation_jobs(continuation, jobs)
@@ -526,6 +602,11 @@ def _run_decision_curation(
             {
                 "cells": {cell: planned[cell] for cell in all_cells},
                 "sourceProjection": exclusions,
+                **(
+                    {"scopedSourceProjection": supplement.report.model_dump(mode="json")}
+                    if supplement is not None
+                    else {}
+                ),
                 "requestedMaximum": config.generation.maxCandidates,
                 "plannedCandidates": len(jobs),
                 "minimumAcceptedPerCell": settings.minimumAcceptedPerCell,
@@ -561,6 +642,8 @@ def _run_decision_curation(
         identity = _select_model(config.endpoint, discover_models(config.endpoint))
         if continuation is not None and identity != continuation.model:
             raise ModelError("CONFIG_INVALID", "Continuation endpoint model differs from parent")
+        if extension is not None and identity != extension.parent.model:
+            raise ModelError("CONFIG_INVALID", "Projection endpoint model differs from parent")
         control.checkpoint()
         if repair is not None:
             from .repair import verify_parent_model
@@ -578,7 +661,13 @@ def _run_decision_curation(
             for seed in seeds
         }
         carried_outcomes = (
-            repair.outcomes if repair else continuation.outcomes if continuation else {}
+            repair.outcomes
+            if repair
+            else continuation.outcomes
+            if continuation
+            else extension.parent.outcomes
+            if extension
+            else {}
         )
         carried_contents = (
             {
@@ -758,6 +847,19 @@ def _run_decision_curation(
             },
             "shortages": shortages,
             "sourceProjection": exclusions,
+            **(
+                {
+                    "scopedSourceProjection": supplement.report.model_dump(mode="json"),
+                    "carriedCounts": {
+                        "accepted": sum(o.status == "accepted" for o in carried_outcomes.values()),
+                        "quarantined": sum(
+                            o.status == "quarantined" for o in carried_outcomes.values()
+                        ),
+                    },
+                }
+                if supplement is not None
+                else {}
+            ),
             "minimumAcceptedPerCell": settings.minimumAcceptedPerCell,
             "plannedCandidates": len(jobs),
             "requestedMaximum": config.generation.maxCandidates,

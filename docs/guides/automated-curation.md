@@ -130,6 +130,9 @@ digest and prompt implementation version select the run directory. Completed
 source conversions and candidate outcomes are reused. `--progress` does not
 change that identity. Once model metadata is stored, a changed model identity is
 refused rather than silently mixed into the same run.
+Foliqant discovers the run model once through the standard `/v1/models`
+endpoint. Candidate requests reuse that observed identity and do not make an
+additional discovery or provider-native metadata request for every generation.
 
 To correct only quarantined jobs in a separate model turn, start an immutable
 child run with the completed parent path printed by the first command:

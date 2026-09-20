@@ -437,7 +437,37 @@ shapes:
       - CONTRACT-NATIVE-DECISION-V1
     mapping_refs:
       - MAP-NATIVE-DECISION-PUBLISH
+  - shape_id: model.source-projection-plan
+    representation_class: persistence
+    canonical_source: 09-native-decision-data.md#auxiliary-source-projection
+    owner: curation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - curation-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-NATIVE-DECISION-V1
+    mapping_refs:
+      - MAP-SCOPED-SOURCE-PROJECTION
 mappings:
+  - mapping_id: MAP-SCOPED-SOURCE-PROJECTION
+    from_shape: model.curation-plan
+    to_shape: model.source-projection-plan
+    direction: custom
+    allowed_differences:
+      - explicitly-scoped-native-tasks-added
+      - selection-and-exclusion-report-added
+    redaction_or_loss_policy: Full source annotations remain unchanged in the source corpus. Intent-only and teacher-hard-decision derivatives declare their scope. Probability distributions and slot labels never enter native prompts. Table comparison targets are independent of original QA answers. Plans stay private outside Git.
+    field_operations:
+      - frozenFamilies:preserve
+      - source-rights:conservative-union
+      - source-snapshot-hashes:bind
+      - selected-records:deterministic-projection
+    verification:
+      - model/tests/test_source_projections.py
+      - model/tests/test_projection_preparation.py
+      - model/tests/test_projection_extension.py
   - mapping_id: MAP-AUXILIARY-NATIVE-PROJECTION
     from_shape: model.data-record
     to_shape: model.decision-input

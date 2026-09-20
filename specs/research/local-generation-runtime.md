@@ -1,6 +1,11 @@
 # Local structured-generation runtime
 
-Date: 2026-09-19. Status: researched design; no endpoint adapter or generation run is implemented.
+Date: 2026-09-19. Status: historical research; superseded by the implemented
+[curation contract](../08-automated-data-curation.md). The original proposal
+below is retained as research context, not current configuration guidance.
+The implementation discovers models once per runner invocation using
+`/v1/models`, reuses that identity in generation workers, and does not probe
+the provider-specific `/api/v1/models` endpoint.
 
 ## Decision
 

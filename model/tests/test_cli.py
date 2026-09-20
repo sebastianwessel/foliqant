@@ -67,6 +67,8 @@ def test_curate_dispatches_all_bounded_operation_flags(
         offline: bool = False,
         repair_from: Path | None = None,
         continue_from: Path | None = None,
+        extend_projections_from: Path | None = None,
+        projection_plan: Path | None = None,
         control: CurationControl | None = None,
     ) -> CurateResult:
         assert config_path == config
@@ -74,6 +76,8 @@ def test_curate_dispatches_all_bounded_operation_flags(
         assert prepare_only is not repair
         assert repair_from == (workspace / "curation/parent" if repair else None)
         assert continue_from == (workspace / "curation/parent" if continuation else None)
+        assert extend_projections_from is None
+        assert projection_plan is None
         assert offline is True
         assert control is not None
         control.report("preparing", workspace / "curation/run")
