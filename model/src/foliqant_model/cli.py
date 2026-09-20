@@ -44,6 +44,17 @@ def _parser() -> argparse.ArgumentParser:
     curate.add_argument("--workspace", type=Path)
     curate.add_argument("--prepare-only", action="store_true")
     curate.add_argument("--offline", action="store_true")
+    curate.add_argument("--progress", choices=("auto", "always", "never"), default="auto")
+    curate.add_argument(
+        "--repair-from",
+        type=Path,
+        help="Create or resume an immutable child run that retries only quarantined jobs",
+    )
+    curate.add_argument(
+        "--continue-from",
+        type=Path,
+        help="Keep completed native outcomes and generate only unfinished jobs in a child run",
+    )
     for name in ("train", "customize"):
         operation = commands.add_parser(name, help="Train a shared or customer adapter")
         operation.add_argument("--config", type=Path, required=True)
@@ -186,13 +197,19 @@ def main(argv: list[str] | None = None) -> int:
             ).model_dump(mode="json")
         elif command == "curate":
             from .curation.runner import run_curation
+            from .curation.runtime import CurationControl
 
-            payload = run_curation(
+            curation_control = CurationControl(progress=args.progress, handle_signals=True)
+            curate_result = run_curation(
                 args.config,
                 args.workspace,
                 prepare_only=args.prepare_only,
                 offline=args.offline,
-            ).model_dump(mode="json")
+                repair_from=args.repair_from,
+                continue_from=args.continue_from,
+                control=curation_control,
+            )
+            payload = curate_result.model_dump(mode="json")
         elif command in {"train", "customize"}:
             from .contracts.cli import CustomizeResult, TrainResult
             from .training import train_model

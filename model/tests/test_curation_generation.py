@@ -12,7 +12,12 @@ from foliqant_model.contracts.base import JsonValue, canonical_digest
 from foliqant_model.contracts.inputs import ChatMessage, DataRecord
 from foliqant_model.curation import generation
 from foliqant_model.curation.contracts import CandidateJob, CurationConfig, GenerationSettings
-from foliqant_model.curation.endpoint import EndpointModelIdentity, GenerationResponse
+from foliqant_model.curation.endpoint import (
+    EndpointModelIdentity,
+    GenerationRejected,
+    GenerationRejection,
+    GenerationResponse,
+)
 from foliqant_model.curation.generation import generate_candidate
 from foliqant_model.curation.scenarios import scenario_records
 from foliqant_model.errors import ModelError
@@ -135,6 +140,42 @@ def test_scenarios_are_deterministic_varied_and_human_claim_free() -> None:
         assert all(isinstance(item, str) and item in prompt for item in evidence)
 
 
+def test_generation_recipe_identity_binds_retry_feedback_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = generation.generation_recipe_digest()
+    monkeypatch.setattr(generation, "_RETRY_FEEDBACK_VERSION", "changed-for-test")
+    assert generation.generation_recipe_digest() != before
+
+
+def test_request_format_versions_both_generation_recipes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from foliqant_model.curation import decision_generation
+
+    generic = generation.generation_recipe_digest()
+    native = decision_generation.decision_generation_recipe_digest()
+    monkeypatch.setattr(generation, "GENERATION_REQUEST_FORMAT", "changed-for-test")
+    monkeypatch.setattr(decision_generation, "GENERATION_REQUEST_FORMAT", "changed-for-test")
+    assert generation.generation_recipe_digest() != generic
+    assert decision_generation.decision_generation_recipe_digest() != native
+
+
+def test_schema_order_changes_call_identity() -> None:
+    schemas = [{"properties": {"zulu": {}, "alpha": {}}}, {"properties": {"alpha": {}, "zulu": {}}}]
+    calls = [
+        generation._call_identity(
+            _config(),
+            _identity(),
+            messages=[ChatMessage(role="user", content="Test")],
+            schema=schema,
+            seed=1,
+            prompt_version="test",
+        )
+        for schema in schemas
+    ]
+    assert canonical_digest(schemas[0]) == canonical_digest(schemas[1])
+    assert canonical_digest(calls[0]) != canonical_digest(calls[1])
+
+
 def test_generation_accepts_checked_candidate_and_resumes_from_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -209,6 +250,55 @@ def test_generation_accepts_checked_candidate_and_resumes_from_cache(
     assert resumed == first
 
 
+def test_invalid_final_response_is_cached_completely_and_replayed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(attempts=1)
+    identity = _identity()
+    messages = [ChatMessage(role="user", content="Return the object")]
+    schema = {"type": "object", "required": ["input"]}
+    seed = 17
+    final_response = "{" + ("x" * 40_000)
+    calls = 0
+
+    def rejected(*_args: object, **_kwargs: object) -> GenerationResponse:
+        nonlocal calls
+        calls += 1
+        raise GenerationRejected(
+            GenerationRejection(
+                message="Generated structured output is not strict JSON",
+                requestSha256=generation._endpoint_request_sha256(
+                    config,
+                    identity,
+                    messages=messages,
+                    schema=schema,
+                    seed=seed,
+                ),
+                rawResponseSha256=canonical_digest({"raw": final_response}),
+                finalAssistantResponse=final_response,
+            )
+        )
+
+    monkeypatch.setattr(generation, "generate_json", rejected)
+    for _ in range(2):
+        with pytest.raises(GenerationRejected) as failure:
+            generation._cached_generation(
+                config,
+                identity,
+                messages=messages,
+                schema=schema,
+                seed=seed,
+                prompt_version="test-invalid-v1",
+                cache_dir=tmp_path,
+            )
+        assert failure.value.rejection.finalAssistantResponse == final_response
+
+    assert calls == 1
+    cached = list((tmp_path / "calls").glob("*.json"))
+    assert len(cached) == 1
+    assert generation.load_cached_final_response(tmp_path, cached[0].stem) == final_response
+
+
 def test_checker_prompt_requires_complete_task_serialization_without_reference_answer() -> None:
     config = _config()
     parent = scenario_records(config)[3].record
@@ -241,6 +331,7 @@ def test_changed_facts_are_quarantined_with_distinct_retry_seeds(
     job = _job(parent)
     identity = _identity()
     seeds: list[int] = []
+    message_sets: list[list[ChatMessage]] = []
 
     def changed_fact(
         _endpoint: object,
@@ -252,6 +343,7 @@ def test_changed_facts_are_quarantined_with_distinct_retry_seeds(
     ) -> GenerationResponse:
         del model_id
         seeds.append(seed)
+        message_sets.append(messages)
         return _response(
             config,
             identity,
@@ -275,6 +367,17 @@ def test_changed_facts_are_quarantined_with_distinct_retry_seeds(
     assert outcome.attempts == 2
     assert outcome.record is None
     assert len(seeds) == 2 and len(set(seeds)) == 2
+    assert [trace.status for trace in outcome.attemptTrace] == [
+        "quarantined",
+        "quarantined",
+    ]
+    assert all(trace.reason == "candidate-numbers-changed" for trace in outcome.attemptTrace)
+    assert all(trace.calls[0].phase == "generator" for trace in outcome.attemptTrace)
+    assert outcome.attemptTrace[0].calls[0].callId != outcome.attemptTrace[1].calls[0].callId
+    assert [message.role for message in message_sets[1][-2:]] == ["assistant", "user"]
+    correction = json.loads(message_sets[1][-1].content)
+    assert correction["rejectionReason"] == "candidate-numbers-changed"
+    assert "answer" not in correction
 
 
 def test_plain_reference_label_in_candidate_is_not_treated_as_answer_leak() -> None:

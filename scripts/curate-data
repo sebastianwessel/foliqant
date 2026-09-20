@@ -16,8 +16,12 @@ load_environment() {
     key="${line%%=*}"
     value="${line#*=}"
     case "$key" in
-      FOLIQANT_CURATION_ENDPOINT_URL|FOLIQANT_CURATION_MODEL|FOLIQANT_CURATION_STRUCTURED_OUTPUT|FOLIQANT_CURATION_ALLOW_PRIVATE_NETWORK|FOLIQANT_CURATION_TIMEOUT_SECONDS|FOLIQANT_CURATION_MAX_TOKENS|FOLIQANT_CURATION_TEMPERATURE|FOLIQANT_CURATION_MAX_RESPONSE_BYTES|FOLIQANT_CURATION_MAX_CANDIDATES|FOLIQANT_CURATION_MAX_ATTEMPTS|FOLIQANT_CURATION_LANGUAGES|FOLIQANT_CURATION_SCENARIO_FAMILIES|FOLIQANT_CURATION_MAX_INPUT_CHARACTERS)
+      FOLIQANT_CURATION_ENDPOINT_URL|FOLIQANT_CURATION_MODEL|FOLIQANT_CURATION_STRUCTURED_OUTPUT|FOLIQANT_CURATION_REASONING_EFFORT|FOLIQANT_CURATION_ALLOW_PRIVATE_NETWORK|FOLIQANT_CURATION_TIMEOUT_SECONDS|FOLIQANT_CURATION_MAX_TOKENS|FOLIQANT_CURATION_TEMPERATURE|FOLIQANT_CURATION_MAX_RESPONSE_BYTES|FOLIQANT_CURATION_MAX_CANDIDATES|FOLIQANT_CURATION_MAX_ATTEMPTS|FOLIQANT_CURATION_LANGUAGES|FOLIQANT_CURATION_SCENARIO_FAMILIES|FOLIQANT_CURATION_MAX_INPUT_CHARACTERS)
         export "$key=$value"
+        ;;
+      OPENROUTER_API_KEY)
+        # The shared root file may contain this unrelated credential. Local
+        # curation ignores it and never exports it to the runtime or workers.
         ;;
       *) echo ".env contains an unsupported configuration key" >&2; exit 2 ;;
     esac
@@ -26,8 +30,8 @@ load_environment() {
 load_environment
 for argument in "$@"; do
   if [[ "$argument" == "--help" || "$argument" == "-h" ]]; then
-    echo "Usage: ./scripts/curate-data [--config FILE] [--workspace DIR] [--prepare-only] [--offline]"
-    echo "Prepares pinned public sources and optionally uses one local LM Studio model."
+    echo "Usage: ./scripts/curate-data [--config FILE] [--workspace DIR] [--repair-from RUN | --continue-from RUN] [--prepare-only] [--offline] [--progress auto|always|never]"
+    echo "Prepares pinned public sources and optionally uses one local OpenAI-compatible model."
     echo "Default config: model/examples/curation.yaml"
     echo "Default workspace: ~/.local/share/foliqant. Does not train a model."
     exit 0
@@ -37,7 +41,7 @@ forwarded=()
 config_seen=false
 while (( $# )); do
   case "$1" in
-    --config|--workspace)
+    --config|--workspace|--repair-from|--continue-from)
       option="$1"
       [[ "$option" == "--config" ]] && config_seen=true
       shift
@@ -47,7 +51,7 @@ while (( $# )); do
       fi
       path_value="$1"
       ;;
-    --config=*|--workspace=*)
+    --config=*|--workspace=*|--repair-from=*|--continue-from=*)
       option="${1%%=*}"
       [[ "$option" == "--config" ]] && config_seen=true
       path_value="${1#*=}"
@@ -82,4 +86,9 @@ for argument in "${forwarded[@]+"${forwarded[@]}"}"; do
   fi
 done
 uv "${sync_args[@]}"
-exec uv run --no-sync --locked foliqant-model curate "${forwarded[@]+"${forwarded[@]}"}"
+runtime_python="$(uv run --no-sync --locked python -c 'import sys; print(sys.executable)')"
+if [[ ! -x "$runtime_python" ]]; then
+  echo "The synchronized Foliqant environment has no Python executable" >&2
+  exit 3
+fi
+exec "$runtime_python" -m foliqant_model curate "${forwarded[@]+"${forwarded[@]}"}"

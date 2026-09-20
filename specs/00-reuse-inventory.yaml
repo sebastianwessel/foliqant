@@ -1,6 +1,57 @@
 reuse_inventory_version: 1
-discovery_revision: 0f42de5
+discovery_revision: working-tree-2026-09-19-native-decision-spec
 assets:
+  - asset_id: model.data-record-contract
+    kind: schema
+    path: ../model/src/foliqant_model/contracts/inputs.py
+    public_export: DataRecord, FrozenFamilyAssignment, GenerationProvenance
+    owner: model-contracts
+    stability: versioned
+    consumers:
+      - data
+      - curation
+      - native-decision-data
+    extension_policy: reuse unchanged as the published record/family/lineage boundary
+  - asset_id: model.curation-source-acquisition
+    kind: module
+    path: ../model/src/foliqant_model/curation/sources.py
+    public_export: acquire_source, source_catalog_digest
+    owner: curation
+    stability: versioned
+    consumers:
+      - curation-runner
+      - native-decision-data
+    extension_policy: project through explicit native mappings; retain raw auxiliary corpus and exclusion counts
+  - asset_id: model.curation-endpoint
+    kind: module
+    path: ../model/src/foliqant_model/curation/endpoint.py
+    public_export: discover_models, generate_json, EndpointModelIdentity
+    owner: curation
+    stability: versioned
+    consumers:
+      - curation-generation
+      - native-decision-data
+    extension_policy: reuse serial bounded validated JSON calls; no second provider client
+  - asset_id: model.curation-storage
+    kind: module
+    path: ../model/src/foliqant_model/curation/storage.py
+    public_export: immutable object cache and run lock functions
+    owner: curation
+    stability: internal
+    consumers:
+      - curation-runner
+      - native-decision-data
+    extension_policy: reuse immutable private cache, integrity checks and locking
+  - asset_id: model.dataset-publication
+    kind: module
+    path: ../model/src/foliqant_model/data.py
+    public_export: prepare_dataset
+    owner: data
+    stability: versioned
+    consumers:
+      - curation-runner
+      - native-decision-data
+    extension_policy: publish through existing frozen-family dataset artifact; no parallel dataset format
   - asset_id: research.model
     kind: research
     path: research/model-research.md

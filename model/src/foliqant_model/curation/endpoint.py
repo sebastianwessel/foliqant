@@ -55,7 +55,7 @@ from ..errors import ModelError
 from ..execution import _terminate_process_group, _worker_environment
 
 _MAX_REQUEST_BYTES = 8 * 1024 * 1024
-_MAX_EXCHANGE_BYTES = 16 * 1024 * 1024
+_MAX_EXCHANGE_BYTES = 128 * 1024 * 1024
 _MAX_DISCOVERED_MODELS = 1024
 _READ_CHUNK_BYTES = 64 * 1024
 _JSON_CONTENT_TYPES = {"application/json", "application/problem+json"}
@@ -79,11 +79,14 @@ class LocalEndpointConfig(ContractModel):
     temperature: Annotated[StrictFloat, Field(ge=0, le=2, allow_inf_nan=False)] = 0.3
     maxResponseBytes: Annotated[StrictInt, Field(ge=1024, le=16_777_216)] = 8_388_608
     structuredOutput: Literal["json-schema", "prompt"] = "json-schema"
+    reasoningEffort: Omitted[Literal["low", "medium", "xhigh"]] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="before")
     @classmethod
     def reject_explicit_null(cls, value: object) -> object:
-        return _reject_explicit_null(value, "model")
+        return _reject_explicit_null(value, "model", "reasoningEffort")
 
     @field_validator("baseUrl")
     @classmethod
@@ -119,6 +122,24 @@ class GenerationResponse(ContractModel):
     schemaSha256: Digest
     rawResponseSha256: Digest
     elapsedSeconds: NonNegativeFloat
+    finalAssistantResponse: str | None = None
+
+
+class GenerationRejection(ContractModel):
+    """Safe bounded evidence for a completed but invalid assistant response."""
+
+    message: NonEmptyStr
+    requestSha256: Digest
+    rawResponseSha256: Digest
+    finalAssistantResponse: str | None
+
+
+class GenerationRejected(ModelError):
+    """Structured-output rejection that retains only final assistant content."""
+
+    def __init__(self, rejection: GenerationRejection) -> None:
+        super().__init__("OUTPUT_INVALID", rejection.message)
+        self.rejection = rejection
 
 
 class _GenerationRequest(ContractModel):
@@ -162,6 +183,9 @@ def discover_models(config: LocalEndpointConfig) -> list[EndpointModelIdentity]:
     return sorted(identities, key=lambda identity: identity.modelId)
 
 
+GENERATION_REQUEST_FORMAT = "declared-schema-order-v2"
+
+
 def generate_json(
     config: LocalEndpointConfig,
     *,
@@ -182,7 +206,7 @@ def generate_json(
                 "seed": seed,
             }
         )
-        request_bytes = _canonical_bytes(request.model_dump(mode="json", by_alias=True))
+        request_bytes = _request_bytes_json(request.model_dump(mode="json", by_alias=True))
     except (ValidationError, TypeError, ValueError) as error:
         raise ModelError("ARGUMENT_INVALID", "Local generation request is invalid") from error
     if len(request_bytes) > _MAX_REQUEST_BYTES:
@@ -267,7 +291,7 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
             schema=schema,
             seed=request.seed,
         )
-        body = _canonical_bytes(payload)
+        body = _request_bytes_json(payload)
         schema_bytes = _canonical_bytes(schema)
     except (TypeError, ValueError) as error:
         raise ModelError("ARGUMENT_INVALID", "Structured generation input is not JSON") from error
@@ -283,14 +307,66 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
         deadline=deadline,
     )
     envelope = _strict_json(raw, label="Local endpoint response")
-    content = _completion_content(envelope, expected_model=request.modelId)
-    generated = _strict_json(content.encode("utf-8"), label="Generated structured output")
+    content, finish_reason = _assistant_content_and_finish(envelope, expected_model=request.modelId)
+    request_sha256 = _generation_request_sha256(
+        request.config,
+        model_id=request.modelId,
+        messages=request.messages,
+        schema=schema,
+        seed=request.seed,
+    )
+    raw_response_sha256 = hashlib.sha256(raw).hexdigest()
+    if finish_reason == "length":
+        raise GenerationRejected(
+            GenerationRejection(
+                message="Local endpoint truncated the generated output",
+                requestSha256=request_sha256,
+                rawResponseSha256=raw_response_sha256,
+                finalAssistantResponse=content,
+            )
+        )
+    if finish_reason != "stop":
+        raise GenerationRejected(
+            GenerationRejection(
+                message="Local endpoint did not complete structured output",
+                requestSha256=request_sha256,
+                rawResponseSha256=raw_response_sha256,
+                finalAssistantResponse=content,
+            )
+        )
+    if content is None:
+        raise ModelError("OUTPUT_INVALID", "Local endpoint returned no structured output")
+    try:
+        generated = _strict_json(content.encode("utf-8"), label="Generated structured output")
+    except ModelError as error:
+        raise GenerationRejected(
+            GenerationRejection(
+                message=error.message,
+                requestSha256=request_sha256,
+                rawResponseSha256=raw_response_sha256,
+                finalAssistantResponse=content,
+            )
+        ) from error
     if not isinstance(generated, dict):
-        raise ModelError("OUTPUT_INVALID", "Generated structured output must be an object")
+        raise GenerationRejected(
+            GenerationRejection(
+                message="Generated structured output must be an object",
+                requestSha256=request_sha256,
+                rawResponseSha256=raw_response_sha256,
+                finalAssistantResponse=content,
+            )
+        )
     try:
         Draft202012Validator(schema).validate(generated)
     except JsonSchemaValidationError as error:
-        raise ModelError("OUTPUT_INVALID", "Generated output does not match its schema") from error
+        raise GenerationRejected(
+            GenerationRejection(
+                message="Generated output does not match its schema",
+                requestSha256=request_sha256,
+                rawResponseSha256=raw_response_sha256,
+                finalAssistantResponse=content,
+            )
+        ) from error
 
     verified_identity = EndpointModelIdentity.model_validate(
         {**identity.model_dump(mode="json"), "structuredOutput": "verified-for-request"}
@@ -299,16 +375,11 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
         model=verified_identity,
         output=cast(dict[str, JsonValue], generated),
         finishReason="stop",
-        requestSha256=_generation_request_sha256(
-            request.config,
-            model_id=request.modelId,
-            messages=request.messages,
-            schema=schema,
-            seed=request.seed,
-        ),
+        requestSha256=request_sha256,
         schemaSha256=hashlib.sha256(schema_bytes).hexdigest(),
-        rawResponseSha256=hashlib.sha256(raw).hexdigest(),
+        rawResponseSha256=raw_response_sha256,
         elapsedSeconds=time.monotonic() - started,
+        finalAssistantResponse=content,
     )
 
 
@@ -329,6 +400,8 @@ def _generation_payload(
         "max_tokens": config.maxTokens,
         "stream": False,
     }
+    if config.reasoningEffort is not None:
+        payload["reasoning_effort"] = config.reasoningEffort
     if config.structuredOutput == "json-schema":
         payload["response_format"] = {
             "type": "json_schema",
@@ -356,7 +429,7 @@ def _effective_messages(
     instruction = (
         "\n\nStructured output requirement: Return only one strict JSON object that conforms "
         "exactly to the JSON Schema below. Do not include Markdown, prose, or reasoning outside "
-        "the JSON object.\nJSON Schema:\n" + _canonical_bytes(schema).decode("utf-8")
+        "the JSON object.\nJSON Schema:\n" + _request_bytes_json(schema).decode("utf-8")
     )
     try:
         final = ChatMessage(role="user", content=messages[-1].content + instruction)
@@ -375,17 +448,19 @@ def _generation_request_sha256(
     schema: dict[str, object],
     seed: int,
 ) -> str:
-    """Hash the exact canonical endpoint request, including prompt-mode augmentation."""
+    """Hash exact HTTP request bytes, preserving prompt-visible schema order."""
 
-    return canonical_digest(
-        _generation_payload(
-            config,
-            model_id=model_id,
-            messages=messages,
-            schema=schema,
-            seed=seed,
+    return hashlib.sha256(
+        _request_bytes_json(
+            _generation_payload(
+                config,
+                model_id=model_id,
+                messages=messages,
+                schema=schema,
+                seed=seed,
+            )
         )
-    )
+    ).hexdigest()
 
 
 def _reject_external_schema_references(value: object) -> None:
@@ -650,7 +725,9 @@ def _optional_nonnegative_int(value: object) -> int | None:
     return value if type(value) is int and value >= 0 else None
 
 
-def _completion_content(value: object, *, expected_model: str) -> str:
+def _assistant_content_and_finish(
+    value: object, *, expected_model: str
+) -> tuple[str | None, object]:
     if not isinstance(value, dict) or value.get("model") != expected_model:
         raise ModelError("OUTPUT_INVALID", "Local endpoint returned a different model identity")
     choices = value.get("choices")
@@ -658,10 +735,6 @@ def _completion_content(value: object, *, expected_model: str) -> str:
         raise ModelError("OUTPUT_INVALID", "Local endpoint completion envelope is invalid")
     choice = choices[0]
     finish_reason = choice.get("finish_reason")
-    if finish_reason == "length":
-        raise ModelError("OUTPUT_INVALID", "Local endpoint truncated the generated output")
-    if finish_reason != "stop":
-        raise ModelError("OUTPUT_INVALID", "Local endpoint did not complete structured output")
     message = choice.get("message")
     if not isinstance(message, dict):
         raise ModelError("OUTPUT_INVALID", "Local endpoint completion message is invalid")
@@ -672,7 +745,20 @@ def _completion_content(value: object, *, expected_model: str) -> str:
     if tool_calls is not None and tool_calls != []:
         raise ModelError("OUTPUT_INVALID", "Local endpoint returned unsupported tool calls")
     content = message.get("content")
+    if finish_reason != "stop" and (content is None or isinstance(content, str)):
+        return content, finish_reason
     if not isinstance(content, str) or not content:
+        raise ModelError("OUTPUT_INVALID", "Local endpoint returned no structured output")
+    return content, finish_reason
+
+
+def _completion_content(value: object, *, expected_model: str) -> str:
+    content, finish_reason = _assistant_content_and_finish(value, expected_model=expected_model)
+    if finish_reason == "length":
+        raise ModelError("OUTPUT_INVALID", "Local endpoint truncated the generated output")
+    if finish_reason != "stop":
+        raise ModelError("OUTPUT_INVALID", "Local endpoint did not complete structured output")
+    if content is None:
         raise ModelError("OUTPUT_INVALID", "Local endpoint returned no structured output")
     return content
 
@@ -699,6 +785,13 @@ def _strict_json(data: bytes, *, label: str) -> object:
         raise ModelError("OUTPUT_INVALID", f"{label} is not strict JSON") from error
 
 
+def _request_bytes_json(value: object) -> bytes:
+    """Serialize model input without reordering schema fields or definitions."""
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode(
+        "utf-8"
+    )
+
+
 def _canonical_bytes(value: object) -> bytes:
     return json.dumps(
         value,
@@ -718,6 +811,15 @@ def _parse_worker_result(data: bytes) -> GenerationResponse:
             return GenerationResponse.model_validate(value.get("response"))
         except ValidationError as error:
             raise ModelError("OUTPUT_INVALID", "Local endpoint worker result is invalid") from error
+    rejection_value = value.get("rejection")
+    if rejection_value is not None:
+        try:
+            rejection = GenerationRejection.model_validate(rejection_value, strict=True)
+        except ValidationError as error:
+            raise ModelError(
+                "OUTPUT_INVALID", "Local endpoint worker failure is invalid"
+            ) from error
+        raise GenerationRejected(rejection)
     error_value = value.get("error")
     if not isinstance(error_value, dict):
         raise ModelError("OUTPUT_INVALID", "Local endpoint worker failure is invalid")
@@ -766,6 +868,12 @@ def _worker_main() -> int:
         result: dict[str, object] = {
             "ok": True,
             "response": response.model_dump(mode="json"),
+        }
+    except GenerationRejected as error:
+        result = {
+            "ok": False,
+            "error": {"code": error.code, "message": error.message},
+            "rejection": error.rejection.model_dump(mode="json"),
         }
     except ModelError as error:
         result = {"ok": False, "error": {"code": error.code, "message": error.message}}

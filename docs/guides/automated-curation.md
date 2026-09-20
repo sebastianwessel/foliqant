@@ -1,5 +1,15 @@
 # Build a local research corpus automatically
 
+For the native typed decision format, use
+[Generate typed decision research data](native-decision-data.md). This page
+describes the auxiliary source-format curation recipe.
+
+The native workflow has a stricter publication boundary than this auxiliary
+augmentation flow: every prepared native seed remains diagnostic, while its
+training split admits only an accepted source verification or an accepted
+authored rewrite with the parent required for lineage. Do not infer native row
+counts or eligibility from the auxiliary corpus outputs described here.
+
 The curation command downloads five pinned public sources, converts them into Foliqant records, freezes related records into one partition, and publishes a verified source corpus. With LM Studio running, the same command also asks one local model to generate bounded variants and scenario cases, checks them automatically, quarantines failures, and publishes two additional datasets.
 
 No source record editing, hand labeling, cloud API, or model download is part of this workflow. Curation does not start training.
@@ -75,6 +85,13 @@ After LM Studio is serving one model, run the same recipe without `--prepare-onl
 
 The command resumes the prepared run. It reuses verified downloads and the frozen source plan, records the discovered model metadata, and processes at most 100 generation jobs with one request at a time. Successful automatic checks add records to `augmented-corpus`. Rejected, malformed, unsupported or duplicate candidates are recorded as quarantined outcomes and excluded without asking you to edit them. Code-authored scenario families are published separately as `synthetic-regression`.
 
+Interactive terminals show progress on stderr while stdout stays available for
+the final JSON result. Pass `--progress always` to force progress when stderr is
+redirected, or `--progress never` to suppress it. Updates include the phase and
+run path, completed/total candidates, accepted, quarantined and reused counts,
+request-cache entries present when generation starts, current-candidate elapsed
+time and heartbeats. It does not provide an ETA.
+
 ```text
 pinned sources ──> source-corpus
                        │
@@ -90,9 +107,44 @@ matches the requested JSON Schema. Some runtime and model combinations respond
 without usable final structured content; those attempts are rejected or
 quarantined instead of being treated as records.
 
+Each private `outcomes/<jobId>.json` records the status and safe reason for every
+attempt. Its call trace contains request/response digests, a stable `callId`, and
+at most a 32,768-character final-response preview. `previewTruncated: true` means
+the complete final `message.content` remains in the integrity-protected
+`requests/calls/<callId>.json`; it was not discarded. `responseSource` marks an
+actual endpoint final response, a canonical reconstruction from an older valid
+cache entry, or an honestly absent response. Hidden reasoning, HTTP error bodies
+and arbitrary exception text are never retained as candidate responses.
+
 ## Resume and offline operation
 
-Rerun the same command after an interruption. A configuration digest, full source-catalog digest and prompt implementation version select the run directory. Completed source conversions and candidate outcomes are reused. Once model metadata is stored, a changed model identity is refused rather than silently mixed into the same run.
+Press Ctrl+C once to pause safely. Generation finishes and saves the current
+candidate before it starts no further candidate; preparation stops at the next
+safe phase boundary. The command releases the lock and exits with code `130` and
+`INTERRUPTED`. A second Ctrl+C stops immediately, so the current request may be
+issued again after resume and server-side work may continue.
+
+Rerun the same recipe with the same effective `.env` settings and workspace to
+resume; no `--resume` flag is needed. A configuration digest, full source-catalog
+digest and prompt implementation version select the run directory. Completed
+source conversions and candidate outcomes are reused. `--progress` does not
+change that identity. Once model metadata is stored, a changed model identity is
+refused rather than silently mixed into the same run.
+
+To correct only quarantined jobs in a separate model turn, start an immutable
+child run with the completed parent path printed by the first command:
+
+```sh
+./scripts/curate-data --repair-from /absolute/path/to/curation/parent-run
+```
+
+The repair command requires the same effective configuration, recipe, frozen
+plans and resolved model metadata. It copies accepted outcomes unchanged, gives
+each rejected job a fresh job and request-cache identity, and applies the same
+validation and publication checks. A coverage-failed run is repairable once all
+of its planned jobs have outcomes. An interrupted run is not. Repeating the same
+command resumes the same child; pass that child to `--repair-from` for another
+separate repair pass. Parent snapshots are never overwritten.
 
 Use offline mode only after uv dependencies and every selected source asset are cached:
 
@@ -162,6 +214,7 @@ Copy [the example](../../model/examples/curation.yaml) and pass your copy with `
 | `endpoint.allowPrivateNetwork` | `false` | Explicitly permits a trusted RFC1918 or IPv6 unique-local model server; public endpoints remain rejected. |
 | `endpoint.baseUrl` | `http://127.0.0.1:1234/v1` | Local OpenAI-compatible endpoint; loopback by default or an explicitly allowed private-network address. |
 | `endpoint.structuredOutput` | `json-schema` | Use `prompt` explicitly when server-side guided grammar is incompatible; local schema validation remains mandatory. |
+| `endpoint.reasoningEffort` | omitted | Optional `low`, `medium`, or `xhigh`; sent explicitly to a supporting server, with no silent fallback. Native full/pilot recipes select `low` and temperature `0.1`; root `.env` can override both. |
 | `endpoint.model` | omitted | Requires exactly one discovered model. Set an exact ID only when several are served. |
 | `endpoint.timeoutSeconds` | `120` | Total deadline for one endpoint request. |
 | `endpoint.maxTokens` | `2048` | Maximum generated tokens per request. |

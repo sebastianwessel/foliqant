@@ -120,6 +120,8 @@ def test_generation_recipe_binds_transformations_and_task_input_recipe() -> None
         },
         "taskInput": task_input.task_input_recipe(),
         "scenarios": scenario_recipe_digest(),
+        "retryFeedback": generation._retry_feedback_recipe(),
+        "requestFormat": generation.GENERATION_REQUEST_FORMAT,
     }
     assert generation.generation_recipe_digest() == canonical_digest(recipe)
 

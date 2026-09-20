@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+for argument in "$@"; do
+  if [[ "$argument" == "--help" || "$argument" == "-h" ]]; then
+    echo "Usage: ./scripts/generate-data [--pilot | --config FILE] [--workspace DIR] [--repair-from RUN | --continue-from RUN] [--prepare-only] [--offline] [--progress auto|always|never]"
+    echo "Generate native typed decisions with answerability and evidence-backed explanations."
+    echo "Full recipe by default; --pilot selects a separate bounded verification run."
+    echo "Resumable, one local request at a time. Does not train a model."
+    exit 0
+  fi
+done
+pilot=false
+custom=false
+forwarded=()
+while (( $# )); do
+  case "$1" in
+    --pilot)
+      [[ "$pilot" == false ]] || { echo "--pilot may be supplied once" >&2; exit 2; }
+      pilot=true
+      shift
+      ;;
+    --config|--workspace|--repair-from|--continue-from|--progress)
+      option="$1"
+      [[ "$option" == "--config" ]] && custom=true
+      shift
+      if (( $# == 0 )) || [[ -z "$1" || "$1" == --* ]]; then
+        echo "$option requires a path" >&2
+        exit 2
+      fi
+      forwarded+=("$option" "$1")
+      shift
+      ;;
+    --config=*|--workspace=*|--repair-from=*|--continue-from=*|--progress=*)
+      [[ "${1#*=}" != "" ]] || { echo "Option requires a value" >&2; exit 2; }
+      [[ "$1" == --config=* ]] && custom=true
+      forwarded+=("$1")
+      shift
+      ;;
+    --prepare-only|--offline)
+      forwarded+=("$1")
+      shift
+      ;;
+    *) echo "Unsupported generation option" >&2; exit 2 ;;
+  esac
+done
+if [[ "$pilot" == true && "$custom" == true ]]; then
+  echo "Choose --pilot or --config, not both" >&2
+  exit 2
+fi
+if [[ "$custom" == false ]]; then
+  recipe="$repo_root/model/examples/native-full.yaml"
+  [[ "$pilot" == true ]] && recipe="$repo_root/model/examples/native-pilot.yaml"
+  forwarded=(--config "$recipe" "${forwarded[@]+"${forwarded[@]}"}")
+fi
+exec "$repo_root/scripts/curate-data" "${forwarded[@]+"${forwarded[@]}"}"

@@ -15,6 +15,36 @@ Identifiers used by `name`, `id` and `sourceId` are 1–128 characters. They sta
 with an ASCII letter or digit and then contain only letters, digits, `.`, `_` or
 `-`. A language is a simple BCP 47-style tag such as `en`, `de` or `de-DE`.
 
+## Native decision-data configuration
+
+`CurationConfig.decisionData` selects the native state-and-questions generation
+path. Omit it for the auxiliary source-format recipe. See
+[native generation](../guides/native-decision-data.md) for full/pilot commands.
+
+| Field inside `decisionData` | Type | Default | Range |
+|---|---|---:|---|
+| `examplesPerScenario` | integer | `4` | 4–10,000; cap over available genuine cases, not a promised row or family count |
+| `sourceExamplesPerSource` | integer | `100` | 0–100,000; zero skips projection |
+| `minimumAcceptedPerCell` | integer | `1` | 0–1,000; accepted jobs per eligible training scenario/language cell |
+
+`familiesPerScenario` is not an alias and is rejected. Existing `endpoint` and
+`generation` fields apply, including candidate, attempt, input and response
+limits. The authored recipe supports English and German, and execution is serial.
+Native full/pilot profiles select `[en, de]`; a custom recipe may select either
+language. German response prose remains German; IDs and enum values stay stable. A zero cell minimum is intended for pilots; at least one accepted job is
+still required for success. Projected jobs verify an unchanged source-derived
+parent; authored jobs produce checked rewrites only for source IDs declared by
+the seed. Ordinary authored cases declare all non-metadata sources. Whole-answer
+adequacy cases declare only `original-state`, while `task-contract` and
+`proposed-answer` remain fixed. All output is unreviewed research data. No
+setting authorizes cloud fallback, human-gold calibration claims or production
+use.
+
+The initial authored catalog contains four genuine cases per scenario. A larger
+`examplesPerScenario` value still selects only those four; it does not create
+numeric repeats, alternate wrappers, or filler metadata. Planning reports the
+requested cap, available catalog count and actual selected count.
+
 ## Dataset configuration
 
 Pass a `DatasetConfig` file to `foliqant-model prepare --config FILE`. A relative
@@ -121,6 +151,7 @@ the result may be below the requested cap.
 | `allowPrivateNetwork` | boolean | `false` | Allows a numeric RFC1918 IPv4 or IPv6 unique-local endpoint. Set it only for a trusted model server; public addresses, DNS names, credentials, redirects and ambient proxies remain rejected. |
 | `baseUrl` | URL | `http://127.0.0.1:1234/v1` | HTTP on an IP loopback address by default, or an explicitly allowed private-network address; no credentials, redirects or ambient proxy. |
 | `model` | string | omitted | Exact discovered model ID. Omission requires exactly one endpoint model. |
+| `reasoningEffort` | string | omitted | `low`, `medium`, or `xhigh`; sent as `reasoning_effort`. Omission leaves the provider setting unspecified. Explicit null is invalid. There is no silent fallback if the server rejects it. |
 | `timeoutSeconds` | integer | `120` | 1–600 seconds per request. |
 | `maxTokens` | integer | `2048` | 1–32,768 generated tokens. |
 | `temperature` | float | `0.3` | Finite, 0–2. |
@@ -130,6 +161,15 @@ The endpoint is not contacted with `--prepare-only`. On a full run, discovered
 model metadata is stored before generation. A resume must present the same model
 identity.
 
+The native full and pilot YAML recipes override the generic endpoint defaults:
+standalone Splash at `http://127.0.0.1:8000/v1`, model
+`incoai/Qwen3.8-27B-Splash`, `reasoningEffort: low`, `temperature: 0.1`,
+`maxTokens: 8192`, and `timeoutSeconds: 300`. Root `.env` overrides these values.
+Reasoning effort is supported in both structured-output modes and participates
+in request, cache and run identity. It is not a separate hard token budget;
+`maxTokens` bounds the total generated response, including reasoning where the
+server counts it that way.
+
 ### Root `.env` overrides
 
 `./scripts/curate-data` reads a root `.env` when present. It accepts only the
@@ -138,7 +178,15 @@ documented `FOLIQANT_CURATION_*` endpoint and generation variables in
 applies them over the selected curation recipe. Empty variables do not override
 the recipe. It does not source arbitrary shell code, interpolate YAML, accept
 credentials, or configure remote endpoints. Use a copied `.env` for local model
-selection; Git ignores it by design.
+selection; Git ignores it by design. A shared root `OPENROUTER_API_KEY` entry is
+ignored and is not exported to the local curation runtime or its workers.
+
+`FOLIQANT_CURATION_REASONING_EFFORT` overrides `endpoint.reasoningEffort`;
+`FOLIQANT_CURATION_TEMPERATURE` overrides `endpoint.temperature`. The checked-in
+native profiles and `.env.example` select `low` and `0.1` respectively. Removing
+an environment override uses the YAML value; to leave reasoning unspecified for
+another model, use a custom recipe without that field and remove its environment
+override too.
 
 ### Generation settings
 

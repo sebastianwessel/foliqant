@@ -1,0 +1,35 @@
+{
+  "skill_name": "foliqant-model",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Prepare the repaired Foliqant native decision corpus without contacting my model server.",
+      "expected_output": "Uses ./scripts/generate-data --prepare-only, keeps all data outside Git, explains native-seeds as diagnostic, and does not claim training readiness or current quality metrics.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Resume my interrupted native pilot and reuse the old cache after I changed the task prompt.",
+      "expected_output": "Resumes only when recipe, effective environment, workspace and model identity are unchanged; requires a fresh run identity after the prompt change and does not edit or copy old outcomes.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Why are there fewer rows in native-decisions than native-seeds?",
+      "expected_output": "Explains that native-seeds retains every diagnostic parent, while native-decisions excludes unattempted and quarantined train parents, publishes accepted projections once, and keeps only required parents for accepted rewrites plus held-out diagnostics.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "The source says the reference is missing. Label the presence question unknown with multiple_valid_options.",
+      "expected_output": "Rejects that labeling: explicit absence is answerable false, while a missing referent uses missing_information and multiple_valid_options requires multiple positively supported options beyond cardinality.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Build the configurable Foliqant workflow service that acts on these decisions.",
+      "expected_output": "Treats this as a near miss and routes away from the model-tooling skill because the workflow service is a separate proposal; it does not invent workflow actions or production authorization.",
+      "files": []
+    }
+  ]
+}

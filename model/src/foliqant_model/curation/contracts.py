@@ -18,6 +18,7 @@ from ..contracts.base import (
 )
 from ..contracts.inputs import DataRecord, FrozenFamilyAssignment, ResolvedSourceDeclaration
 from ..contracts.setup import SetupAsset
+from .decision_contracts import DecisionDataSettings
 from .endpoint import LocalEndpointConfig
 
 
@@ -114,6 +115,7 @@ class CurationConfig(ContractModel):
     )
     endpoint: LocalEndpointConfig = Field(default_factory=LocalEndpointConfig)
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
+    decisionData: DecisionDataSettings | None = None
     seed: UInt32 = 42
 
     @model_validator(mode="after")
@@ -145,7 +147,7 @@ class CandidateJob(ContractModel):
     familyId: Id
     split: Split
     language: Literal["en", "de"]
-    purpose: Literal["training-augmentation", "synthetic-regression"]
+    purpose: Literal["training-augmentation", "synthetic-regression", "decision-training"]
     operation: Literal[
         "paraphrase",
         "source-question",
@@ -155,7 +157,39 @@ class CandidateJob(ContractModel):
         "missing-evidence",
         "conflicting-information",
         "changed-deadline",
+        "native-decision",
     ]
+
+
+class CandidateCallTrace(ContractModel):
+    """Bounded final-response evidence for one model call."""
+
+    phase: Literal["generator", "checker", "rewrite", "solver"]
+    status: Literal["accepted", "rejected"]
+    reason: NonEmptyStr
+    callId: Digest
+    requestSha256: Digest
+    responseSha256: Digest
+    finalAssistantResponsePreview: Annotated[str, Field(max_length=32_768)] | None = None
+    previewTruncated: StrictBool = False
+    responseSource: Literal["endpoint-final", "canonical-output", "absent"]
+
+    @model_validator(mode="after")
+    def valid_retained_response(self) -> CandidateCallTrace:
+        if self.previewTruncated and self.finalAssistantResponsePreview is None:
+            raise ValueError("a truncated response requires retained final content")
+        if (self.finalAssistantResponsePreview is None) != (self.responseSource == "absent"):
+            raise ValueError("response source must describe retained preview presence")
+        return self
+
+
+class CandidateAttemptTrace(ContractModel):
+    """Immutable validation result for one bounded candidate attempt."""
+
+    attempt: Annotated[StrictInt, Field(ge=1, le=5)]
+    status: Literal["accepted", "quarantined"]
+    reason: NonEmptyStr
+    calls: Annotated[list[CandidateCallTrace], Field(max_length=3)] = Field(default_factory=list)
 
 
 class CandidateOutcome(ContractModel):
@@ -168,6 +202,9 @@ class CandidateOutcome(ContractModel):
     requestSha256: Digest
     responseSha256: Digest
     record: DataRecord | None
+    attemptTrace: Annotated[list[CandidateAttemptTrace], Field(max_length=5)] = Field(
+        default_factory=list
+    )
 
     @model_validator(mode="after")
     def valid_record(self) -> CandidateOutcome:
@@ -175,6 +212,14 @@ class CandidateOutcome(ContractModel):
             raise ValueError("only accepted outcomes contain published records")
         if self.record is not None and (self.record.origin == "human" or self.record.reviewed):
             raise ValueError("automatic outcomes cannot claim human review")
+        if self.attemptTrace:
+            if len(self.attemptTrace) != self.attempts:
+                raise ValueError("attempt trace must cover every completed attempt")
+            if [trace.attempt for trace in self.attemptTrace] != list(range(1, self.attempts + 1)):
+                raise ValueError("attempt trace must be contiguous")
+            final = self.attemptTrace[-1]
+            if final.status != self.status or final.reason != self.reason:
+                raise ValueError("final attempt trace must match the outcome")
         return self
 
 

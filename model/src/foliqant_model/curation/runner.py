@@ -29,6 +29,7 @@ from .endpoint import EndpointModelIdentity, _select_model, discover_models
 from .environment import apply_curation_environment
 from .generation import generation_recipe_digest
 from .planning import freeze_sources
+from .runtime import CurationControl, cached_request_count
 from .storage import (
     canonical_bytes,
     ensure_directory,
@@ -311,11 +312,51 @@ def run_curation(
     *,
     prepare_only: bool = False,
     offline: bool = False,
+    repair_from: Path | None = None,
+    continue_from: Path | None = None,
+    control: CurationControl | None = None,
 ) -> CurateResult:
     """Prepare or resume one complete unattended local curation run."""
+    selected_control = control or CurationControl()
+    with selected_control.active():
+        return _run_curation(
+            config_path,
+            workspace,
+            prepare_only=prepare_only,
+            offline=offline,
+            repair_from=repair_from,
+            continue_from=continue_from,
+            control=selected_control,
+        )
+
+
+def _run_curation(
+    config_path: Path,
+    workspace: Path | None,
+    *,
+    prepare_only: bool,
+    offline: bool,
+    repair_from: Path | None,
+    continue_from: Path | None,
+    control: CurationControl,
+) -> CurateResult:
     from .sources import source_catalog_digest
 
     config = apply_curation_environment(load_config(config_path, CurationConfig), os.environ)
+    if config.decisionData is not None:
+        from .decision_runner import run_decision_curation
+
+        return run_decision_curation(
+            config,
+            workspace,
+            prepare_only=prepare_only,
+            offline=offline,
+            repair_from=repair_from,
+            continue_from=continue_from,
+            control=control,
+        )
+    if continue_from is not None:
+        raise ModelError("ARGUMENT_INVALID", "Continuation requires native decision curation")
     configuration_digest = canonical_digest(config.model_dump(mode="json"))
     catalog_digest = source_catalog_digest()
     identity_digest = canonical_digest(
@@ -328,12 +369,40 @@ def run_curation(
     )
     root = (workspace or Path.home() / ".local/share/foliqant").expanduser().absolute()
     check_workspace_git_policy(root)
-    run = root / "curation" / (config.name + "-" + identity_digest[:12])
+    if repair_from is not None and prepare_only:
+        raise ModelError("ARGUMENT_INVALID", "A repair pass cannot be prepare-only")
+    repair = None
+    if repair_from is not None:
+        from .repair import load_repair_pass
+
+        repair = load_repair_pass(
+            root,
+            repair_from,
+            config,
+            recipe_sha256=generation_recipe_digest(),
+            native=False,
+        )
+    run = (
+        root
+        / "curation"
+        / (
+            config.name
+            + ("-repair-" + repair.run_id[:12] if repair else "-" + identity_digest[:12])
+        )
+    )
     cache = root / "curation-downloads" / catalog_digest[:16]
     ensure_directory(run)
+    control.report("preparing", run)
     with run_lock(run):
         store_object(run / "configuration.json", config.model_dump(mode="json"))
-        batches = _source_batches(config, run, cache, offline)
+        if repair is not None:
+            from .repair import initialize_repair_child
+
+            initialize_repair_child(run, repair, recipe_sha256=generation_recipe_digest())
+            batches = repair.source_batches
+        else:
+            batches = _source_batches(config, run, cache, offline)
+        control.checkpoint()
         plan = freeze_sources(
             batches,
             seed=config.seed,
@@ -343,12 +412,17 @@ def run_curation(
         store_object(run / "source-plan.json", plan.model_dump(mode="json"))
         # The persisted plan must be exactly equal even after an interrupted generation run.
         plan = CurationPlan.model_validate(load_object(run / "source-plan.json"))
+        if repair is not None:
+            from .repair import verify_parent_plan
+
+            verify_parent_plan(repair, plan)
         sources = _preserve_family_rights([batch.source for batch in batches], plan)
         base_records = [row.record for row in plan.records]
         base = _publish(
             run, "source-corpus", base_records, sources, plan.frozenFamilies, config.seed
         )
         artifacts = [_created(base, run / "datasets/source-corpus")]
+        control.checkpoint()
         if prepare_only:
             result = CurateResult(
                 command="curate",
@@ -365,12 +439,19 @@ def run_curation(
                 ],
             )
             store_object(run / "prepared-report.json", result.model_dump(mode="json"))
+            control.report("completed", run)
             return result
 
         from .generation import generate_candidate
         from .scenarios import scenario_records
 
+        control.report("discovering-model", run)
         identity = _select_model(config.endpoint, discover_models(config.endpoint))
+        control.checkpoint()
+        if repair is not None:
+            from .repair import verify_parent_model
+
+            verify_parent_model(repair, identity)
         store_object(run / "model-identity.json", identity.model_dump(mode="json"))
         scenario_batch = SourceBatch(
             source=_scenario_source(),
@@ -385,8 +466,18 @@ def run_curation(
             configuration_digest=configuration_digest,
             catalog_digest=catalog_digest,
         )
+        if repair is not None and scenario_plan.model_dump(mode="json") != load_object(
+            repair.parent / "scenario-plan.json"
+        ):
+            raise ModelError("INTEGRITY_FAILED", "Repair scenario plan differs from its parent")
         store_object(run / "scenario-plan.json", scenario_plan.model_dump(mode="json"))
         jobs = _jobs(config, plan, scenario_plan)
+        prior_rejections: dict[str, CandidateOutcome] = {}
+        if repair is not None:
+            from .repair import repair_jobs, verify_job_plan
+
+            verify_job_plan(repair, jobs)
+            jobs, prior_rejections = repair_jobs(repair)
         store_object(run / "jobs.json", [job.model_dump(mode="json") for job in jobs])
         parents = {row.record.id: row.record for row in plan.records + scenario_plan.records}
         augmented = list(base_records)
@@ -395,7 +486,17 @@ def run_curation(
             canonical_digest([message.model_dump(mode="json") for message in record.messages])
             for record in augmented + regression
         }
+        if repair is not None:
+            known.update(
+                canonical_digest(
+                    [message.model_dump(mode="json") for message in outcome.record.messages]
+                )
+                for outcome in repair.outcomes.values()
+                if outcome.status == "accepted" and outcome.record is not None
+            )
         counts: Counter[str] = Counter()
+        reused = 0
+        cached = cached_request_count(run / "requests")
         coverage: Counter[str] = Counter()
         for row in plan.records:
             if plan.frozenFamilies[cast(str, row.record.familyId)].split == "train":
@@ -403,30 +504,54 @@ def run_curation(
                     if tag.startswith("augmentation-ineligible:"):
                         coverage[tag + ":excluded"] += 1
         for job in jobs:
+            control.checkpoint()
             path = run / "outcomes" / (job.jobId + ".json")
             if path.exists() or path.is_symlink():
                 outcome = CandidateOutcome.model_validate(load_object(path))
+                reused += 1
             else:
-                outcome = generate_candidate(
-                    config,
-                    identity=identity,
-                    parent=parents[job.parentRecordId],
-                    job=job,
-                    cache_dir=run / "requests",
+                control.report(
+                    "generating",
+                    run,
+                    completed=sum(counts.values()),
+                    total=len(jobs),
+                    accepted=counts["accepted"],
+                    quarantined=counts["quarantined"],
+                    reused=reused,
+                    cached=cached,
                 )
+                with control.local_request():
+                    if repair is None:
+                        outcome = generate_candidate(
+                            config,
+                            identity=identity,
+                            parent=parents[job.parentRecordId],
+                            job=job,
+                            cache_dir=run / "requests",
+                        )
+                    else:
+                        from .repair import prior_response
+
+                        outcome = generate_candidate(
+                            config,
+                            identity=identity,
+                            parent=parents[job.parentRecordId],
+                            job=job,
+                            cache_dir=run / "requests",
+                            prior_rejection=prior_rejections[job.jobId],
+                            prior_response=prior_response(
+                                repair, prior_rejections[job.jobId], phase="generator"
+                            ),
+                            request_namespace=repair.namespace,
+                        )
                 if outcome.record is not None:
                     content = canonical_digest(
                         [message.model_dump(mode="json") for message in outcome.record.messages]
                     )
                     if content in known:
-                        outcome = CandidateOutcome.model_validate(
-                            {
-                                **outcome.model_dump(mode="json"),
-                                "status": "quarantined",
-                                "reason": "duplicate-conversation",
-                                "record": None,
-                            }
-                        )
+                        from .repair import quarantine_outcome
+
+                        outcome = quarantine_outcome(outcome, "duplicate-conversation")
                 store_object(path, outcome.model_dump(mode="json"))
             if outcome.jobId != job.jobId:
                 raise ModelError("INTEGRITY_FAILED", "Candidate outcome does not belong to its job")
@@ -465,6 +590,28 @@ def run_curation(
                     "quarantined": counts["quarantined"],
                 },
             )
+            control.report(
+                "generating",
+                run,
+                completed=sum(counts.values()),
+                total=len(jobs),
+                accepted=counts["accepted"],
+                quarantined=counts["quarantined"],
+                reused=reused,
+                cached=cached,
+            )
+            control.checkpoint()
+        control.report(
+            "publishing",
+            run,
+            completed=sum(counts.values()),
+            total=len(jobs),
+            accepted=counts["accepted"],
+            quarantined=counts["quarantined"],
+            reused=reused,
+            cached=cached,
+        )
+        control.checkpoint()
         store_object(
             run / "coverage.json",
             {
@@ -495,6 +642,7 @@ def run_curation(
             _created(augmented_manifest, run / "datasets/augmented-corpus"),
             _created(regression_manifest, run / "datasets/synthetic-regression"),
         ]
+        control.checkpoint()
         warnings = [
             "Automatic checks are not human review or financial quality certification.",
             "Generator identity is server metadata; no weight fingerprint was verified.",
@@ -520,4 +668,14 @@ def run_curation(
             warnings=warnings,
         )
         store_object(run / "completed-report.json", result.model_dump(mode="json"))
+        control.report(
+            "completed",
+            run,
+            completed=sum(counts.values()),
+            total=len(jobs),
+            accepted=counts["accepted"],
+            quarantined=counts["quarantined"],
+            reused=reused,
+            cached=cached,
+        )
         return result

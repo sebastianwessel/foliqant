@@ -1,6 +1,6 @@
 ---
 name: foliqant-model
-description: "Operate the local Foliqant model lifecycle: setup, automated public-source curation, data preparation, training, customer customization, evaluation, policy audit, model transformation, export, and artifact verification. Use for Foliqant model tooling, not for the separate workflow service."
+description: "Operates Foliqant setup, data curation, training, evaluation, policy audit, export, and artifact verification. Use when working with the local Foliqant model CLI or datasets; do not use for the separate workflow service."
 ---
 
 # Foliqant model tooling
@@ -35,6 +35,14 @@ metadata. Training is a later explicit command. An omitted endpoint model is saf
 only when exactly one local model is exposed; otherwise require the exact model
 ID.
 
+Use `--progress auto|always|never` for the stderr operator display without
+changing run identity or stdout JSON. On the first Ctrl+C, allow the current
+candidate or preparation phase to reach its safe boundary and persist, then
+resume by rerunning the exact same recipe, effective environment and workspace.
+A second Ctrl+C can repeat the current request on resume and cannot guarantee
+that the model server stopped its work. Do not invent a `--resume` flag or a
+paused-success result.
+
 Keep shared and customer stages separate. Shared training requires explicit
 `sharedTrainingAllowed: true` for every new source. Customer customization starts
 from a shared merged model and records the customer identifier. Never move a
@@ -43,6 +51,28 @@ customer adapter or its descendants back into shared ancestry.
 Use calibration and test only for their declared purposes. Do not tune a policy
 on test results, interpret token log probability as correctness probability, or
 claim that a diagnostic dataset establishes production quality.
+
+For the native state-and-typed-questions corpus, use `./scripts/generate-data`
+(`--pilot` for the bounded bilingual check). Native profiles include English and
+German. Keep German response prose and exact citations in German; language tags
+are not language detection, and English imported data must not be relabeled.
+Preserve the four generic input issue codes:
+`missing_information`, `conflicting_information`, `multiple_valid_options`, and
+`no_matching_option`. Missing referents use `missing_information`;
+`multiple_valid_options` requires multiple positively supported catalog options
+that exceed cardinality. Return every applicable issue. An explicit statement of
+absence supports an answerable false predicate; absent evidence is unknown.
+Any returned request unit without a catalog category adds `no_matching_option`.
+A conditionally stated request remains conditional after its separate predicate
+is resolved; extraction records the gate and does not execute the branch.
+Keep `explanation.summary` to one grounded concise reason, aiming for 160
+characters or fewer, with a second sentence only for a decisive limitation and
+a hard 400-character maximum. Never truncate it; retain support and gaps in the
+citation, contrary-evidence and missing-fact fields, which do not inherit the
+summary bound. Do not add banking-specific enums, workflow actions, or
+model-written confidence targets. A valid unknown answer differs from a
+technical failure. Read the native-data section of
+[setup and data](references/setup-and-data.md) before generation or format edits.
 
 Treat completed artifacts as immutable. Inspect locks and failed run workspaces;
 never automatically delete a stale lock, overwrite an artifact or kill a process

@@ -2,6 +2,13 @@
 
 Date: 2026-09-19. Status: proposal, not implemented or benchmarked.
 
+Current refinement: [input answerability and evidence-backed decisions](input-answerability-and-reliability.md) defines the proposed state-plus-typed-questions contract, complete request handling, reasoning, and separate input-sufficiency and answer-adequacy estimates. It supersedes interpreting confidence as a token-score property alone. [Answerability research](confidence-answerability-research.md) and [risk methods](confidence-risk-methods.md) record the primary evidence and limitations.
+
+Separate research tracks (2026-09-20): [rubric-based evaluations](../../plans/research/evaluation-workstream.md)
+is deferred work, independent of the current generation validator. [Custom inference options](../../plans/research/custom-inference-options.md)
+compares supported classifiers and custom heads with the ordinary causal-model baseline.
+Neither track changes the current serving requirement or authorizes training.
+
 Hardware update: the user has M1-family and M5-family Macs with 64 GB unified memory. See [local training and model lineage](apple-silicon.md). The 24 GB figures below remain a separate inference comparison budget, not the only available development hardware.
 
 Scope: our own reusable model for interpreting financial emails and threads, identifying multiple intents, assigning priority, matching a supplied catalog, and providing evidence for workflow decisions. The financial domain includes funds, product disclosures, regulations, contracts, and financial reports; correspondence remains the initial operational task. English first; German second; preserve a multilingual foundation. **Development is local first on a 24 GB GPU, using ordinary vLLM, LM Studio, Ollama, or comparable inference engines. No special inference system is required.** Cloud custom-model deployment is a later packaging and operations choice, not the starting architecture.
@@ -41,7 +48,7 @@ vLLM documents compatible chat serving and structured output. LM Studio document
 
 Separate **using the model** from **certifying its reliability**. The model works through ordinary inference requests without any companion service. An application that needs validated confidence applies a small calibration function to the returned observations. This is application logic, potentially just a few coefficients and thresholds; it is not another inference engine. For interactive desktop use without that function, show decisions and evidence, but do not label a generated confidence number as calibrated.
 
-Begin confidence experiments with standard token log-probability APIs where available. Current Ollama documentation lists logprobs, and vLLM also documents them; nevertheless, verify the exact alternatives and scoring semantics returned by each installed runtime. Do not make vLLM-specific token-selection extensions a portability requirement. If a runtime cannot supply the validated score inputs, decisions and evidence still work; confidence is unavailable until a separately validated, ordinary-API scoring method exists. A second normal prompt assessing correctness is a possible experiment, not a trustworthy confidence mechanism by itself. [Ollama API compatibility](https://docs.ollama.com/api/openai-compatibility)
+Begin reliability experiments with independently annotated input answerability and complete-answer adequacy. Standard token log probabilities are optional baseline features, not measurements of whether the input contains enough information. Current Ollama documentation lists logprobs, but verify the exact alternatives and semantics returned by each installed runtime. Do not require vLLM-specific scoring extensions. A validated assessor can use ordinary structured inference plus application-side calibration; if its required features are unavailable, expose decisions and evidence without a numerical reliability claim. A second prompt alone is not validation. [Ollama API compatibility](https://docs.ollama.com/api/openai-compatibility)
 
 Local milestone: train a small supported adapter on Apple Silicon, prove the candidate-specific export path, and load the adapted artifact in compatible LM Studio/Ollama or another standard local engine. Run the same small English/German test suite and measure quality, memory, and latency. Validate unmodified vLLM separately on a supported host; do not assume it uses the Mac GPU. No cloud account is required for the Mac milestone.
 
@@ -72,10 +79,11 @@ Trusted mail ingestion and attachment extraction
   -> Normalize messages; retain authors, timestamps, quotes, and source spans
   -> Supply current catalog, policies, and permitted business context
   -> Retrieve catalog candidates only when necessary
-  -> Specialized model: decisions + evidence + missing information
+  -> Typed questions: scope, cardinality, options or rubric, allowed evidence
+  -> Solver: proposed request units + answers + cited evidence + issue candidates
   -> Validate schema, category IDs, citations, and required fields
-  -> Calibrate decision reliability using the deployed scoring profile
-  -> Deterministic policy: route / request information / human review
+  -> Apply separately validated input-sufficiency and whole-answer assessors
+  -> Deterministic policy: split requests / retrieve / clarify / route / review
   -> Authorized workflow execution and auditable outcome
 ```
 
@@ -92,14 +100,18 @@ Suppose message `m1` requests a card-payment dispute. A later message `m2` says:
 ```json
 {
   "catalogVersion": "demo-1",
-  "activeIntents": [
+  "questionId": "identify_active_requests",
+  "requestUnits": [
     {
+      "id": "request-1",
+      "status": "active",
       "categoryId": "payment.receipt",
       "evidence": [{ "messageId": "m2", "quote": "Please send me a receipt." }]
     }
   ],
-  "withdrawnIntents": [
+  "withdrawnRequestUnits": [
     {
+      "id": "request-2",
       "categoryId": "payment.dispute",
       "evidence": [{ "messageId": "m2", "quote": "Please do not open a dispute." }]
     }
@@ -108,16 +120,24 @@ Suppose message `m1` requests a card-payment dispute. A later message `m2` says:
     "level": "normal",
     "reason": "No deadline or ongoing loss is stated in the supplied thread."
   },
-  "missingInformation": ["verified payment reference"],
-  "reliability": {
-    "status": "uncalibrated",
-    "estimatedCorrectness": null
+  "answerability": {
+    "status": "answerable",
+    "basis": "The active request and withdrawal are explicit in the supplied messages.",
+    "probabilitySufficient": null,
+    "calibrationStatus": "unavailable"
+  },
+  "answerAdequacy": {
+    "probabilityAdequate": null,
+    "calibrationStatus": "unavailable"
+  },
+  "executionPrerequisites": {
+    "missing": ["verified payment reference"]
   },
   "recommendedDisposition": "request_information"
 }
 ```
 
-The model supplies the semantic fields. The service attaches calibration status and applies the disposition policy; the model does not invent a confidence percentage or grant access. Production records also retain validated span offsets and model, prompt, parser, catalog, and policy versions. The example deliberately uses `null` because no calibration experiment has been performed.
+The solver proposes request units and evidence. The input assessor supplies the predicted answerability for the named question; an answer assessor evaluates the actual answer. These logical roles can share one ordinary model checkpoint but have distinct inputs and profiles. The service attaches calibration status and applies the disposition policy; no model grants access. Production records also retain validated span offsets and model, assessor, prompt, parser, catalog, and policy versions. The example deliberately uses `null` because no calibration experiment has been performed. Intent identification is answerable here; retrieving the receipt still needs a verified payment reference.
 
 An application rule can then explain the actual branch: receipt requested, dispute withdrawn, payment reference missing, therefore request the reference before retrieving a receipt. That rule trace is reproducible even though the model's internal reasoning is not.
 
@@ -140,19 +160,24 @@ An exact quote check proves that text exists, not that it supports the conclusio
 
 The winning class need not have high probability: `[0.26, 0.25, 0.25, 0.24]` still has a winner. However, a token probability or a model-written “99% confident” is not automatically an estimate of business correctness.
 
-Define three separate concepts:
+Define separate concepts:
 
 | Concept | Meaning | How to establish it |
 |---|---|---|
-| Decision reliability | How often comparable predictions agree with an adjudicated target | Held-out labels and calibration |
-| Evidence sufficiency | Whether the required information is available and supports the claim | Explicit requirements, source checks, and adjudication |
+| Input answerability | Whether supplied evidence permits a complete substantive answer under the question's criteria and cardinality | Input-only blinded adjudication, explicit requirements, separately calibrated estimator |
+| Whole-answer adequacy | Whether this actual answer is correct, complete, supported and contract-valid | Independently labelled outputs and held-out calibration |
+| Action eligibility | Whether trusted prerequisites and authorization permit execution | Application policy and trusted system state |
 | Event probability | Chance a future event will happen, such as a missed payment | Historical outcome data and a forecasting evaluation |
 
 A clear intent with a missing account identifier can have high classification reliability but still be unsafe to act on. Confidence does not replace prerequisites or authorization.
 
+For an email containing two clear requests, a correct singleton label can still be incomplete. Preserve request units, including distinct requests with the same category. Multiple true requests are not alternative labels for one ambiguous request. Never calculate runtime completeness from an unknown gold request count. The [refined concept](input-answerability-and-reliability.md) defines proposed statuses, numerical targets, explanations, and evaluation cases. Until qualified, estimates remain null; semantic assessments are explicitly predictions.
+
 ### Scoring design
 
-First evaluate scores for bounded decisions, not the likelihood of an entire JSON document. Where practical, use ordinary single-token option IDs with a runtime mapping to category descriptions. Obtain comparable scores for all relevant alternatives; for multilabel tasks, evaluate each candidate's applicability rather than forcing all intents into one mutually exclusive distribution.
+First establish independent labels for input answerability and whole-answer adequacy. Compare a supervised input assessor and an input-plus-answer assessor with raw-score baselines. Numerical estimates refer to those adjudicated targets, not to model self-confidence. Use out-of-fold solver outputs for answer-assessor fitting and separate probability calibration from policy selection. More reasoning cannot supply missing evidence.
+
+For bounded answer distributions, evaluate decision-position scores rather than the likelihood of an entire JSON document. Where practical, use ordinary single-token option IDs with a runtime mapping to category descriptions. Obtain comparable scores for all relevant alternatives; for multilabel tasks, evaluate each candidate's applicability rather than forcing all intents into one mutually exclusive distribution. Category distributions alone cannot establish request-unit completeness.
 
 Token scores remain model scores. Fit temperature scaling for suitable multiclass outputs or a simple binary calibrator for accept/reject correctness. Temperature scaling is a well-established starting point, not a universal guarantee. [Guo et al., 2017](https://proceedings.mlr.press/v70/guo17a.html)
 

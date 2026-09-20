@@ -21,3 +21,14 @@ decisions:
       - 00-vision.md
       - 01-model-lifecycle.md
     status: proposed
+  - decision_id: DEC-NATIVE-DECISION-DATA
+    class: D2
+    authority: project-owner implementation mandate; specification author records
+      exact boundaries and independent readiness reviewer validates before
+      implementation acceptance
+    scope_refs:
+      - CAP-NATIVE-DATA
+    source_refs:
+      - 09-native-decision-data.md
+      - research/input-answerability-and-reliability.md
+    status: pipeline implemented; bounded generated-data quality repair independently reviewed and accepted; no formal digest approval, full-recipe coverage, training readiness, model-quality or production qualification

@@ -76,6 +76,10 @@ def apply_curation_environment(
     for name, field, _pointer in values:
         if value := _value(environment, name):
             endpoint[field] = value
+    if value := _value(environment, "REASONING_EFFORT"):
+        if value not in {"low", "medium", "xhigh"}:
+            raise _invalid("/endpoint/reasoningEffort")
+        endpoint["reasoningEffort"] = value
     if value := _value(environment, "ALLOW_PRIVATE_NETWORK"):
         endpoint["allowPrivateNetwork"] = _boolean(value, "/endpoint/allowPrivateNetwork")
     for name, field, pointer in (

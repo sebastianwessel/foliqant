@@ -186,3 +186,37 @@ observed conversion counts. EndpointModelIdentity describes runtime metadata;
 it is never a verified weights checksum. See
 [automated curation](../08-automated-data-curation.md) for split, cache and
 publication rules. Published output still uses the canonical dataset artifact.
+
+## Native decision-data representations
+
+`DecisionDataSettings` is the optional closed `CurationConfig.decisionData`
+branch that selects native generation while reusing endpoint and generation
+limits. `DecisionInput` is the generated-schema wire root for ordered
+`state.sources` and typed choice, multiselect, predicate, ordinal and
+request-unit questions. Caller IDs, criteria and allowed source IDs are data,
+not model-selected metadata. `DecisionOutput` is the generated-schema wire root
+for one typed result per question, question-relative answerability, closed issue
+codes, citations and concise explanations. The closed issue set is exactly
+`missing_information`, `conflicting_information`, `multiple_valid_options`,
+and `no_matching_option`; malformed questions fail contract validation. It
+contains no numeric confidence or calibration target. Every request unit has a
+required nullable subject: a non-null subject is a literal substring of its
+cited evidence and identifies a discriminating reference; a generic request
+noun remains null. Request-unit identity, status, category, subject and relations
+belong to the semantic signature; generated descriptions and citation prose do
+not. Multiselect option order is likewise non-semantic; its unique selected IDs
+are compared as a set.
+
+Native seed publication maps canonical `DecisionInput` to the user message and
+canonical `DecisionOutput` to the final assistant message of the existing
+`DataRecord`. Family, split, origin, reviewed state, source rights and generation
+lineage remain canonical `DataRecord`/dataset fields rather than duplicated
+inside the decision objects. `CandidateJob` and `CandidateOutcome` are reused;
+native jobs use `decision-training` and `native-decision` discriminants.
+
+The private native coverage report records only run identities, counts, cells,
+statuses, source projection exclusions and safe candidate reasons. It is not an
+artifact-manifest branch, evaluation result, calibration profile or human
+approval record. `CurateResult` remains the CLI success variant. Coverage-gate
+failure returns the existing typed CLI failure and points to the retained report.
+See [native decision-data generation](../09-native-decision-data.md).

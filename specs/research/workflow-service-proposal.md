@@ -79,6 +79,16 @@ The included YAML is an illustrative proposal only. Prompts are separate Markdow
 
 Schemas validate structure, not truth. Verify evidence spans against supplied messages/documents and check allowed catalog IDs separately. A schema-valid but unsupported decision must not be treated as safe merely because it is well-formed.
 
+### Input answerability and complete answers
+
+Use the [input-answerability proposal](input-answerability-and-reliability.md) when defining model nodes. Each question declares its scope, cardinality, options or rubric, permitted evidence, and required facts. Separate predicted input sufficiency from the adequacy of the returned answer and from permission to execute an action. A concentrated label distribution does not establish any of these by itself.
+
+Preserve all active request units, including multiple requests in the same category and their conditions, order and dependencies. Several clear requests call for decomposition, while one ambiguous request calls for clarification. Retrieve missing evidence only when its source is authorized, available, and policy permits retrieval; sufficient evidence with solver uncertainty may justify bounded reasoning or review. Do not repeatedly ask the model to reason about a fact that is absent. Partial execution requires an explicit policy establishing that resolved units can proceed independently. Mutually exclusive branches are not independent actions.
+
+The solver provides proposed answers, cited evidence, explanations, and issue candidates. The input assessor owns predicted answerability; the answer assessor evaluates adequacy. These roles may share a checkpoint but retain distinct inputs and profiles. A declared check/review policy handles disagreements; predictions cannot override deterministic contract failures. Application code validates observable facts, attaches separately validated calibration metadata, and applies deterministic disposition rules. Unqualified numeric estimates remain null. An honest unknown can be an adequate answer even when the input cannot support a substantive choice. Business information gaps are distinct from technical endpoint failures; neither should silently become a successful automatic route.
+
+No assessor, clarification loop, or new workflow node is implemented by this research update. Their versioned contracts and bounded execution behavior must be specified before runtime work.
+
 ## 5. Execution and reliability requirements
 
 These are implementation requirements, not capabilities of this scaffold:

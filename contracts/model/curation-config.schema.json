@@ -1,5 +1,34 @@
 {
   "$defs": {
+    "DecisionDataSettings": {
+      "additionalProperties": false,
+      "description": "Bounded native decision-data generation settings.",
+      "properties": {
+        "examplesPerScenario": {
+          "default": 4,
+          "maximum": 10000,
+          "minimum": 4,
+          "title": "Examplesperscenario",
+          "type": "integer"
+        },
+        "minimumAcceptedPerCell": {
+          "default": 1,
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Minimumacceptedpercell",
+          "type": "integer"
+        },
+        "sourceExamplesPerSource": {
+          "default": 100,
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Sourceexamplespersource",
+          "type": "integer"
+        }
+      },
+      "title": "DecisionDataSettings",
+      "type": "object"
+    },
     "GenerationSettings": {
       "additionalProperties": false,
       "description": "Explicit bounded generation; quarantine never becomes human review.",
@@ -90,6 +119,10 @@
           "$ref": "#/$defs/Omitted_Annotated_str__StringConstraints__AfterValidator__",
           "default": null
         },
+        "reasoningEffort": {
+          "$ref": "#/$defs/Omitted_Literal__low____medium____xhigh___",
+          "default": null
+        },
         "structuredOutput": {
           "default": "json-schema",
           "enum": [
@@ -119,6 +152,14 @@
     },
     "Omitted_Annotated_str__StringConstraints__AfterValidator__": {
       "minLength": 1,
+      "type": "string"
+    },
+    "Omitted_Literal__low____medium____xhigh___": {
+      "enum": [
+        "low",
+        "medium",
+        "xhigh"
+      ],
       "type": "string"
     },
     "Scenario": {
@@ -162,6 +203,17 @@
   "additionalProperties": false,
   "description": "Complete recipe for the source corpus and local augmentation workflow.",
   "properties": {
+    "decisionData": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DecisionDataSettings"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "endpoint": {
       "$ref": "#/$defs/LocalEndpointConfig"
     },

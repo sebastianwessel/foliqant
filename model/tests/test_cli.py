@@ -7,6 +7,7 @@ import pytest
 
 from foliqant_model.cli import main
 from foliqant_model.contracts.cli import CurateResult
+from foliqant_model.curation.runtime import CurationControl
 
 DIGEST = "a" * 64
 
@@ -45,10 +46,13 @@ def test_entrypoint_is_executable_offline() -> None:
     assert process.stderr == ""
 
 
+@pytest.mark.parametrize("repair,continuation", [(False, False), (True, False), (False, True)])
 def test_curate_dispatches_all_bounded_operation_flags(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    repair: bool,
+    continuation: bool,
 ) -> None:
     from foliqant_model.curation import runner
 
@@ -61,14 +65,21 @@ def test_curate_dispatches_all_bounded_operation_flags(
         *,
         prepare_only: bool = False,
         offline: bool = False,
+        repair_from: Path | None = None,
+        continue_from: Path | None = None,
+        control: CurationControl | None = None,
     ) -> CurateResult:
         assert config_path == config
         assert selected_workspace == workspace
-        assert prepare_only is True
+        assert prepare_only is not repair
+        assert repair_from == (workspace / "curation/parent" if repair else None)
+        assert continue_from == (workspace / "curation/parent" if continuation else None)
         assert offline is True
+        assert control is not None
+        control.report("preparing", workspace / "curation/run")
         return CurateResult(
             command="curate",
-            status="prepared",
+            status="completed" if repair else "prepared",
             runPath=str(workspace / "curation/run"),
             configurationSha256=DIGEST,
             sourceRecords=12,
@@ -96,13 +107,23 @@ def test_curate_dispatches_all_bounded_operation_flags(
                 str(config),
                 "--workspace",
                 str(workspace),
-                "--prepare-only",
+                *(
+                    ["--repair-from", str(workspace / "curation/parent")]
+                    if repair
+                    else ["--prepare-only"]
+                ),
+                *(["--continue-from", str(workspace / "curation/parent")] if continuation else []),
                 "--offline",
+                "--progress",
+                "always",
             ]
         )
         == 0
     )
-    output = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
     assert output["command"] == "curate"
-    assert output["result"]["status"] == "prepared"
+    assert output["result"]["status"] == ("completed" if repair else "prepared")
     assert output["result"]["sourceRecords"] == 12
+    assert "phase=preparing" in captured.err
+    assert "phase=preparing" not in captured.out

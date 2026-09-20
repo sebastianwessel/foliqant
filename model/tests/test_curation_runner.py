@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import json
+import os
+import signal
 from pathlib import Path
 
 import pytest
@@ -24,6 +27,7 @@ from foliqant_model.curation.contracts import (
     SourceBatch,
 )
 from foliqant_model.curation.endpoint import EndpointModelIdentity
+from foliqant_model.curation.runtime import CurationControl
 from foliqant_model.errors import ModelError
 
 
@@ -163,7 +167,17 @@ def _install_runner_inputs(
 ) -> EndpointModelIdentity:
     identity = _identity()
     monkeypatch.setattr(runner, "check_workspace_git_policy", lambda _path: None)
-    monkeypatch.setattr(runner, "_source_batches", lambda *_args: batches)
+
+    def source_batches(_config, run, _cache, _offline):  # type: ignore[no-untyped-def]
+        from foliqant_model.curation.storage import store_object
+
+        for batch in batches:
+            store_object(
+                run / "sources" / (batch.source.id + ".json"), batch.model_dump(mode="json")
+            )
+        return batches
+
+    monkeypatch.setattr(runner, "_source_batches", source_batches)
     monkeypatch.setattr(sources, "source_catalog_digest", lambda: "b" * 64)
     monkeypatch.setattr(runner, "discover_models", lambda _config: [identity])
     monkeypatch.setattr(runner, "_select_model", lambda _config, _models: identity)
@@ -334,6 +348,56 @@ def test_failed_generation_resumes_after_last_persisted_outcome(
     assert result.generatedAccepted == 4
 
 
+def test_immediate_second_interrupt_repeats_unpersisted_first_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "curation.json"
+    _write_config(config_path, candidates=2)
+    _install_runner_inputs(monkeypatch, _ordinary_batches())
+    attempted: list[str] = []
+
+    def interrupt(
+        _config: object,
+        *,
+        identity: EndpointModelIdentity,
+        parent: DataRecord,
+        job: CandidateJob,
+        cache_dir: Path,
+    ) -> CandidateOutcome:
+        del _config, identity, parent, cache_dir
+        attempted.append(job.jobId)
+        os.kill(os.getpid(), signal.SIGINT)
+        os.kill(os.getpid(), signal.SIGINT)
+        raise AssertionError("second interrupt must stop the active candidate")
+
+    monkeypatch.setattr(generation, "generate_candidate", interrupt)
+    control = CurationControl(progress="never", stream=io.StringIO(), handle_signals=True)
+    with pytest.raises(KeyboardInterrupt):
+        runner.run_curation(config_path, tmp_path / "workspace", control=control)
+    interrupted_job = attempted[0]
+    run_directories = list((tmp_path / "workspace/curation").iterdir())
+    assert len(run_directories) == 1
+    assert not (run_directories[0] / "progress.json").exists()
+    assert not (run_directories[0] / "completed-report.json").exists()
+
+    def resume(
+        _config: object,
+        *,
+        identity: EndpointModelIdentity,
+        parent: DataRecord,
+        job: CandidateJob,
+        cache_dir: Path,
+    ) -> CandidateOutcome:
+        del _config, cache_dir
+        attempted.append(job.jobId)
+        return _accepted_outcome(identity, parent, job)
+
+    monkeypatch.setattr(generation, "generate_candidate", resume)
+    result = runner.run_curation(config_path, tmp_path / "workspace")
+    assert result.status == "completed"
+    assert attempted.count(interrupted_job) == 2
+
+
 def test_dropped_cross_source_duplicate_preserves_restrictive_source_rights(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -421,3 +485,93 @@ def test_ineligible_labels_are_retained_but_not_used_for_augmentation(
     assert observed and all(job.purpose == "synthetic-regression" for job in observed)
     coverage = json.loads((Path(result.runPath) / "coverage.json").read_text())["payload"]
     assert coverage["counts"]["augmentation-ineligible:token-aligned:excluded"] >= 1
+
+
+def test_generic_repair_run_retries_only_rejects_and_preserves_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from foliqant_model.curation.storage import load_object
+
+    config_path = tmp_path / "curation.json"
+    workspace = tmp_path / "workspace"
+    _write_config(config_path, candidates=2)
+    _install_runner_inputs(monkeypatch, _ordinary_batches())
+    first_calls: list[str] = []
+
+    def first_generate(
+        _config: object,
+        *,
+        identity: EndpointModelIdentity,
+        parent: DataRecord,
+        job: CandidateJob,
+        cache_dir: Path,
+    ) -> CandidateOutcome:
+        del cache_dir
+        first_calls.append(job.jobId)
+        if len(first_calls) == 1:
+            return _accepted_outcome(identity, parent, job)
+        return CandidateOutcome(
+            jobId=job.jobId,
+            status="quarantined",
+            reason="checker-disagreed",
+            attempts=1,
+            requestSha256=canonical_digest({"request": job.jobId}),
+            responseSha256=canonical_digest({"response": job.jobId}),
+            record=None,
+        )
+
+    monkeypatch.setattr(generation, "generate_candidate", first_generate)
+    first = runner.run_curation(config_path, workspace)
+    parent = Path(first.runPath)
+    parent_jobs = [
+        CandidateJob.model_validate(value) for value in load_object(parent / "jobs.json")
+    ]
+    accepted_job, rejected_job = parent_jobs
+    accepted_bytes = (parent / "outcomes" / f"{accepted_job.jobId}.json").read_bytes()
+
+    def snapshot(directory: Path) -> dict[str, bytes]:
+        return {
+            str(path.relative_to(directory)): path.read_bytes()
+            for path in directory.rglob("*")
+            if path.is_file() and path.name not in {"progress.json", "run.lock"}
+        }
+
+    parent_before = snapshot(parent)
+    repair_calls: list[CandidateJob] = []
+
+    def repair_generate(
+        _config: object,
+        *,
+        identity: EndpointModelIdentity,
+        parent: DataRecord,
+        job: CandidateJob,
+        cache_dir: Path,
+        prior_rejection: CandidateOutcome,
+        prior_response: str | None,
+        request_namespace: str,
+    ) -> CandidateOutcome:
+        del cache_dir
+        assert prior_rejection.jobId == rejected_job.jobId
+        assert prior_rejection.status == "quarantined"
+        assert prior_response is None
+        assert request_namespace.startswith("repair-")
+        repair_calls.append(job)
+        return _accepted_outcome(identity, parent, job)
+
+    monkeypatch.setattr(generation, "generate_candidate", repair_generate)
+    repaired = runner.run_curation(config_path, workspace, repair_from=parent)
+    child = Path(repaired.runPath)
+
+    assert repaired.generatedAccepted == 2 and repaired.generatedQuarantined == 0
+    assert len(repair_calls) == 1
+    assert repair_calls[0].jobId != rejected_job.jobId
+    assert (child / "outcomes" / f"{accepted_job.jobId}.json").read_bytes() == accepted_bytes
+    assert parent_before == snapshot(parent)
+    assert any(item.outputPath.endswith("augmented-corpus") for item in repaired.datasets)
+    assert runner.run_curation(config_path, workspace, repair_from=parent) == repaired
+    assert len(repair_calls) == 1
+
+    _write_config(config_path, candidates=3)
+    with pytest.raises(ModelError, match="configuration differs"):
+        runner.run_curation(config_path, workspace, repair_from=parent)
+    assert len(repair_calls) == 1

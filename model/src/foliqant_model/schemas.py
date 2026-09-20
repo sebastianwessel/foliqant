@@ -30,6 +30,7 @@ from .contracts import (
 )
 from .contracts.cli import SchemaResult
 from .curation.contracts import CandidateJob, CandidateOutcome, CurationConfig, CurationPlan
+from .curation.decision_contracts import DecisionInput, DecisionOutput
 from .errors import ModelError
 
 SCHEMAS: dict[str, type[BaseModel]] = {
@@ -42,6 +43,8 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "curation-plan.schema.json": CurationPlan,
     "data-record.schema.json": DataRecord,
     "dataset-config.schema.json": DatasetConfig,
+    "decision-input.schema.json": DecisionInput,
+    "decision-output.schema.json": DecisionOutput,
     "evaluation-config.schema.json": EvaluationConfig,
     "frozen-family-assignment.schema.json": FrozenFamilyAssignment,
     "generation-provenance.schema.json": GenerationProvenance,

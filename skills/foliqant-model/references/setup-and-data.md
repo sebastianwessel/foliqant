@@ -1,5 +1,187 @@
 # Setup and data operations
 
+## Contents
+
+- [Native decision data](#native-decision-data)
+- [Existing setup and auxiliary curation](#existing-setup-and-auxiliary-curation)
+
+## Native decision data
+
+`./scripts/generate-data` selects the full native recipe;
+`./scripts/generate-data --pilot` uses a separate 16-candidate bilingual recipe (eight priority scenarios per language).
+`--prepare-only` performs no inference. Both reuse the configured local endpoint,
+serial cached calls, source acquisition and immutable publication. Run sizes
+belong in YAML; any generation overrides left in root `.env` also affect pilot
+sizes. Keep the endpoint/model explicit when discovery returns multiple models.
+
+Native full/pilot profiles select standalone Splash, model
+`incoai/Qwen3.8-27B-Splash`, `endpoint.reasoningEffort: low`, temperature `0.1`,
+8,192 output tokens and a 300-second timeout. Root `.env` overrides these via
+`FOLIQANT_CURATION_REASONING_EFFORT`, `FOLIQANT_CURATION_TEMPERATURE` and the
+existing endpoint keys. Use the exact configured endpoint rather than assuming
+LM Studio's port. Low retains reasoning; do not substitute disabled reasoning or
+silently escalate to xhigh. Generic endpoint configuration leaves effort omitted
+unless explicitly supplied. If another server rejects the parameter, surface the
+failure rather than silently dropping it. Effort and temperature changes must
+change configuration/request/cache identity; resume only unchanged settings.
+
+Preserve declared schema order through worker IPC, prompt-mode text and HTTP
+requests. Do not reuse sorted artifact serialization for model prompts. Request
+format `declared-schema-order-v2` hashes exact HTTP bytes, binds that hash into
+call identity, and versions both generation recipes. It creates new runs;
+earlier caches and outcomes remain untouched and must not be copied into a new
+run as if generated with its prompts.
+
+For an interrupted native run after a generator update, use explicit
+`./scripts/generate-data --continue-from /absolute/path/to/old-run --progress always`.
+It carries completed accepted AND quarantined outcomes unchanged into a child,
+keeps original IDs/prompt provenance, and generates only missing jobs. Repeat
+the same command to resume. `--prepare-only` verifies/carries without inference.
+Configuration, model, sources, seeds and frozen partitions must match; carried
+records undergo current semantic checks. The parent remains untouched; the
+snapshot/current recipe are recorded in `continuation.json`. Do not combine
+with `--repair-from`; once the child finishes, its quarantined outcomes can be
+repaired separately using the child path. Generic non-native curation does not
+support this option. Do not tell users to discard valid data solely because the
+request format changed, and do not manually transplant outcomes to bypass checks.
+
+Native records contain source-addressable state, typed caller questions, answers,
+question-relative answerability and concise cited explanations. Raw source tasks
+stay in `source-corpus`; every native parent stays in diagnostic `native-seeds`.
+`native-decisions` contains all held-out native seeds, accepted source
+verifications, and accepted authored rewrites with only their required train
+parents. Unattempted and quarantined train parents do not enter it. Never
+silently rename the raw teacher distributions or slot labels as native examples.
+Unsupported projections must be counted. Authored oracle facts precede prose
+generation; blind checking never receives target answers or scenario labels.
+Only train families may be submitted to generation. The authored recipe supports English and German through complete, explicit
+prose catalogs. Missing translations fail closed. Preserve German sources,
+questions, explanations, missing facts, request descriptions and exact evidence
+in German records; keep machine IDs/enums stable. English imported sources must
+not be relabeled German. Language metadata is not language detection. Value variants, counterfactuals, paraphrases and
+translations from one semantic template remain connected across partitioning;
+`examplesPerScenario` is only a cap over the finite genuine-case catalog. The
+initial catalog has four cases per scenario and language; larger caps do not justify filler,
+numeric repetitions or alternate wrappers. Planning must report requested,
+available and actual counts. All derived records retain source/model rights.
+
+Every authored seed declares its mutable non-metadata source IDs. Ordinary
+authored cases allow all non-metadata sources; adequacy cases allow only
+`original-state` and keep `task-contract` plus `proposed-answer` fixed. Projected
+verification has no mutable sources. The question contract is always fixed.
+
+Answerability is a predicted input property, not model certainty, answer
+correctness, execution permission, or a calibrated number. Preserve the concise
+generic issue enum. Clear multiple requests are valid when the question permits
+them; ambiguous alternatives and conditional branches are not simultaneous
+actions. A null request category requires `no_matching_option`. A conditionally
+stated unit remains conditional after its predicate is evaluated because
+extraction records the gate rather than executing it. Same-category requests
+must retain distinct request identity.
+
+Use one grounded concise reason for `explanation.summary`, aiming for 160
+characters or fewer. A second sentence is only for a decisive limitation, and
+the hard contract maximum is 400 characters. Never truncate a summary; invalid
+oversized output stays in the ordinary rejection and repair flow. Citation
+quotes, `missingFacts`, and the complete explanation object do not inherit the
+summary bound.
+
+Coverage gates count accepted candidate jobs, not published rows or attempts.
+An accepted projection verifies and publishes the exact parent once, without
+generation provenance; it is verification rather than augmentation. An accepted
+authored job publishes a canonical reference-derived target, not unchecked
+solver rationale. Missing
+required coverage exits with `OUTPUT_INVALID` and retains diagnostic progress;
+never lower the gate, edit a cached outcome, or present partial output as success.
+A pilot also needs at least one accepted job. Zero acceptance publishes no
+`native-decisions` dataset. The exact same command resumes cached work; changed
+configuration, prompts, task contracts or projection rules create a fresh run
+identity and never mutate or relabel old caches.
+
+For a separate correction pass, use `./scripts/generate-data --repair-from RUN`
+(or `./scripts/curate-data --repair-from RUN` for generic curation), retaining
+the parent's pilot/custom recipe, workspace and effective environment settings.
+Only quarantined jobs are called again; accepted rows are carried unchanged into
+an immutable child. The same command resumes that child, and using the child as
+`RUN` starts another pass. The parent must have finished all jobs; a coverage
+failure is allowed, a paused/incomplete run is not. Config, recipe, model and
+frozen plans must match. Do not alter old cached responses or imply that missing
+historical response text can be recovered. Publication still requires ordinary
+validation and coverage, and generated rows remain unreviewed.
+
+Lexical fact-preservation guards are intentionally conservative. A valid
+paraphrase can be quarantined when surface markers differ; the rejection alone
+does not prove model error or factual drift. Inspect the immutable source,
+candidate and recorded reason together. Never edit the cached record or bypass
+validation. Add a supported equivalence only as a tested, versioned recipe
+change.
+
+Keep validation domain-independent. Do not add record IDs, scenario names,
+dataset phrases or expected answers to validator rules. A request subject is an
+identifying reference, not an action or document/product type, even when that
+type has a purpose modifier. Quoting a generic object does not make it specific;
+use null without inventing an identifier. Every non-null subject belongs in that
+same unit's evidence. Partial collections need supported items and an explanation
+citation; do not promote them to complete collections because visible items are
+clear. Report each applicable issue once.
+
+Generated rewrites need a changed sequence of case-insensitive Unicode word
+tokens in at least one selected source. Exact copies and formatting-only changes
+fail with `rewrite-no-wording-change` before solving and during derivative
+revalidation; original seeds and verification-only records need no rewrite.
+Common negative contractions, `cannot`, and `unable` count as negation markers; attached
+percentage symbols count as units. These bounded checks neither establish useful
+diversity nor prove semantic preservation. Cover each new equivalence with
+positive and adversarial tests across domains, retain blind solving and reference
+targets, and record fresh prompt comparisons separately from validator replays.
+Never call a deterministic regression test a measured model-quality improvement.
+Numeric-bound inclusive `or higher`/`or above`/`or more` markers match `at least`;
+`or lower`/`or below`/`or less`/`or fewer` match `at most`. With numeric operands,
+`exceed`/`exceeds`/`above` match strict greater-than, and `below` matches strict
+less-than. Incidental nonnumeric wording does not match; strict/inclusive
+boundaries, comparison direction, and negation stay distinct.
+German supported forms include numeric-bound `über`/`unter`, `mindestens`/
+`höchstens`, common negation and unit inflections, `pro Monat`/`monatlich`,
+`DD.MM.YYYY` dates, and exact `„…“`/`»…«` anchors. Do not infer equivalence between
+ambiguous decimal separator formats or claim complete German entailment. Replaying saved outputs after a guard change is
+validator evidence, not a fresh generation or prompt-quality result.
+
+Published descriptions, explanations, missing facts and citations come from the
+corrected reference and deterministic exact source/quote/subject mapping. This
+prevents solver-added requirements from becoming targets but does not prove
+semantic truth. Source labels, blind agreement and all published rows remain
+unreviewed research data. Run a bounded real pilot for every configured language,
+inspect both source and response prose, verify publication, and verify immutable
+resume. Keep execution evidence separate from validation replays. Neither a pilot
+nor teacher agreement establishes population accuracy, full-recipe coverage,
+training readiness or production fitness.
+
+`--progress auto` writes phase, safe run path, completed/total, accepted,
+quarantined, reused outcomes, request-cache entries present when generation
+starts, current-candidate elapsed time and heartbeats to interactive stderr while
+stdout stays final-JSON only; it provides no ETA. `always` forces and `never`
+disables the display; the choice is outside run identity. The first Ctrl+C finishes and persists the current
+candidate, or reaches a safe preparation boundary, releases the lock and exits
+`130`/`INTERRUPTED`. Resume with the exact same recipe, effective `.env` and
+workspace. A second Ctrl+C can leave the current request to repeat and does not
+prove the endpoint stopped processing. There is no `--resume` flag or paused
+success schema.
+
+`TIMEOUT`/exit 4 stops at a per-request deadline, not a whole-run deadline.
+Completed calls and outcomes remain reusable; an unfinished transport request
+is not a quality rejection. Check the server has finished it before resuming
+with unchanged settings. Do not blindly retry in a loop, silently skip a
+candidate, or increase the configured timeout and claim the original run will
+resume: changing that setting creates a new run.
+
+Generated data is never human-gold calibration or a trustworthy score by itself.
+The existing `calibrate` command selects a token-likelihood threshold; it does
+not fit an input-answerability estimator. Model training, assessor fitting and
+production qualification remain separate activities. See
+`docs/guides/native-decision-data.md` in the checkout for the public workflow.
+
+## Existing setup and auxiliary curation
+
 Run from a Foliqant checkout with uv installed:
 
 ```sh
@@ -118,3 +300,9 @@ For a local endpoint that emits empty final content under guided grammar, an exp
 `endpoint.structuredOutput: prompt` curation setting omits server-side response_format
 while retaining strict local JSON Schema validation. Never consume reasoning_content,
 automatically switch models/modes, or claim invalid output passed.
+
+Private candidate outcomes keep a per-attempt status, safe reason and call trace.
+The trace preview is capped at 32,768 characters and points by `callId` to the
+immutable call-cache entry holding the complete final assistant content. An absent
+final response stays absent; hidden reasoning and transport error bodies are not
+substituted for it. Published training artifacts still contain accepted records only.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
@@ -13,6 +14,7 @@ from pydantic import ValidationError
 
 from foliqant_model.contracts import ChatMessage, canonical_digest
 from foliqant_model.curation.endpoint import (
+    GenerationRejected,
     GenerationResponse,
     LocalEndpointConfig,
     _select_model,
@@ -30,6 +32,7 @@ class _State:
     delay_seconds: float
     counts: dict[str, int]
     request: dict[str, object] | None
+    request_bytes: bytes
     redirect_models: bool
 
     def __init__(self) -> None:
@@ -65,6 +68,7 @@ class _State:
         self.delay_seconds = 0
         self.counts = {}
         self.request = None
+        self.request_bytes = b""
         self.redirect_models = False
 
 
@@ -109,7 +113,8 @@ class _Handler(BaseHTTPRequestHandler):
         state = self.server.state
         state.counts[self.path] = state.counts.get(self.path, 0) + 1
         size = int(self.headers.get("Content-Length", "0"))
-        state.request = json.loads(self.rfile.read(size))
+        state.request_bytes = self.rfile.read(size)
+        state.request = json.loads(state.request_bytes)
         if state.delay_seconds:
             time.sleep(state.delay_seconds)
         body = state.completion_bytes
@@ -156,6 +161,39 @@ def _generate(config: LocalEndpointConfig) -> GenerationResponse:
     )
 
 
+def test_invalid_output_retains_complete_large_final_assistant_response() -> None:
+    content = json.dumps({"wrong": "x" * 40_000}, separators=(",", ":"))
+    with _server() as (state, base_url):
+        state.completion["choices"] = [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": content},
+            }
+        ]
+        with pytest.raises(GenerationRejected) as rejected:
+            _generate(_config(base_url))
+
+    assert rejected.value.rejection.finalAssistantResponse == content
+    assert len(rejected.value.rejection.finalAssistantResponse or "") > 32_768
+
+
+def test_length_finish_without_final_content_records_absence() -> None:
+    with _server() as (state, base_url):
+        state.completion["choices"] = [
+            {
+                "index": 0,
+                "finish_reason": "length",
+                "message": {"role": "assistant", "content": None},
+            }
+        ]
+        with pytest.raises(GenerationRejected) as rejected:
+            _generate(_config(base_url))
+
+    assert rejected.value.message == "Local endpoint truncated the generated output"
+    assert rejected.value.rejection.finalAssistantResponse is None
+
+
 @pytest.mark.parametrize(
     "url",
     [
@@ -183,6 +221,26 @@ def test_config_allows_explicit_rfc1918_endpoint_only() -> None:
 
     with pytest.raises(ValidationError):
         LocalEndpointConfig(baseUrl="http://8.8.8.8:1234/v1", allowPrivateNetwork=True)
+
+
+@pytest.mark.parametrize("reasoning_effort", ["low", "medium", "xhigh"])
+def test_config_accepts_bounded_reasoning_effort(reasoning_effort: str) -> None:
+    config = LocalEndpointConfig.model_validate({"reasoningEffort": reasoning_effort})
+
+    assert config.reasoningEffort == reasoning_effort
+    assert config.model_dump(mode="json")["reasoningEffort"] == reasoning_effort
+
+
+@pytest.mark.parametrize("reasoning_effort", [None, "", "high", "none", 1])
+def test_config_rejects_null_or_unsupported_reasoning_effort(
+    reasoning_effort: object,
+) -> None:
+    with pytest.raises(ValidationError):
+        LocalEndpointConfig.model_validate({"reasoningEffort": reasoning_effort})
+
+
+def test_config_omits_unspecified_reasoning_effort() -> None:
+    assert "reasoningEffort" not in LocalEndpointConfig().model_dump(mode="json")
 
 
 def test_discovery_is_read_only_and_enriches_runtime_metadata() -> None:
@@ -233,12 +291,35 @@ def test_generation_uses_schema_and_returns_validated_provenance() -> None:
     assert state.request is not None
     assert state.request["stream"] is False
     assert state.request["seed"] == 7
+    assert "reasoning_effort" not in state.request
     response_format = state.request["response_format"]
     assert isinstance(response_format, dict)
     json_schema = response_format["json_schema"]
     assert isinstance(json_schema, dict)
     assert json_schema["strict"] is True
     assert "usage" not in response.model.model_dump(mode="json")
+
+
+@pytest.mark.parametrize("structured_output", ["json-schema", "prompt"])
+def test_reasoning_effort_is_wired_and_bound_to_request_identity(
+    structured_output: str,
+) -> None:
+    with _server() as (state, base_url):
+        direct = _generate(_config(base_url, structuredOutput=structured_output))
+        reasoned_config = _config(
+            base_url,
+            structuredOutput=structured_output,
+            reasoningEffort="medium",
+        )
+        reasoned = _generate(reasoned_config)
+
+    assert state.request is not None
+    assert state.request["reasoning_effort"] == "medium"
+    assert reasoned.requestSha256 == hashlib.sha256(state.request_bytes).hexdigest()
+    assert reasoned.requestSha256 != direct.requestSha256
+    assert canonical_digest(reasoned_config.model_dump(mode="json")) != canonical_digest(
+        _config(base_url, structuredOutput=structured_output).model_dump(mode="json")
+    )
 
 
 def test_prompt_structured_output_omits_guided_format_and_binds_effective_request() -> None:
@@ -257,7 +338,59 @@ def test_prompt_structured_output_omits_guided_format_and_binds_effective_reques
     assert content.startswith("Return a test object")
     assert "Return only one strict JSON object" in content
     assert '"required":["result"]' in content
-    assert response.requestSha256 == canonical_digest(state.request)
+    assert response.requestSha256 == hashlib.sha256(state.request_bytes).hexdigest()
+
+
+@pytest.mark.parametrize("structured_output", ["json-schema", "prompt"])
+def test_declared_schema_order_survives_worker_and_is_bound_to_request(
+    structured_output: str,
+) -> None:
+    schema: dict[str, object] = {
+        "type": "object",
+        "properties": {"zulu": {"type": "string"}, "alpha": {"type": "string"}},
+        "required": ["zulu", "alpha"],
+        "additionalProperties": False,
+    }
+    with _server() as (state, base_url):
+        state.completion["choices"] = [
+            {
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": '{"zulu":"ok","alpha":"ok"}'},
+            }
+        ]
+        response = generate_json(
+            _config(base_url, structuredOutput=structured_output),
+            model_id="local-model",
+            messages=[ChatMessage(role="user", content="Return JSON")],
+            schema=schema,
+            seed=1,
+        )
+        first_body = state.request_bytes
+        reversed_schema = {
+            **schema,
+            "properties": {
+                "alpha": {"type": "string"},
+                "zulu": {"type": "string"},
+            },
+        }
+        reordered = generate_json(
+            _config(base_url, structuredOutput=structured_output),
+            model_id="local-model",
+            messages=[ChatMessage(role="user", content="Return JSON")],
+            schema=reversed_schema,
+            seed=1,
+        )
+    wire = json.loads(first_body)
+    if structured_output == "json-schema":
+        assert list(wire["response_format"]["json_schema"]["schema"]["properties"]) == [
+            "zulu",
+            "alpha",
+        ]
+    else:
+        assert '"properties":{"zulu":' in wire["messages"][0]["content"]
+    assert response.requestSha256 == hashlib.sha256(first_body).hexdigest()
+    assert response.requestSha256 != reordered.requestSha256
+    assert response.schemaSha256 == reordered.schemaSha256
 
 
 def test_prompt_structured_output_never_accepts_reasoning_as_final_content() -> None:

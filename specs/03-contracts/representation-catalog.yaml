@@ -12,6 +12,7 @@ applicability:
     - CAP-VERIFY
     - CAP-SETUP
     - CAP-CURATE
+    - CAP-NATIVE-DATA
 shapes:
   - shape_id: model.data-record
     representation_class: domain
@@ -381,7 +382,103 @@ shapes:
       - CONTRACT-CURATION-V1
     mapping_refs:
       - MAP-CURATION-PUBLISH
+  - shape_id: model.decision-data-settings
+    representation_class: command
+    canonical_source: 09-native-decision-data.md#configuration-and-run-identity
+    owner: curation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - curation-module
+      - cli-module
+    source_contract_refs:
+      - CONTRACT-NATIVE-DECISION-V1
+    mapping_refs:
+      - MAP-NATIVE-DECISION-PUBLISH
+  - shape_id: model.decision-input
+    representation_class: domain
+    canonical_source: 09-native-decision-data.md#canonical-native-example
+    owner: curation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - curation-module
+      - data-module
+    source_contract_refs:
+      - CONTRACT-NATIVE-DECISION-V1
+    mapping_refs:
+      - MAP-AUXILIARY-NATIVE-PROJECTION
+      - MAP-NATIVE-DECISION-PUBLISH
+  - shape_id: model.decision-output
+    representation_class: domain
+    canonical_source: 09-native-decision-data.md#result-answerability-issues-and-evidence
+    owner: curation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - curation-module
+      - data-module
+    source_contract_refs:
+      - CONTRACT-NATIVE-DECISION-V1
+    mapping_refs:
+      - MAP-AUXILIARY-NATIVE-PROJECTION
+      - MAP-NATIVE-DECISION-PUBLISH
+  - shape_id: model.native-coverage-report
+    representation_class: persistence
+    canonical_source: 09-native-decision-data.md#publication-coverage-and-completion
+    owner: curation-module
+    stability: versioned
+    open_policy: closed
+    allowed_consumers:
+      - curation-module
+      - cli-module
+      - operator
+    source_contract_refs:
+      - CONTRACT-NATIVE-DECISION-V1
+    mapping_refs:
+      - MAP-NATIVE-DECISION-PUBLISH
 mappings:
+  - mapping_id: MAP-AUXILIARY-NATIVE-PROJECTION
+    from_shape: model.data-record
+    to_shape: model.decision-input
+    direction: domain_to_domain
+    allowed_differences:
+      - source-annotation-projected-to-compatible-native-question
+      - unsupported-source-targets-excluded-and-counted
+      - generated-numeric-confidence-discarded
+    redaction_or_loss_policy: Raw auxiliary records remain in source-corpus. A native seed is emitted only for a supported task mapping; provenance, rights, family and split are preserved and every exclusion is counted. Its inherited label remains unreviewed and enters a training partition only after exact blind verification.
+    field_operations:
+      - source-messages:map-to-state-sources
+      - source-label-space:map-to-caller-question-contract
+      - compatible-discrete-answer:map-to-typed-answer
+      - source-record-id:attach-original-source-record-tag
+      - probability-confidence-fields:omit-from-native-target
+      - unsupported-free-answer-or-alignment:exclude-with-reason
+    verification:
+      - model/tests/test_decision_seeds.py
+      - model/tests/test_decision_generation.py
+  - mapping_id: MAP-NATIVE-DECISION-PUBLISH
+    from_shape: model.decision-output
+    to_shape: model.dataset-artifact
+    direction: domain_to_persistence
+    allowed_differences:
+      - decision-input-and-output-serialized-as-canonical-chat-messages
+      - accepted-rewrites-and-required-lineage-parents-added
+      - accepted-projections-published-once-after-verification
+      - unchecked-solver-prose-replaced-by-corrected-reference-content
+      - coverage-report-persisted-outside-dataset-manifest
+    redaction_or_loss_policy: Full native rows stay in private dataset files; CLI and coverage summaries expose counts and safe reasons, never state text or answers. Unattempted and quarantined train parents remain diagnostic and are not published in native-decisions. No automatic path sets reviewed=true or creates numeric confidence targets.
+    field_operations:
+      - DecisionInput:serialize-to-user-message
+      - DecisionOutput:serialize-to-final-assistant-message
+      - held-out-seed:retain-unchanged-as-diagnostic
+      - accepted-train-parent:attach-family-split-origin-and-rights
+      - accepted-derivative:attach-generation-parent-lineage
+      - corrected-reference-prose:remap-to-exact-rewritten-source-or-reject
+      - coverage:aggregate-without-row-content
+    verification:
+      - model/tests/test_decision_contracts.py
+      - model/tests/test_decision_runner.py
   - mapping_id: MAP-DATASET-PREPARE
     from_shape: model.data-record
     to_shape: model.dataset-artifact

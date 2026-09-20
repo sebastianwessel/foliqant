@@ -8,6 +8,13 @@ Unhappy-path coverage: invalid config and unknown fields; private data without a
 
 Real integration evidence is separate from mocks used to test isolated error handling. Preserve the exact commands, versions, measurements, artifact identities, assertions and limitations in `plans/reviews/`. Do not record a mocked test as a real MLX or standard-inference pass.
 
+The native decision-data path is configuration -> pinned auxiliary acquisition ->
+source/native family freeze -> compatible projection and oracle seed publication
+-> serial train-only generation and blind checking -> coverage gate -> verified
+native dataset. Prepare-only ends after seed publication. Interruption resumes
+immutable outcomes. Network/integrity failure and coverage shortage never become
+semantic unanswerability or a completed-success result.
+
 ## Required behavioral cases
 
 The [semantic vectors](../03-contracts/fixtures/semantic-vectors.json) are language-neutral expected cases, not generated model outputs. Implement tests against actual parsers/scorers/loss masks, not copied test-only algorithms.
@@ -15,6 +22,7 @@ The [semantic vectors](../03-contracts/fixtures/semantic-vectors.json) are langu
 | Area | Required negative or boundary proof |
 |---|---|
 | Curation | Pinned imports, original holdouts, connected-family deduplication, conservative rights, loopback-only schema validation, automatic quarantine, immutable request cache, interruption/resume, and separate diagnostic regression publication. |
+| Native decision data | Every typed question/result variant; explicit absence versus unknown; exhaustive issue codes; explicit adequacy contracts; exact authored subject anchors; withdrawal and relation graph invariants; canonical reference-derived explanations; semantic date/value preservation; content-family isolation across values/paraphrases/translations; meaningful diversity counts; source projection verification with unreviewed status retained; accepted-parent-only train publication; no target leakage or held-out generation context; parent lineage; prepare/offline/resume; zero-acceptance and coverage-shortage OUTPUT_INVALID behavior with diagnostic state retained. |
 | Setup | Exact hashes/sizes, HTTPS-only redirects, offline hit/miss, corrupt-cache refusal, relative workspace paths, Git-ignore preflight, private outputs, unchanged rerun receipt and no implicit training. |
 | Parsing | Duplicate JSON/YAML keys, YAML aliases/tags, NaN, unknown fields, booleans where numeric values are required, oversized config/record and unsafe paths are rejected without printing content. |
 | Grouped data | A-B share a thread and B-C share a translation key: all three stay together regardless of source order. Reordering inputs yields identical partition contents. Four components give exactly one in each partition. |

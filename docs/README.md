@@ -20,5 +20,11 @@ Start with the small exercise, then follow the lifecycle you need:
 11. [Review every configuration field](reference/configuration.md)
 12. [Verify and recover artifacts](operations/artifacts.md)
 
+Agents operating this repository can use the
+[Foliqant model operating skill](skills/foliqant-model.md).
+
+For the native state-and-questions format with answerability and explanations,
+follow [Generate typed decision research data](guides/native-decision-data.md).
+
 The small exercise checks the tooling. Its model and data do not establish
 accuracy for financial decisions, regulatory interpretation or legal advice.

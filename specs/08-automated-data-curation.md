@@ -52,7 +52,8 @@ language option whose translations share source-family identity.
 ## CLI and operation
 
 Add `foliqant-model curate --config <yaml> [--workspace <path>] [--prepare-only]
-[--offline]`. Default workspace is the existing external Foliqant data root.
+[--offline] [--progress auto|always|never]`. Default workspace is the existing
+external Foliqant data root.
 `--prepare-only` downloads/converts/splits and produces a ready-to-generate report
 without inference. `--offline` forbids remote dataset downloads; configured
 local inference remains allowed. No training begins automatically.
@@ -77,6 +78,76 @@ counts, paths and safe errors, not source content or secrets. Code/configuration
 schema, source pins, tests and docs belong in Git. Cancellation must close local
 connections and retain resumable completed work. Closing a connection does not
 prove the server has cancelled GPU work; document that boundary.
+
+A generation timeout stops the run with `TIMEOUT` (exit 4), without an automatic
+transport retry or a fabricated quarantine outcome. The error explains that
+completed work is saved, the deadline is per request, and resumption requires
+unchanged settings after checking that the server has finished the previous
+request. Existing request and run identities remain unchanged by this diagnostic.
+
+Generation request format `declared-schema-order-v2` preserves JSON Schema key
+order through worker IPC, prompt-mode schema text and HTTP serialization. Model
+servers may embed schemas in prompts, so alphabetic canonicalization is only
+for artifact integrity, not model input. Hash the exact HTTP request bytes and
+bind that hash into call identity; bind the request-format version into generic
+and native generation recipes. The changed format creates new runs and never
+relabels or overwrites earlier results.
+
+Progress is an operator display on stderr; stdout remains reserved for the one
+final JSON result. `--progress auto` is the default and displays progress only on
+an interactive stderr, `always` forces it, and `never` disables it. Updates name
+the current phase and safe run path, and report completed/total candidates,
+accepted, quarantined, reused outcomes, request-cache entries present when
+generation starts, current-candidate elapsed time and periodic heartbeats. It
+does not estimate completion time. The progress mode does not participate in run,
+configuration, request or artifact identity.
+
+The first Ctrl+C requests a graceful pause. During generation, finish and persist
+the current candidate outcome before starting no further candidate; during
+preparation, stop at the next safe phase boundary. Release the run lock and exit
+with the existing `INTERRUPTED` error and code 130, without a completed or paused
+success result. A second Ctrl+C may stop immediately: the in-flight call can be
+retried on resume, and closing the client cannot guarantee cancellation of server
+work. Resume requires rerunning the exact same recipe, effective environment and
+workspace; no `--resume` flag is added. Existing outcomes and request-cache
+formats remain unchanged. The bounded local pause/resume verification is recorded
+in [`plans/reviews/curation-progress-pause.md`](../plans/reviews/curation-progress-pause.md).
+
+## Separate rejection-only repair pass
+
+Native decision curation additionally accepts `--continue-from RUN`, mutually
+exclusive with `--repair-from`. It may snapshot an incomplete parent under its
+run lock. Preserve all completed accepted and quarantined outcomes, full retained
+call records, and original generated IDs/provenance. Compare logical job plans
+without their recipe-derived IDs; carried jobs retain their old IDs, missing jobs
+use current IDs. Require identical effective configuration, source snapshots,
+seed records, family assignments and observed model. Revalidate every carried
+outcome before copying or inference. Bind the parent snapshot and current recipe
+into the child identity and persist `continuation.json`; never mutate the parent.
+Allow `--prepare-only` to initialize and verify without inference. Repeating the
+same command resumes the child; advancing the parent creates a different snapshot
+and child. Generic non-native curation rejects this option explicitly. This
+operation does not retry quarantined jobs; those remain for a later repair pass.
+
+`curate --repair-from <run>` creates a deterministic immutable child of a
+completed curation run. Both wrapper scripts forward this option. A native run
+that completed all jobs but failed coverage is eligible; an unfinished run is
+not. `--prepare-only` and repair cannot be combined. The parent must be a direct,
+non-symlink run in the selected workspace.
+
+Require the same effective configuration, generation recipe, observed model,
+source snapshots and frozen logical job plan. Verify private envelopes before
+inference. Carry accepted outcome content and its available call cache unchanged;
+remap only quarantined jobs into fresh job/seed/request identities. Provide only
+phase-matching prior final content and safe rejection feedback, bounded for the
+prompt. Repeat all ordinary checks, duplicate detection and coverage gates.
+Preserve full final content in the bounded private call cache; outcome previews
+may be truncated and must say so. Diagnostic outcomes are not training rows.
+
+Persist the parent link and recipe in `repair.json`. Rerunning the same repair
+command resumes its child; selecting that child starts a later pass. Parent
+outcomes and published artifacts are never overwritten. Old responses that were
+not retained cannot be reconstructed or described as original model responses.
 
 ## Local inference adapter
 
@@ -119,7 +190,20 @@ references, literal evidence existence, arithmetic where specified, duplicates
 and declared scenario constraints. An independent answer/check pass must not be
 fed the generator's proposed answer as the answer to endorse. Semantic checks
 can reject uncertainty but cannot promote reviewed=false to human-reviewed.
-Record both raw candidate and check outcome, including rejection reason.
+Record both raw candidate and check outcome, including rejection reason. Each
+candidate outcome retains a bounded trace for every completed attempt: the safe
+phase, request and response digests, validator reason, and the final assistant
+content when a valid assistant envelope supplied it. Never retain hidden
+reasoning, credentials, HTTP error bodies or arbitrary exception text; an
+attempt without final assistant content records that absence honestly.
+
+Only a rejected candidate may receive the next bounded attempt. Its next request
+may include the previous bounded final response and safe validator reason as
+untrusted correction context, but never the hidden reference answer or oracle.
+Every correction passes the complete schema, deterministic and independent
+checker validation again. Earlier rejected attempts remain immutable and
+auditable, accepted candidates are not regenerated, and published training
+datasets continue to contain accepted records only.
 
 Keep the existing canonical DataRecord, DatasetConfig and ArtifactManifest as the
 published training boundary. Extend them only for explicit frozen assignments and
@@ -237,6 +321,18 @@ paired evidence and a disjoint validation confirmation before changing defaults.
 Protocol and measured limitations belong in `plans/reviews/`.
 
 ## Explicit structured-output transport mode
+
+The local endpoint also accepts optional `reasoningEffort` with exactly `low`,
+`medium`, or `xhigh`. Omission leaves the provider setting unspecified; explicit
+null and unsupported values fail configuration validation. When present it is
+sent as top-level `reasoning_effort` in both structured-output modes and is part
+of effective configuration, request, provenance and cache identities. The
+wrapper accepts `FOLIQANT_CURATION_REASONING_EFFORT`; it does not silently retry
+without the setting, disable reasoning, or switch models on rejection.
+The native full/pilot recipes select `low` and temperature `0.1`, with the existing
+8,192-token limit and serial requests, following the standalone Splash comparison.
+Provider-neutral endpoint defaults remain unspecified for reasoning so other
+model servers are not assumed to support this capability.
 
 LocalEndpointConfig.structuredOutput is json-schema (default) or prompt. The
 json-schema mode sends the standard response_format schema request. Prompt mode

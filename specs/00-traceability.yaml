@@ -88,6 +88,14 @@ requirements:
       - PATH-CURATE-FAILURE
     acceptance_ids:
       - ACCEPT-CURATE
+  - requirement_id: REQ-NATIVE-DATA
+    capability_ids:
+      - CAP-NATIVE-DATA
+    path_ids: &native_paths
+      - PATH-NATIVE-DATA-SUCCESS
+      - PATH-NATIVE-DATA-FAILURE
+    acceptance_ids:
+      - ACCEPT-NATIVE-DATA
 capabilities:
   - capability_id: CAP-SETUP
     requirement_ids:
@@ -153,6 +161,10 @@ capabilities:
     requirement_ids:
       - REQ-CURATE
     path_ids: *id001
+  - capability_id: CAP-NATIVE-DATA
+    requirement_ids:
+      - REQ-NATIVE-DATA
+    path_ids: *native_paths
 paths:
   - path_id: PATH-SETUP-FAILURE
     capability_ids:
@@ -376,6 +388,30 @@ paths:
       - CONTRACT-MODEL-V1
     acceptance_ids:
       - ACCEPT-CURATE
+  - path_id: PATH-NATIVE-DATA-SUCCESS
+    capability_ids:
+      - CAP-NATIVE-DATA
+    requirement_ids:
+      - REQ-NATIVE-DATA
+    kind: success
+    contract_refs:
+      - CONTRACT-NATIVE-DECISION-V1
+      - CONTRACT-CURATION-V1
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-NATIVE-DATA
+  - path_id: PATH-NATIVE-DATA-FAILURE
+    capability_ids:
+      - CAP-NATIVE-DATA
+    requirement_ids:
+      - REQ-NATIVE-DATA
+    kind: failure
+    contract_refs:
+      - CONTRACT-NATIVE-DECISION-V1
+      - CONTRACT-CURATION-V1
+      - CONTRACT-MODEL-V1
+    acceptance_ids:
+      - ACCEPT-NATIVE-DATA
 acceptance:
   - acceptance_id: ACCEPT-SETUP
     requirement_ids:
@@ -511,3 +547,14 @@ acceptance:
       - ../model/tests/test_curation_generation.py
       - ../model/tests/test_curation_runner.py
       - ../plans/reviews/curation-execution.md
+  - acceptance_id: ACCEPT-NATIVE-DATA
+    requirement_ids:
+      - REQ-NATIVE-DATA
+    path_ids: *native_paths
+    verification_refs:
+      - 09-native-decision-data.md
+      - ../model/tests/test_decision_contracts.py
+      - ../model/tests/test_decision_seeds.py
+      - ../model/tests/test_decision_generation.py
+      - ../model/tests/test_decision_runner.py
+      - ../plans/reviews/native-decision-data-review.md

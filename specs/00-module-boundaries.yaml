@@ -313,11 +313,20 @@ modules:
   - module_id: curation
     owner: model-tooling
     public_entrypoint: model/src/foliqant_model/curation/runner.py
+    public_symbols:
+      - run_curation
+      - run_decision_curation
+      - build_decision_jobs
     owned_concepts:
       - pinned-source-conversion
       - local-generation
       - frozen-family-planning
       - resumable-curation
+      - native-decision-oracles
+      - native-decision-adequacy-case-catalog
+      - native-decision-research-case-catalog
+      - native-source-projection
+      - native-coverage-accounting
     allowed_dependencies:
       - acquisition
       - artifacts

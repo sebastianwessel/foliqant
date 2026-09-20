@@ -1,5 +1,133 @@
 {
   "$defs": {
+    "CandidateAttemptTrace": {
+      "additionalProperties": false,
+      "description": "Immutable validation result for one bounded candidate attempt.",
+      "properties": {
+        "attempt": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "calls": {
+          "items": {
+            "$ref": "#/$defs/CandidateCallTrace"
+          },
+          "maxItems": 3,
+          "title": "Calls",
+          "type": "array"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "quarantined"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "attempt",
+        "status",
+        "reason"
+      ],
+      "title": "CandidateAttemptTrace",
+      "type": "object"
+    },
+    "CandidateCallTrace": {
+      "additionalProperties": false,
+      "description": "Bounded final-response evidence for one model call.",
+      "properties": {
+        "callId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Callid",
+          "type": "string"
+        },
+        "finalAssistantResponsePreview": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finalassistantresponsepreview"
+        },
+        "phase": {
+          "enum": [
+            "generator",
+            "checker",
+            "rewrite",
+            "solver"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "previewTruncated": {
+          "default": false,
+          "title": "Previewtruncated",
+          "type": "boolean"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "requestSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Requestsha256",
+          "type": "string"
+        },
+        "responseSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Responsesha256",
+          "type": "string"
+        },
+        "responseSource": {
+          "enum": [
+            "endpoint-final",
+            "canonical-output",
+            "absent"
+          ],
+          "title": "Responsesource",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "rejected"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phase",
+        "status",
+        "reason",
+        "callId",
+        "requestSha256",
+        "responseSha256",
+        "responseSource"
+      ],
+      "title": "CandidateCallTrace",
+      "type": "object"
+    },
     "ChatMessage": {
       "additionalProperties": false,
       "properties": {
@@ -203,6 +331,14 @@
   "additionalProperties": false,
   "description": "Persisted automatic decision and safe reason for one generated candidate.",
   "properties": {
+    "attemptTrace": {
+      "items": {
+        "$ref": "#/$defs/CandidateAttemptTrace"
+      },
+      "maxItems": 5,
+      "title": "Attempttrace",
+      "type": "array"
+    },
     "attempts": {
       "maximum": 5,
       "minimum": 1,

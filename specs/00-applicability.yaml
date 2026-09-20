@@ -12,6 +12,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
   - concern_id: representation_reuse
     status: applicable
     scope_refs:
@@ -24,6 +25,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
   - concern_id: data_integrity
     status: applicable
     scope_refs:
@@ -36,6 +38,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
   - concern_id: security_privacy
     status: applicable
     scope_refs:
@@ -48,6 +51,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
   - concern_id: operations
     status: applicable
     scope_refs:
@@ -60,6 +64,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
   - concern_id: dependency_research
     status: applicable
     scope_refs:
@@ -72,6 +77,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
   - concern_id: documentation
     status: applicable
     scope_refs:
@@ -84,6 +90,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
   - concern_id: local_jobs
     status: applicable
     scope_refs:
@@ -96,6 +103,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
   - concern_id: frontend
     status: not_applicable
     scope_refs:
@@ -108,6 +116,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
     rationale: Local foreground model lifecycle CLI; separate workflow service is
       outside this goal. See 00-vision.md.
   - concern_id: hosted_auth
@@ -122,6 +131,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
     rationale: Local foreground model lifecycle CLI; separate workflow service is
       outside this goal. See 00-vision.md.
   - concern_id: webhooks
@@ -136,6 +146,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
     rationale: Local foreground model lifecycle CLI; separate workflow service is
       outside this goal. See 00-vision.md.
   - concern_id: queue_acknowledgment
@@ -150,6 +161,7 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
     rationale: Local foreground model lifecycle CLI; separate workflow service is
       outside this goal. See 00-vision.md.
   - concern_id: cloud_deployment
@@ -164,5 +176,6 @@ concerns:
       - CAP-EXPORT
       - CAP-VERIFY
       - CAP-GUIDES
+      - CAP-NATIVE-DATA
     rationale: Local foreground model lifecycle CLI; separate workflow service is
       outside this goal. See 00-vision.md.

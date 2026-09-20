@@ -46,7 +46,8 @@
         "multiple-intents",
         "missing-evidence",
         "conflicting-information",
-        "changed-deadline"
+        "changed-deadline",
+        "native-decision"
       ],
       "title": "Operation",
       "type": "string"
@@ -61,7 +62,8 @@
     "purpose": {
       "enum": [
         "training-augmentation",
-        "synthetic-regression"
+        "synthetic-regression",
+        "decision-training"
       ],
       "title": "Purpose",
       "type": "string"

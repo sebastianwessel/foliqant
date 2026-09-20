@@ -11,18 +11,30 @@ a separate proposal.
 
 ```sh
 ./scripts/setup-model
-./scripts/curate-data --prepare-only
+./scripts/generate-data --pilot
 ```
 
-The curation command can continue with a local LM Studio model after source
-preparation. Runtime and model combinations must return final structured content
-matching the requested JSON Schema.
+Use `./scripts/generate-data` for the full bounded native decision-data recipe,
+or add `--prepare-only` to prepare sources and tasks without inference. See
+[native decision data](docs/guides/native-decision-data.md) for setup, resume,
+visible progress, safe Ctrl+C pauses, coverage gates, and machine-readable
+answerability results. The authored recipe includes English and German; German
+examples retain German response prose with unchanged English enum values.
+Generation publishes only accepted training lineage and does not start training.
+Bounded pilot checks demonstrate pipeline behavior, not population accuracy,
+full-recipe coverage, training readiness or financial production qualification.
+
+The native recipes use standalone Splash with low reasoning and temperature
+`0.1`; configure the exact endpoint in root `.env`. Other local OpenAI-compatible
+servers can be selected explicitly. Runtime and model combinations must return
+final structured content matching the requested JSON Schema.
 
 ## Start here
 
 - [Model lifecycle specifications](specs/README.md)
 - [User guides](docs/README.md)
 - [Automated public-source curation](docs/guides/automated-curation.md)
+- [Generate native decision data](docs/guides/native-decision-data.md)
 
 - [Architecture and language recommendation](specs/research/workflow-service-proposal.md)
 - [Apple Silicon training and model lineage](specs/research/apple-silicon.md)
