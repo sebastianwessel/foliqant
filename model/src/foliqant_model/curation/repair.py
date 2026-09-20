@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from ..contracts.base import canonical_digest
 from ..errors import ModelError
 from .contracts import CandidateJob, CandidateOutcome, CurationConfig, CurationPlan, SourceBatch
 from .endpoint import EndpointModelIdentity
-from .storage import load_object, store_object
+from .storage import load_object, run_lock, store_object
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,88 @@ def _safe_parent(root: Path, requested: Path) -> Path:
     return parent
 
 
+def _finished_report(
+    parent: Path, coverage: dict[str, object], *, native: bool
+) -> dict[str, object] | None:
+    """Load terminal success evidence while allowing a native coverage-only failure."""
+
+    if native and coverage.get("status") == "coverage-incomplete":
+        return None
+    report = load_object(parent / "completed-report.json")
+    if not isinstance(report, dict) or report.get("status") != "completed":
+        raise ModelError("INTEGRITY_FAILED", "Repair parent completion evidence is invalid")
+    return report
+
+
+def _verify_finished_coverage(
+    coverage: object,
+    report: dict[str, object] | None,
+    jobs: list[CandidateJob],
+    outcomes: dict[str, CandidateOutcome],
+    *,
+    native: bool,
+) -> None:
+    """Require a complete outcome ledger and coherent terminal coverage evidence."""
+
+    if not isinstance(coverage, dict) or coverage.get("plannedCandidates") != len(jobs):
+        raise ModelError("INTEGRITY_FAILED", "Repair parent coverage is invalid")
+    if set(outcomes) != {job.jobId for job in jobs}:
+        raise ModelError("INTEGRITY_FAILED", "Repair parent outcome ledger is incomplete")
+    status_counts = Counter(outcome.status for outcome in outcomes.values())
+    expected_statuses = {
+        "accepted": status_counts["accepted"],
+        "quarantined": status_counts["quarantined"],
+    }
+    counts = coverage.get("counts")
+    if not isinstance(counts, dict) or any(
+        not isinstance(key, str) or type(value) is not int or value < 0
+        for key, value in counts.items()
+    ):
+        raise ModelError("INTEGRITY_FAILED", "Repair parent coverage is invalid")
+    typed_counts = cast(dict[str, int], counts)
+    if native:
+        if coverage.get("status") not in {"completed", "coverage-incomplete"}:
+            raise ModelError("INTEGRITY_FAILED", "Repair parent completion evidence is invalid")
+        if typed_counts != expected_statuses:
+            raise ModelError("INTEGRITY_FAILED", "Repair parent coverage counts are inconsistent")
+        expected_reasons = dict(sorted(Counter(o.reason for o in outcomes.values()).items()))
+        if coverage.get("reasons") != expected_reasons:
+            raise ModelError("INTEGRITY_FAILED", "Repair parent coverage reasons are inconsistent")
+    else:
+        expected_dimensions: Counter[str] = Counter()
+        for job in jobs:
+            outcome = outcomes[job.jobId]
+            for dimension, value in (
+                ("purpose", job.purpose),
+                ("language", job.language),
+                ("operation", job.operation),
+                ("reason", outcome.reason),
+            ):
+                expected_dimensions[f"{dimension}:{value}:{outcome.status}"] += 1
+        observed_dimensions = {
+            key: value
+            for key, value in typed_counts.items()
+            if key.startswith(("purpose:", "language:", "operation:", "reason:"))
+        }
+        if observed_dimensions != dict(sorted(expected_dimensions.items())):
+            raise ModelError("INTEGRITY_FAILED", "Repair parent coverage counts are inconsistent")
+        for status, expected in expected_statuses.items():
+            observed_sources = sum(
+                value
+                for key, value in typed_counts.items()
+                if key.startswith("source:") and key.endswith(f":{status}")
+            )
+            if observed_sources != expected:
+                raise ModelError(
+                    "INTEGRITY_FAILED", "Repair parent coverage counts are inconsistent"
+                )
+    if report is not None and (
+        report.get("generatedAccepted") != expected_statuses["accepted"]
+        or report.get("generatedQuarantined") != expected_statuses["quarantined"]
+    ):
+        raise ModelError("INTEGRITY_FAILED", "Repair parent completion counts are inconsistent")
+
+
 def load_repair_pass(
     root: Path,
     requested: Path,
@@ -66,53 +150,56 @@ def load_repair_pass(
     """Verify a finished parent and derive the deterministic child repair identity."""
 
     parent = _safe_parent(root, requested)
-    expected_config = config.model_dump(mode="json")
-    if load_object(parent / "configuration.json") != expected_config:
-        raise ModelError("CONFIG_INVALID", "Repair configuration differs from its parent run")
-    coverage = load_object(parent / "coverage.json")
-    if not isinstance(coverage, dict):
-        raise ModelError("INTEGRITY_FAILED", "Repair parent coverage is invalid")
-    repair_record_path = parent / "repair.json"
-    if repair_record_path.exists() or repair_record_path.is_symlink():
-        repair_record = load_object(repair_record_path)
-        if (
-            not isinstance(repair_record, dict)
-            or repair_record.get("generationRecipeSha256") != recipe_sha256
-        ):
+    with run_lock(parent):
+        expected_config = config.model_dump(mode="json")
+        if load_object(parent / "configuration.json") != expected_config:
+            raise ModelError("CONFIG_INVALID", "Repair configuration differs from its parent run")
+        coverage = load_object(parent / "coverage.json")
+        if not isinstance(coverage, dict):
+            raise ModelError("INTEGRITY_FAILED", "Repair parent coverage is invalid")
+        repair_record_path = parent / "repair.json"
+        if repair_record_path.exists() or repair_record_path.is_symlink():
+            repair_record = load_object(repair_record_path)
+            if (
+                not isinstance(repair_record, dict)
+                or repair_record.get("generationRecipeSha256") != recipe_sha256
+            ):
+                raise ModelError("CONFIG_INVALID", "Repair generation recipe differs from parent")
+        elif native and coverage.get("generationRecipeSha256") != recipe_sha256:
             raise ModelError("CONFIG_INVALID", "Repair generation recipe differs from parent")
-    elif native and coverage.get("generationRecipeSha256") != recipe_sha256:
-        raise ModelError("CONFIG_INVALID", "Repair generation recipe differs from parent")
-    raw_jobs = load_object(parent / "jobs.json")
-    if not isinstance(raw_jobs, list):
-        raise ModelError("INTEGRITY_FAILED", "Repair parent job plan is invalid")
-    jobs = [CandidateJob.model_validate(value) for value in raw_jobs]
-    outcomes: dict[str, CandidateOutcome] = {}
-    for job in jobs:
-        outcome = CandidateOutcome.model_validate(
-            load_object(parent / "outcomes" / (job.jobId + ".json"))
+        raw_jobs = load_object(parent / "jobs.json")
+        if not isinstance(raw_jobs, list):
+            raise ModelError("INTEGRITY_FAILED", "Repair parent job plan is invalid")
+        jobs = [CandidateJob.model_validate(value) for value in raw_jobs]
+        outcomes: dict[str, CandidateOutcome] = {}
+        for job in jobs:
+            outcome = CandidateOutcome.model_validate(
+                load_object(parent / "outcomes" / (job.jobId + ".json"))
+            )
+            if outcome.jobId != job.jobId:
+                raise ModelError("INTEGRITY_FAILED", "Repair parent outcome has the wrong job")
+            outcomes[job.jobId] = outcome
+        report = _finished_report(parent, coverage, native=native)
+        _verify_finished_coverage(coverage, report, jobs, outcomes, native=native)
+        if not any(outcome.status == "quarantined" for outcome in outcomes.values()):
+            raise ModelError("ARGUMENT_INVALID", "Repair parent has no quarantined outcomes")
+        source_plan = CurationPlan.model_validate(load_object(parent / "source-plan.json"))
+        source_batches = [
+            SourceBatch.model_validate(load_object(parent / "sources" / (source.id + ".json")))
+            for source in config.sources
+        ]
+        model = EndpointModelIdentity.model_validate(load_object(parent / "model-identity.json"))
+        parent_identity = canonical_digest(
+            {
+                "configuration": expected_config,
+                "sourcePlan": source_plan.model_dump(mode="json"),
+                "jobs": [job.model_dump(mode="json") for job in jobs],
+                "outcomes": [outcomes[job.jobId].model_dump(mode="json") for job in jobs],
+                "model": model.model_dump(mode="json"),
+                "recipe": recipe_sha256,
+                "native": native,
+            }
         )
-        if outcome.jobId != job.jobId:
-            raise ModelError("INTEGRITY_FAILED", "Repair parent outcome has the wrong job")
-        outcomes[job.jobId] = outcome
-    if not any(outcome.status == "quarantined" for outcome in outcomes.values()):
-        raise ModelError("ARGUMENT_INVALID", "Repair parent has no quarantined outcomes")
-    source_plan = CurationPlan.model_validate(load_object(parent / "source-plan.json"))
-    source_batches = [
-        SourceBatch.model_validate(load_object(parent / "sources" / (source.id + ".json")))
-        for source in config.sources
-    ]
-    model = EndpointModelIdentity.model_validate(load_object(parent / "model-identity.json"))
-    parent_identity = canonical_digest(
-        {
-            "configuration": expected_config,
-            "sourcePlan": source_plan.model_dump(mode="json"),
-            "jobs": [job.model_dump(mode="json") for job in jobs],
-            "outcomes": [outcomes[job.jobId].model_dump(mode="json") for job in jobs],
-            "model": model.model_dump(mode="json"),
-            "recipe": recipe_sha256,
-            "native": native,
-        }
-    )
     run_id = canonical_digest({"repairParent": parent_identity, "version": 1})
     return RepairPass(
         parent=parent,

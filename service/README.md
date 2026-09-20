@@ -8,4 +8,9 @@ The first slice is one validated workflow, a fake model adapter, a real endpoint
 
 ## Public-surface inventory
 
+The [business-process design](../specs/10-business-decisions-and-processes.md)
+includes one parent case with multiple bounded child tasks, per-request evidence,
+explicit joins and recovery. This is future scope; the current illustrative
+single-route workflow is not a fan-out implementation.
+
 There are no implemented public endpoints, adapter interfaces, step handlers, CLI commands, or durable manifests yet. The workflow and service YAML files are proposed examples. Replace this inventory with concrete signatures and execution semantics as each feature is implemented.

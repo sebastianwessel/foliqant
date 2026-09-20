@@ -15,6 +15,13 @@ Identifiers used by `name`, `id` and `sourceId` are 1–128 characters. They sta
 with an ASCII letter or digit and then contain only letters, digits, `.`, `_` or
 `-`. A language is a simple BCP 47-style tag such as `en`, `de` or `de-DE`.
 
+New category catalogs normalize IDs to unique lowercase snake_case keys matching
+`[a-z][a-z0-9]*(?:_[a-z0-9]+)*` and require nonblank descriptions. Normalization
+collisions are rejected. Use `CategoryCatalog`
+from `foliqant_model.curation.category_catalog`; see
+[category definitions](../guides/native-decision-data.md#define-categories-with-clear-boundaries).
+This does not change historical V1 identifiers or rewrite stored artifacts.
+
 ## Native decision-data configuration
 
 `CurationConfig.decisionData` selects the native state-and-questions generation

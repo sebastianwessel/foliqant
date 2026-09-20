@@ -1,5 +1,18 @@
 # Capability inventory
 
+## Proposed business-process extension
+
+These are unimplemented target capabilities owned by
+[specification 10](../10-business-decisions-and-processes.md), not new CLI/API promises.
+
+| ID | Target | Planned verification |
+| --- | --- | --- |
+| CAP-BUSINESS-DECISIONS | Existing typed decisions plus per-answer evidence, thread snapshots and bounded extraction | ACCEPT-BUSINESS-DECISIONS; semantic, Unicode, temporal and omission cases |
+| CAP-PROCESS-BRANCHING | One process with bounded configured child tasks and an explicit join | ACCEPT-PROCESS-BRANCHING; failure, ordering, authorization, retry and correction cases |
+| CAP-DOMAIN-DATA | Evidence-backed candidate datasets for banking/funds, insurance and public administration | ACCEPT-DOMAIN-DATA; primary-source fit, annotation provenance and rights review; no acquisition |
+
+## Implemented model lifecycle scope
+
 The actor for every command is the local authorized operator or an agent acting for that operator. The entrypoint is the installed `foliqant-model` console script. Local filesystem access and explicit config are prerequisites; remote access is permitted only for explicit fetch, setup and curate acquisition; curate generation is loopback-only. The lifecycle and operations specs define common validation, logging, permissions, failure codes and atomic finalization.
 
 | ID | Capability | Entrypoint | Success | Failure/recovery | Verification |

@@ -15,3 +15,12 @@ coverage, model quality, training readiness, native MLX training, formal human
 approval or production fitness.
 
 Research basis: [input answerability and evidence-backed decisions](research/input-answerability-and-reliability.md) refines typed questions, complete request handling, explanations, and trustworthy numerical estimates. Specification 09 adopts only its data-generation slice; calibrated estimators, runtime decision APIs and production qualification remain research and are not implemented lifecycle claims.
+
+New target design: [business decisions and process branching](10-business-decisions-and-processes.md)
+records the accepted direction for banking, funds, insurance and public-sector
+work: per-answer evidence, ordered threads, bounded extraction and one process
+with several configured child tasks. Those remain target features with explicit
+readiness gaps. Additive category authoring/normalization is implemented without
+changing the V1 generation contract. Candidate
+[domain datasets](research/business-process-datasets.md) remain research until
+their rights, mappings and acquisition profiles are separately reviewed.

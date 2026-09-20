@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:e850ec7859e29eb9a74b08c916145f4d2064e1d4026c7465c5b584a4abe3b4f9
-  source_revision: working-tree-301516d-source-projections
-  generated_at: 2026-09-20T18:59:15.374Z
+  content_digest: sha256:d7e15330a52297baea88125ea830fd20e86718ea229ea3c8f6c3cfa7d2634e35
+  source_revision: working-tree-7742096-catalog-and-completed-run
+  generated_at: 2026-09-20T21:16:27.018Z

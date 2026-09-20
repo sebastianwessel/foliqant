@@ -1,5 +1,11 @@
 # Model tool architecture
 
+The future [business-process extension](10-business-decisions-and-processes.md)
+keeps model interpretation separate from deterministic process execution.
+Per-answer evidence and snapshot-bound observations feed one parent process
+with bounded, configured child tasks and an explicit join. It does not change
+this implemented CLI architecture or introduce a workflow runtime here.
+
 The scoped source-projection extension has two explicit boundaries. Offline
 preparation reads verified immutable source snapshots and produces a typed,
 hash-bound plan without discovery, downloads, or inference. A separate native

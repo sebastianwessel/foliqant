@@ -29,6 +29,7 @@ from .contracts import (
     WorkerResult,
 )
 from .contracts.cli import SchemaResult
+from .curation.category_catalog import CategoryCatalog
 from .curation.contracts import CandidateJob, CandidateOutcome, CurationConfig, CurationPlan
 from .curation.decision_contracts import DecisionInput, DecisionOutput
 from .curation.projection_contracts import ProjectionPlan, ProjectionReport
@@ -36,6 +37,7 @@ from .errors import ModelError
 
 SCHEMAS: dict[str, type[BaseModel]] = {
     "artifact-manifest.schema.json": ArtifactManifest,
+    "category-catalog.schema.json": CategoryCatalog,
     "candidate-job.schema.json": CandidateJob,
     "candidate-outcome.schema.json": CandidateOutcome,
     "cli-failure.schema.json": CliFailure,

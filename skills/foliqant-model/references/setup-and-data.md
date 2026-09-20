@@ -183,6 +183,10 @@ frozen plans must match. Do not alter old cached responses or imply that missing
 historical response text can be recovered. Publication still requires ordinary
 validation and coverage, and generated rows remain unreviewed.
 
+Projection plans are bound to one exact parent. After repairing a run, prepare
+fresh pilot/full plans from the completed repair child; do not apply an earlier
+continuation's plan to it. Run repair and projection verification sequentially.
+
 Lexical fact-preservation guards are intentionally conservative. A valid
 paraphrase can be quarantined when surface markers differ; the rejection alone
 does not prove model error or factual drift. Inspect the immutable source,
@@ -253,6 +257,37 @@ The existing `calibrate` command selects a token-likelihood threshold; it does
 not fit an input-answerability estimator. Model training, assessor fitting and
 production qualification remain separate activities. See
 `docs/guides/native-decision-data.md` in the checkout for the public workflow.
+
+## Category catalogs
+
+Use `CategoryCatalog` from `foliqant_model.curation.category_catalog` to author
+new categories with `id` and nonblank `description`, then `decision_options()`
+to build existing choice/multiselect/request-unit questions. Explain category
+inclusion, exclusion and neighboring boundaries in descriptions; do not rely on
+keys alone. Keep priority, request kind and topic as separate questions when
+they express different dimensions. A date in an input is not automatically an
+SLA deadline; policy-based date calculation remains deterministic application work.
+
+Normalize recoverable key formatting deterministically (`Request Info` and
+`request-info` become `request_info`) and reject collisions. Preserve German
+descriptions while keeping stable English machine keys. `resolve_id` applies
+normalization plus exact catalog membership to a returned key; unknown categories
+remain invalid. Do not fuzzy-match, invent categories, or silently drop duplicate
+selections. `validate_decision_output` still validates the whole result against
+the exact task, including allowed IDs, cardinality and citations.
+
+This is additive authoring support. The V1 artifact reader, source-projection
+labels, output schemas and recipe digests retain their original semantics.
+Never rewrite a completed run to impose new identifier rules. Catalog display
+descriptions come from caller configuration; explanations and evidence come from
+validated results. Per-label evidence binding, bounded extraction and process
+branching remain planned rather than implemented service capabilities.
+
+Source cards determine annotation provenance. A third-party model's claim of
+human training data does not override a dataset publisher describing synthetic
+records. Source priority/type labels are provisional references under that
+source's definitions, not universal urgency or request-intent gold. Preserve
+the distinction between authored, synthetic, teacher and human-reviewed data.
 
 ## Existing setup and auxiliary curation
 

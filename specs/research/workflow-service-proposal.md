@@ -66,6 +66,17 @@ The durable database or broker, acknowledgment boundary, lease/fencing rules and
 
 ## 4. Configuration boundary
 
+The [business-process target specification](../10-business-decisions-and-processes.md)
+extends this proposal with one parent process and multiple configured child
+tasks/subflows. The small single-route example below remains illustrative; it
+does not implement or demonstrate fan-out/join. The model never generates the
+execution graph. A configured dispatcher maps validated request instances to
+allowlisted subflow definitions, with a persisted complete child set, explicit
+dependency/concurrency limits, an all-required-children join and crash/retry
+semantics. Conditional alternatives are not parallel confirmed requests. A later
+email must not recreate completed child work. Wire syntax, durable storage and
+reconciliation rules require a separate implementation review.
+
 Keep two separate artifacts:
 
 - **Workflow bundle:** version, input/output contracts, prompt files, bounded model tasks, deterministic route rules, and terminal outcomes. No secrets, ports, Redis connection strings, or deployment-specific model IDs.
@@ -73,7 +84,7 @@ Keep two separate artifacts:
 
 YAML is an authoring format, not an untyped escape hatch. Parse using a safe YAML subset, reject duplicate keys/custom tags, limit size/depth/alias expansion, validate against versioned JSON Schema, and perform semantic checks before activation. File references must remain inside the approved bundle/config roots after canonicalization, including symlinks. Environment substitution is restricted to explicit secret/connection-reference fields, not arbitrary recursive text expansion.
 
-Start with a small bounded graph: `model`, `decision`, and `finish` nodes. Custom behavior can use reviewed registered step handlers later. Avoid arbitrary expressions, scripting, unbounded loops, and a full BPMN engine in the first release. Decision conditions use a small set of typed operators against explicit JSON Pointer paths. The first matching case wins; every decision needs a default outcome. Require acyclic graphs initially, all nodes reachable, all paths terminal, unique IDs, compatible data references, and bounded execution budgets.
+The illustrative single-route slice uses `model`, `decision`, and `finish` nodes. Custom behavior can use reviewed registered step handlers later. Avoid arbitrary expressions, scripting, unbounded loops, and a full BPMN engine in the first release. Decision conditions use a small set of typed operators against explicit JSON Pointer paths. The first matching case wins within an exclusive decision; every decision needs a default outcome. That rule must not discard secondary request instances when implementing specification 10's separate bounded fan-out/join contract. Require acyclic graphs initially, all nodes reachable, all paths terminal, unique IDs, compatible data references, and bounded execution budgets.
 
 The included YAML is an illustrative proposal only. Prompts are separate Markdown files; request text is serialized as untrusted user data, not interpolated into privileged instructions. A `model` node receives the mapped input as one user data message plus the referenced instruction document. A `decision` reads only validated prior outputs. A `finish` returns the explicitly mapped output.
 
@@ -98,7 +109,7 @@ These are implementation requirements, not capabilities of this scaffold:
 - Separate business `needs-review` outcomes from malformed output, timeouts, endpoint errors, and delivery failures. Invalid model output must not silently become a successful route. Retries are bounded and apply only to classified retryable failures.
 - Enforce request size, concurrency, token, step, and wall-clock budgets. Cancellation is best effort after an external call; it is not rollback.
 - HTTP's first slice may be synchronous and explicitly non-durable. Async HTTP or Redis delivery requires a durable execution design before release.
-- Redis processing is at-least-once. Deduplicate using a tenant-scoped request key plus workflow revision; reject mismatched payload reuse. Define consumer recovery, pending-entry reclaim, retry limits, and dead-letter handling. Acknowledge only after durable outcome/delivery intent is recorded.
+- Redis processing is at-least-once. Deduplicate delivery using a tenant-scoped request key and reject mismatched payload reuse; record the selected workflow revision separately. Business action identities remain stable across plan revisions and reconciliation checks the parent action history, so a revision change cannot repeat completed work. Define consumer recovery, pending-entry reclaim, retry limits, and dead-letter handling. Acknowledge only after durable outcome/delivery intent is recorded.
 - Persist a terminal result and pending delivery together when possible; deliver via an outbox, then mark delivery. If a crash causes repeated publication, sinks must deduplicate. Do not promise exactly-once execution across independent systems.
 - Freeze the workflow bundle revision for a run, record validated node outputs, and define resume semantics before enabling retries after process crashes. Do not silently rerun side-effecting handlers.
 - Default logs contain identifiers and redacted diagnostics, not email bodies, prompts, retrieved documents, secrets, or full model output. Sensitive trace retention requires explicit configuration and access control.

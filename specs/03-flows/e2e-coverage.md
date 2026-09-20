@@ -1,5 +1,13 @@
 # End-to-end acceptance paths
 
+Future paths in [specification 10](../10-business-decisions-and-processes.md)
+are requirements, not observed tests: snapshot -> typed observations -> validated
+per-item evidence -> configured task plan -> persisted child set -> dispatch ->
+join. Failures include ambiguous request identity, stale spans, unauthorized
+children and an incomplete/failed join. Recovery preserves completed child work
+across redelivery and later correspondence. Dataset discovery ends at a reviewed
+candidate inventory and cannot acquire sources or invoke a model.
+
 Each CAP has a success path and rejected/interrupted path in the traceability register. Common state flow is validated input -> reserved staging/workspace -> backend/processing -> verified output -> atomic completed artifact; failure produces no completed artifact and records diagnostic evidence where a backend had started.
 
 First-run setup installs the isolated environment, acquires pinned assets, prepares separate diagnostic pools and verifies a receipt. Its offline rerun must perform no downloads. The general release path is fetch -> prepare -> optional quantize -> shared train -> evaluate -> merge -> customer customize -> evaluate -> merge -> export -> independent standard inference -> verify. Risk selection uses calibration predictions; audit uses untouched test predictions from the same profile. No deployment is performed. Docs and skills must describe the same executable path.

@@ -2,6 +2,11 @@
 
 Date: 2026-09-19. Status: exact public assets inspected and pinned; source adapters implemented. This note records source facts and conversion choices. It does not claim that public labels qualify Foliqant for financial production use.
 
+The separate [broader business-process dataset review](business-process-datasets.md)
+records banking/funds, insurance and public-sector candidates inspected on
+2026-09-20. They are not additional pinned sources, and do not change the current
+catalog, frozen runs or projections.
+
 The packaged catalog is `model/src/foliqant_model/curation/source-catalog-v1.json`, with SHA-256 `10432e0564195bbdda5453dc2648105897af7cd7a76dee1b44db93fa4e03ad29`. Its 25 files total 48,449,751 bytes (46.21 MiB). Every URL contains an immutable Git commit or Hugging Face revision; acquisition verifies the exact byte size and SHA-256 before parsing. No gated source, access-token flow, model weight, or paid service is required.
 
 ## Selected sources

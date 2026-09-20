@@ -338,6 +338,12 @@ request-cache identities plus bounded prior rejection feedback; oracle answers
 and hidden scenario labels are never feedback. Repeating the command resumes
 the child. Use the child path as the next `--repair-from` value for a later pass.
 
+If you repair before extending source projections, prepare a new projection
+plan with `--from-run` pointing to the completed repair child. A plan is bound
+to its exact parent; a plan prepared from an earlier continuation cannot be
+applied to a later repair child. Run repair and the 32-task extension pilot
+sequentially, retaining low reasoning and temperature `0.1`.
+
 Each authored seed declares which non-metadata state sources may be rewritten;
 all other sources and the complete question contract stay fixed. Ordinary
 authored cases expose all of their non-metadata sources. Whole-answer adequacy
@@ -354,6 +360,95 @@ uv run --no-sync foliqant-model verify /absolute/path/to/native-decisions
 
 After inspecting data quality and coverage, use that artifact with the existing
 [training workflow](train-and-customize.md). Generation never starts training.
+
+## Define categories with clear boundaries
+
+Use `choice` for one category and `multiselect` for several independently valid
+labels. Each option needs an `id` and a detailed `description`: state what belongs
+in it, what is excluded, and how it differs from neighboring categories.
+Question-level `criteria` explain the selection rule for the complete catalog.
+
+For new catalogs, validate your configuration with `CategoryCatalog` before
+building a question:
+
+```python
+from foliqant_model.curation.category_catalog import CategoryCatalog
+from foliqant_model.curation.decision_contracts import ChoiceQuestion
+
+catalog = CategoryCatalog.model_validate({
+    "categories": [
+        {
+            "id": "incident",
+            "description": (
+                "Reports an existing malfunction or unexpected behavior and asks "
+                "for it to be resolved. Excludes instructions requested without "
+                "a reported malfunction."
+            ),
+        },
+        {
+            "id": "information_request",
+            "description": (
+                "Asks for facts, documentation, or instructions. Excludes a "
+                "reported malfunction requiring repair and a pure confirmation."
+            ),
+        },
+        {
+            "id": "confirmation",
+            "description": (
+                "Only acknowledges or confirms an earlier statement or action; "
+                "does not add a new question, incident, or requested action."
+            ),
+        },
+    ],
+})
+question = ChoiceQuestion(
+    id="request_kind",
+    type="choice",
+    prompt="Which request kind does the current message express?",
+    criteria=[
+        "Use the category definitions and the message evidence.",
+        "If multiple categories apply, report multiple_valid_options; do not force a winner.",
+    ],
+    allowedSourceIds=["message"],
+    options=catalog.decision_options(),
+)
+```
+
+`CategoryCatalog` normalizes category IDs to lowercase snake_case:
+`Information Request` and `information-request` become `information_request`.
+Canonical IDs match `[a-z][a-z0-9]*(?:_[a-z0-9]+)*`. Collisions after normalization,
+unrepresentable IDs and whitespace-only descriptions are rejected. Descriptions can be
+English or German while the same English machine keys stay stable.
+See the [catalog schema](../../contracts/model/category-catalog.schema.json).
+The normalizer accepts printable ASCII IDs up to 128 characters, lowercases
+letters, replaces each run of punctuation/spaces with `_`, and removes outer
+separators. The result must start with a letter. Unicode letters and control
+characters in IDs require an explicit caller mapping; they are not silently
+discarded. The exported schema describes raw input: JSON Schema itself does not
+normalize values or check collisions after normalization.
+
+For independent labels, pass the same options to `MultiselectQuestion` and set
+`minSelections` and `maxSelections` explicitly. Keep topic, request kind and
+priority as separate questions when they represent different dimensions. Two
+labels may describe one request; two requests in the same category may require
+two `request_units` instead. Priority needs a supplied rubric. A deadline needs
+source evidence and, for relative dates, reference time and timezone; SLA
+arithmetic belongs in application code.
+
+Answers return your exact option IDs plus answerability, a concise explanation
+and citations. Resolve display descriptions from the original catalog rather
+than asking the model to regenerate them. `catalog.resolve_id(raw_id)` recovers
+formatting variants through the same normalization and checks exact membership;
+it rejects an unknown category instead of guessing. Validate the resulting output with
+`validate_decision_output` against its `DecisionInput`; syntactically valid IDs
+that are absent from the question catalog are still invalid. Current V1 attaches
+classification evidence to the question result, not individually to every label.
+
+Catalog validation is an authoring boundary. Existing V1 artifacts keep their
+original identifier rules, schemas and recipe identity so completed data can be
+verified, repaired and extended without renaming stored answers. Importing an
+external taxonomy into a new catalog requires an explicit collision-checked
+mapping; this helper does not migrate datasets or create a workflow service.
 
 ## Handle unreliable input in application code
 

@@ -1,5 +1,12 @@
 module_boundary_version: 1
 modules:
+  - module_id: business-process-target
+    owner: workflow-proposal
+    public_entrypoint: service/README.md
+    public_symbols: []
+    owned_concepts: [proposed-process-configuration, proposed-task-plan, proposed-child-lifecycle]
+    allowed_dependencies: [versioned-language-neutral-decision-contract, typed-adapter-ports]
+    forbidden_dependencies: [model-training-runtime, provider-sdk-in-core, transport-client-in-core]
   - module_id: acquisition
     owner: model-tooling
     public_entrypoint: model/src/foliqant_model/acquisition.py

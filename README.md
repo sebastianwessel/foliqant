@@ -4,6 +4,11 @@ Financial understanding. Decisions supported by evidence.
 
 Foliqant combines a reusable financial decision model with a configurable service for interpreting correspondence and documents. The model produces structured answers and evidence; deterministic workflow rules decide how those answers are used.
 
+The target scope includes banking and fund operations, insurance and public-sector
+processes. Multiple confirmed requests can lead to several configured tasks
+inside one process. This expanded [decision and process concept](specs/10-business-decisions-and-processes.md)
+is specified, not yet implemented in the workflow service.
+
 **Available now:** local setup, pinned public-source curation, data preparation,
 LoRA/QLoRA training, customer customization, evaluation, threshold selection,
 independent audit, and model export. The configurable workflow service remains

@@ -21,6 +21,16 @@ All public CLI paths have typed validated inputs, meaningful success/failure tes
 
 No checkpoint is selected as the production Foliqant winner by these specs. The smoke checkpoint is a compatibility fixture. Users select explicit pinned upstream weights for substantive experiments.
 
+## Business-process target extension
+
+The owner subsequently requested recording broader banking/funds, insurance and
+public-sector use cases, including one process branching into several tasks.
+[Specification 10](10-business-decisions-and-processes.md) owns that future
+decision/evidence/process design. Its current mandate is specifications and
+dataset research only; the lifecycle boundary above and active data-generation
+runs remain unchanged. It is not permission to deploy a workflow service,
+download new data, call additional models or assert production reliability.
+
 ## One-command setup
 
 The user additionally requires one command to prepare all model-development prerequisites: the isolated environment, pinned dataset downloads, pinned model weights, and local prepared inputs/configuration. Source datasets and weights stay outside version control; the default data workspace is outside the checkout. Committed files are manifests, hashes/revisions, downloader/preparation code, configurations, documentation and minimal code-created unit-test inputs. Setup is separate from training and must not silently start training, upload data, accept gated access terms or incur paid compute.

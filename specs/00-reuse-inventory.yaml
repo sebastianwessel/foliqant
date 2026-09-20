@@ -1,6 +1,33 @@
 reuse_inventory_version: 1
-discovery_revision: working-tree-2026-09-19-native-decision-spec
+discovery_revision: 7742096
 assets:
+  - asset_id: model.category-catalog
+    kind: schema
+    path: ../model/src/foliqant_model/curation/category_catalog.py
+    public_export: CategoryCatalog, CategoryDefinition, normalize_category_key
+    owner: native-decision-data
+    stability: experimental
+    consumers: [caller-question-authoring]
+    extension_policy: Reuse DecisionOption; normalize new keys and check collisions;
+      preserve V1 record readers and generation recipe identity.
+  - asset_id: model.native-decision-contract
+    kind: schema
+    path: ../model/src/foliqant_model/curation/decision_contracts.py
+    public_export: DecisionInput, DecisionOutput, Citation, RequestUnit, validate_decision_output
+    owner: native-decision-data
+    stability: versioned
+    consumers: [curation, future-business-decisions]
+    extension_policy: Preserve V1 and existing jobs; specify a new version before adding
+      per-label evidence, trusted thread metadata or extract. Do not duplicate task enums.
+  - asset_id: concept.workflow-service
+    kind: research
+    path: research/workflow-service-proposal.md
+    public_export: none; proposed workflow core and adapter boundaries
+    owner: workflow-proposal
+    stability: experimental
+    consumers: [future-process-branching]
+    extension_policy: Extend one parent with bounded configured children; no model-generated
+      graph or shared runtime dependency on Python training code.
   - asset_id: model.data-record-contract
     kind: schema
     path: ../model/src/foliqant_model/contracts/inputs.py

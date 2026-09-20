@@ -33,3 +33,9 @@ model-validation or quality-acceptance claim.
 
 Start with [the model-tool documentation](../README.md) or the focused
 [native decision-data guide](../guides/native-decision-data.md).
+
+For new category catalogs, it uses required descriptions, deterministic
+snake_case normalization, collision checks and exact output membership.
+Historical V1 artifacts and recipe identities remain unchanged. It also keeps
+synthetic support-ticket annotations distinct from human-reviewed evidence and
+does not treat a priority label as a due date or executable business policy.

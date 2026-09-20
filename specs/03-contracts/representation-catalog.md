@@ -6,8 +6,8 @@ in `model-contracts.md`; this file does not redefine them.
 
 ## Generation and ownership
 
-- Canonical source: typed closed classes in
-  `model/src/foliqant_model/contracts/__init__.py`.
+- Canonical source: typed closed classes registered in
+  `model/src/foliqant_model/schemas.py`, from `contracts/` and `curation/`.
 - Generated representations: one Draft 2020-12 JSON Schema per root shape in
   `contracts/model/`, produced only by `foliqant-model schema --output`.
 - Drift check: `foliqant-model schema --check contracts/model` compares
@@ -23,6 +23,7 @@ in `model-contracts.md`; this file does not redefine them.
 
 | Representation | Wire occurrence | Producer | Consumers | Mapping |
 |---|---|---|---|---|
+| `CategoryCatalog` | caller-authored configuration | application author | native question builder | deterministic key-format normalization; reject collisions; preserve descriptions; convert to existing `DecisionOption` values; no change to historical V1 artifacts |
 | `ChatMessage` | source JSONL inside `DataRecord` | data owner | prepare, evaluation prompt builder | identity after NFC/LF normalization for hashes; original validated text is retained |
 | `DataRecord` | source JSONL and prepared full-record JSONL | data owner / prepare | prepare, train preflight, evaluation | source object to validated closed record; chat-only training row removes metadata and retains messages |
 | `SourceDeclaration` | `DatasetConfig.sources[]` | operator | prepare rights gate | path resolves relative to config; durable mapping is `ResolvedSourceDeclaration` plus top-level `SourceRight` |

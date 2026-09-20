@@ -2,6 +2,14 @@
 
 Date: 2026-09-19. Status: proposal, not implemented or benchmarked.
 
+2026-09-20 concept update: [business decisions and process branching](../10-business-decisions-and-processes.md)
+is the target extension for banking/funds, insurance and public administration.
+It preserves existing single-choice, multilabel and request-instance semantics,
+adds precise evidence/thread/extraction design, and separates one parent process
+from its configured child tasks. It does not claim trained capability or runtime
+implementation. [Broader-domain source research](business-process-datasets.md)
+distinguishes operational correspondence from financial QA and market sentiment.
+
 Current refinement: [input answerability and evidence-backed decisions](input-answerability-and-reliability.md) defines the proposed state-plus-typed-questions contract, complete request handling, reasoning, and separate input-sufficiency and answer-adequacy estimates. It supersedes interpreting confidence as a token-score property alone. [Answerability research](confidence-answerability-research.md) and [risk methods](confidence-risk-methods.md) record the primary evidence and limitations.
 
 Separate research tracks (2026-09-20): [rubric-based evaluations](../../plans/research/evaluation-workstream.md)
@@ -73,6 +81,13 @@ For large catalogs, retrieve candidate categories first, then let the model comp
 Use multiple catalogs during training, with renamed and previously unseen categories in evaluation. Shuffle category order and transient option IDs to detect position bias. This teaches matching by meaning rather than memorizing `category_17` or “go to step 9.”
 
 ## 3. Proposed processing architecture
+
+Several confirmed requests may create several child tasks under one process
+instance. The model supplies observations, not executable branches. Configuration
+owns task selection, dependency/concurrency limits and joins; host code owns
+persistent request identities, authorization, retries and idempotency. A later
+withdrawal revises the analysis without replaying completed work. See
+[the process contract](../10-business-decisions-and-processes.md#one-parent-process-with-bounded-child-tasks).
 
 ```text
 Trusted mail ingestion and attachment extraction

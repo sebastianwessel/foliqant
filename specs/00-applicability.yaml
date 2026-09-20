@@ -1,5 +1,16 @@
 applicability_version: 1
 concerns:
+  - concern_id: business_process_target_design
+    status: applicable
+    scope_refs: [CAP-BUSINESS-DECISIONS, CAP-PROCESS-BRANCHING, CAP-DOMAIN-DATA]
+    rationale: Specification 10 defines future evidence/thread/extraction, task fan-out,
+      join/recovery, privacy and dataset rights; this is authoring, not runtime implementation.
+  - concern_id: business_concept_deployment
+    status: not_applicable
+    scope_refs: [CAP-BUSINESS-DECISIONS, CAP-PROCESS-BRANCHING, CAP-DOMAIN-DATA]
+    rationale: No UI, hosted endpoint, webhook, broker, cloud provisioning or training
+      is implemented in this authoring slice. Runtime trust and durability remain
+      explicit readiness items in specification 10, not permanent exemptions.
   - concern_id: contracts
     status: applicable
     scope_refs:

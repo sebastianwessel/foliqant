@@ -3,6 +3,20 @@ default_allowed_classes:
   - D0
   - D1
 decisions:
+  - decision_id: DEC-CATEGORY-CATALOG-AUTHORING
+    class: D2
+    authority: project owner requested detailed category descriptions and deterministic
+      snake_case normalization of recoverable key formatting with collision checks
+    scope_refs: [CAP-NATIVE-DATA, CAP-BUSINESS-DECISIONS]
+    source_refs: [09-native-decision-data.md, 10-business-decisions-and-processes.md]
+    status: additive authoring implementation; immutable V1 schemas and recipe identities preserved
+  - decision_id: DEC-BUSINESS-PROCESS-CONCEPT
+    class: D2
+    authority: project owner accepted the proposal and requested specs, concept
+      and dataset research; exact implementation contracts require later review
+    scope_refs: [CAP-BUSINESS-DECISIONS, CAP-PROCESS-BRANCHING, CAP-DOMAIN-DATA]
+    source_refs: [10-business-decisions-and-processes.md, research/business-process-datasets.md]
+    status: direction accepted; target specification proposed; no implementation or formal readiness approval
   - decision_id: DEC-MODEL-LIFECYCLE
     class: D2
     authority: project-owner implementation mandate; architecture author proposes,

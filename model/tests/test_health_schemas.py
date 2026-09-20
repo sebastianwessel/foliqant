@@ -12,6 +12,7 @@ from foliqant_model.schemas import SCHEMAS, export_schemas
 CURATION_SCHEMAS = {
     "candidate-job.schema.json",
     "candidate-outcome.schema.json",
+    "category-catalog.schema.json",
     "curation-config.schema.json",
     "curation-plan.schema.json",
     "frozen-family-assignment.schema.json",

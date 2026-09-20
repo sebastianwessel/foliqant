@@ -1,5 +1,7 @@
 registry_version: 1
 contracts:
+  - id: CONTRACT-BUSINESS-PROCESS-TARGET
+    path: 10-business-decisions-and-processes.md
   - id: CONTRACT-MODEL-V1
     path: 03-contracts/model-contracts.md
   - id: CONTRACT-SETUP-V1
@@ -9,6 +11,12 @@ contracts:
   - id: CONTRACT-NATIVE-DECISION-V1
     path: 09-native-decision-data.md
 capabilities:
+  - id: CAP-BUSINESS-DECISIONS
+    path: 10-business-decisions-and-processes.md
+  - id: CAP-PROCESS-BRANCHING
+    path: 10-business-decisions-and-processes.md
+  - id: CAP-DOMAIN-DATA
+    path: 10-business-decisions-and-processes.md
   - id: CAP-ENV
     path: 02-capabilities/capability-inventory.md
   - id: CAP-DATA

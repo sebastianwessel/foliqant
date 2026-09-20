@@ -2,6 +2,12 @@
 
 Date: 2026-09-19. Status: research recommendation, not an implemented API, trained capability, or production qualification. This extends the [model concept](model-research.md). Supporting reviews cover [answerability research](confidence-answerability-research.md) and [statistical risk methods](confidence-risk-methods.md).
 
+2026-09-20 target refinement: [specification 10](../10-business-decisions-and-processes.md)
+records per-label/value evidence, host-resolved source spans, explicit ordered
+thread snapshots, bounded extraction and one process with multiple child tasks.
+These additions remain unimplemented. Existing V1 curation retains its exact
+contract, source snapshots and artifact identities.
+
 ## 1. Product decision
 
 Foliqant should answer **typed questions about supplied state**, with caller-defined options, predicates, and score rubrics. Its distinctive reliability feature should assess whether that state supports answering the question completely. It must not equate a concentrated model distribution with sufficient information.

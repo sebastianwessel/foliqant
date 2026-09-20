@@ -1,5 +1,11 @@
 # File and ownership structure
 
+Future business-process semantics live in `10-business-decisions-and-processes.md`;
+candidate sources and their limitations live in `research/business-process-datasets.md`.
+These documents add no runtime module or executable download profile. The proposed
+service core remains separate from model tooling; exact future schema generation
+and module contracts must be settled before implementation.
+
 Scoped native source preparation lives in `curation/source_projections.py`
 (pure adapters), `projection_contracts.py` (closed plan/report contracts),
 `projection_preparation.py` (offline immutable snapshots and selection), and

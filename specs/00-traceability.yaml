@@ -1,5 +1,17 @@
 traceability_version: 1
 requirements:
+  - requirement_id: REQ-BUSINESS-DECISIONS
+    capability_ids: [CAP-BUSINESS-DECISIONS]
+    path_ids: [PATH-BUSINESS-DECISIONS-SUCCESS, PATH-BUSINESS-DECISIONS-FAILURE]
+    acceptance_ids: [ACCEPT-BUSINESS-DECISIONS]
+  - requirement_id: REQ-PROCESS-BRANCHING
+    capability_ids: [CAP-PROCESS-BRANCHING]
+    path_ids: [PATH-PROCESS-BRANCHING-SUCCESS, PATH-PROCESS-BRANCHING-FAILURE]
+    acceptance_ids: [ACCEPT-PROCESS-BRANCHING]
+  - requirement_id: REQ-DOMAIN-DATA
+    capability_ids: [CAP-DOMAIN-DATA]
+    path_ids: [PATH-DOMAIN-DATA-SUCCESS, PATH-DOMAIN-DATA-FAILURE]
+    acceptance_ids: [ACCEPT-DOMAIN-DATA]
   - requirement_id: REQ-SETUP
     capability_ids:
       - CAP-SETUP
@@ -97,6 +109,15 @@ requirements:
     acceptance_ids:
       - ACCEPT-NATIVE-DATA
 capabilities:
+  - capability_id: CAP-BUSINESS-DECISIONS
+    requirement_ids: [REQ-BUSINESS-DECISIONS]
+    path_ids: [PATH-BUSINESS-DECISIONS-SUCCESS, PATH-BUSINESS-DECISIONS-FAILURE]
+  - capability_id: CAP-PROCESS-BRANCHING
+    requirement_ids: [REQ-PROCESS-BRANCHING]
+    path_ids: [PATH-PROCESS-BRANCHING-SUCCESS, PATH-PROCESS-BRANCHING-FAILURE]
+  - capability_id: CAP-DOMAIN-DATA
+    requirement_ids: [REQ-DOMAIN-DATA]
+    path_ids: [PATH-DOMAIN-DATA-SUCCESS, PATH-DOMAIN-DATA-FAILURE]
   - capability_id: CAP-SETUP
     requirement_ids:
       - REQ-SETUP
@@ -166,6 +187,42 @@ capabilities:
       - REQ-NATIVE-DATA
     path_ids: *native_paths
 paths:
+  - path_id: PATH-BUSINESS-DECISIONS-SUCCESS
+    capability_ids: [CAP-BUSINESS-DECISIONS]
+    requirement_ids: [REQ-BUSINESS-DECISIONS]
+    kind: success
+    contract_refs: [CONTRACT-BUSINESS-PROCESS-TARGET]
+    acceptance_ids: [ACCEPT-BUSINESS-DECISIONS]
+  - path_id: PATH-BUSINESS-DECISIONS-FAILURE
+    capability_ids: [CAP-BUSINESS-DECISIONS]
+    requirement_ids: [REQ-BUSINESS-DECISIONS]
+    kind: failure
+    contract_refs: [CONTRACT-BUSINESS-PROCESS-TARGET]
+    acceptance_ids: [ACCEPT-BUSINESS-DECISIONS]
+  - path_id: PATH-PROCESS-BRANCHING-SUCCESS
+    capability_ids: [CAP-PROCESS-BRANCHING]
+    requirement_ids: [REQ-PROCESS-BRANCHING]
+    kind: success
+    contract_refs: [CONTRACT-BUSINESS-PROCESS-TARGET]
+    acceptance_ids: [ACCEPT-PROCESS-BRANCHING]
+  - path_id: PATH-PROCESS-BRANCHING-FAILURE
+    capability_ids: [CAP-PROCESS-BRANCHING]
+    requirement_ids: [REQ-PROCESS-BRANCHING]
+    kind: failure
+    contract_refs: [CONTRACT-BUSINESS-PROCESS-TARGET]
+    acceptance_ids: [ACCEPT-PROCESS-BRANCHING]
+  - path_id: PATH-DOMAIN-DATA-SUCCESS
+    capability_ids: [CAP-DOMAIN-DATA]
+    requirement_ids: [REQ-DOMAIN-DATA]
+    kind: success
+    contract_refs: [CONTRACT-BUSINESS-PROCESS-TARGET]
+    acceptance_ids: [ACCEPT-DOMAIN-DATA]
+  - path_id: PATH-DOMAIN-DATA-FAILURE
+    capability_ids: [CAP-DOMAIN-DATA]
+    requirement_ids: [REQ-DOMAIN-DATA]
+    kind: failure
+    contract_refs: [CONTRACT-BUSINESS-PROCESS-TARGET]
+    acceptance_ids: [ACCEPT-DOMAIN-DATA]
   - path_id: PATH-SETUP-FAILURE
     capability_ids:
       - CAP-SETUP
@@ -413,6 +470,21 @@ paths:
     acceptance_ids:
       - ACCEPT-NATIVE-DATA
 acceptance:
+  - acceptance_id: ACCEPT-BUSINESS-DECISIONS
+    requirement_ids: [REQ-BUSINESS-DECISIONS]
+    path_ids: [PATH-BUSINESS-DECISIONS-SUCCESS, PATH-BUSINESS-DECISIONS-FAILURE]
+    verification_refs:
+      - 10-business-decisions-and-processes.md#data-and-acceptance
+  - acceptance_id: ACCEPT-PROCESS-BRANCHING
+    requirement_ids: [REQ-PROCESS-BRANCHING]
+    path_ids: [PATH-PROCESS-BRANCHING-SUCCESS, PATH-PROCESS-BRANCHING-FAILURE]
+    verification_refs:
+      - 10-business-decisions-and-processes.md#data-and-acceptance
+  - acceptance_id: ACCEPT-DOMAIN-DATA
+    requirement_ids: [REQ-DOMAIN-DATA]
+    path_ids: [PATH-DOMAIN-DATA-SUCCESS, PATH-DOMAIN-DATA-FAILURE]
+    verification_refs:
+      - 10-business-decisions-and-processes.md#data-and-acceptance
   - acceptance_id: ACCEPT-SETUP
     requirement_ids:
       - REQ-SETUP

@@ -3,6 +3,12 @@ allowed_default_refs:
   - POL-LOCAL-REVERSIBLE
   - POL-NATIVE-DATA-LOCAL
 profiles:
+  - id: POL-BUSINESS-CONCEPT-RESEARCH
+    source: project-owner request to record broader business decisions and one-process
+      multi-task branching, and research domain datasets using agents
+    defaults: specification and primary-source research only; no downloads, inference,
+      active-run mutation, new executable source manifests or production claims
+    status: authoring mandate; implementation details and dataset adoption require review
   - id: POL-LOCAL-REVERSIBLE
     source: 'user goal: implement model building/fine-tuning, specs first, autonomous
       agents, review and cleanup'

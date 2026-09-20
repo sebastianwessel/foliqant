@@ -310,6 +310,17 @@ remain different questions.
 
 ### Typed questions
 
+New caller-authored category catalogs use the additive `CategoryCatalog`
+contract in `foliqant_model.curation.category_catalog` and its generated
+`category-catalog.schema.json`: IDs deterministically normalized to unique
+lowercase snake_case keys, collisions rejected, and nonblank
+descriptions. `decision_options()` converts these definitions to the existing
+option representation without changing text. This authoring boundary preserves
+V1 message schemas, historical source IDs and frozen recipe identities; it does
+not retroactively rename existing category answers. Detailed catalog and support
+task semantics are recorded in
+[the business decision concept](10-business-decisions-and-processes.md#category-catalogs-and-support-decisions).
+
 Each question has a caller-stable `id`, `type`, nonempty `prompt`, a nonempty
 unique list of `criteria` strings, and `allowedSourceIds`. Type-specific fields
 and typed answer objects are:

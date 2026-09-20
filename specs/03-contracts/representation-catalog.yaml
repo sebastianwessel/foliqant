@@ -14,6 +14,33 @@ applicability:
     - CAP-CURATE
     - CAP-NATIVE-DATA
 shapes:
+  - shape_id: model.category-catalog
+    representation_class: command
+    canonical_source: ../model/src/foliqant_model/curation/category_catalog.py
+    owner: curation-module
+    stability: experimental
+    open_policy: closed
+    allowed_consumers: [caller-question-authoring]
+    source_contract_refs: [CONTRACT-NATIVE-DECISION-V1]
+    mapping_refs: [MAP-CATEGORY-OPTIONS]
+  - shape_id: business.decision-observations
+    representation_class: domain
+    canonical_source: 10-business-decisions-and-processes.md#evidence-and-explanations
+    owner: business-decision-target
+    stability: experimental
+    open_policy: closed
+    allowed_consumers: [future-process-core, future-data-curation]
+    source_contract_refs: [CONTRACT-BUSINESS-PROCESS-TARGET]
+    mapping_refs: [MAP-BUSINESS-TASK-PLAN]
+  - shape_id: business.process-task-plan
+    representation_class: persistence
+    canonical_source: 10-business-decisions-and-processes.md#one-parent-process-with-bounded-child-tasks
+    owner: workflow-proposal
+    stability: experimental
+    open_policy: closed
+    allowed_consumers: [future-process-core, future-dispatch-adapter]
+    source_contract_refs: [CONTRACT-BUSINESS-PROCESS-TARGET]
+    mapping_refs: [MAP-BUSINESS-TASK-PLAN]
   - shape_id: model.data-record
     representation_class: domain
     canonical_source: 03-contracts/model-contracts.md#data-input
@@ -451,6 +478,32 @@ shapes:
     mapping_refs:
       - MAP-SCOPED-SOURCE-PROJECTION
 mappings:
+  - mapping_id: MAP-CATEGORY-OPTIONS
+    from_shape: model.category-catalog
+    to_shape: model.decision-input
+    direction: custom
+    allowed_differences: [category-key-format-normalized]
+    redaction_or_loss_policy: Normalize new category formatting with collision checks;
+      preserve descriptions and reject unknown output keys. Never rewrite historical V1 artifacts.
+    field_operations:
+      - category-id:normalize-and-check-unique
+      - description:preserve
+      - categories:convert-to-existing-decision-options
+    verification: [model/tests/test_category_catalog.py]
+  - mapping_id: MAP-BUSINESS-TASK-PLAN
+    from_shape: business.decision-observations
+    to_shape: business.process-task-plan
+    direction: boundary_to_persistence
+    allowed_differences: [host-owned-action-identities, configured-task-definitions, rule-audit-reasons]
+    redaction_or_loss_policy: Proposed only; no generator or wire schema exists. Preserve
+      every request obligation, evidence revision and exclusion/review reason. Model prose
+      is never executable policy; future schema/generation map must be frozen before implementation.
+    field_operations:
+      - request-instances:validate-and-reconcile-to-host-identities
+      - confirmed-requests:map-through-allowlisted-process-configuration
+      - conditional-or-unresolved-requests:hold-until-policy-resolves
+      - complete-child-set:persist-before-dispatch
+    verification: [specs/10-business-decisions-and-processes.md#data-and-acceptance]
   - mapping_id: MAP-SCOPED-SOURCE-PROJECTION
     from_shape: model.curation-plan
     to_shape: model.source-projection-plan

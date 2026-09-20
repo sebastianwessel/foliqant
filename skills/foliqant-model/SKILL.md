@@ -14,6 +14,12 @@ For setup, automated curation, source configuration and recovery, read
 For training, evaluation, risk policy, merging and export, read
 [references/model-lifecycle.md](references/model-lifecycle.md).
 
+For new classification catalogs, use `CategoryCatalog` from
+`foliqant_model.curation.category_catalog`: detailed descriptions, deterministic
+lowercase snake_case IDs, and collision rejection. Keep immutable V1 data and
+generation identities unchanged. See the category guidance in
+[setup and data](references/setup-and-data.md#category-catalogs).
+
 Keep source datasets, weights, adapters and run outputs outside Git. The default
 workspace is `~/.local/share/foliqant`; a chosen project-local workspace must be
 ignored. Keep pinned source manifests, recipes and preparation code in Git.

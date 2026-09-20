@@ -14,7 +14,8 @@ or acceptance review has run.
 
 - Original baseline commit: `301516d`.
 - Implement and review in an independent worktree. Do not modify the original
-  checkout.
+  checkout while its generator is active. The parent has now completed; the
+  owner authorized committing and merging the verified work into `main`.
 - Reuse only the exact frozen source snapshots, source-family assignments and
   splits from the selected native run. Do not download, replace or resplit data.
 - During implementation and offline verification, make no LLM endpoint request,
