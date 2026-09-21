@@ -6,8 +6,10 @@ import subprocess
 from pathlib import Path
 from typing import cast
 
+from examples.extracted_request_mcp import offline
 from examples.extracted_request_mcp.evaluate import dataset, run_evaluations
 from examples.extracted_request_mcp.run import CONFIG_PATH, DEMO_PAYLOAD, run_example
+from pydantic_ai.messages import ModelResponse, TextPart
 
 from foliqant import prepare_application
 from foliqant.core.json import JsonValue
@@ -60,6 +62,7 @@ async def test_scripted_extraction_calls_real_mcp_without_envelope_leak() -> Non
 
 async def test_en_de_pipeline_and_isolated_step_evaluations(tmp_path: Path) -> None:
     gold = dataset()
+    assert gold.revision == "2"
     assert [(spec.step, len(spec.gold_cases)) for spec in gold.suites] == [
         (None, 2),
         ("extract", 2),
@@ -78,6 +81,59 @@ async def test_en_de_pipeline_and_isolated_step_evaluations(tmp_path: Path) -> N
     reports = json.loads(Path(report_path).read_text())["reports"]
     assert [report["target_step"] for report in reports] == [None, "extract", "lookup"]
     assert all(report["case_pass_rate"] == 1 for report in reports)
+
+
+async def test_summary_wording_is_not_gold_but_structured_fields_remain_gold(
+    tmp_path: Path, monkeypatch
+) -> None:
+    original = offline.scripted_response
+
+    def response_with(**changes: str):  # type: ignore[no-untyped-def]
+        def respond(messages, info):  # type: ignore[no-untyped-def]
+            response = original(messages, info)
+            part = response.parts[0]
+            assert isinstance(part, TextPart)
+            value = json.loads(part.content)
+            extracted = value["value"]
+            extracted["internal_summary"] = (
+                "A different valid summary of the same synthetic request."
+            )
+            extracted.update(changes)
+            return ModelResponse(parts=[TextPart(json.dumps(value))])
+
+        return respond
+
+    monkeypatch.setattr(offline, "scripted_response", response_with())
+    valid = await run_evaluations(output=tmp_path / "varied-summary.json")
+    assert valid["ok"] is True
+
+    def wrong_structured_fields(messages, info):  # type: ignore[no-untyped-def]
+        response = original(messages, info)
+        part = response.parts[0]
+        assert isinstance(part, TextPart)
+        value = json.loads(part.content)
+        extracted = value["value"]
+        if extracted["language"] == "en":
+            extracted["reference"] = "FOI-2026-9999"
+        else:
+            extracted["language"] = "en"
+        return ModelResponse(parts=[TextPart(json.dumps(value))])
+
+    monkeypatch.setattr(offline, "scripted_response", wrong_structured_fields)
+    invalid = await run_evaluations(output=tmp_path / "wrong-structured-fields.json")
+    assert invalid["ok"] is False
+    reports = json.loads(Path(cast(str, invalid["report"])).read_text())["reports"]
+    failures = {
+        (report["target_step"], case["id"], check["name"])
+        for report in reports
+        for case in report["cases"]
+        for check in case["checks"]
+        if check["outcome"] == "failed"
+    }
+    assert (None, "english_request", "reference") in failures
+    assert ("extract", "english_request", "reference") in failures
+    assert (None, "german_request", "language") in failures
+    assert ("extract", "german_request", "language") in failures
 
 
 def test_default_command_is_offline_except_for_bundled_stdio_mcp() -> None:

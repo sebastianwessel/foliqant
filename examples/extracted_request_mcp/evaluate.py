@@ -29,7 +29,6 @@ _CASES: tuple[dict[str, str], ...] = (
         "language": "en",
         "email": "private-en@example.test",
         "reference": "FOI-2026-0142",
-        "summary": "English request-status lookup.",
         "due_date": "2026-10-05",
     },
     {
@@ -38,7 +37,6 @@ _CASES: tuple[dict[str, str], ...] = (
         "language": "de",
         "email": "private-de@example.test",
         "reference": "FOI-2026-0310",
-        "summary": "Deutsche Statusabfrage.",
         "due_date": "05.10.2026",
     },
 )
@@ -57,7 +55,7 @@ def _lookup_expectations(case: dict[str, str]) -> tuple[Expectation, ...]:
 def _pipeline_suite() -> EvaluationSuite:
     return EvaluationSuite(
         "extracted_request_lookup",
-        "1",
+        "2",
         tuple(
             EvaluationCase(
                 case["id"],
@@ -70,11 +68,6 @@ def _pipeline_suite() -> EvaluationSuite:
                 ),
                 _lookup_expectations(case)
                 + (
-                    Expectation(
-                        "internal_summary",
-                        "/decisions/extract/result/internal_summary",
-                        case["summary"],
-                    ),
                     Expectation("one_model", "/execution/usage/model_requests", 1),
                     Expectation("one_tool", "/execution/usage/tool_calls", 1),
                 ),
@@ -87,7 +80,7 @@ def _pipeline_suite() -> EvaluationSuite:
 def _extract_suite() -> EvaluationSuite:
     return EvaluationSuite(
         "extracted_request_extract",
-        "1",
+        "2",
         tuple(
             EvaluationCase(
                 case["id"],
@@ -96,7 +89,6 @@ def _extract_suite() -> EvaluationSuite:
                     Expectation("completed", "/execution/status", "completed"),
                     Expectation("reference", "/payload/reference", case["reference"]),
                     Expectation("language", "/payload/language", case["language"]),
-                    Expectation("internal_summary", "/payload/internal_summary", case["summary"]),
                     Expectation("one_model", "/execution/usage/model_requests", 1),
                     Expectation("no_tool", "/execution/usage/tool_calls", 0),
                 ),
@@ -132,7 +124,7 @@ def dataset() -> EvaluationDataset:
         {
             "version": 1,
             "name": "extracted_request_mcp_examples",
-            "revision": "1",
+            "revision": "2",
             "suites": [
                 suite_document(_pipeline_suite(), workflow="extracted_request_lookup"),
                 suite_document(

@@ -17,9 +17,10 @@ arguments:
 ```
 
 The extraction's `internal_summary` remains available in the execution result
-for the current invocation but is not sent to MCP. The final payload is the
-validated tool result. No state, conversation history, or result survives the
-call.
+for the current invocation but is not sent to MCP. Its schema is validated, but
+the evaluation does not score arbitrary summary wording as an exact string or
+measure its semantic faithfulness. The final payload is the validated tool
+result. No state, conversation history, or result survives the call.
 
 Run the default scripted model with the bundled real MCP server:
 
