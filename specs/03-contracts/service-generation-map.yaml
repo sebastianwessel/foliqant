@@ -2,6 +2,16 @@ generation_map_version: 1
 contract_ref: CONTRACT-SERVICE-V1
 authority: ../11-workflow-service.md
 entries:
+  - id: GEN-SERVICE-DEPLOYMENT
+    canonical_source: ../../service/src/foliqant/contracts/deployment.py
+    generated_outputs: [../../contracts/service/deployment.schema.json]
+    command: uv run --project service python service/scripts/generate_schemas.py
+    drift_check: uv run --project service python service/scripts/generate_schemas.py --check
+    handwritten_remainder:
+      - path confinement, offline compilation, immutable snapshots and secret-free effective revisions
+      - loopback development policy, workflow grants and signature verification with bounded JWKS caching
+      - asynchronous lifecycle, admission, handler schema validation and transport cancellation
+    verification: [../../service/tests/test_bootstrap.py, ../../service/tests/test_auth.py, ../../service/tests/test_http.py, ../../service/tests/test_application_http.py, ../../service/tests/test_cli.py, ../../service/tests/test_server_lifespan.py]
   - id: GEN-SERVICE-TELEMETRY
     canonical_source: ../../service/src/foliqant/contracts/telemetry.py
     generated_outputs: [../../contracts/service/telemetry.schema.json]

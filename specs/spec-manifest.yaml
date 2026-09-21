@@ -1,5 +1,5 @@
 spec_manifest_version: 1
-content_digest: sha256:9690171de49220aefd6e90cfd74e8a4e4e1f83673b9d6d9012b3ee9cd9bab0a0
+content_digest: sha256:3c0587100aa87bcdc10da78a0e69e07219804c42bfdf7c2032638fcb55a51523
 artifacts:
   - path: 00-applicability.yaml
     sha256: sha256:0982cb434f46a6d2f83f2544fce27c7b24644696210c0af23954ead564a3bf48
@@ -36,7 +36,7 @@ artifacts:
   - path: 03-contracts/representation-catalog.yaml
     sha256: sha256:99061414c844951f37f72a1cc22b786b8634266fa4bf0fa92ac83ce10ab842bc
   - path: 03-contracts/service-generation-map.yaml
-    sha256: sha256:f2bfac467f4060e539408531b3b80e5caafc1067f2a826b8e644c83fe582c3cc
+    sha256: sha256:1b94e813cd6df60fa637fddc3c8760b1008cfaea50d6f10e4c678a3563c2f972
   - path: 03-flows/e2e-coverage.md
     sha256: sha256:1ee8fa604489b1a729218059cc8d6eee26728b4c5f2884c5123f705124d330f7
   - path: 04-operations/security-release.md
@@ -54,7 +54,7 @@ artifacts:
   - path: 10-business-decisions-and-processes.md
     sha256: sha256:4c787f27dfd46cc4216cd955a50677985a8c4ab559f6503e9b02454c2929e4ce
   - path: 11-workflow-service.md
-    sha256: sha256:0dfc125976bd0a394853efdb41d9e2a996ea16ac97809a3a00b5dcbe5b80b3a1
+    sha256: sha256:46f1ecba5f7d250f83c9c89e127bca3cbf6c661b07abeb6acf053ecf0a659afe
   - path: README.md
     sha256: sha256:f3821193e712d036e87566012fbc044f85b92c52205b2317297ff505247a4dd3
   - path: _registry.yaml
@@ -90,6 +90,6 @@ artifacts:
   - path: research/workflow-service-proposal.md
     sha256: sha256:c822ff78eaa2a9ae2c64105b781e02a45c485fa333a48a4098232fe5fa14a2ac
 provenance:
-  source_revision: working-tree-1bf6a8d-telemetry
-  generated_at: 2026-09-21T11:55:37.369Z
+  source_revision: working-tree-5d42dce-bootstrap-http
+  generated_at: 2026-09-21T12:36:47.865Z
   generator: spec-manifest/v1

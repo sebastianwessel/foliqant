@@ -8,15 +8,35 @@ description: "Build and test Foliqant workflow bundles and embedded async servic
 Use the [service guide](../../service/README.md) and
 [offline example](../../examples/embedded-workflow/README.md) and
 [model-enabled inbox example](../../examples/inbox/README.md) as the
-implemented API authority. The service is still under implementation: the
-embedded runner, model executor and read-only MCP adapters work, but a deployable
-CLI, durable transports and recovery are not yet available. Never present planned commands or
-production guarantees as working features.
+implemented API authority. The CLI/bootstrap and authenticated synchronous HTTP
+boundary are implemented alongside the embedded runner, model executor, read-only
+MCP adapters, and safe telemetry. Durable jobs, HTTP retrieval/cancellation,
+database/broker recovery, child workflows, and reconciled writes are not
+implemented. Never present those planned capabilities as working features.
 
 Keep the service in its own uv project and environment. Select only needed extras
 for production; use the dev group for testing. Never import training or curation
 packages. Native decision types and semantic validation come from the shared
 `foliqant_decisions` package, not a duplicated schema or `foliqant_model`.
+
+## Deployment and ingress
+
+For `foliqant.yaml`, CLI, bootstrap, or HTTP work, read
+[deployment and HTTP](references/deployment-http.md). Treat YAML as a strict
+versioned contract: do not add implicit environment substitution, endpoint
+discovery, executable imports, or compatibility aliases.
+
+Keep authentication, workflow access, and business permission distinct. An
+authenticator establishes immutable optional identity and configuration-owned
+workflow grants. Body metadata and JWT claims never grant workflow access. Once
+a workflow is granted, its compiled MCP allowlist still permits only declared
+read tools by default. A host-supplied `RuntimePlugins.tool_authorizer` must add
+resource-specific business checks for deployments that need them; it receives
+trusted identity and validated frozen arguments for every call.
+
+`run` and HTTP execute synchronously through the nondurable in-process runner.
+Do not add detached background tasks or describe 202 acceptance, job retrieval,
+cancellation, restart recovery, or write reconciliation as available.
 
 ## Workflow and runtime boundaries
 
@@ -66,12 +86,13 @@ Missing token measurements remain unknown. Bedrock remains incomplete; do not
 imply it is ready because its dependencies or contracts exist.
 
 For MCP, reuse `McpProfiles` and the existing `DeclaredToolCatalog`. Construct
-`McpClientSessionFactory` once and inject it plus a required host `ToolAuthorizer`
-into `McpRuntime`. Use `McpExecutor` for explicit calls or inject the runtime into
-`ModelExecutor(..., tools=runtime)`. `supports_tools` is a model capability, not
-permission. Every step allowlists tools and every call reauthorizes its frozen
-arguments against the current trusted identity. Do not share authenticated SDK
-clients or mutable token state between callers.
+`McpClientSessionFactory` once and inject it plus a `ToolAuthorizer` into
+`McpRuntime`. Bootstrap supplies a declared-read policy; a host can inject a
+stricter authorizer through `RuntimePlugins`. Use `McpExecutor` for explicit calls
+or inject the runtime into `ModelExecutor(..., tools=runtime)`. `supports_tools`
+is a model capability, not permission. Every step allowlists tools and every call
+reauthorizes its frozen arguments against the current trusted identity. Do not
+share authenticated SDK clients or mutable token state between callers.
 
 Catalog schema drift, duplicate names, pagination cycles and oversized catalogs
 fail closed. Tool results use declared schema validation; nontext blocks are not
@@ -80,7 +101,7 @@ model context, then allow final output. Automatic interaction/retry rounds are
 disabled. MCP input-required becomes `needs_review`; interactive continuation and
 write-effect execution await durable identity/reconciliation support.
 
-HTTP auth profiles contain a registered credential-hook ID, never a token. Use
+MCP HTTP auth profiles contain a registered credential-hook ID, never a token. Use
 `SdkOAuthCredentialProvider` with explicit allowed HTTPS authorization origins
 and a host storage factory partitioned by the complete credential scope, with
 protection at rest. Interactive callbacks are for explicit operator login only;

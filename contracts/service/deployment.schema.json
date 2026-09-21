@@ -1,0 +1,1507 @@
+{
+  "$defs": {
+    "AnthropicModelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "api_key_env": {
+          "default": "ANTHROPIC_API_KEY",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Api Key Env",
+          "type": "string"
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "model": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Model",
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/AnthropicOptions"
+        },
+        "output_mode": {
+          "enum": [
+            "native",
+            "tool"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "provider": {
+          "const": "anthropic",
+          "title": "Provider",
+          "type": "string"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "supports_json_schema": {
+          "default": true,
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "supports_text": {
+          "default": true,
+          "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "output_mode",
+        "provider"
+      ],
+      "title": "AnthropicModelConfig",
+      "type": "object"
+    },
+    "AnthropicOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effort"
+        },
+        "max_tokens": {
+          "default": 4096,
+          "maximum": 1048576,
+          "minimum": 1,
+          "title": "Max Tokens",
+          "type": "integer"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "thinking": {
+          "anyOf": [
+            {
+              "enum": [
+                "disabled",
+                "adaptive"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thinking"
+        },
+        "thinking_budget": {
+          "anyOf": [
+            {
+              "minimum": 1024,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thinking Budget"
+        },
+        "top_p": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top P"
+        }
+      },
+      "title": "AnthropicOptions",
+      "type": "object"
+    },
+    "AzureModelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "api": {
+          "enum": [
+            "chat",
+            "responses"
+          ],
+          "title": "Api",
+          "type": "string"
+        },
+        "api_flavor": {
+          "enum": [
+            "versioned",
+            "v1"
+          ],
+          "title": "Api Flavor",
+          "type": "string"
+        },
+        "api_key_env": {
+          "default": "AZURE_OPENAI_API_KEY",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Api Key Env",
+          "type": "string"
+        },
+        "api_version": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Version"
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "endpoint": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Model",
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/OpenAIOptions"
+        },
+        "output_mode": {
+          "enum": [
+            "native",
+            "tool"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "provider": {
+          "const": "azure_openai",
+          "title": "Provider",
+          "type": "string"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "supports_json_schema": {
+          "default": true,
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "supports_text": {
+          "default": true,
+          "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "output_mode",
+        "provider",
+        "api",
+        "api_flavor",
+        "endpoint"
+      ],
+      "title": "AzureModelConfig",
+      "type": "object"
+    },
+    "BearerAuthConfig": {
+      "additionalProperties": false,
+      "description": "Static bearer bindings resolved once from the startup environment.",
+      "properties": {
+        "bindings": {
+          "maxProperties": 1024,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "$ref": "#/$defs/BearerBinding"
+            }
+          },
+          "title": "Bindings",
+          "type": "object"
+        },
+        "type": {
+          "const": "bearer",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "bindings"
+      ],
+      "title": "BearerAuthConfig",
+      "type": "object"
+    },
+    "BearerBinding": {
+      "additionalProperties": false,
+      "description": "Environment credential reference and trusted grants for one bearer token.",
+      "properties": {
+        "principal_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdentityId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdentityId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "token_env": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Token Env",
+          "type": "string"
+        },
+        "workflows": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "title": "Workflows",
+          "type": "array"
+        }
+      },
+      "required": [
+        "token_env",
+        "workflows"
+      ],
+      "title": "BearerBinding",
+      "type": "object"
+    },
+    "BedrockModelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "model": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Model",
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/GenerationOptions"
+        },
+        "output_mode": {
+          "enum": [
+            "native",
+            "tool"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "provider": {
+          "const": "bedrock",
+          "title": "Provider",
+          "type": "string"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "region": {
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)+$",
+          "title": "Region",
+          "type": "string"
+        },
+        "request_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "supports_json_schema": {
+          "default": true,
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "supports_text": {
+          "default": true,
+          "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "output_mode",
+        "provider",
+        "region"
+      ],
+      "title": "BedrockModelConfig",
+      "type": "object"
+    },
+    "CompatibleModelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_insecure_http": {
+          "default": false,
+          "title": "Allow Insecure Http",
+          "type": "boolean"
+        },
+        "api": {
+          "const": "chat",
+          "default": "chat",
+          "title": "Api",
+          "type": "string"
+        },
+        "api_key_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key Env"
+        },
+        "base_url": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Base Url",
+          "type": "string"
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "max_tokens_field": {
+          "default": "max_tokens",
+          "enum": [
+            "max_tokens",
+            "max_completion_tokens"
+          ],
+          "title": "Max Tokens Field",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Model",
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/OpenAIOptions"
+        },
+        "output_mode": {
+          "enum": [
+            "native",
+            "tool"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "provider": {
+          "const": "openai_compatible",
+          "title": "Provider",
+          "type": "string"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "supports_json_schema": {
+          "default": true,
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "supports_text": {
+          "default": true,
+          "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "output_mode",
+        "provider",
+        "base_url"
+      ],
+      "title": "CompatibleModelConfig",
+      "type": "object"
+    },
+    "DeclaredTool": {
+      "additionalProperties": false,
+      "description": "Operator-reviewed tool metadata used by offline compilation only.",
+      "properties": {
+        "effect": {
+          "enum": [
+            "read",
+            "write"
+          ],
+          "title": "Effect",
+          "type": "string"
+        },
+        "input_schema": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Input Schema",
+          "type": "object"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        }
+      },
+      "required": [
+        "input_schema",
+        "effect"
+      ],
+      "title": "DeclaredTool",
+      "type": "object"
+    },
+    "DeclaredToolCatalog": {
+      "additionalProperties": false,
+      "properties": {
+        "tools": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DeclaredTool"
+          },
+          "title": "Tools",
+          "type": "object"
+        }
+      },
+      "required": [
+        "tools"
+      ],
+      "title": "DeclaredToolCatalog",
+      "type": "object"
+    },
+    "DevelopmentAuthConfig": {
+      "additionalProperties": false,
+      "description": "Explicit unauthenticated mode; HTTP additionally restricts it to loopback.",
+      "properties": {
+        "type": {
+          "const": "development",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "DevelopmentAuthConfig",
+      "type": "object"
+    },
+    "ExecutionConfig": {
+      "additionalProperties": false,
+      "description": "Per-replica admission and per-run attempt/time bounds.",
+      "properties": {
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "max_steps": {
+          "default": 32,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Max Steps",
+          "type": "integer"
+        },
+        "model_requests_per_step": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Model Requests Per Step",
+          "type": "integer"
+        },
+        "model_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Model Timeout",
+          "type": "number"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 65536,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "run_timeout": {
+          "default": 300.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Run Timeout",
+          "type": "number"
+        },
+        "tool_calls_per_step": {
+          "default": 3,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Tool Calls Per Step",
+          "type": "integer"
+        },
+        "tool_timeout": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Tool Timeout",
+          "type": "number"
+        }
+      },
+      "title": "ExecutionConfig",
+      "type": "object"
+    },
+    "GenerationOptions": {
+      "additionalProperties": false,
+      "description": "Common sampling options; absence means use the configured provider default.",
+      "properties": {
+        "max_tokens": {
+          "default": 4096,
+          "maximum": 1048576,
+          "minimum": 1,
+          "title": "Max Tokens",
+          "type": "integer"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "top_p": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top P"
+        }
+      },
+      "title": "GenerationOptions",
+      "type": "object"
+    },
+    "HttpConfig": {
+      "additionalProperties": false,
+      "description": "Bounded listener and authentication settings for the HTTP adapter.",
+      "properties": {
+        "auth": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BearerAuthConfig"
+            },
+            {
+              "$ref": "#/$defs/JwtAuthConfig"
+            },
+            {
+              "$ref": "#/$defs/DevelopmentAuthConfig"
+            }
+          ],
+          "title": "Auth"
+        },
+        "body_timeout": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "title": "Body Timeout",
+          "type": "number"
+        },
+        "host": {
+          "default": "127.0.0.1",
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Host",
+          "type": "string"
+        },
+        "max_body_bytes": {
+          "default": 1048576,
+          "maximum": 16777216,
+          "minimum": 1,
+          "title": "Max Body Bytes",
+          "type": "integer"
+        },
+        "port": {
+          "default": 8000,
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Port",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "auth"
+      ],
+      "title": "HttpConfig",
+      "type": "object"
+    },
+    "IdentityId": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f]*[^\\s\\x00-\\x1f\\x7f-\\x9f][^\\x00-\\x1f\\x7f-\\x9f]*$",
+      "type": "string"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "JwtAlgorithm": {
+      "description": "Asymmetric JWT signature algorithms supported by the native adapter.",
+      "enum": [
+        "RS256",
+        "ES256",
+        "EdDSA"
+      ],
+      "title": "JwtAlgorithm",
+      "type": "string"
+    },
+    "JwtAuthConfig": {
+      "additionalProperties": false,
+      "description": "Fixed issuer policy and bounded JWKS retrieval settings for JWT verification.",
+      "properties": {
+        "algorithms": {
+          "items": {
+            "$ref": "#/$defs/JwtAlgorithm"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Algorithms",
+          "type": "array"
+        },
+        "audience": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Audience",
+          "type": "string"
+        },
+        "issuer": {
+          "maxLength": 2048,
+          "title": "Issuer",
+          "type": "string"
+        },
+        "jwks_cache_ttl": {
+          "default": 300.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Jwks Cache Ttl",
+          "type": "number"
+        },
+        "jwks_refresh_cooldown": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 300,
+          "title": "Jwks Refresh Cooldown",
+          "type": "number"
+        },
+        "jwks_url": {
+          "maxLength": 2048,
+          "title": "Jwks Url",
+          "type": "string"
+        },
+        "max_cached_keys": {
+          "default": 128,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Max Cached Keys",
+          "type": "integer"
+        },
+        "max_jwks_bytes": {
+          "default": 1048576,
+          "maximum": 4194304,
+          "minimum": 256,
+          "title": "Max Jwks Bytes",
+          "type": "integer"
+        },
+        "principal_claim": {
+          "const": "sub",
+          "default": "sub",
+          "title": "Principal Claim",
+          "type": "string"
+        },
+        "request_timeout": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "tenant_claim": {
+          "const": "tenant_id",
+          "default": "tenant_id",
+          "title": "Tenant Claim",
+          "type": "string"
+        },
+        "type": {
+          "const": "jwt",
+          "title": "Type",
+          "type": "string"
+        },
+        "workflows": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "title": "Workflows",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "issuer",
+        "audience",
+        "algorithms",
+        "jwks_url",
+        "workflows"
+      ],
+      "title": "JwtAuthConfig",
+      "type": "object"
+    },
+    "McpHttpTransport": {
+      "additionalProperties": false,
+      "description": "Current Streamable HTTP endpoint; HTTPS is the deployment default.",
+      "properties": {
+        "allow_insecure_http": {
+          "default": false,
+          "title": "Allow Insecure Http",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "type": {
+          "const": "streamable_http",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "endpoint"
+      ],
+      "title": "McpHttpTransport",
+      "type": "object"
+    },
+    "McpServerProfile": {
+      "additionalProperties": false,
+      "description": "One trusted server binding and its operator-reviewed host policy.",
+      "properties": {
+        "auth": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Auth"
+        },
+        "catalog": {
+          "$ref": "#/$defs/DeclaredToolCatalog"
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "identity_meta_key": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 5,
+              "pattern": "^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}/[A-Za-z0-9](?:[A-Za-z0-9._~/-]*[A-Za-z0-9._~-])?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identity Meta Key"
+        },
+        "output_limit_bytes": {
+          "default": 1048576,
+          "maximum": 67108864,
+          "minimum": 1,
+          "title": "Output Limit Bytes",
+          "type": "integer"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "transport": {
+          "discriminator": {
+            "mapping": {
+              "stdio": "#/$defs/McpStdioTransport",
+              "streamable_http": "#/$defs/McpHttpTransport"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/McpHttpTransport"
+            },
+            {
+              "$ref": "#/$defs/McpStdioTransport"
+            }
+          ],
+          "title": "Transport"
+        }
+      },
+      "required": [
+        "transport",
+        "catalog"
+      ],
+      "title": "McpServerProfile",
+      "type": "object"
+    },
+    "McpStdioTransport": {
+      "additionalProperties": false,
+      "description": "Trusted child settings plus an overlay on the SDK's fixed safe environment.",
+      "properties": {
+        "args": {
+          "items": {
+            "maxLength": 8192,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Args",
+          "type": "array"
+        },
+        "command": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Command",
+          "type": "string"
+        },
+        "cwd": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cwd"
+        },
+        "env": {
+          "maxProperties": 128,
+          "patternProperties": {
+            "^[A-Za-z_][A-Za-z0-9_]*$": {
+              "maxLength": 8192,
+              "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+              "type": "string"
+            }
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "type": {
+          "const": "stdio",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "command"
+      ],
+      "title": "McpStdioTransport",
+      "type": "object"
+    },
+    "OpenAIModelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "api": {
+          "enum": [
+            "chat",
+            "responses"
+          ],
+          "title": "Api",
+          "type": "string"
+        },
+        "api_key_env": {
+          "default": "OPENAI_API_KEY",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Api Key Env",
+          "type": "string"
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "model": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Model",
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/OpenAIOptions"
+        },
+        "output_mode": {
+          "enum": [
+            "native",
+            "tool"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "provider": {
+          "const": "openai",
+          "title": "Provider",
+          "type": "string"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "supports_json_schema": {
+          "default": true,
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "supports_text": {
+          "default": true,
+          "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "output_mode",
+        "provider",
+        "api"
+      ],
+      "title": "OpenAIModelConfig",
+      "type": "object"
+    },
+    "OpenAIOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "max_tokens": {
+          "default": 4096,
+          "maximum": 1048576,
+          "minimum": 1,
+          "title": "Max Tokens",
+          "type": "integer"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Effort"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "top_p": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top P"
+        }
+      },
+      "title": "OpenAIOptions",
+      "type": "object"
+    },
+    "TelemetryConfig": {
+      "additionalProperties": false,
+      "description": "Explicit OTLP/HTTP settings; header values remain outside configuration.",
+      "properties": {
+        "allow_insecure_http": {
+          "default": false,
+          "title": "Allow Insecure Http",
+          "type": "boolean"
+        },
+        "export_timeout": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Export Timeout",
+          "type": "number"
+        },
+        "metric_export_batch_size": {
+          "default": 512,
+          "maximum": 65536,
+          "minimum": 1,
+          "title": "Metric Export Batch Size",
+          "type": "integer"
+        },
+        "metric_export_interval": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Metric Export Interval",
+          "type": "number"
+        },
+        "metrics_endpoint": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metrics Endpoint"
+        },
+        "metrics_headers_env": {
+          "maxProperties": 64,
+          "patternProperties": {
+            "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 128,
+            "minLength": 1
+          },
+          "title": "Metrics Headers Env",
+          "type": "object"
+        },
+        "service_name": {
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]*$",
+          "title": "Service Name",
+          "type": "string"
+        },
+        "shutdown_timeout": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Shutdown Timeout",
+          "type": "number"
+        },
+        "span_batch_size": {
+          "default": 512,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Span Batch Size",
+          "type": "integer"
+        },
+        "span_queue_capacity": {
+          "default": 2048,
+          "maximum": 65536,
+          "minimum": 1,
+          "title": "Span Queue Capacity",
+          "type": "integer"
+        },
+        "span_schedule_delay": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Span Schedule Delay",
+          "type": "number"
+        },
+        "traces_endpoint": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Traces Endpoint"
+        },
+        "traces_headers_env": {
+          "maxProperties": 64,
+          "patternProperties": {
+            "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 128,
+            "minLength": 1
+          },
+          "title": "Traces Headers Env",
+          "type": "object"
+        }
+      },
+      "required": [
+        "service_name"
+      ],
+      "title": "TelemetryConfig",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Configuration contains references and policy, never resolved credentials.",
+  "properties": {
+    "execution": {
+      "$ref": "#/$defs/ExecutionConfig"
+    },
+    "http": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HttpConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "mcp": {
+      "maxProperties": 128,
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+          "$ref": "#/$defs/McpServerProfile"
+        }
+      },
+      "title": "Mcp",
+      "type": "object"
+    },
+    "mode": {
+      "default": "production",
+      "enum": [
+        "production",
+        "development"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "models": {
+      "maxProperties": 128,
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+          "discriminator": {
+            "mapping": {
+              "anthropic": "#/$defs/AnthropicModelConfig",
+              "azure_openai": "#/$defs/AzureModelConfig",
+              "bedrock": "#/$defs/BedrockModelConfig",
+              "openai": "#/$defs/OpenAIModelConfig",
+              "openai_compatible": "#/$defs/CompatibleModelConfig"
+            },
+            "propertyName": "provider"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/OpenAIModelConfig"
+            },
+            {
+              "$ref": "#/$defs/CompatibleModelConfig"
+            },
+            {
+              "$ref": "#/$defs/AzureModelConfig"
+            },
+            {
+              "$ref": "#/$defs/AnthropicModelConfig"
+            },
+            {
+              "$ref": "#/$defs/BedrockModelConfig"
+            }
+          ]
+        }
+      },
+      "title": "Models",
+      "type": "object"
+    },
+    "telemetry": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TelemetryConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "workflows": {
+      "maxProperties": 64,
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "type": "string"
+        }
+      },
+      "title": "Workflows",
+      "type": "object"
+    }
+  },
+  "required": [
+    "version",
+    "workflows"
+  ],
+  "title": "DeploymentConfig",
+  "type": "object"
+}

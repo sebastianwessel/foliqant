@@ -60,7 +60,8 @@ end-to-end identity-isolation evidence. The full service remains incomplete.
   job cover the implemented slice. Independent runner review closed four concrete
   findings; see [runtime review](reviews/service-embedded-runtime.md).
 
-This is not the model-enabled CLI/HTTP application or production recovery.
+At this embedded-runtime checkpoint, CLI/HTTP composition and production recovery
+had not landed; the later bootstrap/HTTP section records the current state.
 Closing local checks: 263 service tests passed; strict mypy passed for 35 source
 files including the example; lint, formatting, six service schema snapshots,
 27 unchanged native schema snapshots, documentation links and skill validation
@@ -87,10 +88,9 @@ passed. The matching CI job has been added but has not run remotely.
   [model adapter review](reviews/service-model-adapters.md). Final verification:
   359 service tests, strict typing, lint/format and seven schema snapshots.
 
-The full service remains incomplete. Bedrock is explicitly disabled until its
-credential discovery and worker lifetime can be bounded. Production telemetry, durable transports and child workflows still need their
-implementation and acceptance checks. The subsequent MCP slice below covers
-read-only tools and SDK OAuth integration.
+Bedrock remains explicitly disabled until its credential discovery and worker
+lifetime can be bounded. The subsequent slices added MCP, safe telemetry, and
+synchronous bootstrap; durable transports and child workflows remain incomplete.
 
 ## MCP and model-tool slice
 
@@ -114,9 +114,9 @@ read-only tools and SDK OAuth integration.
   schemas, unchanged native schemas, docs/skill and staged-data audits pass.
 
 Writes and interactive continuation remain disabled pending durable identity and
-reconciliation. Full service deployment, privacy-filtered OTel export, database/
-broker recovery and child workflows remain required, not implicitly delivered
-by these adapter tests.
+reconciliation. At this checkpoint, final bootstrap, database/broker recovery,
+and child workflows remained outstanding; later sections supersede only the
+bootstrap and telemetry parts.
 
 ## Safe telemetry slice
 
@@ -145,26 +145,55 @@ parameter; the host bounds its caller wait and retains one owned cleanup worker.
 A real collector deployment and live-provider qualification remain separate from
 these SDK/transport tests.
 
+## CLI, bootstrap, authentication, and synchronous HTTP slice
+
+- Strict version 1 deployment settings compose workflow directories, model/MCP
+  profiles, execution limits, optional telemetry, and optional HTTP. Paths remain
+  below the configuration root, workflow keys match compiled names, and the
+  configuration digest excludes resolved secrets and executable plugin objects.
+- The installed `foliqant` CLI implements `init`, offline `validate`/`explain`/
+  `doctor`, nondurable synchronous `run`, and authenticated synchronous `serve`.
+  Public output is one safe JSON object without raw validation or exception text.
+- Replaceable async authentication includes startup-snapshotted bearer bindings,
+  bounded native-async JWT/JWKS verification, and explicit loopback-only
+  development mode. Identity fields are independently optional. Workflow grants
+  come from trusted configuration, never body metadata or untrusted JWT fields.
+- HTTP authenticates before reading the bounded body, rejects duplicate security
+  headers, enforces workflow grants, and exposes only synchronous run plus fixed
+  health/readiness routes. RFC 9457 problems use fixed safe diagnostic fields;
+  execution failures intentionally include that caller's result and payload.
+  There are no detached tasks, 202 acceptance, retrieval/cancellation routes, or
+  restart recovery in this slice.
+- Bootstrap supplies a default policy for compiled, declared read-only tools only
+  after workflow access. `RuntimePlugins.tool_authorizer` is the host extension
+  point for resource-specific business permission checks on trusted identity and
+  validated arguments. Write effects remain disabled.
+- Configured telemetry is now wired through workflow/model observation and MCP
+  W3C propagation. CLI `run` and `serve` own global installation; embedded
+  `open_application` leaves global provider ownership with its host by default.
+- `examples/http-workflow` exercises offline validation, CLI execution, and local
+  bearer HTTP without model or MCP calls. Nonlocal bearer/JWT deployment requires
+  TLS termination. Uvicorn proxy headers are disabled, and no forwarded header
+  establishes identity.
+- Independent base and HTTP production installs contain 26 and 33 distributions
+  respectively, with no development or training dependencies. The service has
+  ten generated schema snapshots. Closing checks: 603 service tests and 934
+  model-tooling tests pass (seven native integration tests intentionally excluded),
+  with strict typing, lint/format, schema and documentation/skill checks. See the
+  [bootstrap/HTTP review](reviews/service-bootstrap-http.md) for acceptance limits
+  and review findings.
+
 ## Remaining implementation sequence
 
-1. Complete deployment/provider settings and concrete durable-operation contracts;
-   retain the shared extraction and execution-contract regressions.
-2. Complete executable service CLI/bootstrap and safe observations around the
-   implemented compiler, bounded embedded runner and PydanticAI model adapter;
-   extend the current `examples/inbox` application as these capabilities land.
-3. Add authenticated HTTP ingress and integrate the implemented MCP runtime into
-   service bootstrap. Complete production credential storage/login operations
-   and deployment conformance; retain SDK wire and caller-isolation regressions.
-4. Integrate the verified safe OTel runtime into the final service bootstrap and
-   operator configuration; retain prequeue privacy, bounded caller cleanup and
-   no-exporter regression coverage. Add a runnable collector deployment example.
-5. Freeze durable SQL/operation contracts, then implement PostgreSQL inbox,
+1. Complete production MCP credential storage/login operations, TLS deployment
+   guidance, provider conformance, and live collector/provider qualification.
+2. Freeze durable SQL/operation contracts, then implement PostgreSQL inbox,
    leases/fencing, persisted budgets/effect identity, checkpoints/outbox, async
    HTTP retrieval/cancellation, Redis recovery/output and webhook delivery.
-6. Implement bounded child dispatch/join, per-child authorization, dependency and
+3. Implement bounded child dispatch/join, per-child authorization, dependency and
    conditional holds, correction/reconciliation and retention/deletion operations.
    Real broker/database crash/redelivery tests are required.
-7. Finish provider conformance, install/container/CI checks, full root regression,
+4. Finish install/container/CI checks, full root regression,
    runnable examples/Compose, generated configuration docs and service skill.
    Independent end-to-end review must close findings before completion.
 

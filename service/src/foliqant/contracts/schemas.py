@@ -6,6 +6,7 @@ from pydantic import TypeAdapter
 
 from foliqant.core.json import JsonValue
 
+from .deployment import DeploymentConfig
 from .envelope import Envelope
 from .execution import AcceptanceReceipt, ExecutionResult
 from .mcp import McpProfiles
@@ -19,6 +20,7 @@ def service_schemas() -> dict[str, dict[str, JsonValue]]:
     schemas = cast(
         dict[str, dict[str, JsonValue]],
         {
+            "deployment.schema.json": DeploymentConfig.model_json_schema(),
             "envelope.schema.json": Envelope.model_json_schema(),
             "execution-result.schema.json": ExecutionResult.model_json_schema(),
             "acceptance-receipt.schema.json": AcceptanceReceipt.model_json_schema(),

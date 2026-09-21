@@ -14,13 +14,16 @@ dependencies = [
   "python-dotenv==1.2.3",
 ]
 
+[project.scripts]
+foliqant = "foliqant.cli:main"
+
 [project.optional-dependencies]
 openai = ["pydantic-ai-slim[openai]==2.46.0"]
 anthropic = ["pydantic-ai-slim[anthropic]==2.46.0"]
 bedrock = ["pydantic-ai-slim[bedrock]==2.46.0"]
 azure = ["pydantic-ai-slim[openai]==2.46.0", "azure-identity==1.25.3"]
 mcp = ["mcp==2.2.0", "httpx2==2.13.0", "cryptography==50.0.1"]
-http = ["starlette==1.6.0", "uvicorn==0.53.0", "PyJWT[crypto]==2.14.0"]
+http = ["starlette==1.6.0", "uvicorn==0.53.0", "PyJWT[crypto]==2.14.0", "httpx2==2.13.0"]
 redis = ["redis==8.1.0"]
 postgres = ["psycopg[binary]==3.3.6"]
 telemetry = [

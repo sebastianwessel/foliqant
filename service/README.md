@@ -5,14 +5,14 @@ implementation contract is [specification 11](../specs/11-workflow-service.md).
 PydanticAI owns model/tool conversations; the service owns deterministic routing,
 identity, authorization, admission, persistence and transports.
 
-Implementation is in progress. Available foundations are strict envelopes,
-protected metadata validation, immutable core values, safe errors and bounded
-async admission, bounded blocking-I/O execution, safe JSON logging, an offline
-workflow compiler, embedded async runner, public execution results, PydanticAI
-model execution, safe optional OTel observations and shared native decision validation. A model-enabled inbox
-example is available. The executable service CLI and durable
-transports are not yet complete; read-only MCP steps and model tools are available. See the
-[implementation status](../plans/workflow-service-status.md) for verified scope.
+Implemented foundations include strict envelopes, protected metadata, immutable
+core values, bounded admission and blocking execution, the offline compiler,
+embedded runner, model execution, read-only MCP tools, safe OTel observations,
+an executable CLI/bootstrap, and authenticated synchronous HTTP ingress. The
+current runtime is nondurable: durable jobs, retrieval/cancellation endpoints,
+Redis/PostgreSQL recovery, child workflows, and reconciled writes remain future
+work. See the [implementation status](../plans/workflow-service-status.md) for
+verified scope.
 
 ## Development environment
 
@@ -31,8 +31,8 @@ The local shared decision-contract package is resolved through `tool.uv.sources`
 Keep its source directory alongside this project when building from the repository.
 Production dependency installation uses `uv sync --locked --no-dev` with only
 the selected adapter extras, for example `--extra openai --extra http`. This is
-dependency separation, not a claim that the current foundations constitute a
-deployable service. The root model-tooling environment is separate.
+dependency separation; it does not add durable execution or qualify a provider
+deployment. The root model-tooling environment is separate.
 
 ## Boundaries
 
@@ -67,7 +67,100 @@ is unsupported, with depth and node limits enforced. JSON data inside schema
 `const`, `default` and examples is not interpreted as schema instructions.
 Generate/check the public schemas using the development commands above.
 
+## Deployment, CLI, and synchronous HTTP
+
+`foliqant.yaml` is a strict version 1 deployment document. It maps workflow names
+to relative bundle directories and may configure model, MCP, execution, HTTP, and
+telemetry profiles. Unknown fields, duplicate YAML keys, aliases, custom tags,
+paths escaping the configuration directory, and workflow-name mismatches fail
+startup. Environment substitution is not available inside arbitrary YAML values;
+credential fields contain environment variable names, and bootstrap resolves a
+single environment snapshot before opening adapters.
+
+The installed `foliqant` command provides:
+
+- `init DEST` creates a model-free project without overwriting a path.
+- `validate`, `explain`, and `doctor` compile locally without constructing model,
+  MCP, HTTP, or telemetry clients. `doctor` reports installed optional extras; it
+  does not probe their endpoints.
+- `run` executes one envelope synchronously in the current process. Optional
+  `--tenant-id` and `--principal-id` values are explicit trusted operator input.
+- `serve` owns the configured clients and a synchronous authenticated HTTP
+  listener for its process lifetime.
+
+When telemetry is configured, CLI `run` and `serve` own global installation.
+Programmatic `open_application` leaves global provider ownership with the
+embedding host unless explicitly requested.
+
+Successful commands emit a JSON object (help displays usage text). Technical run
+failures emit no success result; they use a fixed safe error object on
+stderr without exception text, input, prompts, or credentials. The
+[authenticated HTTP example](../examples/http-workflow/README.md) is model-free
+and exercises `validate`, `explain`, `run`, and bearer-protected `serve`.
+
+HTTP supports `POST /workflows/{name}/runs`, `GET /health`, and `GET /ready`.
+Runs finish within that request and return a terminal result or RFC 9457 problem
+details. There is no detached acceptance, job status lookup, or cancellation API;
+the current runner does not preserve work across a process restart.
+
+Authentication happens before reading the request body. A bearer profile resolves
+each `token_env` once at startup, verifies the credential, establishes optional
+tenant/principal identity, and returns explicit workflow grants. A JWT profile
+verifies signature, issuer, audience, expiry, issued-at time, and an asymmetric
+algorithm (`RS256`, `ES256`, or `EdDSA`) against the fixed HTTPS JWKS endpoint.
+The JWKS endpoint must honor `Accept-Encoding: identity`; unexpected compressed
+responses are rejected. Cache-lock waits, reads and cleanup share one deadline.
+JWT claims establish only the configured identity fields; workflow grants always
+come from trusted deployment configuration. Development authentication is allowed
+only with `mode: development` and a literal loopback listener. Nonlocal bearer or
+JWT deployment requires host-managed TLS termination. The built-in Uvicorn setup
+disables proxy headers and never treats forwarded identity headers as trusted.
+
+Authentication and workflow access do not imply permission to use a business
+resource. After the ingress workflow grant and compiled step allowlist, bootstrap's
+default MCP policy permits only declared read tools. A host embedding the service
+can inject `RuntimePlugins(tool_authorizer=...)` to recheck resource-specific
+business permissions from trusted identity and validated arguments on every
+call. Write tools remain disabled pending durable operation identity and
+reconciliation.
+
 ## Embedded execution
+
+For the same composition used by the CLI, compile a deployment once and own its
+async lifespan. The caller supplies an authenticated and authorized identity;
+calling this Python API does not verify a token or grant workflow access:
+
+```python
+import asyncio
+import os
+from pathlib import Path
+
+from foliqant.bootstrap import load_environment, open_application, prepare_application
+from foliqant.contracts.envelope import Envelope
+from foliqant.core.identity import Identity
+
+async def main() -> None:
+    config = Path("examples/http-workflow/foliqant.yaml")
+    prepared = prepare_application(config)
+    async with open_application(
+        prepared, environment=load_environment(config, os.environ)
+    ) as application:
+        result = await application.run(
+            "hello", Envelope(payload={"message": "hello"}),
+            identity=Identity(principal_id="example_operator"),
+        )
+        assert result.execution.status == "completed"
+
+asyncio.run(main())
+```
+
+Trusted Python hosts can pass named `HandlerRegistration` objects through
+`prepare_application(..., handlers=...)` and runtime adapters through
+`open_application(..., plugins=RuntimePlugins(...))`. Handler callbacks are async,
+receive frozen inputs and a per-call `StepContext`, and return `StepOutcome`.
+Their declared input/output schemas are checked independently of the callback;
+selected write handlers cannot be prepared until durable execution exists.
+Use the lower-level runner below only when the host needs to own that composition.
 
 The [offline example](../examples/embedded-workflow/README.md) combines a compiled
 workflow, frozen input schemas, an async handler and a public execution result.
@@ -164,8 +257,9 @@ request has an operation timeout within the original run deadline. Failed
 requests count, missing token measurements stay null, and truncation/refusal is
 an invalid output rather than a successful partial decision. Automatic output
 repairs are currently disabled. Tool-bearing LLM steps require an explicitly
-injected host MCP runtime and a tool-capable model profile. Model instrumentation is explicitly off until the safe
-OTel integration is connected.
+injected host MCP runtime and a tool-capable model profile. Model instrumentation
+is connected when the deployment includes telemetry; no telemetry profile means
+no model observation adapter or exporter.
 
 ## MCP tools and authentication
 
@@ -222,7 +316,7 @@ retries, automatic sampling or elicitation rounds. Input-required responses end
 in `needs_review`; interactive continuation is not yet implemented. Write tools
 remain disabled until durable effect tracking and reconciliation are available.
 
-For HTTP authentication, set `auth` to a host-registered credential-provider ID.
+For MCP HTTP authentication, set `auth` to a host-registered credential-provider ID.
 The hook receives the current trusted identity, server and context. The provided
 `SdkOAuthCredentialProvider` uses the MCP SDK's OAuth discovery, PKCE/state,
 resource binding and refresh handling. Supply a storage factory partitioned by
@@ -235,8 +329,9 @@ workflow providers omit them and never launch a browser. Tokens never belong in
 request bodies, metadata, workflow files or model context. The profile's optional
 domain-qualified identity key forwards only present trusted IDs in MCP `_meta`;
 it does not authenticate the user. A host `trace_carrier` callback can supply
-only W3C `traceparent`/`tracestate` for discovery and calls. Full OTel instrumentation
-is a separate integration still in progress.
+only W3C `traceparent`/`tracestate` for discovery and calls. When telemetry is
+configured, bootstrap also supplies protected W3C propagation to MCP and installs
+the owned global provider for SDK spans.
 
 Stdio profiles accept only trusted deployment commands and arguments. The SDK
 inherits its fixed safe environment baseline plus the explicit `env` overlay;

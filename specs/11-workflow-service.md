@@ -171,6 +171,83 @@ connection/authentication fields, never in prompt bodies or arbitrary input.
 Secrets use secret-bearing types and are excluded from repr, diagnostics and
 generated examples. Configuration does not read environment variables per step.
 
+### Deployment and synchronous HTTP bootstrap contract
+
+Deployment version 1 has `mode: production|development` (production default),
+`workflows: {name: relative_directory}` (1–64, names equal compiled workflow
+names), `models: {alias: ModelConfig}` and `mcp: {alias: McpServerProfile}` (both
+empty by default), `execution`, optional `http`, and optional `telemetry`.
+Unknown fields fail. Deployment/workflow paths resolve below the configuration
+file's directory after symlink resolution. Model/MCP profile types are reused,
+not a second settings language. The settings fingerprint includes effective
+nonsecret settings and exact compiled workflow revisions; secret environment
+values and executable plugin objects are excluded. Auth environment references
+are included, not resolved secrets. Stdio environment overlays contribute names,
+not values, to the fingerprint. Workflow effective revisions include the deployment
+fingerprint. Executable handler code needs its own deployment artifact version;
+a schema fingerprint is not a code digest. Files are read/compiled once before serving.
+
+`execution` supplies shared run admission (`concurrency: 4`, `queue_limit: 16`)
+and the existing embedded limits (300s run, 60s model, 30s tool, 32 steps,
+4 model requests and 3 tool calls per step). The shared limiter spans workflows.
+All bounded operations retain an absolute deadline; changing workflow cannot
+reset an invocation's admission budget. Handler registrations are trusted Python
+objects with async callable, frozen input/output schemas and declared read/write
+effect. Their schemas are confined like tool schemas; preparation rejects selected
+write handlers until durable operation identity is implemented. No YAML module import exists.
+Default MCP authorization permits only declared read tools of the current compiled
+step after the ingress workflow grant. Resource-specific business permissions
+require an injected host tool authorizer. Embedded callers own authentication and
+workflow authorization. Shutdown stops admission, drains active caller tasks for
+10 seconds, then cancels them and waits two seconds for cooperative completion.
+Uncooperative host callbacks cannot be forcibly stopped. Cleanup failures produce
+safe warnings without rewriting a completed outcome or an existing caller error.
+
+HTTP configuration contains `host: 127.0.0.1`, `port: 8000`, required `auth`,
+`max_body_bytes: 1048576` (maximum 16 MiB), and `body_timeout: 10s` (maximum 60s).
+A development authenticator is allowed only in development mode on a literal
+loopback bind address. A bearer profile uses named bindings containing a secret
+`token_env` reference, independently optional tenant/principal IDs, and explicit
+workflow grants referring to configured workflows. A JWT profile supplies HTTPS issuer/JWKS URL, audience, explicit
+asymmetric algorithm allowlist, tenant/principal claim names, workflow grants and
+bounded async fetch/cache settings. No unverified identity headers or token body
+claims grant workflow access. Identity may remain empty after valid authentication.
+
+Authentication is an async replaceable port returning immutable identity and
+trusted workflow grants. It runs before reading the body. JWT signature, expiry,
+issuer and audience validation use maintained libraries; JWKS fetch is native
+async with bounds, a fixed endpoint, no redirects, bounded cache/refresh and no
+sync discovery. The key lookup deadline includes cache-lock wait, fetching and
+response cleanup; failed fetches and unknown keys have bounded refresh cooldowns.
+JWKS requests negotiate identity encoding and reject unexpected compression so
+bounded reads and cleanup remain owned by the adapter.
+Public keys may omit `alg` only when their type/curve matches a configured allowed
+asymmetric algorithm. Token algorithm claims never widen operator policy.
+Tokens and JWKS data never reach diagnostics. An authentication
+failure is distinct from a workflow authorization rejection.
+
+Synchronous `POST /workflows/{name}/runs` accepts one strict envelope. Completed
+and review results return 200. Technical execution failures use RFC 9457 problem
+details with fixed safe fields and a `result` extension containing that caller's
+ExecutionResult; boundary failures have no result extension. Oversize bodies use
+413, admission saturation 429 with a fixed Retry-After, and dependency/timeouts
+503/504. Health/readiness reveal only a fixed status. Async acceptance/retrieval
+and cancellation endpoints require the durable slice; do not pretend that a
+background in-memory task is durable acceptance.
+
+CLI `init` creates a new deterministic runnable bundle without overwriting files.
+`validate`, `explain` and `doctor` compile/read configuration offline without
+constructing SDK clients/exporters or calling endpoints. Explain reports graph,
+types and bindings without prompt/literal/credential contents. `run` reads a
+bounded envelope and explicit operator-supplied optional identity; `serve` owns
+one async application lifespan. HTTP resources belong to the ASGI lifespan so
+signal shutdown closes them before the server restores process signal behavior.
+Runtime commands may read configuration-local
+`.env` once, with process environment taking precedence and interpolation disabled.
+No production command loads test doubles or arbitrary dotted imports from YAML.
+Offline fixture testing and durable operations are added with their actual
+implementation, not placeholder success commands.
+
 Workflow directory contains `workflow.yaml`, `steps/*.md` or `steps/*.yaml`,
 `schemas/` and optional synthetic `tests/`. Markdown frontmatter owns structured
 step settings; body owns instructions. YAML-only steps use `instructions` when
@@ -592,7 +669,10 @@ CLI commands: `init`, `validate`, `explain`, `run`, `serve`, `test`, `doctor`,
 plus explicit storage migration/worker operations. Offline validation/explain/test
 do not discover endpoints or invoke a model. Live tests require explicit selection.
 Errors identify file and line where available without echoing source content.
-CLI stdout is JSON result/report; diagnostics go to safe stderr. Embedded users
+CLI stdout is a JSON result/report for successful commands (including business
+`needs_review`). Technical run failures produce a final fixed safe error on
+stderr and a nonzero exit code, without a success object or raw result content.
+Diagnostics go to safe stderr. Embedded users
 can inject ports without a web server or broker.
 
 `examples/inbox/` is a minimal complete application with Markdown steps, catalogs,
