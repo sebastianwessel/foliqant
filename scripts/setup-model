@@ -9,7 +9,7 @@ for argument in "$@"; do
   if [[ "$argument" == "--help" || "$argument" == "-h" ]]; then
     echo "Usage: ./scripts/setup-model [--workspace DIR] [--offline] [--timeout-seconds N]"
     echo "Creates an isolated environment and prepares pinned local model/data assets."
-    echo "Default data workspace: ~/.local/share/foliqant. Does not start training."
+    echo "Default data workspace: <repository>/.foliqant. Does not start training."
     exit 0
   fi
 done

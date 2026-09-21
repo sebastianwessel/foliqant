@@ -98,7 +98,7 @@ once the required source snapshots, families and splits are frozen. It makes zer
 including endpoint model discovery, performs no source or dependency download,
 and does not alter the source run. It fails closed unless every required source
 snapshot, family assignment, split and integrity envelope can be reused exactly.
-Its output is a new immutable plan directory outside the checkout. Explicit
+Its output is a new immutable plan directory in an ignored workspace. Explicit
 selected, projected and excluded counts bind the plan to its inputs and rules.
 `--pilot` selects exactly 32 training projection tasks: eight MultiDoGO tasks,
 eight TAT-QA tasks and 16 typed-decisions tasks, with four typed records from

@@ -25,6 +25,7 @@ from foliqant.contracts.mcp import (
 )
 from foliqant.core.admission import CapacityLimiter
 from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.environment import EnvironmentResolver
 from foliqant.ports.execution import StepContext
 
 from .auth import McpCredentialProvider, McpCredentialScope, McpHttpAuthorization
@@ -104,10 +105,13 @@ class McpClientSessionFactory:
         profiles: McpProfiles,
         *,
         credential_providers: Mapping[str, McpCredentialProvider],
+        environment: Mapping[str, str] | None = None,
         http_client_factory: McpHttpClientFactory = _default_http_client_factory,
     ) -> None:
         try:
-            validated = McpProfiles.model_validate(profiles.model_dump(mode="python"), strict=True)
+            validated = (
+                EnvironmentResolver(environment or {}).resolve(profiles).model_copy(deep=True)
+            )
         except Exception:
             raise _invalid_configuration() from None
         providers = dict(credential_providers)
@@ -224,7 +228,7 @@ class McpClientSessionFactory:
             parameters = StdioServerParameters(
                 command=transport.command,
                 args=list(transport.args),
-                env=dict(transport.env),
+                env={key: value.get_secret_value() for key, value in transport.env.items()},
                 cwd=transport.cwd,
             )
             # A child controls stderr content and volume. Discard it here until

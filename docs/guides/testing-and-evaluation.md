@@ -136,16 +136,38 @@ contain IDs, paths, outcomes, and measurements, but omit inputs and expected or
 actual business values. Caller-supplied model revisions identify configuration;
 they do not prove the provider served particular weights.
 
-Run the complete synthetic example sequentially against the explicitly
-configured local model:
+## Evaluate each example
+
+From the repository root after installing the development extras:
+
+```sh
+uv run --no-sync python -m examples.support_triage.evaluate
+uv run --no-sync python -m examples.public_request_mcp.evaluate
+uv run --no-sync python -m examples.http_workflow.evaluate
+```
+
+Support triage evaluates three pipeline cases, classification in isolation, and
+extraction in isolation. The cases cover cancellation, a billing dispute and
+insufficient information. The default injects a scripted `FunctionModel` through
+`RuntimePlugins`; it measures routing and validation wiring, not model quality.
+The MCP suite runs the real local stdio server, with no model. The HTTP suite
+reuses the support gold through an in-process ASGI client without opening a port.
+Each command exits nonzero if an assertion fails.
+
+To measure the explicitly configured local model, add `--live` to the support or
+HTTP evaluation command. Calls remain sequential. Do not run both evaluations
+or data generation concurrently against a capacity-limited local server.
 
 ```sh
 PYDANTIC_AI_NO_BANNER=1 \
   uv run --no-sync python -m examples.support_triage.evaluate --live
 ```
 
-Its two committed cases are a bounded smoke check for the example contract.
-They are not a quality benchmark or a substitute for a reviewed holdout.
+Keep the authored expected results separate from scripted outputs. Repository
+tests deliberately change a gold value and verify that the example exits with a
+failure. Small synthetic suites are smoke checks, not a quality benchmark or a
+substitute for a reviewed holdout. Store private suites and reports under the
+ignored `.foliqant/evaluations/` directory or an explicit private workspace.
 
 For training-time held-out datasets, calibration, threshold selection, and
 artifact audit, use the separate [model evaluation guide](evaluate-and-audit.md).

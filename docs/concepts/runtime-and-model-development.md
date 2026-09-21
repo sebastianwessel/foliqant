@@ -32,7 +32,7 @@ process shutdown cannot recover an unfinished run.
 
 The model lifecycle is an explicit sequence: acquire or curate source data,
 prepare it, train, evaluate and calibrate, audit, export, then verify the exported
-artifact. Outputs retain lineage and must live outside the checkout. Completing
+artifact. Outputs retain lineage and must remain excluded from Git. Completing
 that lifecycle does not by itself qualify a model for a financial production
 decision; qualification depends on the intended domain and acceptance criteria.
 

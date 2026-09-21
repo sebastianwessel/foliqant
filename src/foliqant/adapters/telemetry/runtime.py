@@ -27,6 +27,7 @@ from opentelemetry.trace import ProxyTracerProvider
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 from foliqant.contracts.telemetry import TelemetryConfig
+from foliqant.environment import EnvironmentResolver
 
 from .privacy import SafeSpanProcessor, TelemetryLabels
 
@@ -136,23 +137,6 @@ def _metric_exporter(
         raise
 
 
-def _resolve_headers(
-    references: Mapping[str, str],
-    environment: Mapping[str, str],
-) -> dict[str, str]:
-    resolved: dict[str, str] = {}
-    for header, environment_name in references.items():
-        value = environment.get(environment_name)
-        if (
-            type(value) is not str
-            or not 1 <= len(value) <= 8192
-            or any(ord(character) < 32 or ord(character) == 127 for character in value)
-        ):
-            raise ValueError("telemetry header environment value is missing or invalid")
-        resolved[header] = value
-    return resolved
-
-
 def _reject_unsafe_ambient(config: TelemetryConfig) -> None:
     if config.traces_endpoint is None and config.metrics_endpoint is None:
         return
@@ -257,6 +241,7 @@ class TelemetryRuntime:
             or not isinstance(environment, Mapping)
         ):
             raise ValueError("invalid telemetry runtime configuration")
+        config = EnvironmentResolver(environment).resolve(config)
         _reject_unsafe_ambient(config)
 
         resource = Resource({"service.name": config.service_name})
@@ -266,7 +251,9 @@ class TelemetryRuntime:
         metrics_exporting = False
         if config.metrics_endpoint is not None:
             try:
-                metric_headers = _resolve_headers(config.metrics_headers_env, environment)
+                metric_headers = {
+                    key: value.get_secret_value() for key, value in config.metrics_headers.items()
+                }
                 metric_exporter = _metric_exporter_factory(
                     endpoint=config.metrics_endpoint,
                     headers=metric_headers,
@@ -325,7 +312,9 @@ class TelemetryRuntime:
         traces_exporting = False
         if config.traces_endpoint is not None:
             try:
-                trace_headers = _resolve_headers(config.traces_headers_env, environment)
+                trace_headers = {
+                    key: value.get_secret_value() for key, value in config.traces_headers.items()
+                }
                 span_exporter = _span_exporter_factory(
                     endpoint=config.traces_endpoint,
                     headers=trace_headers,

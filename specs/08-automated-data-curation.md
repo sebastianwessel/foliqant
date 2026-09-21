@@ -368,7 +368,7 @@ The local endpoint also accepts optional `reasoningEffort` with exactly `low`,
 null and unsupported values fail configuration validation. When present it is
 sent as top-level `reasoning_effort` in both structured-output modes and is part
 of effective configuration, request, provenance and cache identities. The
-wrapper accepts `FOLIQANT_CURATION_REASONING_EFFORT`; it does not silently retry
+Python CLI accepts `FOLIQANT_CURATION_REASONING_EFFORT`; it does not silently retry
 without the setting, disable reasoning, or switch models on rejection.
 The native full/pilot recipes select `low` and temperature `0.1`, with the existing
 8,192-token limit and serial requests, following the standalone Splash comparison.
@@ -384,3 +384,14 @@ neither accepts reasoning_content as the final answer. There is no automatic
 mode or model fallback. The mode and effective request body are bound into
 configuration, request cache and provenance identities. Malformed, truncated or
 schema-invalid final responses remain failures in both modes.
+
+## Local environment and data ownership
+
+The Python CLI and prefix experiment reuse `load_curation_environment`, which
+uses the runtime dotenv loader without interpolation. Process values override
+local `.env` values; only curation-prefixed settings reach the typed recipe
+adapter. Shell wrappers do not parse or source environment files. Library calls
+accept an explicit mapping and otherwise use the process environment without
+reading a file. Setup and both curation paths reuse `model_workspace`; defaults
+are `.foliqant/` in the CLI working directory (checkout root for wrappers), ignored
+and checked against Git’s index. Explicit external workspaces remain supported.

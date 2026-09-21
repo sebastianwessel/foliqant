@@ -10,12 +10,12 @@ Install the local-model and HTTP dependencies, then start it explicitly:
 ```sh
 uv sync --locked --extra openai --group http-example
 PYDANTIC_AI_NO_BANNER=1 \
-  uv run --no-sync python examples/http-workflow/server.py --live
+  uv run --no-sync python -m examples.http_workflow.server --live
 ```
 
-The default runner uses the exact Qwen model ID, endpoint, low reasoning,
-temperature `0.1`, token limit, and timeout from the root `.env`, as described in
-the support example. There is no model discovery. Omitting `--live` prints help
+The default runner reuses the support example’s deployment. Model ID and
+endpoint come from the root `.env`; reasoning, temperature, token limit and
+timeouts are configured in its `foliqant.yaml`. There is no model discovery. Omitting `--live` prints help
 and performs no call.
 
 In a second terminal:
@@ -34,3 +34,16 @@ The example bounds request size and read time and returns safe errors.
 HTTP remains application code. The package provides no server, route, database,
 job ID, retry queue, or result store. Tests inject an offline support runner into
 the same wrapper, so the default test suite never contacts a model endpoint.
+
+## Evaluate through HTTP
+
+```sh
+uv run --no-sync python -m examples.http_workflow.evaluate
+```
+
+The default sends the support example’s same golden cases through an in-process
+ASGI client and the real workflow with scripted model responses. No port or model
+connection is opened. Transport rejection checks are in `tests/test_http_example.py`.
+Use `--live` to measure the configured local Qwen model through this boundary.
+The command exits nonzero on failed expectations. Per-step evaluations remain in
+`examples.support_triage.evaluate`, avoiding duplicated business cases.

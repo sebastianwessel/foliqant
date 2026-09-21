@@ -3,11 +3,12 @@
     "AnthropicModelConfig": {
       "additionalProperties": false,
       "properties": {
-        "api_key_env": {
-          "default": "ANTHROPIC_API_KEY",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "title": "Api Key Env",
-          "type": "string"
+        "api_key": {
+          "environment_reference": true,
+          "format": "password",
+          "title": "Api Key",
+          "type": "string",
+          "writeOnly": true
         },
         "concurrency": {
           "default": 4,
@@ -17,8 +18,8 @@
           "type": "integer"
         },
         "model": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Model",
           "type": "string"
         },
@@ -185,17 +186,17 @@
           "title": "Api Flavor",
           "type": "string"
         },
-        "api_key_env": {
-          "default": "AZURE_OPENAI_API_KEY",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "title": "Api Key Env",
-          "type": "string"
+        "api_key": {
+          "environment_reference": true,
+          "format": "password",
+          "title": "Api Key",
+          "type": "string",
+          "writeOnly": true
         },
         "api_version": {
           "anyOf": [
             {
               "minLength": 1,
-              "pattern": ".*\\S.*",
               "type": "string"
             },
             {
@@ -203,6 +204,7 @@
             }
           ],
           "default": null,
+          "environment_reference": true,
           "title": "Api Version"
         },
         "concurrency": {
@@ -213,14 +215,14 @@
           "type": "integer"
         },
         "endpoint": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Endpoint",
           "type": "string"
         },
         "model": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Model",
           "type": "string"
         },
@@ -295,22 +297,24 @@
           "title": "Api",
           "type": "string"
         },
-        "api_key_env": {
+        "api_key": {
           "anyOf": [
             {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Api Key Env"
+          "environment_reference": true,
+          "title": "Api Key"
         },
         "base_url": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Base Url",
           "type": "string"
         },
@@ -331,8 +335,8 @@
           "type": "string"
         },
         "model": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Model",
           "type": "string"
         },
@@ -402,11 +406,12 @@
           "title": "Api",
           "type": "string"
         },
-        "api_key_env": {
-          "default": "OPENAI_API_KEY",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "title": "Api Key Env",
-          "type": "string"
+        "api_key": {
+          "environment_reference": true,
+          "format": "password",
+          "title": "Api Key",
+          "type": "string",
+          "writeOnly": true
         },
         "concurrency": {
           "default": 4,
@@ -416,8 +421,8 @@
           "type": "integer"
         },
         "model": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Model",
           "type": "string"
         },

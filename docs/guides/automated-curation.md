@@ -16,7 +16,7 @@ No source record editing, hand labeling, cloud API, or model download is part of
 
 ## Before you start
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/). The default source assets total 46.21 MiB; allow more space for converted records, generated responses and immutable dataset artifacts under `~/.local/share/foliqant`.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/). The default source assets total 46.21 MiB; allow more space for converted records, generated responses and immutable dataset artifacts under `./.foliqant`.
 
 LM Studio is optional for source preparation. To run generation, load exactly one chat model in LM Studio and start its local server at `http://127.0.0.1:1234/v1`. The default recipe omits `endpoint.model`, so Foliqant requires exactly one suitable discovered model instead of choosing one arbitrarily. If the endpoint exposes several models, copy the recipe and set `endpoint.model` to the exact model ID returned by LM Studio.
 
@@ -34,7 +34,8 @@ addresses, DNS names, credentials, ambient proxies and redirects; it does not fa
 back to a cloud service, download models or manage the server. LM Studio may activate
 an installed selected model when a request arrives, according to its own loading settings.
 
-The wrapper reads the ignored root `.env` and applies the checked allowlist in
+The Python CLI reads the ignored root `.env` using the shared environment loader;
+process values take precedence. It applies the checked allowlist in
 [`.env.example`](https://github.com/sebastianwessel/foliqant/blob/main/.env.example). This is the usual place to choose your
 loaded model, endpoint limits and structured-output mode. The YAML recipe remains
 the versioned baseline; `.env` remains local to your machine.
@@ -57,7 +58,7 @@ publishes `source-corpus`. It does not contact the model endpoint.
 The command writes one JSON result. Save its `runPath`, `reportPath`, and dataset paths rather than reconstructing the digest suffix. The default workspace layout is:
 
 ```text
-~/.local/share/foliqant/
+./.foliqant/
   curation-downloads/<catalog-digest>/  verified public-source cache
   curation/<name>-<identity>/
     configuration.json

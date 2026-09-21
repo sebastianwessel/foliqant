@@ -25,7 +25,7 @@ workflow that needs no endpoint or credentials. Then continue with:
 Runnable examples cover
 [support triage](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/README.md),
 [a read-only MCP lookup](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/README.md),
-and [a thin HTTP wrapper](https://github.com/sebastianwessel/foliqant/blob/main/examples/http-workflow/README.md).
+and [a thin HTTP wrapper](https://github.com/sebastianwessel/foliqant/blob/main/examples/http_workflow/README.md).
 
 ## Develop models and data
 

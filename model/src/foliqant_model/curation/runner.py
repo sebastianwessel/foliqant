@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections import Counter
+from collections.abc import Mapping
 from itertools import zip_longest
 from pathlib import Path
 from typing import cast
@@ -23,7 +24,7 @@ from ..contracts.inputs import (
 )
 from ..data import prepare_dataset
 from ..errors import ModelError
-from ..setup import check_workspace_git_policy
+from ..workspace import model_workspace
 from .contracts import CandidateJob, CandidateOutcome, CurationConfig, CurationPlan, SourceBatch
 from .endpoint import EndpointModelIdentity, _select_model, discover_models
 from .environment import apply_curation_environment
@@ -317,8 +318,13 @@ def run_curation(
     extend_projections_from: Path | None = None,
     projection_plan: Path | None = None,
     control: CurationControl | None = None,
+    environment: Mapping[str, str] | None = None,
 ) -> CurateResult:
-    """Prepare or resume one complete unattended local curation run."""
+    """Prepare or resume a local run using explicit or process environment overrides.
+
+    This library function never reads a ``.env`` file. The CLI loads its local
+    file explicitly and supplies the resulting curation-only environment.
+    """
     selected_control = control or CurationControl()
     with selected_control.active():
         return _run_curation(
@@ -331,6 +337,7 @@ def run_curation(
             extend_projections_from=extend_projections_from,
             projection_plan=projection_plan,
             control=selected_control,
+            environment=dict(os.environ if environment is None else environment),
         )
 
 
@@ -345,10 +352,11 @@ def _run_curation(
     extend_projections_from: Path | None,
     projection_plan: Path | None,
     control: CurationControl,
+    environment: Mapping[str, str],
 ) -> CurateResult:
     from .sources import source_catalog_digest
 
-    config = apply_curation_environment(load_config(config_path, CurationConfig), os.environ)
+    config = apply_curation_environment(load_config(config_path, CurationConfig), environment)
     if config.decisionData is not None:
         from .decision_runner import run_decision_curation
 
@@ -377,8 +385,7 @@ def _run_curation(
             "generationRecipe": generation_recipe_digest(),
         }
     )
-    root = (workspace or Path.home() / ".local/share/foliqant").expanduser().absolute()
-    check_workspace_git_policy(root)
+    root = model_workspace(workspace)
     if repair_from is not None and prepare_only:
         raise ModelError("ARGUMENT_INVALID", "A repair pass cannot be prepare-only")
     repair = None

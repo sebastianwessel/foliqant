@@ -5,42 +5,44 @@ entries:
   - id: GEN-PACKAGE-DEPLOYMENT
     canonical_source: ../../src/foliqant/contracts/deployment.py
     generated_outputs: [../../schemas/foliqant/runtime/deployment.schema.json]
-    command: uv run python scripts/generate_schemas.py
-    drift_check: uv run python scripts/generate_schemas.py --check
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
-      - path confinement, offline compilation, immutable snapshots and secret-free effective revisions
+      - shared contracts/environment.py reference types feed deployment, model, MCP and telemetry schemas
+      - annotated-field resolution in environment.py, config-local .env loading and secret-safe revisions
+      - path confinement, offline compilation and immutable authored/resolved snapshots
       - asynchronous application lifecycle, local admission and handler schema validation
-    verification: [../../tests/test_bootstrap.py, ../../tests/test_cli.py]
+    verification: [../../tests/test_bootstrap.py, ../../tests/test_environment.py, ../../tests/test_cli.py]
   - id: GEN-PACKAGE-TELEMETRY
     canonical_source: ../../src/foliqant/contracts/telemetry.py
     generated_outputs: [../../schemas/foliqant/runtime/telemetry.schema.json]
-    command: uv run python scripts/generate_schemas.py
-    drift_check: uv run python scripts/generate_schemas.py --check
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
-      - signal-specific endpoint and header-reference resolution, safe provider ownership and bounded export
+      - signal-specific endpoint validation after shared environment resolution, safe provider ownership and bounded export
       - prequeue span filtering and startup label allowlists before metric aggregation
     verification: [../../tests/test_telemetry_runtime.py, ../../tests/test_trace_privacy.py, ../../tests/test_workflow_telemetry.py, ../../tests/test_model_telemetry.py, ../../tests/test_mcp_telemetry.py]
   - id: GEN-PACKAGE-MCP-PROFILES
     canonical_source: ../../src/foliqant/contracts/mcp.py
     generated_outputs: [../../schemas/foliqant/runtime/mcp-profiles.schema.json]
-    command: uv run python scripts/generate_schemas.py
-    drift_check: uv run python scripts/generate_schemas.py --check
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
       - confined schema validation, exact discovery matching and caller-context-scoped credential hooks
     verification: [../../tests/test_mcp_configuration.py, ../../tests/test_mcp_catalog.py, ../../tests/test_mcp_runtime.py, ../../tests/test_mcp_transport.py]
   - id: GEN-PACKAGE-MODEL-PROFILES
     canonical_source: ../../src/foliqant/contracts/models.py
     generated_outputs: [../../schemas/foliqant/runtime/model-profiles.schema.json]
-    command: uv run python scripts/generate_schemas.py
-    drift_check: uv run python scripts/generate_schemas.py --check
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
-      - endpoint and API-flavor validation, SDK capability checks and credential resolution
+      - endpoint and API-flavor validation, offline workflow capability checks and shared credential resolution
     verification: [../../tests/test_model_configuration.py, ../../tests/test_model_providers.py]
   - id: GEN-PACKAGE-ENVELOPE
     canonical_source: ../../src/foliqant/contracts/envelope.py
     generated_outputs: [../../schemas/foliqant/runtime/envelope.schema.json]
-    command: uv run python scripts/generate_schemas.py
-    drift_check: uv run python scripts/generate_schemas.py --check
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
       - raw JSON decoder rejects duplicate keys and enforces byte/depth limits
       - optional identity consistency/enrichment and immutable core mapping
@@ -49,8 +51,8 @@ entries:
     canonical_source: ../../src/foliqant/contracts/execution.py
     generated_outputs:
       - ../../schemas/foliqant/runtime/execution-result.schema.json
-    command: uv run python scripts/generate_schemas.py
-    drift_check: uv run python scripts/generate_schemas.py --check
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
       - core-to-boundary mapping preserves omitted fields versus explicit null
       - canonical error messages and token subset validation use shared core rules
@@ -61,8 +63,8 @@ entries:
       - ../../schemas/foliqant/decisions/decision-input.schema.json
       - ../../schemas/foliqant/decisions/decision-output.schema.json
       - ../../schemas/foliqant/decisions/category-catalog.schema.json
-    command: uv run python scripts/generate_schemas.py
-    drift_check: uv run python scripts/generate_schemas.py --check
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
       - native cross-field semantic validation and category normalization remain shared code
     verification: [../../model/tests/test_decision_contracts.py, ../../model/tests/test_category_catalog.py]
@@ -72,10 +74,13 @@ entries:
       - ../../schemas/foliqant/runtime/workflow.schema.json
       - ../../schemas/foliqant/runtime/step.schema.json
       - ../../schemas/foliqant/runtime/tool-catalog.schema.json
-    command: uv run python scripts/generate_schemas.py
-    drift_check: uv run python scripts/generate_schemas.py --check
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
-      - graph dominance, local file confinement, category normalization and semantic checks
+      - one compilation path for inline or separate-file steps and inline or file schemas
+      - explicit success transitions, unresolved review terminals and graph dominance
+      - conservative schema-aware binding checks, safe diagnostics and local file confinement
+      - category normalization and native semantic checks
       - cross-field invariants remain strict Pydantic runtime validators
     verification: [../../tests/test_compiler.py, ../../tests/test_bindings.py]
 
@@ -87,3 +92,5 @@ entries:
 # src/foliqant/evaluation/contracts.py; report.to_dict() is the sole JSON mapping.
 # No separate handwritten JSON schema is maintained. test_evaluation.py checks
 # scoring, privacy and serialization against those types.
+# tests/test_example_evaluations.py checks example pipeline and isolated-step suites,
+# the HTTP boundary and a deliberately wrong golden expectation as a negative control.

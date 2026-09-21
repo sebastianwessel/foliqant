@@ -761,6 +761,7 @@ acceptance:
   - 11-python-package.md#evaluation-and-step-isolation
   - ../tests/test_evaluation.py
   - ../tests/test_step_execution.py
+  - ../tests/test_example_evaluations.py
   - ../plans/reviews/python-package-evaluation.md
 - acceptance_id: ACCEPT-PACKAGE-CONTRACTS
   requirement_ids:
@@ -778,6 +779,7 @@ acceptance:
   - PATH-PACKAGE-COMPILER-FAILURE
   verification_refs:
   - 11-python-package.md#entry-points-example-and-acceptance
+  - ../tests/test_compiler.py
 - acceptance_id: ACCEPT-PACKAGE-RUNTIME
   requirement_ids:
   - REQ-PACKAGE-RUNTIME
@@ -810,6 +812,11 @@ acceptance:
   - PATH-PACKAGE-DX-FAILURE
   verification_refs:
   - 11-python-package.md#entry-points-example-and-acceptance
+  - ../tests/test_environment.py
+  - ../tests/test_bootstrap.py
+  - ../tests/test_cli.py
+  - ../tests/test_example_evaluations.py
+  - ../plans/reviews/configuration-dx-2026-09-21.md
 - acceptance_id: ACCEPT-BUSINESS-DECISIONS
   requirement_ids:
   - REQ-BUSINESS-DECISIONS
@@ -847,6 +854,7 @@ acceptance:
   - ../model/tests/test_setup.py
   - ../model/tests/test_acquisition.py
   - ../model/tests/test_bootstrap_data.py
+  - ../model/tests/test_workspace.py
 - acceptance_id: ACCEPT-ENV
   requirement_ids:
   - REQ-ENV

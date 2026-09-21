@@ -187,7 +187,9 @@ server counts it that way.
 
 ### Root `.env` overrides
 
-`./scripts/curate-data` reads a root `.env` when present. It accepts only the
+`./scripts/curate-data` runs the Python CLI from the repository root. The CLI
+reads that directory's `.env` using the same loader as the runtime; explicit
+process values take precedence. It passes only the
 documented `FOLIQANT_CURATION_*` endpoint and generation variables in
 [`.env.example`](https://github.com/sebastianwessel/foliqant/blob/main/.env.example), validates their types and bounds, and then
 applies them over the selected curation recipe. Empty variables do not override

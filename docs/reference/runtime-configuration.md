@@ -40,7 +40,7 @@ models:
     model: incoai/Qwen3.8-27B-Splash
     base_url: http://127.0.0.1:8000/v1
     allow_insecure_http: true
-    api_key_env: null
+    api_key: null
     output_mode: native
     supports_text: true
     supports_json_schema: true
@@ -65,13 +65,65 @@ timeout. Setting `request_timeout: 300` does not override the default 60-second
 model-attempt limit; raise `execution.model_timeout` explicitly when a local
 model needs more time.
 
-For authenticated providers, `api_key_env` names an environment variable. Put
-the value in the process environment or the deployment directory's `.env`. The
-CLI reads the adjacent `.env` once without interpolation and lets process values
-take precedence. Embedded applications must call
-`load_environment(config_path, os.environ)` explicitly and pass its result to
-`open_application`; passing `os.environ` alone does not read `.env`. Never put
-secret values in YAML.
+## Environment references
+
+Use a complete `$VARIABLE` value in supported deployment fields:
+
+```yaml
+models:
+  assistant:
+    provider: openai_compatible
+    model: '$MODEL_NAME'
+    base_url: '$MODEL_URL'
+    api_key: '$MODEL_KEY'
+    output_mode: native
+```
+
+The reference-capable fields are:
+
+| Configuration | Fields |
+| --- | --- |
+| Model profile | `model`, `api_key`, compatible `base_url`, Azure `endpoint` and `api_version` |
+| MCP HTTP transport | `endpoint` |
+| MCP stdio transport | `command`, each `args` entry, `cwd`, each `env` value |
+| Telemetry | `traces_endpoint`, `metrics_endpoint`, each `traces_headers` and `metrics_headers` value |
+
+Other configuration, workflow instructions, literal bindings, schemas, and
+customer input remain literal. Provider names, flags, numeric limits, workflow
+paths, and registration IDs do not accept references.
+
+Variable names follow `[A-Za-z_][A-Za-z0-9_]*`. Only the full value can be a
+reference: `${NAME}`, `$NAME/suffix`, `prefix$NAME`, and shell expressions are
+rejected. `$$` escapes a literal dollar: `$$NAME` resolves to `$NAME`, and
+`prefix$$NAME` resolves to `prefix$NAME`.
+Resolved values are never expanded again. Nothing executes a shell or performs
+interpolation.
+
+`open_application(prepared, environment=os.environ)` reads `.env` beside the
+prepared deployment once when opening, then lets the supplied process mapping
+override file values. `.env` interpolation is disabled, and opening does not
+change the process environment. `load_environment(config_path, environment)`
+remains available when a host explicitly needs the merged mapping; it is not a
+required step before opening an application.
+
+`prepare_application`, `validate`, `doctor`, and `explain` validate reference
+syntax and compile local workflows without reading environment values, resolving
+credentials, or constructing SDK clients. Opening requires every declared
+reference to be present and nonblank, even a header on a disabled telemetry
+signal. It validates resolved URLs, Azure API flavor, absolute stdio working
+directories, header values, and other field constraints before constructing
+clients. These are local configuration checks; they do not probe endpoints or
+verify tokens.
+
+`openai`, `anthropic`, and `azure_openai` default `api_key` to
+`$OPENAI_API_KEY`, `$ANTHROPIC_API_KEY`, and `$AZURE_OPENAI_API_KEY`, respectively.
+An unauthenticated compatible endpoint may use `api_key: null`. Prefer references
+for credentials. API keys, telemetry headers, and stdio environment values use
+protected secret values: authored references remain visible in JSON exports,
+while secret literals and resolved secrets are redacted in exports and `repr`.
+Resolved secrets do not enter configuration revisions, diagnostics, or logs.
+Revisions depend on authored references and nonsecret configuration, not the
+current values of environment variables.
 
 ## MCP profiles
 
@@ -96,7 +148,19 @@ for a complete stdio profile and authorizer.
 
 Telemetry is optional and uses explicit OTLP/HTTP trace and metric endpoints.
 When a signal endpoint is absent, Foliqant creates no exporter for that signal.
-Ambient OTLP endpoints and headers are not discovered.
+Ambient OTLP endpoints and headers are not discovered. Configure header values
+with the same reference syntax:
+
+```yaml
+telemetry:
+  service_name: support-triage
+  traces_endpoint: '$OTLP_TRACES_ENDPOINT'
+  traces_headers:
+    authorization: '$OTLP_AUTHORIZATION'
+```
+
+The variable must contain the complete header value, including any required
+scheme such as `Bearer `. Use `metrics_headers` for metric exporter headers.
 
 Observations use bounded configured labels and fixed error codes. Business
 payloads, arbitrary metadata, credentials, prompts, model output, and exception

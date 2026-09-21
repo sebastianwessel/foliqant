@@ -64,9 +64,10 @@ workflows:
     "workflows/demo/workflow.yaml": """version: 1
 name: demo
 start: done
-""",
-    "workflows/demo/steps/done.yaml": """type: finish
-outcome: completed
+steps:
+  done:
+    type: finish
+    outcome: completed
 """,
     ".env.example": "# Add only environment variables referenced by foliqant.yaml.\n",
     ".gitignore": ".env\n",
@@ -101,6 +102,8 @@ class _CliFailure(Exception):
     exit_code: int
     location: SourceLocation | None = None
     reason: str | None = None
+    field: str | None = None
+    hint: str | None = None
     retryable: bool = False
 
 
@@ -186,6 +189,10 @@ def _failure_payload(failure: _CliFailure) -> dict[str, object]:
     }
     if failure.reason is not None and failure.reason.replace("_", "").isalnum():
         error["reason"] = failure.reason[:64]
+    if failure.field is not None:
+        error["field"] = failure.field
+    if failure.hint is not None:
+        error["hint"] = failure.hint
     location = _safe_location(failure.location)
     if location is not None:
         error["location"] = location
@@ -218,18 +225,11 @@ def _prepare(config_path: Path) -> PreparedApplication:
             _EXIT_INPUT,
             location=error.location,
             reason=error.reason,
+            field=error.field,
+            hint=error.hint,
         ) from None
     except ServiceError:
         raise
-    except (OSError, TypeError, ValueError):
-        raise _CliFailure(ErrorCode.INVALID_CONFIGURATION.value, _EXIT_INPUT) from None
-
-
-def _environment(config_path: Path) -> dict[str, str]:
-    from foliqant.bootstrap import load_environment
-
-    try:
-        return load_environment(config_path, os.environ)
     except (OSError, TypeError, ValueError):
         raise _CliFailure(ErrorCode.INVALID_CONFIGURATION.value, _EXIT_INPUT) from None
 
@@ -408,11 +408,10 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, object], int]:
         raise
     except (TypeError, ValueError):
         raise _CliFailure(ErrorCode.INVALID_INPUT.value, _EXIT_INPUT) from None
-    environment = _environment(args.config)
     logging_runtime = configure_logging(debug=args.debug, labels=_logging_labels(prepared))
     try:
         async with open_application(
-            prepared, environment=environment, install_global_telemetry=True
+            prepared, environment=os.environ, install_global_telemetry=True
         ) as application:
             result = await application.run(args.workflow, envelope, identity=identity)
     finally:

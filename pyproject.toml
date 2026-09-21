@@ -48,7 +48,7 @@ packages = ["src/foliqant"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 asyncio_mode = "auto"
 addopts = "-ra -m 'not live_model'"
 markers = [

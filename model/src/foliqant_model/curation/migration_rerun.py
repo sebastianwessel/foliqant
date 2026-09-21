@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from ..contracts.base import canonical_digest
 from ..errors import ModelError
-from ..setup import check_workspace_git_policy
+from ..workspace import check_workspace_git_policy
 from .contracts import CandidateJob, CandidateOutcome
 from .decision_generation import (
     _recover_call,

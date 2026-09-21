@@ -45,7 +45,7 @@ async def offline_support() -> AsyncIterator[SupportRun]:
 
 
 def example_app():  # type: ignore[no-untyped-def]
-    path = ROOT / "examples/http-workflow/server.py"
+    path = ROOT / "examples/http_workflow/server.py"
     spec = importlib.util.spec_from_file_location("foliqant_http_example", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

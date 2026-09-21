@@ -80,11 +80,10 @@ def test_init_is_atomic_non_overwriting_and_scaffolds_model_free_workflow(tmp_pa
         "version: 1\nworkflows:\n  demo: workflows/demo\n"
     )
     assert (destination / "workflows/demo/workflow.yaml").read_text(encoding="utf-8") == (
-        "version: 1\nname: demo\nstart: done\n"
+        "version: 1\nname: demo\nstart: done\nsteps:\n"
+        "  done:\n    type: finish\n    outcome: completed\n"
     )
-    assert (destination / "workflows/demo/steps/done.yaml").read_text(encoding="utf-8") == (
-        "type: finish\noutcome: completed\n"
-    )
+    assert not (destination / "workflows/demo/steps").exists()
 
     sentinel = destination / "sentinel"
     sentinel.write_text("keep", encoding="utf-8")
@@ -221,6 +220,8 @@ def test_explain_includes_branch_edges_and_alias_without_prompt_content(tmp_path
     )
     bundle = destination / "workflows/demo"
     (bundle / "workflow.yaml").write_text("version: 1\nname: demo\nstart: choose\n")
+    (bundle / "steps").mkdir()
+    (bundle / "steps/done.yaml").write_text("type: finish\noutcome: completed\n")
     (bundle / "steps/choose.yaml").write_text(
         "type: decision\nmodel: local\ninstructions: private-prompt\n"
         "sources: {document: {literal: private-content}}\n"

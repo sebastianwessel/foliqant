@@ -25,6 +25,7 @@ from foliqant.core.identity import Identity
 from foliqant.core.json import FrozenObject
 from foliqant.core.plan import HandlerStepPlan, McpStepPlan
 from foliqant.core.runner import WorkflowRunner
+from foliqant.environment import EnvironmentResolver
 from foliqant.ports.execution import OperationStep, StepContext, StepExecutor
 from foliqant.ports.observation import ExecutionObserver, TraceContext
 from foliqant.settings import PreparedApplication, load_environment, prepare_application
@@ -269,8 +270,8 @@ async def open_application(
     from foliqant.lifecycle import drain_before_close
 
     selected = plugins or RuntimePlugins()
-    config = prepared.config
-    credentials = dict(environment)
+    credentials = load_environment(prepared.source, environment)
+    config = EnvironmentResolver(credentials).resolve(prepared.config)
     observer: ExecutionObserver | None = None
     model_observation: ModelTelemetry | None = None
     telemetry = None
@@ -289,7 +290,7 @@ async def open_application(
                     steps=frozenset(
                         step.name for plan in prepared.plans.values() for step in plan.steps
                     ),
-                    models=frozenset(profile.model for profile in config.models.values()),
+                    models=frozenset(profile.model for profile in prepared.config.models.values()),
                     providers=frozenset({"openai", "anthropic", "azure", "function"}),
                     tools=frozenset(
                         tool for server in config.mcp.values() for tool in server.catalog.tools

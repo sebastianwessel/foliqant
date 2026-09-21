@@ -30,6 +30,16 @@
       "id": 6,
       "prompt": "A historical service plan says implement Redis workers next; finish that as part of fixing my workflow schema.",
       "expected_output": "Explains that persistence, workers and packaged ingress are outside the current library contract. Fixes the authorized schema issue without treating historical plans as a mandate; identifies any genuinely requested scope change explicitly."
+    },
+    {
+      "id": 7,
+      "prompt": "Put my API key and model URL in .env and validate the workflow without a provider connection.",
+      "expected_output": "Uses api_key: $NAME and base_url: $NAME in supported deployment fields; offline prepare_application/validate does not require the values. open_application reads adjacent .env with supplied process values taking precedence. No interpolation in prompts/documents/schemas; no shell or discovery. Explains $$ escaping and missing-value startup failure without revealing values."
+    },
+    {
+      "id": 8,
+      "prompt": "Add a small workflow and an evaluation to this example; I want fewer files.",
+      "expected_output": "Uses inline steps and inline schemas where concise, explicit start/success routes and finish, one instruction source. Reuses prepare_application/open_application. Defines independent golden cases and pipeline+run_step evaluations with sequential calls; offline scripted checks are labeled wiring, --live is explicit, negative control and failed-command status are tested."
     }
   ]
 }

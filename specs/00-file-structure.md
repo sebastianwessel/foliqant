@@ -31,5 +31,5 @@ it is retained as evidence rather than treated as live implementation guidance.
 
 Model weights, prepared datasets, evaluation outputs, `.env`, virtual environments,
 caches and generated responses remain ignored and outside Git. The default data
-workspace is outside the checkout. Refactoring code does not rewrite existing
+workspace is the ignored `.foliqant/` directory in the checkout. Refactoring code does not rewrite existing
 immutable artifact identities, source rights, splits or training data.

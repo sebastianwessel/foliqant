@@ -20,6 +20,34 @@ applicability:
   - CAP-NATIVE-DATA
   - CAP-PACKAGE-EVALUATION
 shapes:
+- shape_id: package.authored-deployment
+  representation_class: command
+  canonical_source: ../src/foliqant/contracts/deployment.py
+  owner: package-contracts
+  stability: experimental
+  open_policy: open_json_leaf
+  allowed_consumers:
+  - package-settings
+  - package-environment
+  source_contract_refs:
+  - CONTRACT-PACKAGE-V1
+  mapping_refs:
+  - MAP-PACKAGE-RESOLVE-ENVIRONMENT
+- shape_id: package.resolved-deployment
+  representation_class: domain
+  canonical_source: ../src/foliqant/environment.py
+  owner: package-environment
+  stability: internal
+  open_policy: open_json_leaf
+  allowed_consumers:
+  - package-bootstrap
+  - model-adapters
+  - mcp-adapters
+  - telemetry-adapters
+  source_contract_refs:
+  - CONTRACT-PACKAGE-V1
+  mapping_refs:
+  - MAP-PACKAGE-RESOLVE-ENVIRONMENT
 - shape_id: package.evaluation-report
   representation_class: boundary
   canonical_source: ../src/foliqant/evaluation/contracts.py
@@ -545,6 +573,30 @@ shapes:
   mapping_refs:
   - MAP-SCOPED-SOURCE-PROJECTION
 mappings:
+- mapping_id: MAP-PACKAGE-RESOLVE-ENVIRONMENT
+  from_shape: package.authored-deployment
+  to_shape: package.resolved-deployment
+  direction: command_to_domain
+  allowed_differences:
+  - resolve-only-explicitly-annotated-environment-fields
+  - unescape-doubled-dollar-literals-once
+  - retain-resolved-secrets-only-in-ephemeral-settings
+  redaction_or_loss_policy: Authored references remain serializable; literal and
+    resolved secret values are redacted from JSON exports. Workflow strings and
+    business values remain literal. Missing required variables fail locally and
+    resolved values never become references or enter configuration revisions.
+  field_operations:
+  - environment:copy-snapshot-with-explicit-values-over-config-local-dotenv
+  - annotated-reference:resolve-full-variable-name-once
+  - annotated-literal:unescape-doubled-dollar-once
+  - resolved-copy:validate-endpoints-and-credentials-before-opening-clients
+  - other-fields:copy-without-interpolation
+  verification:
+  - ../tests/test_environment.py
+  - ../tests/test_bootstrap.py
+  - ../tests/test_model_configuration.py
+  - ../tests/test_mcp_configuration.py
+  - ../tests/test_telemetry_runtime.py
 - mapping_id: MAP-PACKAGE-EVALUATION
   from_shape: package.evaluation-suite
   to_shape: package.evaluation-report
@@ -562,6 +614,7 @@ mappings:
   verification:
   - ../tests/test_evaluation.py
   - ../tests/test_step_execution.py
+  - ../tests/test_example_evaluations.py
 - mapping_id: MAP-PACKAGE-ACCEPT-ENVELOPE
   from_shape: package.envelope
   to_shape: package.accepted-envelope

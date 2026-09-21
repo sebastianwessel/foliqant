@@ -16,7 +16,24 @@ The script starts the bundled server with the active Python interpreter and
 passes a fixed request reference through the compiled workflow. The expected
 payload contains the reference, `in_review` status, due date, and assigned team.
 
-The example's `ExampleAuthorizer` permits only this reviewed tool. It shows where
-an embedding application enforces business authorization; it does not
-authenticate a caller. Production MCP credentials, transport selection, and
-resource-specific permissions remain host responsibilities.
+The deployment’s reviewed catalog and the step’s declared tool bound access.
+The default host policy permits only declared read tools; it does not authenticate
+a caller or establish resource-specific business permission. An application can
+inject a `RuntimePlugins.tool_authorizer` for those rules. Production credentials
+and caller authentication remain host responsibilities.
+
+`workflow.yaml` demonstrates inline steps and an inline input schema. Its
+`foliqant.yaml` uses environment references for the Python executable and working
+directory, which `run.py` supplies explicitly. It calls `prepare_application` and
+`open_application`, with no second runner or model configuration parser.
+
+Evaluate the full workflow and isolated lookup against explicit expectations:
+
+```sh
+uv run --no-sync python -m examples.public_request_mcp.evaluate
+```
+
+This uses the real bundled stdio server and no model/network calls. The two
+synthetic cases check returned reference, status, due date, team and operation
+counts. A failed assertion gives a nonzero exit. The fixed example records do
+not establish correctness for a production records-office system.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -113,3 +114,17 @@ def apply_curation_environment(
         ]
         pointer = "/" + "/".join(str(part) for part in location)
         raise _invalid(pointer) from error
+
+
+def load_curation_environment(directory: Path, environment: Mapping[str, str]) -> dict[str, str]:
+    """Load local CLI overrides with the library parser and process precedence."""
+    from foliqant.core.errors import ServiceError
+    from foliqant.settings import load_environment
+
+    try:
+        environment = load_environment(directory / "foliqant.yaml", environment)
+    except ServiceError:
+        raise ModelError("CONFIG_INVALID", "Cannot load local curation environment") from None
+    return {
+        key: value for key, value in environment.items() if key.startswith("FOLIQANT_CURATION_")
+    }

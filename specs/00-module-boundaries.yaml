@@ -81,6 +81,10 @@ modules:
   owned_concepts:
   - safe-authoring
   - confined-schemas
+  - shared-inline-and-file-compilation
+  - explicit-success-transitions
+  - conservative-schema-binding-checks
+  - safe-field-and-hint-diagnostics
   - deterministic-plan
   allowed_dependencies:
   - standard-library
@@ -93,6 +97,44 @@ modules:
   - transport-client
   - persistence-client
   architecture_check: tests/test_architecture.py
+- module_id: package-environment-contracts
+  owner: python-package
+  public_entrypoint: src/foliqant/contracts/environment.py
+  public_symbols:
+  - EnvironmentText
+  - EnvironmentSecret
+  - EnvironmentCredential
+  - ENVIRONMENT_FIELD
+  owned_concepts:
+  - explicit-deployment-reference-syntax
+  - secret-safe-serialization
+  allowed_dependencies:
+  - standard-library
+  - pydantic
+  forbidden_dependencies:
+  - provider-sdk
+  - model-training-runtime
+  - transport-client
+  architecture_check: tests/test_environment.py
+- module_id: package-environment
+  owner: python-package
+  public_entrypoint: src/foliqant/environment.py
+  public_symbols:
+  - EnvironmentResolver
+  owned_concepts:
+  - one-time-environment-snapshot-resolution
+  - resolved-settings-validation
+  allowed_dependencies:
+  - standard-library
+  - pydantic
+  - package-contracts
+  - package-environment-contracts
+  - package-core
+  forbidden_dependencies:
+  - provider-sdk
+  - model-training-runtime
+  - transport-client
+  architecture_check: tests/test_environment.py
 - module_id: package-model-adapters
   owner: python-package
   public_entrypoint: src/foliqant/adapters/models/__init__.py
@@ -149,13 +191,14 @@ modules:
   - open_application
   owned_concepts:
   - adapter-composition
-  - environment-resolution
+  - environment-resolution-composition
   - application-lifecycle
   allowed_dependencies:
   - package-core
   - package-ports
   - package-contracts
   - package-compiler
+  - package-environment
   - package-adapters
   forbidden_dependencies:
   - model-training-runtime
@@ -442,6 +485,23 @@ modules:
   - service
   - purista
   - voyage
+- module_id: model-workspace
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/workspace.py
+  public_symbols:
+  - model_workspace
+  - check_workspace_git_policy
+  owned_concepts:
+  - shared-model-workspace-selection
+  - git-exclusion-policy
+  allowed_dependencies:
+  - standard-library
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+  architecture_check: model/tests/test_workspace.py
 - module_id: setup
   owner: model-tooling
   public_entrypoint: model/src/foliqant_model/setup.py
@@ -456,6 +516,7 @@ modules:
   - data
   - errors
   - snapshots
+  - model-workspace
   forbidden_dependencies:
   - service
   - purista
@@ -507,6 +568,24 @@ modules:
   - service
   - purista
   - voyage
+- module_id: curation-environment
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/curation/environment.py
+  public_symbols:
+  - load_curation_environment
+  - apply_curation_environment
+  owned_concepts:
+  - documented-curation-environment-overrides
+  - shared-dotenv-parser-reuse
+  allowed_dependencies:
+  - standard-library
+  - pydantic
+  - contracts
+  - errors
+  - package-settings
+  forbidden_dependencies:
+  - provider-sdk
+  - transport-client
 - module_id: curation
   owner: model-tooling
   public_entrypoint: model/src/foliqant_model/curation/runner.py
@@ -528,12 +607,13 @@ modules:
   - acquisition
   - artifacts
   - configuration
+  - curation-environment
   - contracts
   - data
   - errors
   - execution
   - scoring
-  - setup
+  - model-workspace
   forbidden_dependencies:
   - service
   - purista

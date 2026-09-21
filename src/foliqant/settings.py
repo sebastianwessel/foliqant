@@ -67,6 +67,8 @@ def prepare_application(
                 model_aliases={alias: profile.model for alias, profile in config.models.items()},
                 tool_catalogs={alias: profile.catalog for alias, profile in config.mcp.items()},
                 handler_names=set(registered),
+                model_profiles=config.models,
+                handler_schemas=registered,
             )
             if any(
                 isinstance(step, HandlerStepPlan) and registered[step.handler].effect != "read"
@@ -76,13 +78,9 @@ def prepare_application(
             if plan.name != name:
                 raise ValueError("workflow name differs from deployment key")
             plans[name] = plan
-        document = config.model_dump(mode="json", exclude_none=True)
-        # Environment overlay values can be credentials; only their names identify
-        # deployment structure. Prefer credential hooks for secret-bearing inputs.
+        document = data
+        # Secret literals are redacted; authored references retain their names.
         digest_document = config.model_dump(mode="json", exclude_none=True)
-        for profile in digest_document["mcp"].values():
-            if profile["transport"]["type"] == "stdio":
-                profile["transport"]["env"] = sorted(profile["transport"]["env"])
         digest_input = {
             "settings": digest_document,
             "workflows": {name: plan.revision for name, plan in plans.items()},

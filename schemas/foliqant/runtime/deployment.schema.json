@@ -3,11 +3,12 @@
     "AnthropicModelConfig": {
       "additionalProperties": false,
       "properties": {
-        "api_key_env": {
-          "default": "ANTHROPIC_API_KEY",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "title": "Api Key Env",
-          "type": "string"
+        "api_key": {
+          "environment_reference": true,
+          "format": "password",
+          "title": "Api Key",
+          "type": "string",
+          "writeOnly": true
         },
         "concurrency": {
           "default": 4,
@@ -17,8 +18,8 @@
           "type": "integer"
         },
         "model": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Model",
           "type": "string"
         },
@@ -185,17 +186,17 @@
           "title": "Api Flavor",
           "type": "string"
         },
-        "api_key_env": {
-          "default": "AZURE_OPENAI_API_KEY",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "title": "Api Key Env",
-          "type": "string"
+        "api_key": {
+          "environment_reference": true,
+          "format": "password",
+          "title": "Api Key",
+          "type": "string",
+          "writeOnly": true
         },
         "api_version": {
           "anyOf": [
             {
               "minLength": 1,
-              "pattern": ".*\\S.*",
               "type": "string"
             },
             {
@@ -203,6 +204,7 @@
             }
           ],
           "default": null,
+          "environment_reference": true,
           "title": "Api Version"
         },
         "concurrency": {
@@ -213,14 +215,14 @@
           "type": "integer"
         },
         "endpoint": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Endpoint",
           "type": "string"
         },
         "model": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Model",
           "type": "string"
         },
@@ -295,22 +297,24 @@
           "title": "Api",
           "type": "string"
         },
-        "api_key_env": {
+        "api_key": {
           "anyOf": [
             {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Api Key Env"
+          "environment_reference": true,
+          "title": "Api Key"
         },
         "base_url": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Base Url",
           "type": "string"
         },
@@ -331,8 +335,8 @@
           "type": "string"
         },
         "model": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Model",
           "type": "string"
         },
@@ -555,8 +559,8 @@
           "type": "boolean"
         },
         "endpoint": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Endpoint",
           "type": "string"
         },
@@ -667,9 +671,9 @@
       "description": "Trusted child settings plus an overlay on the SDK's fixed safe environment.",
       "properties": {
         "args": {
+          "environment_reference": true,
           "items": {
             "maxLength": 8192,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
             "type": "string"
           },
           "maxItems": 256,
@@ -677,9 +681,9 @@
           "type": "array"
         },
         "command": {
+          "environment_reference": true,
           "maxLength": 4096,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Command",
           "type": "string"
         },
@@ -688,7 +692,6 @@
             {
               "maxLength": 4096,
               "minLength": 1,
-              "pattern": ".*\\S.*",
               "type": "string"
             },
             {
@@ -696,15 +699,17 @@
             }
           ],
           "default": null,
+          "environment_reference": true,
           "title": "Cwd"
         },
         "env": {
+          "environment_reference": true,
           "maxProperties": 128,
           "patternProperties": {
             "^[A-Za-z_][A-Za-z0-9_]*$": {
-              "maxLength": 8192,
-              "pattern": "^[^\\x00-\\x1f\\x7f]*$",
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             }
           },
           "title": "Env",
@@ -734,11 +739,12 @@
           "title": "Api",
           "type": "string"
         },
-        "api_key_env": {
-          "default": "OPENAI_API_KEY",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "title": "Api Key Env",
-          "type": "string"
+        "api_key": {
+          "environment_reference": true,
+          "format": "password",
+          "title": "Api Key",
+          "type": "string",
+          "writeOnly": true
         },
         "concurrency": {
           "default": 4,
@@ -748,8 +754,8 @@
           "type": "integer"
         },
         "model": {
+          "environment_reference": true,
           "minLength": 1,
-          "pattern": ".*\\S.*",
           "title": "Model",
           "type": "string"
         },
@@ -884,7 +890,7 @@
     },
     "TelemetryConfig": {
       "additionalProperties": false,
-      "description": "Explicit OTLP/HTTP settings; header values remain outside configuration.",
+      "description": "Explicit OTLP/HTTP settings; secret header contents are redacted on export.",
       "properties": {
         "allow_insecure_http": {
           "default": false,
@@ -923,21 +929,24 @@
             }
           ],
           "default": null,
+          "environment_reference": true,
           "title": "Metrics Endpoint"
         },
-        "metrics_headers_env": {
+        "metrics_headers": {
+          "environment_reference": true,
           "maxProperties": 64,
           "patternProperties": {
             "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$": {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             }
           },
           "propertyNames": {
             "maxLength": 128,
             "minLength": 1
           },
-          "title": "Metrics Headers Env",
+          "title": "Metrics Headers",
           "type": "object"
         },
         "service_name": {
@@ -985,21 +994,24 @@
             }
           ],
           "default": null,
+          "environment_reference": true,
           "title": "Traces Endpoint"
         },
-        "traces_headers_env": {
+        "traces_headers": {
+          "environment_reference": true,
           "maxProperties": 64,
           "patternProperties": {
             "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$": {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             }
           },
           "propertyNames": {
             "maxLength": 128,
             "minLength": 1
           },
-          "title": "Traces Headers Env",
+          "title": "Traces Headers",
           "type": "object"
         }
       },

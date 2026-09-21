@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
 import time
 import uuid
 from contextlib import suppress
@@ -20,6 +18,7 @@ from .contracts import ArtifactManifest, DatasetConfig, FileEntry, LockOwner, ca
 from .contracts.setup import SetupProfile, SetupReceipt, SetupResult
 from .errors import ModelError
 from .snapshots import checkpoint_from_snapshot
+from .workspace import model_workspace
 
 
 def _bytes(value: object) -> bytes:
@@ -36,53 +35,6 @@ def builtin_profile() -> SetupProfile:
     return SetupProfile.model_validate_json(
         files("foliqant_model.profiles").joinpath("smoke-v1.json").read_bytes()
     )
-
-
-def check_workspace_git_policy(workspace: Path) -> None:
-    """Refuse a data workspace in a worktree unless the whole directory is ignored."""
-    root = next(
-        (parent for parent in (workspace, *workspace.parents) if (parent / ".git").exists()), None
-    )
-    if root is None:
-        return
-    executable = shutil.which("git")
-    if executable is None:
-        raise ModelError("ENVIRONMENT_UNSUPPORTED", "Git is needed to check workspace exclusions")
-    relative = workspace.relative_to(root).as_posix()
-    if relative == ".":
-        raise ModelError("ARGUMENT_INVALID", "A Git worktree root cannot be a data workspace")
-    try:
-        ignored = subprocess.run(
-            [
-                executable,
-                "-C",
-                str(root),
-                "check-ignore",
-                "--quiet",
-                "--no-index",
-                "--",
-                relative + "/",
-            ],
-            capture_output=True,
-            timeout=5,
-            check=False,
-        )
-        if ignored.returncode == 1:
-            raise ModelError("ARGUMENT_INVALID", "The data workspace must be ignored by Git")
-        if ignored.returncode != 0:
-            raise ModelError("ENVIRONMENT_UNSUPPORTED", "Cannot verify the Git workspace exclusion")
-        tracked = subprocess.run(
-            [executable, "-C", str(root), "ls-files", "-z", "--", relative + "/"],
-            capture_output=True,
-            timeout=5,
-            check=False,
-        )
-        if tracked.returncode != 0:
-            raise ModelError("ENVIRONMENT_UNSUPPORTED", "Cannot inspect tracked workspace files")
-        if tracked.stdout:
-            raise ModelError("ARGUMENT_INVALID", "The data workspace contains tracked files")
-    except (OSError, subprocess.SubprocessError) as error:
-        raise ModelError("ENVIRONMENT_UNSUPPORTED", "Cannot verify Git workspace safety") from error
 
 
 def _directory(path: Path) -> None:
@@ -169,8 +121,7 @@ def run_setup(
     if not 1 <= timeout_seconds <= 604800:
         raise ModelError("ARGUMENT_INVALID", "Setup timeout is out of range")
     started = time.monotonic()
-    workspace = (workspace or Path.home() / ".local/share/foliqant").expanduser().absolute()
-    check_workspace_git_policy(workspace)
+    workspace = model_workspace(workspace)
     profile = builtin_profile()
     profile_id = canonical_digest(profile.model_dump(mode="json"))
     root = workspace / "setups" / f"{profile.name}-{profile_id[:12]}"

@@ -1,15 +1,54 @@
 reuse_inventory_version: 1
-discovery_revision: working-tree-3cc1ec4-documentation-alignment
+discovery_revision: working-tree-baabcfd-configuration-dx-2026-09-21
 assets:
 - asset_id: package.environment
+  kind: module
+  path: ../src/foliqant/environment.py
+  public_export: EnvironmentResolver
+  owner: python-package
+  stability: experimental
+  consumers: [package-bootstrap, model-adapters, mcp-adapters, telemetry-adapters]
+  extension_policy: Resolve explicitly annotated deployment fields once from a snapshot;
+    validate the resolved copy and never expand workflow or business strings.
+- asset_id: package.environment-contracts
+  kind: schema
+  path: ../src/foliqant/contracts/environment.py
+  public_export: EnvironmentText, EnvironmentSecret, EnvironmentCredential, ENVIRONMENT_FIELD
+  owner: python-package
+  stability: experimental
+  consumers: [model-profiles, mcp-profiles, telemetry-profiles, environment-resolver]
+  extension_policy: One full-value reference syntax and secret serializer; keep generated
+    deployment schemas source-derived and resolved secrets out of exports and revisions.
+- asset_id: package.environment-loader
   kind: module
   path: ../src/foliqant/settings.py
   public_export: load_environment (also lazily exported from foliqant)
   owner: python-package
   stability: experimental
-  consumers: [embedded-application, foreground-cli]
-  extension_policy: Explicit environment loading before offline preparation;
-    no import-time settings discovery or duplicate credential-resolution logic.
+  consumers: [package-bootstrap, embedded-application, foreground-cli]
+  extension_policy: open_application loads config-local .env automatically; explicit
+    environment values win, offline preparation needs no secret values, and imports
+    do not discover settings or open clients.
+- asset_id: package.workflow-compiler
+  kind: module
+  path: ../src/foliqant/compiler/compiler.py
+  public_export: compile_workflow
+  owner: python-package
+  stability: experimental
+  consumers: [package-settings, foreground-cli, embedded-application]
+  extension_policy: Compile inline or separate-file steps and inline or file schemas
+    through one path; require explicit success transitions and keep conservative
+    schema checks distinct from runtime value validation.
+- asset_id: model.workspace
+  kind: module
+  path: ../model/src/foliqant_model/workspace.py
+  public_export: model_workspace, check_workspace_git_policy
+  owner: model-tooling
+  stability: internal
+  consumers: [model-setup, curation-runner, decision-curation, curation-migration]
+  extension_policy: Reuse the ignored current-directory .foliqant default and explicit
+    workspace override; reject tracked or unignored worktree data and preserve existing
+    immutable artifacts without a second setup-owned policy implementation.
 - asset_id: package.evaluation
   kind: module
   path: ../src/foliqant/evaluation/__init__.py
@@ -118,6 +157,16 @@ assets:
   - curation
   - native-decision-data
   extension_policy: reuse unchanged as the published record/family/lineage boundary
+- asset_id: model.curation-environment
+  kind: module
+  path: ../model/src/foliqant_model/curation/environment.py
+  public_export: load_curation_environment, apply_curation_environment
+  owner: model-tooling
+  stability: internal
+  consumers: [model-cli, curation-runner, decision-curation, task-prefix-evaluation]
+  extension_policy: Reuse the library dotenv parser and process-value precedence;
+    retain only documented FOLIQANT_CURATION_ overrides and validate their typed
+    application without general model-config or prompt interpolation.
 - asset_id: model.curation-source-acquisition
   kind: module
   path: ../model/src/foliqant_model/curation/sources.py

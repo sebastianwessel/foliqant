@@ -71,6 +71,10 @@ def runner(
 
 
 _HANDLER = "type: handler\nhandler: echo\ninput: {message: {pointer: /payload/message}}\n"
+_HANDLER_WORKFLOW = {
+    "first": _HANDLER + "next: done\n",
+    "done": "type: finish\noutcome: completed\n",
+}
 _DECISION = """type: decision
 instructions: Does the message request help?
 sources: {message: {pointer: /payload/message}}
@@ -193,7 +197,7 @@ async def test_projection_failure_preserves_completed_step_and_original_payload(
     tmp_path: Path,
 ) -> None:
     plan = make_plan(
-        tmp_path, {"first": _HANDLER}, "output: {pointer: /steps/first/result/missing}\n"
+        tmp_path, _HANDLER_WORKFLOW, "output: {pointer: /steps/first/result/missing}\n"
     )
 
     async def handle(
@@ -210,7 +214,7 @@ async def test_projection_failure_preserves_completed_step_and_original_payload(
 
 
 async def test_cancellation_releases_capacity_without_detached_work(tmp_path: Path) -> None:
-    plan = make_plan(tmp_path, {"first": _HANDLER})
+    plan = make_plan(tmp_path, _HANDLER_WORKFLOW)
     entered = asyncio.Event()
     stopped = asyncio.Event()
     limiter = CapacityLimiter(concurrency=1, queue_limit=0)
@@ -238,7 +242,7 @@ async def test_cancellation_releases_capacity_without_detached_work(tmp_path: Pa
 
 
 async def test_deadline_stops_work_and_returns_typed_failure(tmp_path: Path) -> None:
-    plan = make_plan(tmp_path, {"first": _HANDLER})
+    plan = make_plan(tmp_path, _HANDLER_WORKFLOW)
     stopped = asyncio.Event()
 
     async def handle(
@@ -264,7 +268,7 @@ async def test_deadline_stops_work_and_returns_typed_failure(tmp_path: Path) -> 
 async def test_two_runs_overlap_with_identity_metadata_result_and_budget_isolation(
     tmp_path: Path,
 ) -> None:
-    plan = make_plan(tmp_path, {"first": _HANDLER})
+    plan = make_plan(tmp_path, _HANDLER_WORKFLOW)
     both_entered = asyncio.Event()
     entered = 0
 
@@ -299,7 +303,7 @@ async def test_two_runs_overlap_with_identity_metadata_result_and_budget_isolati
 
 
 async def test_unverified_metadata_rejected_before_adapter_call(tmp_path: Path) -> None:
-    plan = make_plan(tmp_path, {"first": _HANDLER})
+    plan = make_plan(tmp_path, _HANDLER_WORKFLOW)
 
     async def handle(
         step: OperationStep, inputs: FrozenObject, context: StepContext
@@ -315,7 +319,7 @@ async def test_unverified_metadata_rejected_before_adapter_call(tmp_path: Path) 
 
 
 async def test_validator_exception_does_not_expose_content(tmp_path: Path) -> None:
-    plan = make_plan(tmp_path, {"first": _HANDLER})
+    plan = make_plan(tmp_path, _HANDLER_WORKFLOW)
 
     class FailingValidator:
         def validate_input(self, payload: FrozenJson) -> None:
@@ -343,7 +347,7 @@ async def test_validator_exception_does_not_expose_content(tmp_path: Path) -> No
 async def test_direct_embedded_metadata_cannot_bypass_identity_constraints(
     tmp_path: Path, claim: object
 ) -> None:
-    plan = make_plan(tmp_path, {"first": _HANDLER})
+    plan = make_plan(tmp_path, _HANDLER_WORKFLOW)
 
     async def handle(
         step: OperationStep, inputs: FrozenObject, context: StepContext

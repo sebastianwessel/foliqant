@@ -166,7 +166,7 @@ def _install_runner_inputs(
     batches: list[SourceBatch],
 ) -> EndpointModelIdentity:
     identity = _identity()
-    monkeypatch.setattr(runner, "check_workspace_git_policy", lambda _path: None)
+    monkeypatch.setattr("foliqant_model.workspace.check_workspace_git_policy", lambda _path: None)
 
     def source_batches(_config, run, _cache, _offline):  # type: ignore[no-untyped-def]
         from foliqant_model.curation.storage import store_object

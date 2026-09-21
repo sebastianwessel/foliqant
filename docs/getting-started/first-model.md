@@ -21,7 +21,7 @@ do not need to type the versioned setup directory yourself:
 setup_result=$(uv run --project model --no-sync foliqant-model setup --offline)
 EXERCISE=$(printf '%s' "$setup_result" | uv run --project model --no-sync python -c \
   'import json, sys; from pathlib import Path; print(Path(json.load(sys.stdin)["result"]["receiptPath"]).parent)')
-OUTPUT="$HOME/.local/share/foliqant/exercises/first-model"
+OUTPUT="$PWD/.foliqant/exercises/first-model"
 mkdir -p "$OUTPUT"
 ```
 

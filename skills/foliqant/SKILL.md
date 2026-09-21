@@ -28,6 +28,11 @@ Pydantic adapters stay outside it.
   the result of the current call. No endpoint discovery or hidden SDK retries.
 - Supported steps: `decision`, `llm`, `mcp`, trusted `handler`, and `finish`.
   Explicit graph routes are deterministic. Model output cannot invent a route.
+- Start small with inline `steps`; use separate files only when useful. Never
+  mix layouts. Reuse inline or file schemas through the same compiler. Every
+  operation has a success transition; `finish` owns the terminal outcome.
+- Markdown instructions belong in frontmatter or the body, not both. Use one
+  `next` when all successful answers share a route.
 - Bind inputs with tagged literals or RFC 6901 pointers. Earlier results are
   `/steps/<id>/result`; public returned records are under `decisions`.
 - Missing differs from null. A final output referencing a conditional step needs
@@ -60,6 +65,17 @@ metadata, diagnostics or telemetry. Stdio receives only its safe environment plu
 configured overlay; never the complete process environment.
 
 ## Evaluate
+
+Every example or new workflow needs a golden evaluation setup as well as unit
+tests. Start from `examples/support_triage/evaluate.py`: explicit cases, full-run
+checks and isolated `run_step` suites with resolved inputs. Include successful,
+unclear and boundary cases. Reuse the workflow suite through transport wrappers;
+do not copy the workflow implementation or derive expected values from responses.
+Default example checks inject a scripted `FunctionModel` and label results as
+wiring evidence. A `--live` option may use the configured local model sequentially.
+Commands exit nonzero on unmet expectations, including missing/failed checks.
+Never claim scripted results measure model quality; add a negative control which
+changes expected gold or an output and proves the evaluation catches disagreement.
 
 Use `foliqant.evaluation` with explicit ground truth. Wrap `app.run` for complete
 pipelines; wrap `app.run_step(workflow, step_id, envelope)` for isolated steps.

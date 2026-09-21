@@ -107,7 +107,13 @@ async def test_real_runner_spans_and_metrics_do_not_capture_business_values(tmp_
 @pytest.mark.parametrize("mode", ["failure", "review", "cancel"])
 async def test_outcome_status_and_context_restored(tmp_path: Path, telemetry, mode: str):
     observer, exporter, _, _ = telemetry
-    plan = make_plan(tmp_path, {"first": "type: handler\nhandler: echo\ninput: {}\n"})
+    plan = make_plan(
+        tmp_path,
+        {
+            "first": "type: handler\nhandler: echo\ninput: {}\nnext: done\n",
+            "done": "type: finish\noutcome: completed\n",
+        },
+    )
 
     async def execute(
         step: OperationStep, inputs: FrozenObject, context: StepContext

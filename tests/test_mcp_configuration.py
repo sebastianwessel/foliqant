@@ -109,7 +109,10 @@ def test_stdio_profile_records_explicit_safe_environment_overlay() -> None:
     )
     selected = settings.servers["policy_tools"]
     assert isinstance(selected.transport, McpStdioTransport)
-    assert selected.transport.env == {"LANG": "C.UTF-8", "TOOL_MODE": "production"}
+    assert {key: value.get_secret_value() for key, value in selected.transport.env.items()} == {
+        "LANG": "C.UTF-8",
+        "TOOL_MODE": "production",
+    }
     assert selected.catalog.tools["lookup"].effect == "write"
 
 

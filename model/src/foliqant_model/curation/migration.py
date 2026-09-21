@@ -14,7 +14,7 @@ from ..artifacts import load_verified_artifact, require_disjoint_output, sha256_
 from ..contracts.base import canonical_digest
 from ..contracts.inputs import DataRecord
 from ..errors import ModelError
-from ..setup import check_workspace_git_policy
+from ..workspace import check_workspace_git_policy
 from .contracts import CandidateJob, CandidateOutcome, ImportedRecord
 from .decision_runner import _seeds_and_families
 from .decision_seeds import DecisionSeed, decision_seed_recipe_digest

@@ -21,7 +21,7 @@ from ..contracts.base import canonical_digest
 from ..contracts.cli import CurateResult, ErrorLocation
 from ..contracts.inputs import DataRecord, FrozenFamilyAssignment, ResolvedSourceDeclaration
 from ..errors import ModelError
-from ..setup import check_workspace_git_policy
+from ..workspace import model_workspace
 from .continuation import (
     Continuation,
     continuation_jobs,
@@ -412,8 +412,7 @@ def _run_decision_curation(
             "generation": decision_generation_recipe_digest(),
         }
     )
-    root = (workspace or Path.home() / ".local/share/foliqant").expanduser().absolute()
-    check_workspace_git_policy(root)
+    root = model_workspace(workspace)
     if continue_from is not None and repair_from is not None:
         raise ModelError("ARGUMENT_INVALID", "Choose continuation or rejection repair, not both")
     if (extend_projections_from is None) != (projection_plan is None):

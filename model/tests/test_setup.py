@@ -104,7 +104,7 @@ def test_interrupted_partial_download_never_finalizes_setup_receipt(
 def test_git_workspace_policy(tmp_path: Path) -> None:
     import subprocess
 
-    from foliqant_model.setup import check_workspace_git_policy
+    from foliqant_model.workspace import check_workspace_git_policy
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, capture_output=True)
     (tmp_path / ".gitignore").write_text("/ignored/\n")

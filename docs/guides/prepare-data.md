@@ -12,7 +12,7 @@ JSONL records of your own.
 
 ## Describe each example
 
-Store one JSON object per line in a UTF-8 `.jsonl` file outside the repository.
+Store one JSON object per line in a UTF-8 `.jsonl` file in the ignored `.foliqant/` workspace.
 Each record needs:
 
 | Field | Meaning |

@@ -42,6 +42,11 @@
       "prompt": "Build the configurable Foliqant Python pipeline that acts on these decisions.",
       "expected_output": "Treats this as a near miss and routes away from the model-tooling skill because the runtime library belongs to the foliqant skill; it does not invent workflow actions or production authorization.",
       "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "Keep my existing weights and generated data with this repository and start the next data operation.",
+      "expected_output": "Uses ignored .foliqant in the repo through shared model_workspace/default wrapper behavior or explicit --workspace. Verifies Git exclusion and active process ownership, preserves immutable records and absolute ancestry when relocating, never commits contents or regenerates data silently. Does not run inference unless authorized."
     }
   ]
 }

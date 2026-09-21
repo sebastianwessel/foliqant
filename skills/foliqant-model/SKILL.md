@@ -19,7 +19,7 @@ command authority. The separate `model/` project owns these operations.
    audit or export read [model lifecycle](references/model-lifecycle.md).
 2. Verify local parent identity, rights and split boundaries before consuming
    inputs. Keep source datasets, weights, adapters, predictions and outputs
-   outside Git. The default workspace is `~/.local/share/foliqant`.
+   outside Git. The default workspace is `./.foliqant`.
 3. Use the existing command for that stage. Setup prepares assets without
    training. Prepare-only performs no inference; source acquisition may still be
    needed. Offline projection preparation and migration require frozen local

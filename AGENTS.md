@@ -35,6 +35,11 @@ relevant skill together when a public surface changes. Runtime fields are
 snake_case; existing native decision/model wire fields retain their camelCase
 names. Do not rename immutable artifacts or change old recipe identities.
 
+Reuse the same compiler for inline and file-based steps/schemas. Reuse the marked
+deployment-field environment resolver; never expand prompts or input data. Every
+runnable example needs explicit golden pipeline/step evaluations, with offline
+wiring checks distinguished from opt-in live model measurements.
+
 ## Execution and data
 
 Default verification is offline. Live inference, native training, downloads and
@@ -50,6 +55,9 @@ temporary records in code. Preserve source rights, split isolation, lineage and
 artifact immutability. Research/noncommercial data is usable only within its
 terms; private hosting is not permission. Do not accept gated terms, upload data
 or use paid services unless authorized.
+The default model workspace is the ignored `.foliqant/` directory in this
+checkout; installed commands use their current directory. Use the shared
+workspace selector/Git policy. Relocation must not rewrite immutable records.
 
 ## Verification
 

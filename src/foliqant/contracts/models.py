@@ -1,15 +1,20 @@
-"""Explicit deployment model profiles; credentials are environment references only."""
+"""Explicit deployment model profiles with protected credential values."""
 
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, SecretStr, ValidationInfo, model_validator
 
 from .base import BoundaryModel
 from .endpoints import validate_http_endpoint
-from .workflow import Id, NonBlank
+from .environment import (
+    ENVIRONMENT_FIELD,
+    EnvironmentCredential,
+    EnvironmentText,
+    is_environment_reference,
+)
+from .workflow import Id
 
-EnvironmentName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
 Duration = Annotated[float, Field(gt=0, le=3600)]
 
 
@@ -50,7 +55,9 @@ class AnthropicOptions(GenerationOptions):
 class _ModelConfig(BoundaryModel):
     model_config = ConfigDict(frozen=True)
 
-    model: NonBlank
+    model: Annotated[EnvironmentText, Field(min_length=1, pattern=r"\S")] = Field(
+        json_schema_extra=ENVIRONMENT_FIELD
+    )
     output_mode: Literal["native", "tool"]
     supports_text: bool = True
     supports_json_schema: bool = True
@@ -71,22 +78,28 @@ class _ModelConfig(BoundaryModel):
 class OpenAIModelConfig(_ModelConfig):
     provider: Literal["openai"]
     api: Literal["chat", "responses"]
-    api_key_env: EnvironmentName = "OPENAI_API_KEY"
+    api_key: EnvironmentCredential = Field(
+        default_factory=lambda: SecretStr("$OPENAI_API_KEY"), json_schema_extra=ENVIRONMENT_FIELD
+    )
     options: OpenAIOptions = Field(default_factory=OpenAIOptions)
 
 
 class CompatibleModelConfig(_ModelConfig):
     provider: Literal["openai_compatible"]
     api: Literal["chat"] = "chat"
-    base_url: NonBlank
-    api_key_env: EnvironmentName | None = None
+    base_url: EnvironmentText = Field(min_length=1, json_schema_extra=ENVIRONMENT_FIELD)
+    api_key: EnvironmentCredential | None = Field(default=None, json_schema_extra=ENVIRONMENT_FIELD)
     allow_insecure_http: bool = False
     # Some compatible servers accept only the legacy max_tokens field.
     max_tokens_field: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
     options: OpenAIOptions = Field(default_factory=OpenAIOptions)
 
     @model_validator(mode="after")
-    def valid_endpoint(self) -> Self:
+    def valid_endpoint(self, info: ValidationInfo) -> Self:
+        if not (
+            info.context and info.context.get("resolved_environment")
+        ) and is_environment_reference(self.base_url):
+            return self
         validate_http_endpoint(self.base_url, allow_insecure_http=self.allow_insecure_http)
         return self
 
@@ -95,13 +108,26 @@ class AzureModelConfig(_ModelConfig):
     provider: Literal["azure_openai"]
     api: Literal["chat", "responses"]
     api_flavor: Literal["versioned", "v1"]
-    endpoint: NonBlank
-    api_version: NonBlank | None = None
-    api_key_env: EnvironmentName = "AZURE_OPENAI_API_KEY"
+    endpoint: EnvironmentText = Field(min_length=1, json_schema_extra=ENVIRONMENT_FIELD)
+    api_version: EnvironmentText | None = Field(
+        default=None, min_length=1, pattern=r".*\S.*", json_schema_extra=ENVIRONMENT_FIELD
+    )
+    api_key: EnvironmentCredential = Field(
+        default_factory=lambda: SecretStr("$AZURE_OPENAI_API_KEY"),
+        json_schema_extra=ENVIRONMENT_FIELD,
+    )
     options: OpenAIOptions = Field(default_factory=OpenAIOptions)
 
     @model_validator(mode="after")
-    def explicit_api_flavor(self) -> Self:
+    def explicit_api_flavor(self, info: ValidationInfo) -> Self:
+        if self.api_flavor == "versioned" and self.api_version is None:
+            raise ValueError("versioned Azure requires an API version")
+        if self.api_flavor == "v1" and self.api_version is not None:
+            raise ValueError("Azure v1 cannot specify an API version")
+        if not (
+            info.context and info.context.get("resolved_environment")
+        ) and is_environment_reference(self.endpoint):
+            return self
         validate_http_endpoint(self.endpoint, allow_insecure_http=False)
         path = urlsplit(self.endpoint).path.rstrip("/")
         if self.api_flavor == "versioned":
@@ -114,7 +140,9 @@ class AzureModelConfig(_ModelConfig):
 
 class AnthropicModelConfig(_ModelConfig):
     provider: Literal["anthropic"]
-    api_key_env: EnvironmentName = "ANTHROPIC_API_KEY"
+    api_key: EnvironmentCredential = Field(
+        default_factory=lambda: SecretStr("$ANTHROPIC_API_KEY"), json_schema_extra=ENVIRONMENT_FIELD
+    )
     options: AnthropicOptions = Field(default_factory=AnthropicOptions)
 
 

@@ -14,6 +14,7 @@ from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import StepOutcome
 from foliqant.core.json import FrozenJson, FrozenObject, JsonValue, freeze_json, thaw_json
 from foliqant.core.plan import McpStepPlan
+from foliqant.environment import EnvironmentResolver
 from foliqant.ports.execution import OperationStep, StepContext
 from foliqant.ports.tools import ToolInputRequired
 
@@ -169,7 +170,7 @@ class McpRuntime:
         trace_carrier: Callable[[], Mapping[str, str]] | None = None,
     ) -> None:
         try:
-            self._profiles = McpProfiles.model_validate(profiles.model_dump(), strict=True)
+            self._profiles = EnvironmentResolver({}).resolve(profiles).model_copy(deep=True)
             self._catalogs = {
                 name: ToolCatalog(profile.catalog, max_result_bytes=profile.output_limit_bytes)
                 for name, profile in self._profiles.servers.items()

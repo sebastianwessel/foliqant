@@ -20,9 +20,7 @@ SPEC.loader.exec_module(mcp_example)
 async def test_real_stdio_server_executes_public_request_lookup() -> None:
     result = cast(
         ExecutionResult,
-        await mcp_example.run_example(
-            {"reference": "FOI-2026-0142"}, configure_process_logging=False
-        ),
+        await mcp_example.run_example({"reference": "FOI-2026-0142"}),
     )
 
     assert result.execution.status == "completed"

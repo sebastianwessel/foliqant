@@ -1,12 +1,12 @@
 """Closed deployment settings composed from the existing adapter contracts."""
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import Field
 
 from foliqant.core.runner import ExecutionLimits
 
-from .base import BoundaryModel
+from .base import BoundaryModel, Version1
 from .mcp import McpServerProfile
 from .models import Duration, ModelConfig
 from .telemetry import TelemetryConfig
@@ -40,7 +40,7 @@ class ExecutionConfig(BoundaryModel):
 class DeploymentConfig(BoundaryModel):
     """Configuration contains references and policy, never resolved credentials."""
 
-    version: Literal[1]
+    version: Version1
     workflows: Annotated[dict[Id, NonBlank], Field(min_length=1, max_length=64)]
     models: Annotated[dict[Id, ModelConfig], Field(max_length=128)] = Field(default_factory=dict)
     mcp: Annotated[dict[Id, McpServerProfile], Field(max_length=128)] = Field(default_factory=dict)

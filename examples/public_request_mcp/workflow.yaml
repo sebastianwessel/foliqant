@@ -1,5 +1,27 @@
 version: 1
 name: public_request_lookup
 start: lookup
-input_schema: schemas/input.json
-output: {pointer: /steps/lookup/result}
+input_schema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  type: object
+  properties:
+    reference:
+      type: string
+      pattern: ^FOI-[0-9]{4}-[0-9]{4}$
+  required:
+  - reference
+  additionalProperties: false
+output:
+  pointer: /steps/lookup/result
+steps:
+  done:
+    type: finish
+    outcome: completed
+  lookup:
+    type: mcp
+    server: records_office
+    tool: lookup_request
+    arguments:
+      reference:
+        pointer: /payload/reference
+    next: done

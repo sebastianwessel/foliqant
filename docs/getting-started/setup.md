@@ -31,7 +31,7 @@ The command installs locked dependencies and prints one JSON success result.
 | `evaluationConfigPath` | A bounded evaluation recipe |
 | `receiptPath` | Asset checksums and prepared artifact identities |
 
-Downloads and outputs live under `~/.local/share/foliqant`, outside the checkout.
+Downloads and outputs live under `./.foliqant`, ignored by Git inside the checkout.
 To use another disk, choose an absolute directory:
 
 ```sh

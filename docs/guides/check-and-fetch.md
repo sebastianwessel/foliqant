@@ -33,12 +33,12 @@ Create a private output parent directory. The artifact directory itself must not
 exist. This example downloads the same small checkpoint used by setup:
 
 ```sh
-mkdir -p "$HOME/.local/share/foliqant/models"
+mkdir -p "$PWD/.foliqant/models"
 uv run --project model --no-sync foliqant-model fetch \
   --repo HuggingFaceTB/SmolLM2-135M-Instruct \
   --revision 12fd25f77366fa6b3b4b768ec3050bf629380bac \
   --license Apache-2.0 \
-  --output "$HOME/.local/share/foliqant/models/smollm2-135m"
+  --output "$PWD/.foliqant/models/smollm2-135m"
 ```
 
 Use the full commit identifier, not `main` or a movable tag. The tool downloads

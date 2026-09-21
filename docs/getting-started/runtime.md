@@ -73,14 +73,13 @@ import asyncio
 import os
 from pathlib import Path
 
-from foliqant import Envelope, load_environment, open_application, prepare_application
+from foliqant import Envelope, open_application, prepare_application
 
 
 async def main() -> None:
     config_path = Path("foliqant.yaml")
     prepared = prepare_application(config_path)
-    environment = load_environment(config_path, os.environ)
-    async with open_application(prepared, environment=environment) as application:
+    async with open_application(prepared, environment=os.environ) as application:
         result = await application.run(
             "demo",
             Envelope(payload={"message": "hello"}),
@@ -91,10 +90,11 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-The embedded API uses exactly the environment mapping supplied to
-`open_application`; passing `os.environ` by itself does not load the adjacent
-`.env` file. The CLI loads that file automatically. In both cases, process
-environment values take precedence.
+`open_application` reads the configuration directory's `.env` once and overlays
+the supplied environment mapping. The CLI uses the same path. Process values
+take precedence. `prepare_application` validates offline without reading `.env`,
+resolving secrets or constructing clients. Use the public `load_environment`
+helper only when explicitly loading an additional environment file location.
 
 The host owns authentication and supplies trusted `Identity` values when needed.
 Envelope metadata alone does not authenticate a tenant or principal. Keep the

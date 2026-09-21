@@ -12,16 +12,16 @@ uv sync --locked --extra openai
 ```
 
 The example deliberately reuses the local Qwen settings already used by model
-curation. Define these non-secret keys in the repository `.env`:
+curation. Define these non-secret endpoint and model keys in the repository `.env`:
 
 ```dotenv
 FOLIQANT_CURATION_ENDPOINT_URL=http://127.0.0.1:8000/v1
 FOLIQANT_CURATION_MODEL=incoai/Qwen3.8-27B-Splash
-FOLIQANT_CURATION_REASONING_EFFORT=low
-FOLIQANT_CURATION_MAX_TOKENS=8192
-FOLIQANT_CURATION_TEMPERATURE=0.1
-FOLIQANT_CURATION_TIMEOUT_SECONDS=300
 ```
+
+The example’s `foliqant.yaml` binds those values with `$NAME` references.
+Reasoning, token limit, temperature and timeouts live in that YAML profile; edit
+that one profile to change runtime behavior. Curation has its own recipe.
 
 The model ID is mandatory. Foliqant does not discover a served model or choose a
 fallback. The committed script performs no call unless `--live` is present:
@@ -37,14 +37,27 @@ in-process, in-memory run. It provides no HTTP server, authentication, storage,
 retry queue, or model-quality guarantee. The default test uses a local
 `FunctionModel` and never contacts the configured endpoint.
 
-To run two synthetic golden cases sequentially against the same configured
-model, use:
+## Evaluate the pipeline and individual steps
+
+```sh
+uv run --no-sync python -m examples.support_triage.evaluate
+```
+
+The default uses scripted `FunctionModel` responses without contacting a model.
+It checks three pipeline cases (cancellation, billing dispute, missing details),
+the classification step separately, and extraction separately. Expected answers
+are authored in `evaluate.py`; the scripted outputs in `offline.py` only exercise
+wiring and validation. A negative-control test proves mismatched gold fails.
+
+To measure the configured Qwen model sequentially on the same cases:
 
 ```sh
 PYDANTIC_AI_NO_BANNER=1 \
   uv run --no-sync python -m examples.support_triage.evaluate --live
 ```
 
-The cases live in Python code rather than a checked-in dataset file. The report
-contains case IDs, paths, outcomes, timing, usage, and revisions; it omits input,
-expected, and actual business values.
+Both commands return nonzero on failed expectations. Reports contain outcomes,
+latency, usage and revisions, without input/expected/actual business values.
+These small synthetic suites are smoke checks, not accuracy claims. Store real
+reviewed cases and reports under ignored `.foliqant/evaluations/` and preserve
+an untouched holdout when optimizing prompts.

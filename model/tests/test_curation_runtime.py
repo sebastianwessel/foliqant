@@ -194,7 +194,7 @@ def test_curate_wrapper_ignores_openrouter_key_without_exporting_it(tmp_path: Pa
     assert "unsupported configuration key" not in result.stderr
 
 
-def test_curate_wrapper_allows_and_exports_reasoning_effort(tmp_path: Path) -> None:
+def test_curate_wrapper_leaves_dotenv_parsing_to_python(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
     isolated = tmp_path / "repo"
     scripts = isolated / "scripts"
@@ -211,7 +211,7 @@ def test_curate_wrapper_allows_and_exports_reasoning_effort(tmp_path: Path) -> N
     runtime = binaries / "runtime-python"
     runtime.write_text(
         "#!/usr/bin/env bash\n"
-        "[[ ${FOLIQANT_CURATION_REASONING_EFFORT:-} == xhigh ]] || exit 41\n"
+        "[[ -z ${FOLIQANT_CURATION_REASONING_EFFORT+x} ]] || exit 41\n"
         "exit 0\n",
         encoding="utf-8",
     )

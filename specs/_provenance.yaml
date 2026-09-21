@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:ff1ce574e127d3f5d1543ea0df7d016c53f395027e66083d99d9f4aaaa541bfd
-  source_revision: working-tree-3cc1ec4-spec-skill-alignment
-  generated_at: 2026-09-21T15:54:58.544Z
+  content_digest: sha256:525781bf6ba1f83dde518e17036753173c38b46e7296b54a581ad8449fb9af38
+  source_revision: working-tree-baabcfd-configuration-dx-2026-09-21
+  generated_at: 2026-09-21T16:57:19.505Z

@@ -49,7 +49,7 @@ request-time execution performs no filesystem or schema-network lookup.
 The package root lazily exports `Envelope`, `ExecutionResult`, `Identity`,
 `PreparedApplication`, `RuntimePlugins`, `WorkflowApplication`,
 `load_environment`, `prepare_application` and `open_application`. Embedding code
-uses `load_environment` explicitly when it wants the existing environment loader;
+uses `load_environment` only when selecting an additional environment location;
 importing the package alone does not load configuration or initialize clients.
 
 ## Input, identity and output
@@ -87,12 +87,20 @@ Known business uncertainty produces `needs_review`; it is not a technical failur
 
 ## Deployment and authoring
 
+Version is exactly integer `1`, never boolean `true`, a string or a float.
 Version 1 deployment configuration contains `workflows`, optional `models`,
 optional `mcp`, `execution` and optional `telemetry`. Paths are relative to the
 configuration file and must remain below its directory after symlink resolution.
 Unknown fields, duplicate keys, aliases, custom tags and unrecognized union tags
-fail. Credential fields name environment variables; secret values are resolved
-once by bootstrap and never enter diagnostics, examples or revision IDs.
+fail. Supported deployment fields accept a complete `$VARIABLE_NAME` reference;
+`$$` escapes a literal dollar. No shell expressions, recursive expansion or
+substring interpolation is accepted. Workflow prompts, schemas and customer data
+are never environment-expanded. Missing required values fail startup locally.
+Credential values never enter diagnostics, public configuration exports or revision IDs.
+Offline compilation checks references without requiring environment values.
+Bootstrap loads the adjacent `.env` once, with supplied process values taking
+precedence, and validates resolved settings before opening adapters. It does not
+test credentials or probe provider endpoints.
 
 Execution configuration bounds local run concurrency and waiting capacity plus
 run/model/tool timeouts, visited steps and model/tool attempts per step. Limits
@@ -100,8 +108,13 @@ are local admission controls, not distributed quotas or service-level promises.
 Configuration and workflow revisions are deterministic across processes for the
 same nonsecret semantic input. Files compile before adapters open.
 
-A workflow bundle contains `workflow.yaml`, `steps/*.yaml` or `steps/*.md`, local
-schemas and optional synthetic tests. IDs are stable lowercase snake case. Safe
+A workflow bundle contains `workflow.yaml` with either an inline `steps` mapping
+or `steps/*.yaml`/`steps/*.md`, never both. Inline step keys own identity; nested
+step names are rejected. Input and structured-output schemas may be inline
+objects or confined file references. Both forms use the same schema validator,
+frozen resource registry and execution plans. Markdown model steps have exactly
+one instruction source: frontmatter instructions or a nonempty body, never both.
+IDs are stable lowercase snake case. Safe
 YAML parsing rejects duplicates, aliases and custom tags. JSON Schema references
 are local and confined to the bundle; remote, dynamic and unbounded recursive
 resolution is unsupported. Revisions hash the exact bytes already parsed for all
@@ -117,11 +130,22 @@ Supported step kinds are:
 - `handler`: one trusted host registration with frozen input/output schemas.
 - `finish`: one explicit terminal status and optional final payload projection.
 
-Every nonterminal route is statically declared. Bindings use tagged literals or
+Every operation declares `next`, or a decision declares exhaustive `on_answer`
+routes. Only `finish` is an authored success terminal; missing unresolved routes
+still stop safely for review. Every nonterminal route is statically declared. Bindings use tagged literals or
 RFC 6901 pointers into payload, metadata and earlier step results. Missing is
 distinct from explicit null. Compilation proves referenced steps dominate uses,
 routes target known nodes and the reachable graph terminates within runtime
-bounds. Step file order has no execution meaning.
+bounds. Step file order has no execution meaning. Compile-time checks reject
+provably missing closed-schema paths, scalar traversal and disjoint JSON types
+at typed MCP/handler boundaries. Open or complex schemas remain runtime-checked;
+validation is not a proof of business correctness or model accuracy. Declared
+model capabilities must satisfy each referenced step's requirements.
+
+Compiler failures contain a stable reason, authored file location, safe field
+path and corrective hint. Raw Pydantic errors and authored values are never
+rendered. CLI `validate` and Python `prepare_application` share this compiler;
+there is no parallel validation engine or network preflight.
 
 ## In-memory execution
 
@@ -211,7 +235,8 @@ The package exposes embedded composition plus offline `init`, `validate`,
 model/MCP endpoints. `validate`, `explain`, `doctor` and `run` use `foliqant.yaml`
 in the current directory unless `--config PATH` is supplied; no parent-directory
 search or endpoint discovery occurs. `init` creates a model-free workflow and a
-minimal version/workflows configuration; empty model and MCP maps use typed defaults.
+minimal version/workflows configuration and inline finish step; empty model and
+MCP maps use typed defaults.
 Successful CLI output is one safe JSON object; failures use
 one stable safe error and a nonzero exit. No `migrate`, queue `worker`, durable
 lookup/cancel or packaged HTTP server command belongs to this scope.
@@ -281,6 +306,14 @@ explicit revision. `evaluate` defaults to one worker and a 300-second per-case
 timeout including scoring; results retain suite order. `compare_variants` runs
 variants sequentially. Hosts own dataset loading, report persistence and holdout
 selection. The library neither certifies holdout separation nor optimizes prompts.
+
+Every runnable example includes executable evaluation with explicit ground
+truth. Model examples default to clearly labeled scripted wiring checks and
+require `--live` for local-model measurements. Step suites use `run_step`; full
+suites use `run`. The HTTP wrapper reuses the same workflow suite through its
+ASGI boundary; it does not duplicate business logic. Failed assertions result in
+a nonzero evaluation command status. No example's expected values are generated
+from its observed response. Synthetic checks do not establish population accuracy.
 
 Reports identify the suite and its content fingerprint, the variant/configuration
 revision supplied by the caller and observed workflow revisions. They report

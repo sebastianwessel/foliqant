@@ -24,7 +24,7 @@ Model development follows an explicit, local artifact chain:
    a larger checkpoint, longer run, or deployment target.
 
 Native training uses MLX on Apple Silicon macOS. Model and data outputs default
-to a workspace outside the repository. Every completed artifact is immutable,
+to an ignored workspace inside the repository. Every completed artifact is immutable,
 content-addressed, and linked to its verified parents.
 
 ## Follow the lifecycle

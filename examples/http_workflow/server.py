@@ -6,12 +6,12 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import cast
 
-from examples.support_triage.run import open_configured
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from examples.support_triage.run import open_configured
 from foliqant.contracts.decoding import MAX_ENVELOPE_BYTES, decode_envelope
 from foliqant.contracts.execution import ExecutionResult
 from foliqant.core.errors import ErrorCode, ServiceError

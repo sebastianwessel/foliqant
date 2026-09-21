@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from types import MappingProxyType
 from typing import Protocol, cast
 
+from pydantic import SecretStr
 from pydantic_ai.models import Model
 from pydantic_ai.profiles import ModelProfile, merge_profile
 from pydantic_ai.settings import ModelSettings
@@ -21,6 +22,7 @@ from foliqant.contracts.models import (
     OpenAIModelConfig,
 )
 from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.environment import EnvironmentResolver
 
 from .binding import ModelBinding
 
@@ -44,17 +46,15 @@ def _invalid_configuration() -> ServiceError:
     return ServiceError(ErrorCode.INVALID_CONFIGURATION)
 
 
-def _secret(environment: Mapping[str, str], name: str | None, *, required: bool) -> str:
-    if name is None:
+def _secret(value: SecretStr | None, *, required: bool) -> str:
+    if value is None:
         if required:
             raise _invalid_configuration()
-        # The OpenAI SDK requires a nonempty value even when an explicitly
-        # configured compatible endpoint performs no authentication.
         return "credential-not-required"
-    value = environment.get(name)
-    if not isinstance(value, str) or not value.strip():
+    secret = value.get_secret_value()
+    if not secret.strip():
         raise _invalid_configuration()
-    return value
+    return secret
 
 
 def _reject_ambient_request_configuration(names: frozenset[str]) -> None:
@@ -209,7 +209,6 @@ def _binding(
 
 def _build_openai(
     config: OpenAIModelConfig,
-    environment: Mapping[str, str],
     owned_clients: list[_AsyncCloseable],
 ) -> ModelBinding:
     from openai import APITimeoutError, AsyncOpenAI
@@ -218,7 +217,7 @@ def _build_openai(
 
     _reject_ambient_request_configuration(_OPENAI_AMBIENT_REQUEST_ENV)
     client = AsyncOpenAI(
-        api_key=_secret(environment, config.api_key_env, required=True),
+        api_key=_secret(config.api_key, required=True),
         base_url="https://api.openai.com/v1",
         max_retries=0,
         timeout=config.request_timeout,
@@ -233,7 +232,6 @@ def _build_openai(
 
 def _build_compatible(
     config: CompatibleModelConfig,
-    environment: Mapping[str, str],
     owned_clients: list[_AsyncCloseable],
 ) -> ModelBinding:
     from openai import APITimeoutError, AsyncOpenAI
@@ -243,7 +241,7 @@ def _build_compatible(
 
     _reject_ambient_request_configuration(_OPENAI_AMBIENT_REQUEST_ENV)
     client = AsyncOpenAI(
-        api_key=_secret(environment, config.api_key_env, required=False),
+        api_key=_secret(config.api_key, required=False),
         base_url=config.base_url,
         max_retries=0,
         timeout=config.request_timeout,
@@ -269,7 +267,6 @@ def _build_compatible(
 
 def _build_azure(
     config: AzureModelConfig,
-    environment: Mapping[str, str],
     owned_clients: list[_AsyncCloseable],
 ) -> ModelBinding:
     from openai import APITimeoutError, AsyncAzureOpenAI, AsyncOpenAI
@@ -279,7 +276,7 @@ def _build_azure(
     from pydantic_ai.providers.openai import OpenAIProvider
 
     _reject_ambient_request_configuration(_OPENAI_AMBIENT_REQUEST_ENV)
-    api_key = _secret(environment, config.api_key_env, required=True)
+    api_key = _secret(config.api_key, required=True)
     profile: ModelProfile = _profile(config)
     if config.api_flavor == "versioned":
         assert config.api_version is not None
@@ -319,7 +316,6 @@ def _build_azure(
 
 def _build_anthropic(
     config: AnthropicModelConfig,
-    environment: Mapping[str, str],
     owned_clients: list[_AsyncCloseable],
 ) -> ModelBinding:
     from anthropic import APITimeoutError, AsyncAnthropic
@@ -328,7 +324,7 @@ def _build_anthropic(
 
     _reject_ambient_request_configuration(_ANTHROPIC_AMBIENT_REQUEST_ENV)
     client = AsyncAnthropic(
-        api_key=_secret(environment, config.api_key_env, required=True),
+        api_key=_secret(config.api_key, required=True),
         base_url="https://api.anthropic.com",
         max_retries=0,
         timeout=config.request_timeout,
@@ -357,17 +353,16 @@ def _build_anthropic(
 
 def _build_one(
     config: ModelConfig,
-    environment: Mapping[str, str],
     owned_clients: list[_AsyncCloseable],
 ) -> ModelBinding:
     if isinstance(config, OpenAIModelConfig):
-        return _build_openai(config, environment, owned_clients)
+        return _build_openai(config, owned_clients)
     if isinstance(config, CompatibleModelConfig):
-        return _build_compatible(config, environment, owned_clients)
+        return _build_compatible(config, owned_clients)
     if isinstance(config, AzureModelConfig):
-        return _build_azure(config, environment, owned_clients)
+        return _build_azure(config, owned_clients)
     if isinstance(config, AnthropicModelConfig):
-        return _build_anthropic(config, environment, owned_clients)
+        return _build_anthropic(config, owned_clients)
     raise _invalid_configuration()
 
 
@@ -416,13 +411,9 @@ async def open_model_bindings(
     owned_clients: list[_AsyncCloseable] = []
     try:
         try:
-            validated = ModelProfiles.model_validate(
-                profiles.model_dump(mode="python"),
-                strict=True,
-            )
-            frozen_environment = dict(environment)
+            validated = EnvironmentResolver(environment).resolve(profiles)
             bindings = {
-                alias: _build_one(config, frozen_environment, owned_clients)
+                alias: _build_one(config, owned_clients)
                 for alias, config in validated.models.items()
             }
         except ServiceError:

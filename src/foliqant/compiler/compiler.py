@@ -4,11 +4,12 @@ import hashlib
 import json
 from collections.abc import Collection, Mapping
 from pathlib import Path
-from typing import Literal, Never, cast
+from typing import Literal, Never, Protocol, cast
 
 from jsonschema import Draft202012Validator, SchemaError
 from pydantic import TypeAdapter, ValidationError
 
+from foliqant.contracts.models import ModelConfig
 from foliqant.contracts.workflow import (
     Binding,
     ChoiceQuestionShorthand,
@@ -27,7 +28,7 @@ from foliqant.contracts.workflow import (
     WorkflowAuthoring,
 )
 from foliqant.core.errors import ServiceError
-from foliqant.core.json import FrozenObject, freeze_json
+from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import (
     BindingPlan,
     CompiledStep,
@@ -62,6 +63,7 @@ from .schema_helpers import (
 from .schema_helpers import (
     walk_schema_nodes as _walk_schema_nodes,
 )
+from .static_schema import SchemaView, incompatible_types, json_type, schema_types
 
 _WORKFLOW_ADAPTER = TypeAdapter(WorkflowAuthoring)
 _STEP_ADAPTER: TypeAdapter[StepAuthoring] = TypeAdapter(StepAuthoring)
@@ -75,15 +77,59 @@ type NativeQuestion = (
 )
 
 
-def _fail(reason: str, location: SourceLocation) -> Never:
-    raise CompilationError(reason, location)
+class HandlerSchemas(Protocol):
+    """Structural schema interface implemented by trusted handler registrations."""
+
+    @property
+    def input_schema(self) -> FrozenObject: ...
+
+    @property
+    def output_schema(self) -> FrozenObject: ...
+
+
+def _fail(reason: str, location: SourceLocation, field: str | None = None) -> Never:
+    raise CompilationError(reason, location, field=field) from None
 
 
 def _validate[T](adapter: TypeAdapter[T], value: object, location: SourceLocation) -> T:
     try:
         return adapter.validate_python(value, strict=True)
-    except ValidationError:
-        _fail("invalid_contract", location)
+    except ValidationError as error:
+        issue = error.errors(include_url=False, include_context=False, include_input=False)[0]
+        allowed = {
+            "version",
+            "name",
+            "start",
+            "defaults",
+            "model",
+            "input_schema",
+            "output",
+            "steps",
+            "type",
+            "next",
+            "on_unresolved",
+            "sources",
+            "question",
+            "questions",
+            "instructions",
+            "on_answer",
+            "input",
+            "tools",
+            "server",
+            "tool",
+            "arguments",
+            "handler",
+            "outcome",
+            "schema",
+            "pointer",
+            "optional",
+            "default",
+            "literal",
+        }
+        parts = [
+            str(part) if isinstance(part, int) or part in allowed else "*" for part in issue["loc"]
+        ]
+        _fail("invalid_contract", location, ".".join(parts) or None)
 
 
 def _binding(value: Binding, location: SourceLocation) -> BindingPlan:
@@ -201,12 +247,40 @@ def _reject_json_constant(_: str) -> object:
 
 def _load_schema(
     bundle: Path,
-    authored: str,
+    authored: str | dict[str, object],
     location: SourceLocation,
     loaded: dict[str, dict[str, object]],
     sources: dict[str, bytes],
     validated_nodes: set[tuple[str, int]],
+    *,
+    inline_name: str = "input",
 ) -> tuple[str, FrozenObject]:
+    if isinstance(authored, dict):
+        # A reserved virtual resource gives inline schemas the same local-ref base
+        # and frozen registry treatment as file schemas without writing a file.
+        relative = f".foliqant-inline-{inline_name}.json"
+        if relative in loaded or (bundle / relative).exists():
+            _fail("invalid_schema_path", location)
+        try:
+            return _accept_schema(
+                bundle,
+                bundle / relative,
+                relative,
+                authored,
+                location,
+                loaded,
+                sources,
+                validated_nodes,
+            )
+        except CompilationError as error:
+            if error.location.path == relative:
+                _fail(
+                    error.reason,
+                    location,
+                    "input_schema" if inline_name == "input" else "output.schema",
+                )
+            raise
+
     path = _confined_path(bundle, authored, location)
     relative = path.relative_to(bundle).as_posix()
     if relative in loaded:
@@ -224,25 +298,42 @@ def _load_schema(
             raw = load_yaml(text, relative_path=relative)
         if not isinstance(raw, dict):
             raise ValueError
-        Draft202012Validator.check_schema(raw)
     except (OSError, UnicodeError, ValueError, RecursionError, SchemaError):
         _fail("invalid_json_schema", SourceLocation(relative, 1, 1))
     sources[relative] = source
-    loaded[relative] = raw
-    _validate_schema_object(
+    return _accept_schema(
         bundle,
         path,
         relative,
         raw,
-        raw,
+        SourceLocation(relative, 1, 1),
         loaded,
         sources,
         validated_nodes,
     )
+
+
+def _accept_schema(
+    bundle: Path,
+    path: Path,
+    relative: str,
+    raw: dict[str, object],
+    location: SourceLocation,
+    loaded: dict[str, dict[str, object]],
+    sources: dict[str, bytes],
+    validated_nodes: set[tuple[str, int]],
+) -> tuple[str, FrozenObject]:
     try:
-        return relative, cast(FrozenObject, freeze_json(raw))
-    except ServiceError:
-        _fail("invalid_json_schema", SourceLocation(relative, 1, 1))
+        Draft202012Validator.check_schema(raw)
+        frozen = cast(FrozenObject, freeze_json(raw))
+    except (ValueError, RecursionError, SchemaError, ServiceError):
+        _fail("invalid_json_schema", location)
+    loaded[relative] = raw
+    try:
+        _validate_schema_object(bundle, path, relative, raw, raw, loaded, sources, validated_nodes)
+    except RecursionError:
+        _fail("invalid_json_schema", location)
+    return relative, frozen
 
 
 def _resolve_schema_fragment(resource: dict[str, object], fragment: str, relative: str) -> object:
@@ -424,11 +515,12 @@ def _compile_step(
             output_kind = "schema"
             output_schema_path, output_schema = _load_schema(
                 bundle,
-                authored.output.schema_path,
+                cast(str | dict[str, object], authored.output.schema_value),
                 location,
                 schemas,
                 schema_sources,
                 validated_schema_nodes,
+                inline_name=f"step-{step_id}",
             )
         return LlmStepPlan(
             name=step_id,
@@ -509,18 +601,21 @@ def _validate_graph(plan_steps: Mapping[str, CompiledStep], start: str) -> dict[
     visiting: set[str] = set()
     visited: set[str] = set()
 
-    def visit(name: str) -> None:
+    pending: list[tuple[str, bool]] = [(start, False)]
+    while pending:
+        name, exiting = pending.pop()
+        if exiting:
+            visiting.remove(name)
+            visited.add(name)
+            continue
         if name in visiting:
             _fail("workflow_cycle", plan_steps[name].location)
         if name in visited:
-            return
+            continue
         visiting.add(name)
-        for target in graph[name]:
-            visit(target)
-        visiting.remove(name)
-        visited.add(name)
+        pending.append((name, True))
+        pending.extend((target, False) for target in reversed(graph[name]))
 
-    visit(start)
     if visited != set(plan_steps):
         missing = sorted(set(plan_steps) - visited)[0]
         _fail("unreachable_step", plan_steps[missing].location)
@@ -605,13 +700,157 @@ def _validate_output(
     terminal_steps = [
         name
         for name, step in steps.items()
-        if not _edges(step) or (isinstance(step, DecisionStepPlan) and step.on_unresolved is None)
+        if isinstance(step, FinishStepPlan) or step.on_unresolved is None
     ]
     if not output.optional and any(
         reference != terminal and reference not in dominators[terminal]
         for terminal in terminal_steps
     ):
         _fail("incompatible_output_binding", location)
+
+
+def _validate_model_capabilities(
+    steps: Mapping[str, CompiledStep], profiles: Mapping[str, ModelConfig] | None
+) -> None:
+    if profiles is None:
+        return
+    for step in steps.values():
+        if not isinstance(step, (DecisionStepPlan, LlmStepPlan)):
+            continue
+        profile = profiles.get(step.model)
+        if profile is None:
+            _fail("unknown_model", step.location, "model")
+        schema_output = isinstance(step, DecisionStepPlan) or step.output_kind == "schema"
+        tools = isinstance(step, LlmStepPlan) and step.tools is not None
+        if (
+            (schema_output and not profile.supports_json_schema)
+            or (not schema_output and not profile.supports_text)
+            or (tools and not profile.supports_tools)
+            or (schema_output and profile.output_mode == "tool" and not profile.supports_tools)
+        ):
+            _fail("unsupported_model_capability", step.location, "model")
+
+
+def _validate_schema_bindings(
+    steps: Mapping[str, CompiledStep],
+    input_path: str | None,
+    schemas: Mapping[str, dict[str, object]],
+    catalogs: Mapping[str, DeclaredToolCatalog],
+    handlers: Mapping[str, HandlerSchemas],
+    output: BindingPlan | None,
+    location: SourceLocation,
+) -> None:
+    def view(schema: dict[str, object], path: str = "") -> SchemaView:
+        return SchemaView(schema, schema, path, schemas)
+
+    def frozen_view(schema: FrozenObject) -> SchemaView:
+        return view(cast(dict[str, object], thaw_json(schema)))
+
+    def result_schema(step: CompiledStep) -> SchemaView:
+        if isinstance(step, LlmStepPlan):
+            if step.output_schema_path is not None:
+                return view(schemas[step.output_schema_path], step.output_schema_path)
+            return view({"type": "string"})
+        if isinstance(step, McpStepPlan):
+            return view(
+                cast(dict[str, object], catalogs[step.server].tools[step.tool].output_schema or {})
+            )
+        if isinstance(step, HandlerStepPlan) and step.handler in handlers:
+            return frozen_view(handlers[step.handler].output_schema)
+        return view({})
+
+    def source(binding: BindingPlan, at: SourceLocation, field: str) -> SchemaView:
+        if binding.kind == "literal":
+            return view({"type": json_type(binding.literal)})
+        tokens = [
+            (part.replace("~1", "/").replace("~0", "~"))
+            for part in (binding.pointer or "").split("/")[1:]
+        ]
+        schema = view({})
+        if not tokens:
+            return schema
+        if tokens[0] == "payload":
+            if input_path is not None:
+                schema = view(schemas[input_path], input_path)
+            tokens = tokens[1:]
+        elif tokens[0] == "metadata":
+            schema = view({"type": "object"})
+            tokens = tokens[1:]
+        elif tokens[0] == "steps" and len(tokens) >= 2 and tokens[1] in steps:
+            referenced = steps[tokens[1]]
+            if len(tokens) >= 3 and tokens[2] == "result":
+                schema = result_schema(referenced)
+                tokens = tokens[3:]
+            else:
+                schema = view(
+                    {
+                        "type": "object",
+                        "properties": {
+                            "status": {"type": "string"},
+                            "result": {},
+                            "error": {
+                                "type": "object",
+                                "properties": {
+                                    "code": {"type": "string"},
+                                    "message": {"type": "string"},
+                                    "retryable": {"type": "boolean"},
+                                },
+                                "additionalProperties": False,
+                            },
+                        },
+                        "additionalProperties": False,
+                    }
+                )
+                tokens = tokens[2:]
+        else:
+            return schema
+        resolved = schema.pointer(tokens)
+        if resolved is None:
+            if binding.optional:
+                return view({"type": json_type(binding.default)})
+            _fail("dangling_pointer", at, field)
+        return resolved
+
+    for step in steps.values():
+        pairs: tuple[tuple[str, BindingPlan], ...] = ()
+        expected: SchemaView | None = None
+        field = "input"
+        if isinstance(step, DecisionStepPlan):
+            pairs, field = step.sources, "sources"
+        elif isinstance(step, LlmStepPlan):
+            pairs = step.input
+        elif isinstance(step, McpStepPlan):
+            pairs, field = step.arguments, "arguments"
+            expected = view(
+                cast(dict[str, object], catalogs[step.server].tools[step.tool].input_schema)
+            )
+        elif isinstance(step, HandlerStepPlan):
+            pairs = step.input
+            if step.handler in handlers:
+                expected = frozen_view(handlers[step.handler].input_schema)
+        if expected is not None:
+            node = expected.resolved().node
+            if isinstance(node, dict):
+                required = node.get("required", [])
+                if isinstance(required, list) and not set(required).issubset(dict(pairs)):
+                    _fail("invalid_input_bindings", step.location, field)
+                if incompatible_types({"object"}, schema_types(expected)):
+                    _fail("incompatible_binding_type", step.location, field)
+        for key, binding in pairs:
+            actual = source(binding, step.location, field + ".*.pointer")
+            if expected is None:
+                continue
+            target = expected.child(key)
+            if target is None:
+                _fail("invalid_input_bindings", step.location, field)
+            if incompatible_types(schema_types(actual), schema_types(target)):
+                _fail("incompatible_binding_type", step.location, field + ".*")
+            if binding.optional and incompatible_types(
+                {json_type(binding.default)}, schema_types(target)
+            ):
+                _fail("incompatible_binding_type", step.location, field + ".*.default")
+    if output is not None:
+        source(output, location, "output.pointer")
 
 
 def _catalogs(
@@ -659,6 +898,8 @@ def _revision(
     model_aliases: Mapping[str, str],
     catalogs: Mapping[str, DeclaredToolCatalog],
     handler_names: Collection[str],
+    model_profiles: Mapping[str, ModelConfig] | None,
+    handler_schemas: Mapping[str, HandlerSchemas],
 ) -> str:
     files = {
         relative: hashlib.sha256(source).hexdigest() for relative, source in sorted(sources.items())
@@ -670,6 +911,22 @@ def _revision(
             name: catalog.model_dump(mode="json") for name, catalog in sorted(catalogs.items())
         },
         "handlers": sorted(handler_names),
+        "handler_schemas": {
+            name: {
+                "input": thaw_json(schema.input_schema),
+                "output": thaw_json(schema.output_schema),
+            }
+            for name, schema in sorted(handler_schemas.items())
+        },
+        "model_capabilities": {
+            name: {
+                "text": profile.supports_text,
+                "schema": profile.supports_json_schema,
+                "tools": profile.supports_tools,
+                "output_mode": profile.output_mode,
+            }
+            for name, profile in sorted((model_profiles or {}).items())
+        },
     }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
@@ -681,11 +938,15 @@ def compile_workflow(
     model_aliases: Mapping[str, str],
     tool_catalogs: Mapping[str, DeclaredToolCatalog | Mapping[str, object]],
     handler_names: Collection[str],
+    model_profiles: Mapping[str, ModelConfig] | None = None,
+    handler_schemas: Mapping[str, HandlerSchemas] | None = None,
 ) -> WorkflowPlan:
     """Compile a local bundle using only the supplied offline registries.
 
     No provider or MCP endpoint is contacted. Tool discovery remains a separate
     runtime/doctor responsibility that compares against the declared catalog.
+    Optional profiles and handler schemas enable declared capability and conservative
+    static type checks; runtime validators remain authoritative for actual values.
     """
 
     try:
@@ -711,7 +972,7 @@ def compile_workflow(
     if workflow.input_schema is not None:
         input_schema_path, input_schema = _load_schema(
             bundle,
-            workflow.input_schema,
+            cast(str | dict[str, object], workflow.input_schema),
             workflow_location,
             schemas,
             sources,
@@ -735,6 +996,13 @@ def compile_workflow(
     )
     authored_steps: list[tuple[StepAuthoring, str, SourceLocation]] = []
     names: set[str] = set()
+    if workflow.steps is not None:
+        if paths:
+            _fail("mixed_step_sources", workflow_location, "steps")
+        for step_id, step in workflow.steps.items():
+            if step.name is not None:
+                _fail("ambiguous_step_name", workflow_location, "steps.*.name")
+            authored_steps.append((step, step_id, workflow_location))
     for path in paths:
         if not path.resolve().is_relative_to(bundle):
             _fail("invalid_step_path", SourceLocation(path.name, 1, 1))
@@ -748,7 +1016,9 @@ def compile_workflow(
             _fail("unsupported_step_type", location)
         if body is not None and step_type not in {"decision", "llm"}:
             _fail("unexpected_step_body", location)
-        if body is not None and "instructions" not in raw_mapping:
+        if body is not None:
+            if "instructions" in raw_mapping:
+                _fail("ambiguous_instructions", location, "instructions")
             raw_mapping["instructions"] = body
         step = _validate(_STEP_ADAPTER, raw_mapping, location)
         step_id = step.name or path.stem
@@ -776,13 +1046,29 @@ def compile_workflow(
         )
         for step, step_id, location in authored_steps
     }
+    for compiled_step in compiled.values():
+        if not isinstance(compiled_step, FinishStepPlan) and compiled_step.next is None:
+            if not isinstance(compiled_step, DecisionStepPlan) or not compiled_step.on_answer:
+                _fail("missing_transition", compiled_step.location, "next")
     dominators = _validate_graph(compiled, workflow.start)
     _validate_bindings(compiled, dominators)
     output = _binding(workflow.output, workflow_location) if workflow.output is not None else None
     _validate_output(output, compiled, dominators, workflow_location)
+    _validate_model_capabilities(compiled, model_profiles)
+    _validate_schema_bindings(
+        compiled,
+        input_schema_path,
+        schemas,
+        catalogs,
+        handler_schemas or {},
+        output,
+        workflow_location,
+    )
     return WorkflowPlan(
         name=workflow.name,
-        revision=_revision(sources, model_aliases, catalogs, handler_names),
+        revision=_revision(
+            sources, model_aliases, catalogs, handler_names, model_profiles, handler_schemas or {}
+        ),
         start=workflow.start,
         default_model=workflow.defaults.model,
         input_schema_path=input_schema_path,

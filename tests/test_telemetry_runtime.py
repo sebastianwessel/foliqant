@@ -85,7 +85,7 @@ def labels() -> TelemetryLabels:
     )
 
 
-def test_empty_endpoints_create_no_exporter_and_ignore_disabled_header_refs() -> None:
+def test_empty_endpoints_create_no_exporter() -> None:
     calls: list[str] = []
 
     def unexpected_span(**kwargs: object) -> SpanExporter:
@@ -99,8 +99,6 @@ def test_empty_endpoints_create_no_exporter_and_ignore_disabled_header_refs() ->
     settings = config(
         traces_endpoint="",
         metrics_endpoint="",
-        traces_headers_env={"authorization": "MISSING_TRACE_SECRET"},
-        metrics_headers_env={"authorization": "MISSING_METRIC_SECRET"},
     )
     runtime = TelemetryRuntime.build(
         settings,
@@ -124,7 +122,7 @@ def test_empty_endpoints_create_no_exporter_and_ignore_disabled_header_refs() ->
         {"metrics_endpoint": "http://collector.example/v1/metrics"},
         {"traces_endpoint": "https://user:secret@collector.example/v1/traces"},
         {"span_queue_capacity": 2, "span_batch_size": 3},
-        {"traces_headers_env": {"bad header": "TOKEN"}},
+        {"traces_headers": {"bad header": "$TOKEN"}},
         {"export_timeout": float("inf")},
     ],
 )
@@ -165,8 +163,8 @@ async def test_explicit_signal_settings_ignore_common_ambient_exporter_overrides
         config(
             traces_endpoint="https://configured.example/v1/traces",
             metrics_endpoint="https://configured.example/v1/metrics",
-            traces_headers_env={"authorization": "TRACE_TOKEN"},
-            metrics_headers_env={"x-api-key": "METRIC_TOKEN"},
+            traces_headers={"authorization": "$TRACE_TOKEN"},
+            metrics_headers={"x-api-key": "$METRIC_TOKEN"},
             export_timeout=2.5,
             metric_export_interval=3600.0,
         ),
@@ -205,7 +203,9 @@ def test_unoverridable_ambient_credentials_are_rejected_only_when_exporting(
         )
 
 
-def test_missing_header_or_exporter_construction_failure_is_nonfatal() -> None:
+def test_missing_header_fails_before_exporter_construction_and_export_failure_is_nonfatal() -> None:
+    from foliqant.core.errors import ServiceError
+
     calls = 0
 
     def broken_factory(**kwargs: object) -> SpanExporter:
@@ -214,18 +214,17 @@ def test_missing_header_or_exporter_construction_failure_is_nonfatal() -> None:
         calls += 1
         raise RuntimeError("SECRET_CONSTRUCTOR_FAILURE")
 
-    missing = TelemetryRuntime.build(
-        config(
-            traces_endpoint="https://collector.example/v1/traces",
-            traces_headers_env={"authorization": "MISSING"},
-        ),
-        labels=labels(),
-        environment={},
-        _span_exporter_factory=broken_factory,
-    )
+    with pytest.raises(ServiceError):
+        TelemetryRuntime.build(
+            config(
+                traces_endpoint="https://collector.example/v1/traces",
+                traces_headers={"authorization": "$MISSING"},
+            ),
+            labels=labels(),
+            environment={},
+            _span_exporter_factory=broken_factory,
+        )
     assert calls == 0
-    assert missing.startup_failures == frozenset({"traces"})
-    assert not missing.traces_exporting
 
     failed = TelemetryRuntime.build(
         config(traces_endpoint="https://collector.example/v1/traces"),

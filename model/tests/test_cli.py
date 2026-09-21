@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,7 @@ def test_curate_dispatches_all_bounded_operation_flags(
 ) -> None:
     from foliqant_model.curation import runner
 
+    monkeypatch.chdir(tmp_path)
     config = tmp_path / "curation.yaml"
     workspace = tmp_path / "workspace"
 
@@ -70,7 +72,10 @@ def test_curate_dispatches_all_bounded_operation_flags(
         extend_projections_from: Path | None = None,
         projection_plan: Path | None = None,
         control: CurationControl | None = None,
+        environment: Mapping[str, str] | None = None,
     ) -> CurateResult:
+        assert environment is not None
+        assert all(key.startswith("FOLIQANT_CURATION_") for key in environment)
         assert config_path == config
         assert selected_workspace == workspace
         assert prepare_only is not repair

@@ -10,7 +10,9 @@ flag. Do not install global Python, accept gated agreements, launch servers,
 start training or upload anything. The wheel exposes the same setup command;
 wheel users install the MLX extra separately. Help is offline and needs no MLX.
 
-CLI options: `--workspace DIR` defaults to `~/.local/share/foliqant`,
+CLI options: `--workspace DIR` defaults to `./.foliqant` in the CLI working
+directory (the repository root for wrappers). Shared `model_workspace` selection
+and Git policy checks are reused by setup and both curation paths.
 `--offline` defaults false, `--timeout-seconds` integer 1..604800 defaults 3600.
 No implicit environment-variable expansion in configuration. Resolve the explicit
 workspace against the current working directory and create private directories.

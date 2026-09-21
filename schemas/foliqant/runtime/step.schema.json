@@ -1167,10 +1167,20 @@
       "additionalProperties": false,
       "properties": {
         "schema": {
-          "minLength": 1,
-          "pattern": ".*\\S.*",
-          "title": "Schema",
-          "type": "string"
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            }
+          ],
+          "title": "Schema"
         }
       },
       "required": [

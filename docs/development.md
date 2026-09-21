@@ -102,9 +102,9 @@ is available.
 
 Model weights, prepared datasets, customer records, generated candidates,
 checkpoints, prediction logs, and evaluation holdouts belong in a private data
-workspace outside the checkout. Commit source manifests, configuration, schemas,
+ignored workspace inside the checkout. Commit source manifests, configuration, schemas,
 and documentation only. The setup command defaults to
-`~/.local/share/foliqant` and refuses an unignored workspace inside a Git tree.
+`./.foliqant` and refuses an unignored workspace inside a Git tree.
 
 When a public contract changes, update its schema, example, and focused guide in
 the same change. The runtime and model projects generate different schema sets;

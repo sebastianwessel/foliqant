@@ -115,7 +115,7 @@ unless you deliberately need an override. Configuration changes create new runs.
 
 The final JSON reports `runPath`, artifact paths, accepted/quarantined counts and
 the result report. Use these paths instead of guessing the identity suffix.
-Default files live under `~/.local/share/foliqant/curation/<run-identity>/`.
+Default files live under `./.foliqant/curation/<run-identity>/`.
 
 | Output | Purpose |
 |---|---|
@@ -158,7 +158,7 @@ old native run:
 
 ```sh
 ./scripts/generate-data \
-  --continue-from "$HOME/.local/share/foliqant/curation/<previous-run-directory>" \
+  --continue-from "$PWD/.foliqant/curation/<previous-run-directory>" \
   --progress always
 ```
 

@@ -38,7 +38,7 @@ def test_explicit_alias_model_and_options_roundtrip_without_secrets() -> None:
         {"provider": "unknown"},
         {"model": " "},
         {"output_mode": "prompt"},
-        {"api_key": "not-accepted"},
+        {"api_key": "${KEY}"},
         {"api_key_env": "${KEY}"},
         {"supports_text": False, "supports_json_schema": False},
         {"concurrency": True},

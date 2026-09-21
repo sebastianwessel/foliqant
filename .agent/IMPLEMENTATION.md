@@ -26,6 +26,10 @@ Do not log payloads, identities, prompts, credentials or raw exceptions.
 Evaluation reuses `run_step` and the same validators; failed/skipped expectations
 remain in denominators. Golden data, results and holdout selection belong to the
 caller. Schema validity and confidence are not accuracy.
+Examples use the public application lifecycle and existing evaluation module,
+not a copied runner. Include an evaluation command and independent expected
+values; a failing expectation must fail that command. Default scripted examples
+exercise wiring only; live evaluation must be explicit.
 
 ## Model operations
 
@@ -39,6 +43,9 @@ Setup/fetch/curation acquire explicitly configured sources. Generation uses the
 configured loopback or explicitly allowed private endpoint; training/evaluation
 use local verified assets. Setup never starts training. Keep data and outputs
 outside Git; minimal test records are constructed in temporary directories.
+Default to ignored `.foliqant/` inside the checkout, through the shared
+`model_workspace` selector. Preserve historic absolute references when moving
+existing assets; never alter completed artifact hashes to disguise relocation.
 Live execution follows the user's authorization and must not disturb active runs.
 
 ## Offline verification

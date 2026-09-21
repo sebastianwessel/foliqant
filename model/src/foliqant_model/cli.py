@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Never, cast
@@ -28,7 +29,8 @@ def _parser() -> argparse.ArgumentParser:
     schema_mode.add_argument("--output", type=Path)
     schema_mode.add_argument("--check", type=Path)
     setup = commands.add_parser("setup", help="Download and prepare the small local exercise")
-    setup.add_argument("--workspace", type=Path)
+    workspace_help = "data directory (default: ./.foliqant in the current directory)"
+    setup.add_argument("--workspace", type=Path, help=workspace_help)
     setup.add_argument("--offline", action="store_true")
     setup.add_argument("--timeout-seconds", type=int, default=3600)
     fetch = commands.add_parser("fetch", help="Download a pinned upstream model")
@@ -60,7 +62,7 @@ def _parser() -> argparse.ArgumentParser:
     rerun.add_argument("--progress", choices=("auto", "always", "never"), default="auto")
     curate = commands.add_parser("curate", help="Prepare or resume automated dataset curation")
     curate.add_argument("--config", type=Path, required=True)
-    curate.add_argument("--workspace", type=Path)
+    curate.add_argument("--workspace", type=Path, help=workspace_help)
     curate.add_argument("--prepare-only", action="store_true")
     curate.add_argument("--offline", action="store_true")
     curate.add_argument("--progress", choices=("auto", "always", "never"), default="auto")
@@ -280,6 +282,7 @@ def main(argv: list[str] | None = None) -> int:
                 strict=True,
             ).model_dump(mode="json")
         elif command == "curate":
+            from .curation.environment import load_curation_environment
             from .curation.runner import run_curation
             from .curation.runtime import CurationControl
 
@@ -294,6 +297,7 @@ def main(argv: list[str] | None = None) -> int:
                 extend_projections_from=args.extend_projections_from,
                 projection_plan=args.projection_plan,
                 control=curation_control,
+                environment=load_curation_environment(Path.cwd(), os.environ),
             )
             payload = curate_result.model_dump(mode="json")
         elif command in {"train", "customize"}:

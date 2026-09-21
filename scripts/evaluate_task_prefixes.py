@@ -21,10 +21,14 @@ from foliqant_model.contracts.base import canonical_digest
 from foliqant_model.contracts.inputs import ChatMessage, DataRecord
 from foliqant_model.curation.contracts import CurationConfig
 from foliqant_model.curation.endpoint import _select_model, discover_models, generate_json
-from foliqant_model.curation.environment import apply_curation_environment
+from foliqant_model.curation.environment import (
+    apply_curation_environment,
+    load_curation_environment,
+)
 from foliqant_model.curation.storage import load_object, run_lock, store_object
 from foliqant_model.errors import ModelError
 from foliqant_model.scoring import structural_equal
+from foliqant_model.workspace import check_workspace_git_policy
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = 20260919
@@ -253,14 +257,8 @@ def main() -> int:
     parser.add_argument("--execute", action="store_true", help="Run the frozen 72-call experiment")
     args = parser.parse_args()
     output = args.output.expanduser().resolve()
-    if output.is_relative_to(ROOT):
-        raise ValueError("Experiment data must stay outside the checkout")
-    environment = dict(os.environ)
-    for line in ROOT.joinpath(".env").read_text().splitlines():
-        if line.strip() and not line.lstrip().startswith("#"):
-            key, value = line.split("=", 1)
-            if key.startswith("FOLIQANT_CURATION_"):
-                environment[key] = value
+    check_workspace_git_policy(output)
+    environment = load_curation_environment(ROOT, os.environ)
     config = apply_curation_environment(
         load_config(ROOT / "model/examples/curation.yaml", CurationConfig), environment
     )

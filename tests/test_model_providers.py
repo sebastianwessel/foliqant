@@ -379,7 +379,7 @@ async def test_explicit_cloud_base_url_ignores_ambient_endpoint(
 
 
 @pytest.mark.asyncio
-async def test_partial_construction_failure_closes_prior_client(
+async def test_missing_environment_fails_before_constructing_any_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from openai import AsyncOpenAI
@@ -410,8 +410,7 @@ async def test_partial_construction_failure_closes_prior_client(
     with pytest.raises(ServiceError):
         async with open_model_bindings(profiles, environment={"OPENAI_API_KEY": "secret"}):
             pytest.fail("partial construction did not fail")
-    assert len(closed) == 1
-    assert closed[0].is_closed()
+    assert closed == []
 
 
 @pytest.mark.asyncio

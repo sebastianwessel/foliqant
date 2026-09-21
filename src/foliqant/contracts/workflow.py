@@ -12,7 +12,7 @@ from foliqant.decisions import (
     DecisionQuestion,
 )
 
-from .base import BoundaryModel
+from .base import BoundaryModel, Version1
 
 Id = Annotated[str, Field(pattern=r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")]
 NonBlank = Annotated[str, Field(min_length=1, pattern=r".*\S.*")]
@@ -108,22 +108,6 @@ class WorkflowDefaults(BoundaryModel):
     model: Id | None = None
 
 
-class WorkflowAuthoring(BoundaryModel):
-    version: Literal[1]
-    name: Id
-    start: Id
-    defaults: WorkflowDefaults = Field(default_factory=WorkflowDefaults)
-    input_schema: NonBlank | None = None
-    output: Binding | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def exact_integer_version(cls, value: object) -> object:
-        if not isinstance(value, Mapping) or type(value.get("version")) is not int:
-            raise ValueError("version must be the integer 1")
-        return value
-
-
 class _CommonStep(BoundaryModel):
     name: Id | None = None
     type: str
@@ -156,7 +140,9 @@ class DecisionStepAuthoring(_CommonStep):
 
 
 class SchemaOutput(BoundaryModel):
-    schema_path: NonBlank = Field(alias="schema", serialization_alias="schema")
+    schema_value: NonBlank | dict[str, JsonValue] = Field(
+        alias="schema", serialization_alias="schema"
+    )
 
 
 class NamedToolChoice(BoundaryModel):
@@ -212,6 +198,16 @@ StepAuthoring = Annotated[
     | FinishStepAuthoring,
     Field(discriminator="type"),
 ]
+
+
+class WorkflowAuthoring(BoundaryModel):
+    version: Version1
+    name: Id
+    start: Id
+    defaults: WorkflowDefaults = Field(default_factory=WorkflowDefaults)
+    input_schema: NonBlank | dict[str, JsonValue] | None = None
+    output: Binding | None = None
+    steps: Annotated[dict[Id, StepAuthoring], Field(min_length=1)] | None = None
 
 
 class DeclaredTool(BoundaryModel):

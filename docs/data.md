@@ -31,7 +31,7 @@ the calibration and test partitions for different decisions.
 
 Store downloaded sources, prepared datasets, customer records, generated
 candidates, and evaluation holdouts outside Git. The default setup workspace is
-`~/.local/share/foliqant`. If you select a directory inside a Git worktree, setup
+`./.foliqant`. If you select a directory inside a Git worktree, setup
 requires that the entire workspace is ignored and contains no tracked files.
 
 Dataset manifests retain source revisions, permission declarations,

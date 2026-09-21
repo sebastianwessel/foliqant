@@ -32,6 +32,9 @@ def settings(
     root = tmp_path / "workflows/demo"
     (root / "steps").mkdir(parents=True)
     (root / "workflow.yaml").write_text("version: 1\nname: demo\nstart: first\n")
+    if "type: finish" not in step and "next:" not in step and "on_answer:" not in step:
+        step += "next: done\n"
+        (root / "steps/done.yaml").write_text("type: finish\noutcome: completed\n")
     (root / "steps/first.yaml").write_text(step)
     config = tmp_path / "foliqant.yaml"
     config.write_text("version: 1\nworkflows: {demo: workflows/demo}\n" + extra)
@@ -300,4 +303,16 @@ def test_write_handler_cannot_be_activated_in_read_only_pipeline(tmp_path):
         prepare_application(
             path,
             handlers={"write": HandlerRegistration(write, schema({}), schema({}), effect="write")},
+        )
+
+
+@pytest.mark.parametrize("version", [True, False, 1.0, "1", None, 0, 2])
+def test_deployment_version_requires_exact_integer_one(version):
+    from pydantic import ValidationError
+
+    from foliqant.contracts.deployment import DeploymentConfig
+
+    with pytest.raises(ValidationError):
+        DeploymentConfig.model_validate(
+            {"version": version, "workflows": {"demo": "demo"}}, strict=True
         )

@@ -134,3 +134,17 @@ Verify immutable artifacts with the actual CLI and inspect coverage/rejection
 reports. Regression replays establish validator behavior; separately authorized
 fresh pilots establish only their sampled generation behavior. Neither establishes
 full-recipe coverage, training readiness, population accuracy or production fitness.
+
+## Workspace and environment
+
+Repository wrappers default to ignored `.foliqant/` in the checkout. Installed
+CLI commands default to `.foliqant/` in their current directory; `--workspace`
+selects another location. The shared workspace helper rejects unignored or
+already tracked data directories. Never commit datasets, weights or reports.
+The Python curation CLI reuses the environment loader (process over local `.env`,
+no interpolation) and forwards only curation settings to the existing typed
+recipe override function. Unrelated secrets are not passed into that path.
+
+When moving existing data, verify no owner process is active and preserve all
+bytes/ancestry. Historic records may contain absolute paths; keep those references
+reachable instead of editing completed records and regenerating their hashes.

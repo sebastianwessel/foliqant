@@ -6,9 +6,10 @@ configuration. The package owns an in-memory application API. HTTP is demonstrat
 only by the small runnable example maintained outside the package transport/core.
 
 Embedding code may import `load_environment`, `prepare_application` and
-`open_application` from `foliqant`. Environment loading is explicit: call
-`load_environment(config_path, environment)` to merge the adjacent `.env` with
-caller environment values, then pass the returned mapping to `open_application`.
+`open_application` from `foliqant`. Preparation is offline and does not read
+environment values. Opening the application loads the adjacent `.env` once,
+overlays the supplied environment and resolves marked deployment references.
+Use `load_environment` only to load an explicitly selected additional location.
 Package import does not discover configuration or open clients.
 
 ## Deployment contract
@@ -17,8 +18,16 @@ Version 1 requires `workflows` and accepts `models`, `mcp`, `execution` and
 `telemetry`. Workflow paths are relative to the configuration file, remain below
 its directory after resolution, and each key equals the compiled workflow name.
 The safe YAML loader rejects unknown/duplicate fields, aliases, custom tags and
-unrecognized unions. Credential fields name environment variables; arbitrary YAML
-strings do not interpolate the environment.
+unrecognized unions. Deployment fields marked for environment use accept `$NAME`
+as a complete reference and `$$` as a literal dollar. Model `api_key`, telemetry
+headers and stdio environment values are secret-safe. Missing references fail
+before clients open. Do not expand workflow prompts, schemas, documents or
+customer values; do not add shell, recursive or partial-string interpolation.
+
+Workflows use inline `steps` or separate step files, never both. Step IDs, start
+and success transitions remain explicit. Schemas may be inline or file-based
+through the same compiler. Reject ambiguous Markdown instruction sources. Reuse
+compiler diagnostics and graph/schema checks; never create a second validator.
 
 `foliqant init DEST` creates a model-free project without overwriting a path.
 `validate`, `explain`, `doctor` and `run` default to `foliqant.yaml` in the
@@ -27,6 +36,11 @@ current directory; `--config PATH` overrides it without parent-directory search.
 capabilities without opening endpoints. `run` reads one bounded envelope and waits
 for one terminal in-memory result. Public CLI output is one safe JSON object.
 Caught exception or validation text must not escape.
+
+Compilation errors expose safe file/field/reason/hint details, never authored
+values. Static checks catch graph gaps and provable schema incompatibilities;
+runtime validation and golden-case evaluation remain necessary for dynamic data
+and business correctness.
 
 There are no `storage`, `worker`, HTTP-auth or execution-mode profiles. There are
 no `migrate`, queue-worker, accepted-job, lookup or cancellation commands. The
@@ -50,7 +64,8 @@ application authentication.
 
 The example may expose a single bounded POST that decodes an envelope, invokes the
 same foreground application call and returns its terminal `ExecutionResult`.
-Disconnect cancellation follows ordinary call cancellation. It must not return an
+The host owns disconnect handling; cancellation of a workflow call propagates.
+It must not return an
 accepted receipt, detach work, expose result lookup/cancel, implement application
 authentication or claim durability. Production ingress, authorization, rate
 control, idempotency and hosting remain responsibilities of the embedding system.
