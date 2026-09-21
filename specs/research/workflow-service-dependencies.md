@@ -458,3 +458,28 @@ the latter stops in review with no automatic sampling or elicitation loop.
 SDK timeout code `REQUEST_TIMEOUT` is mapped independently of message text.
 Application control signals are retained until SDK context cleanup finishes,
 so AnyIO task groups cannot turn business review into a generic failure.
+
+## Safe telemetry integration evidence
+
+Reviewed on 2026-09-21 against the installed OTel SDK 1.44.0, PydanticAI 2.46.0
+and MCP 2.2.0. The [GenAI overview](https://opentelemetry.io/blog/2026/genai-observability/)
+and current [GenAI span conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-spans.md),
+[metric conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-metrics.md)
+and [MCP conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/mcp.md)
+were inspected. GenAI conventions have moved to their own repository and remain
+in development. These upstream links are research references, not mutable runtime
+configuration. The implemented signal allowlist is reviewed in code and tests.
+
+The service uses client inference spans plus `gen_ai.client.operation.duration`
+in seconds and `gen_ai.client.token.usage` split into input/output tokens.
+Deterministic workflow/step duration uses the Foliqant namespace: not every
+workflow operation is a generative AI agent. MCP trace context travels in
+JSON-RPC `params._meta`, separately from its HTTP transport context.
+
+PydanticAI instrumentation format 6 supports disabling content, binary and request
+parameter capture, but still includes tool definitions; a prequeue span filter
+is therefore required. Its metric output is disabled in favor of host-recorded,
+presence-aware token counts. SDK default zeros must not invent measured usage.
+MCP's SDK tracer uses the process-global OTel provider; explicit bootstrap
+ownership is required to apply the same filter to its spans. No private SDK
+tracer replacement or OTel global reset is used.

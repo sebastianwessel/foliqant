@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:c3c1410901a79eb4e936bd04500ddd6af496bce5564b4c3dca136dcc3a8cd606
-  source_revision: working-tree-299ff98-mcp
-  generated_at: 2026-09-21T11:28:02.819Z
+  content_digest: sha256:9690171de49220aefd6e90cfd74e8a4e4e1f83673b9d6d9012b3ee9cd9bab0a0
+  source_revision: working-tree-1bf6a8d-telemetry
+  generated_at: 2026-09-21T11:55:37.369Z

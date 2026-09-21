@@ -1,11 +1,13 @@
 """Bounded PydanticAI model execution behind the workflow step port."""
 
+from __future__ import annotations
+
 import asyncio
 import copy
 import json
 import math
 from collections.abc import Mapping
-from typing import Any, Never
+from typing import TYPE_CHECKING, Any, Never
 
 from foliqant_decisions import DecisionOutput
 from pydantic import ValidationError
@@ -30,6 +32,9 @@ from .accounting import request_token_usage
 from .binding import ModelBinding
 from .tools import ModelTools
 
+if TYPE_CHECKING:
+    from foliqant.adapters.telemetry.models import ModelTelemetry
+
 
 def _fail(code: ErrorCode) -> Never:
     raise ServiceError(code) from None
@@ -39,12 +44,20 @@ class _InvocationModel(WrapperModel):
     """Apply one step's admission, deadline, budget, and accounting to every request."""
 
     def __init__(
-        self, binding: ModelBinding, context: StepContext, tools: ModelTools | None = None
+        self,
+        binding: ModelBinding,
+        context: StepContext,
+        tools: ModelTools | None = None,
+        telemetry: ModelTelemetry | None = None,
     ) -> None:
         super().__init__(binding.model)
         self._binding = binding
         self._context = context
         self._tools = tools
+        self._telemetry = telemetry
+        self._request_model = binding.model
+        if telemetry is not None:
+            self.wrapped = telemetry.instrument(binding.model)
 
     async def request(
         self,
@@ -65,6 +78,10 @@ class _InvocationModel(WrapperModel):
             if deadline <= loop.time():
                 _fail(ErrorCode.TIMEOUT)
             ticket = await self._context.budget.start_model_request()
+            started_at = self._telemetry.start_request() if self._telemetry is not None else None
+            response: ModelResponse | None = None
+            usage = None
+            telemetry_error: ErrorCode | None = None
             try:
                 async with asyncio.timeout_at(deadline):
                     response = await self.wrapped.request(
@@ -72,18 +89,36 @@ class _InvocationModel(WrapperModel):
                         model_settings,
                         model_request_parameters,
                     )
+                # Snapshot and validate the mutable SDK value once. Re-reading it
+                # for metrics and budget accounting could observe different data.
+                usage = request_token_usage(response.usage)
             except TimeoutError:
+                telemetry_error = ErrorCode.TIMEOUT
                 raise ServiceError(ErrorCode.TIMEOUT) from None
             except ModelAPIError as error:
                 # PydanticAI wraps SDK connection errors; only a configured,
                 # typed timeout cause establishes a provider request timeout.
                 if isinstance(error.__cause__, self._binding.timeout_errors):
+                    telemetry_error = ErrorCode.TIMEOUT
                     raise ServiceError(ErrorCode.TIMEOUT) from None
+                telemetry_error = ErrorCode.DEPENDENCY_FAILURE
                 raise
-            await self._context.budget.finish_model_request(
-                ticket,
-                request_token_usage(response.usage),
-            )
+            except ServiceError as error:
+                telemetry_error = error.code
+                raise
+            except Exception:
+                telemetry_error = ErrorCode.DEPENDENCY_FAILURE
+                raise
+            finally:
+                if self._telemetry is not None and started_at is not None:
+                    self._telemetry.record_request(
+                        self._request_model,
+                        started_at,
+                        usage,
+                        telemetry_error,
+                    )
+            assert usage is not None
+            await self._context.budget.finish_model_request(ticket, usage)
             if response.finish_reason in {"length", "content_filter", "error"}:
                 _fail(ErrorCode.INVALID_OUTPUT)
             if (
@@ -125,10 +160,12 @@ class ModelExecutor:
         schemas: WorkflowSchemas,
         *,
         tools: ToolRuntime | None = None,
+        telemetry: ModelTelemetry | None = None,
     ) -> None:
         self._bindings = dict(bindings)
         self._schemas = schemas
         self._tools = tools
+        self._telemetry = telemetry
 
     async def execute(
         self,
@@ -202,8 +239,8 @@ class ModelExecutor:
             return await self._run_schema(step, inputs, context, binding, tools)
         _fail(ErrorCode.INVALID_CONFIGURATION)
 
-    @staticmethod
     def _agent(
+        self,
         binding: ModelBinding,
         context: StepContext,
         *,
@@ -216,7 +253,7 @@ class ModelExecutor:
         except Exception:
             _fail(ErrorCode.INVALID_CONFIGURATION)
         agent: Agent[None, Any] = Agent(
-            _InvocationModel(binding, context, tools),
+            _InvocationModel(binding, context, tools, self._telemetry),
             name="foliqant_workflow_model",
             instructions=instructions,
             output_type=output_type,

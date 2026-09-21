@@ -558,6 +558,34 @@ free-text output. No-exporter and exporter-failure tests must prove business wor
 still completes. Debug content capture is off unless separately enabled with
 explicit field allowlists and bounds; credentials/reasoning remain excluded.
 
+Implementation contract for the optional observation adapter:
+
+- The standard-library `ExecutionObserver` port receives configured workflow/step
+  names, fixed outcomes/error codes and W3C carrier fields only. It never receives
+  identity, payloads, exceptions or execution IDs. Observation failures cannot
+  replace business outcomes; closing restores task-local context.
+- `TelemetryConfig` selects independent OTLP/HTTP signal endpoints and environment
+  references for header values. Empty or absent endpoints disable the signal.
+  Startup label allowlists are supplied separately from deployment configuration.
+- Span sanitization precedes the batch processor, not only the exporter. Preserve
+  IDs, parentage, timing and reviewed bounded fields; strip events, status text,
+  arbitrary resources/scope metadata, link attributes and exported tracestate.
+  Safe configured model names may appear in standard inference span names.
+- PydanticAI's explicit content-disabled model instrumentation owns one client
+  inference span per actual request. Its raw metrics are disabled. Host metrics
+  use validated usage presence and approved labels, with no duplicate agent totals.
+  Missing counts stay absent; zero is recorded only when measured explicitly.
+- MCP's own SDK tracer supplies client operations and W3C `_meta` propagation.
+  Process bootstrap explicitly owns global tracing/propagation once; embedded
+  integration never silently replaces a host tracer. No baggage is forwarded.
+  Authentication and authorization are independent of tracing.
+- Owned metric views accept only reviewed host instrument names, scopes, units
+  and attribute keys; adapters allowlist values before aggregation. Exemplars
+  are disabled. Export shutdown runs off the event loop with a bounded caller
+  wait and reports incomplete drain without changing a completed business outcome.
+  The SDK exposes no public batch shutdown timeout; one owned daemon worker may
+  continue its fixed SDK wait after the caller deadline. Repeated closes reuse it.
+
 ## Developer experience, artifacts and acceptance
 
 CLI commands: `init`, `validate`, `explain`, `run`, `serve`, `test`, `doctor`,

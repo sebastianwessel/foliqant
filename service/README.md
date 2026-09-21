@@ -9,7 +9,7 @@ Implementation is in progress. Available foundations are strict envelopes,
 protected metadata validation, immutable core values, safe errors and bounded
 async admission, bounded blocking-I/O execution, safe JSON logging, an offline
 workflow compiler, embedded async runner, public execution results, PydanticAI
-model execution and shared native decision validation. A model-enabled inbox
+model execution, safe optional OTel observations and shared native decision validation. A model-enabled inbox
 example is available. The executable service CLI and durable
 transports are not yet complete; read-only MCP steps and model tools are available. See the
 [implementation status](../plans/workflow-service-status.md) for verified scope.
@@ -80,6 +80,9 @@ uv run --project service --no-sync python examples/embedded-workflow/run.py
 Construct `WorkflowSchemas(plan)` once and pass it to `WorkflowRunner` alongside
 an async `StepExecutor`, a shared `CapacityLimiter`, and optional `ExecutionLimits`.
 Pass an accepted envelope and explicit trusted `Identity` to `await runner.run(...)`.
+Ingress can also pass a `TraceContext` as `transport_trace=`. A valid transport
+carrier takes precedence over envelope telemetry as a whole; the carriers are
+never merged, and the original metadata remains unchanged.
 Use `to_execution_result(...)` to validate and serialize the returned core result.
 The runner rechecks identity claims and input schemas before admission; these
 boundary errors raise `ServiceError`. Execution failures return a failed result
@@ -268,3 +271,77 @@ The bootstrap owns the returned logging runtime and drains it outside the event
 loop using `await asyncio.to_thread(runtime.close, timeout=...)`, checking the
 boolean outcome. These are tested primitives; full transport/provider scaling
 and durability acceptance remain part of the ongoing implementation.
+
+## Safe OpenTelemetry
+
+Install the optional `telemetry` extra. `TelemetryRuntime` owns separate trace and
+metric providers; it creates no exporter when a signal endpoint is missing or
+empty. It never discovers a collector or uses ambient OTLP endpoint/header
+settings. Configure explicit OTLP/HTTP signal URLs, including `/v1/traces` or
+`/v1/metrics`; HTTP needs `allow_insecure_http=True` for local development.
+
+```python
+from foliqant.adapters.telemetry.observation import WorkflowTelemetry
+from foliqant.adapters.telemetry.privacy import TelemetryLabels
+from foliqant.adapters.telemetry.runtime import TelemetryRuntime
+from foliqant.contracts.telemetry import TelemetryConfig
+
+labels = TelemetryLabels(
+    services=frozenset({"workflow_service"}),
+    workflows=frozenset({"inbox"}),
+    steps=frozenset({"classify", "done"}),
+    models=frozenset({"your-configured-model-id"}),
+    providers=frozenset({"openai"}),
+)
+telemetry = TelemetryRuntime.build(
+    TelemetryConfig(service_name="workflow_service"),
+    labels=labels,
+    environment={},
+)
+observer = WorkflowTelemetry(
+    telemetry.tracer_provider, labels=labels, meter_provider=telemetry.meter_provider
+)
+# Pass observer=observer when constructing WorkflowRunner.
+# At application shutdown: clean = await telemetry.aclose()
+```
+
+Add `ModelTelemetry(telemetry.tracer_provider, telemetry.meter_provider, labels)`
+from `foliqant.adapters.telemetry.models` as `ModelExecutor(..., telemetry=...)`
+to observe actual model requests. Only one SDK inference span is emitted per
+request. Host metrics count available input/output tokens once; missing usage is
+not recorded as zero and component subsets are not added to totals. The upstream
+SDK omits explicit zero counts from span attributes; use the host metrics, not
+absence of a span attribute, to distinguish measured zero from unavailable usage.
+
+For the MCP SDK, call `telemetry.install_global()` once during process startup,
+before creating sessions. It explicitly owns global tracing and W3C propagation;
+it refuses to replace an already configured host provider. Embedded applications
+can pass the providers directly for workflow/model tracing without installing
+globals, but must separately arrange safe host-owned tracing for MCP SDK spans.
+Pass `trace_carrier` from `foliqant.adapters.telemetry.observation` to
+`McpRuntime(..., trace_carrier=trace_carrier)` for protected W3C metadata. The SDK
+creates its client-operation span and stamps the current context on each request.
+Neither the observer nor MCP forwards baggage or uses trace fields as identity.
+
+Labels must be reviewed nonsecret configuration, never values collected from
+requests. Prompts, results, identity values, exception text, tool schemas and
+arbitrary SDK attributes/events are removed before export queueing. Tracestate
+may propagate over W3C transport but is removed from exported span contexts.
+Metric labels are filtered before aggregation; raw SDK metrics and exemplars are
+disabled. Workflow/step durations use seconds and fixed outcomes/error codes.
+
+Configure JSON logging before SDK startup, including in debug mode. Header
+credentials use references such as `traces_headers_env={"Authorization":
+"OTLP_AUTHORIZATION"}` with an explicit environment snapshot; never put their
+values in configuration. Conflicting ambient TLS/client-credential SDK settings
+are rejected rather than silently applied. Export failures are nonfatal;
+`startup_failures` reports signals that could not initialize, and `aclose()`
+returns false if bounded shutdown could not finish. OTel exposes no timeout
+argument on its public batch shutdown API: one owned daemon cleanup thread can
+continue after this caller wait expires (the SDK batch wait is up to 30 seconds).
+Repeated close calls wait on that same worker rather than starting more threads. Observe these safe health
+signals without changing a completed business result. Do not keep the event loop
+open awaiting an unbounded exporter flush.
+
+The [embedded example](../examples/embedded-workflow/README.md) includes a
+`--telemetry` option and makes no model requests.

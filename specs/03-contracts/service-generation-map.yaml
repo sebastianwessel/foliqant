@@ -2,6 +2,15 @@ generation_map_version: 1
 contract_ref: CONTRACT-SERVICE-V1
 authority: ../11-workflow-service.md
 entries:
+  - id: GEN-SERVICE-TELEMETRY
+    canonical_source: ../../service/src/foliqant/contracts/telemetry.py
+    generated_outputs: [../../contracts/service/telemetry.schema.json]
+    command: uv run --project service python service/scripts/generate_schemas.py
+    drift_check: uv run --project service python service/scripts/generate_schemas.py --check
+    handwritten_remainder:
+      - signal-specific endpoint and header-reference resolution, safe provider ownership and bounded export
+      - prequeue span filtering and startup label allowlists before metric aggregation
+    verification: [../../service/tests/test_telemetry_runtime.py, ../../service/tests/test_trace_privacy.py, ../../service/tests/test_workflow_telemetry.py, ../../service/tests/test_model_telemetry.py, ../../service/tests/test_mcp_telemetry.py]
   - id: GEN-SERVICE-MCP-PROFILES
     canonical_source: ../../service/src/foliqant/contracts/mcp.py
     generated_outputs: [../../contracts/service/mcp-profiles.schema.json]

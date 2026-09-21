@@ -1,7 +1,9 @@
 """Run the nondurable embedded workflow without inference or network access."""
 
+import argparse
 import asyncio
 import json
+import sys
 from pathlib import Path
 
 from foliqant.adapters.validation import WorkflowSchemas
@@ -16,6 +18,7 @@ from foliqant.core.json import FrozenObject, JsonValue, freeze_json
 from foliqant.core.plan import HandlerStepPlan
 from foliqant.core.runner import WorkflowRunner
 from foliqant.ports.execution import OperationStep, StepContext
+from foliqant.ports.observation import ExecutionObserver
 
 EXAMPLE_DIRECTORY = Path(__file__).resolve().parent
 
@@ -50,6 +53,7 @@ async def run_example(
     payload: dict[str, JsonValue],
     *,
     executor: DeterministicExecutor | None = None,
+    observer: ExecutionObserver | None = None,
 ) -> ExecutionResult:
     """Compile and run once; this example deliberately provides no durability."""
 
@@ -66,6 +70,7 @@ async def run_example(
         executor=selected_executor,
         validator=schemas,
         admission=CapacityLimiter(concurrency=1, queue_limit=0),
+        observer=observer,
     )
     # These are host-supplied trusted demo values. This example performs no
     # authentication; untrusted envelope metadata cannot create or replace them.
@@ -82,7 +87,19 @@ async def run_example(
 
 
 async def main() -> None:
-    result = await run_example({"requestId": "req-001", "priority": "urgent"})
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--telemetry", action="store_true", help="enable optional safe OTel providers"
+    )
+    args = parser.parse_args()
+    payload: dict[str, JsonValue] = {"requestId": "req-001", "priority": "urgent"}
+    if args.telemetry:
+        from telemetry_setup import telemetry_observer
+
+        async with telemetry_observer() as observer:
+            result = await run_example(payload, observer=observer)
+    else:
+        result = await run_example(payload)
     print(
         json.dumps(
             result.model_dump(mode="json", by_alias=True),
@@ -93,4 +110,11 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except ServiceError as error:
+        print(
+            json.dumps({"error": {"code": error.code.value, "message": str(error)}}),
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None

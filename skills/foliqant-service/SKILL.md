@@ -62,9 +62,8 @@ before inference. Use non-strict provider mode for authored schemas to preserve
 constraints; Anthropic requires `tool` mode for these steps. Local provider
 preflight precedes admission and accounting; unsupported modes never silently
 switch or consume an attempt. Never relax validation to accept a refusal or truncated reply.
-Missing token measurements remain unknown. Bedrock and model OTel
-integration remain incomplete; do not imply they are ready because their
-dependencies or contracts exist.
+Missing token measurements remain unknown. Bedrock remains incomplete; do not
+imply it is ready because its dependencies or contracts exist.
 
 For MCP, reuse `McpProfiles` and the existing `DeclaredToolCatalog`. Construct
 `McpClientSessionFactory` once and inject it plus a required host `ToolAuthorizer`
@@ -96,6 +95,26 @@ Use native async I/O. A blocking-only SDK uses the owned bounded
 cancellation. Keep request identity, auth and trace state off shared mutable
 adapters. Only safe allowlisted events reach the JSON logger, never raw errors,
 prompts, responses or credentials.
+
+## Safe observations
+
+Use the `telemetry` extra and `TelemetryRuntime.build` with explicit signal URLs,
+header environment references and a reviewed `TelemetryLabels` allowlist. Missing
+or empty endpoints allocate no exporters. Keep runtime ownership in bootstrap;
+`install_global()` is explicit for the MCP SDK and refuses an existing host
+provider. Pass `WorkflowTelemetry` to the runner, `ModelTelemetry` to the model
+executor and W3C `trace_carrier` to MCP. Do not patch SDK global tracers or reset
+OTel globals between tests; isolate global installation tests in a subprocess.
+
+Never bypass `SafeSpanProcessor`: it sanitizes before batch queueing, including
+SDK exception events, tool definitions, names and resource/scope/link metadata.
+Disabling model content capture alone is insufficient. Keep PydanticAI raw
+metrics disabled; host counters use actual measurement presence, not default
+zeros or duplicate component totals. Approve labels at startup, never from input.
+No identity, prompts, responses or baggage belongs in observations. Configure
+safe JSON logging before SDK initialization, including debug runs. Shutdown is
+async/bounded; report incomplete telemetry cleanup without changing a completed
+business outcome. See the service guide and the embedded `--telemetry` example.
 
 ## Checks
 

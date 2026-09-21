@@ -52,7 +52,7 @@ jobs:
       - run: uv run --project service --no-sync python -m pytest service/tests -q
         env:
           UV_OFFLINE: '1'
-      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml service/src examples/embedded-workflow/run.py
+      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml service/src examples/embedded-workflow
       - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/inbox/run.py
       - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/mcp-tools
       - run: uv run --project service --no-sync ruff check --config service/pyproject.toml service/src service/tests service/scripts examples

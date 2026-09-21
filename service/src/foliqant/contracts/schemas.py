@@ -10,6 +10,7 @@ from .envelope import Envelope
 from .execution import AcceptanceReceipt, ExecutionResult
 from .mcp import McpProfiles
 from .models import ModelProfiles
+from .telemetry import TelemetryConfig
 from .workflow import DeclaredToolCatalog, StepAuthoring, WorkflowAuthoring
 
 
@@ -23,6 +24,7 @@ def service_schemas() -> dict[str, dict[str, JsonValue]]:
             "acceptance-receipt.schema.json": AcceptanceReceipt.model_json_schema(),
             "model-profiles.schema.json": ModelProfiles.model_json_schema(),
             "mcp-profiles.schema.json": McpProfiles.model_json_schema(),
+            "telemetry.schema.json": TelemetryConfig.model_json_schema(),
             "workflow.schema.json": WorkflowAuthoring.model_json_schema(),
             "step.schema.json": TypeAdapter(StepAuthoring).json_schema(),
             "tool-catalog.schema.json": DeclaredToolCatalog.model_json_schema(),

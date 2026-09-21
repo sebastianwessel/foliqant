@@ -88,9 +88,13 @@ async def test_missing_business_priority_routes_to_review() -> None:
     assert executor.calls == ["route"]  # type: ignore[attr-defined]
 
 
-def test_documented_no_sync_command_prints_json_result() -> None:
+@pytest.mark.parametrize("extra_args", [[], ["--telemetry"]])
+def test_documented_no_sync_command_prints_json_result(extra_args: list[str]) -> None:
     environment = os.environ.copy()
     environment["UV_OFFLINE"] = "1"
+    environment["FOLIQANT_OTLP_TRACES_ENDPOINT"] = ""
+    environment["FOLIQANT_OTLP_METRICS_ENDPOINT"] = ""
+    environment["FOLIQANT_OTLP_ALLOW_INSECURE_HTTP"] = "false"
     completed = subprocess.run(
         [
             "uv",
@@ -100,6 +104,7 @@ def test_documented_no_sync_command_prints_json_result() -> None:
             "--no-sync",
             "python",
             "examples/embedded-workflow/run.py",
+            *extra_args,
         ],
         cwd=ROOT,
         env=environment,

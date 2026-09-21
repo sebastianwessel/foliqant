@@ -118,6 +118,33 @@ reconciliation. Full service deployment, privacy-filtered OTel export, database/
 broker recovery and child workflows remain required, not implicitly delivered
 by these adapter tests.
 
+## Safe telemetry slice
+
+- Optional OTLP/HTTP trace and metric endpoints, secret header references and
+  bounded exporter settings have a ninth generated service schema. No endpoint
+  means no exporter; ambient endpoint/header settings do not silently enable one.
+- A standard-library observer port wraps workflow and step execution, including
+  review, failures and cancellation. Valid transport context takes precedence
+  over metadata as one complete W3C carrier; incoming metadata stays unchanged.
+- Spans are sanitized before queueing. Content, identity, tool definitions,
+  exception events, raw status text and arbitrary resource/scope/link metadata
+  are excluded. Current-context propagation is isolated between concurrent runs.
+- PydanticAI owns one content-disabled inference span per admitted request.
+  Host metrics preserve measured zero versus unavailable usage without duplicate
+  SDK counts. Metric views drop unreviewed instruments; exemplars are disabled.
+- Actual MCP SDK ASGI tests prove client/server trace continuity, per-caller
+  isolation and protected metadata without baggage. No network/model calls occur.
+- The embedded example now supports `--telemetry`; an isolated production install
+  with that extra has 37 distributions, no dev/training packages, and executes
+  offline. Closing verification: 505 service tests, strict typing, lint/format,
+  nine service schemas, unchanged native schemas and docs/skill audits pass. See the [telemetry review](reviews/service-telemetry.md) for limitations
+  and independent review findings.
+
+The full service remains incomplete. OTel's public batch shutdown has no timeout
+parameter; the host bounds its caller wait and retains one owned cleanup worker.
+A real collector deployment and live-provider qualification remain separate from
+these SDK/transport tests.
+
 ## Remaining implementation sequence
 
 1. Complete deployment/provider settings and concrete durable-operation contracts;
@@ -128,9 +155,9 @@ by these adapter tests.
 3. Add authenticated HTTP ingress and integrate the implemented MCP runtime into
    service bootstrap. Complete production credential storage/login operations
    and deployment conformance; retain SDK wire and caller-isolation regressions.
-4. Add standards-based OTel trace/metric export and MCP propagation, pre-export
-   privacy filtering including third-party spans/events, bounded cleanup and
-   no-exporter behavior. Finish safe logging and operator configuration.
+4. Integrate the verified safe OTel runtime into the final service bootstrap and
+   operator configuration; retain prequeue privacy, bounded caller cleanup and
+   no-exporter regression coverage. Add a runnable collector deployment example.
 5. Freeze durable SQL/operation contracts, then implement PostgreSQL inbox,
    leases/fencing, persisted budgets/effect identity, checkpoints/outbox, async
    HTTP retrieval/cancellation, Redis recovery/output and webhook delivery.
