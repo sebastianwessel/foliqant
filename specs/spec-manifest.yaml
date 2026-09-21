@@ -1,5 +1,5 @@
 spec_manifest_version: 1
-content_digest: sha256:525781bf6ba1f83dde518e17036753173c38b46e7296b54a581ad8449fb9af38
+content_digest: sha256:314db3d87cf3c8bd59597b4b9b99f2493836a8db0d6b5205173d8a616ec2cc69
 artifacts:
   - path: 00-applicability.yaml
     sha256: sha256:f4f27579afa175878b0f9202ebd507291e5791523a08ad1394f790ff91cce975
@@ -42,7 +42,7 @@ artifacts:
   - path: 04-operations/security-release.md
     sha256: sha256:a2fdd059062d55fc800bbae2e0afc5013f3e2edd7ff561df8dcb1653891f73c0
   - path: 05-documentation-and-skills.md
-    sha256: sha256:6b6306b5f7924be581f5c5c0f59499344fdf33ee3da467c1e2eb57a0cb2eee94
+    sha256: sha256:2b1b8915c2b706c5a186883d1384e2472dc83e324532c62197af6fcf2a286f03
   - path: 06-backend-and-dependencies.md
     sha256: sha256:f033cd4b49ea3b0c8dae0298e5085a57eca656c792c212ab0bc7997fa007339c
   - path: 07-local-setup.md
@@ -94,6 +94,6 @@ artifacts:
   - path: research/workflow-service-proposal.md
     sha256: sha256:6114e68214a130ffdd8df207e31144228638152debf1736e13ce7ae44e6da80d
 provenance:
-  source_revision: working-tree-baabcfd-configuration-dx-2026-09-21
-  generated_at: 2026-09-21T16:57:19.505Z
+  source_revision: working-tree-6db4bca-ci-pages-gate
+  generated_at: 2026-09-21T17:26:52.480Z
   generator: spec-manifest/v1

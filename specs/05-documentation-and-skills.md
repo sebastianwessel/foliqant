@@ -15,7 +15,8 @@ Use the root uv project's documentation group:
 `uv run --group docs mkdocs serve --dev-addr 127.0.0.1:8001` previews the site;
 `uv run --group docs mkdocs build --strict` verifies it. CI runs the strict
 build; GitHub Actions is configured to publish to GitHub Pages when enabled
-and available for the repository. Keep all published navigation
+and available for the repository, and when the administrator sets the
+`FOLIQANT_PUBLISH_PAGES` repository variable to `true`. Keep all published navigation
 in `mkdocs.yml`; local repository links must also remain valid.
 
 Commands must match current CLI help. Examples use declared dependencies and

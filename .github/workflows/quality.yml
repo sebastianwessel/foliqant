@@ -78,7 +78,11 @@ jobs:
 
   deploy-docs:
     name: Publish documentation
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # Pages is a repository feature with plan-dependent availability. Keep the
+    # required build and artifact checks green everywhere; deploy only after an
+    # administrator has enabled Pages and deliberately set this repository
+    # variable to true.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.FOLIQANT_PUBLISH_PAGES == 'true'
     needs: [quality, runtime, documentation]
     runs-on: ubuntu-24.04
     permissions:
@@ -92,10 +96,6 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/configure-pages@v5
-        with:
-          # Create/configure the Pages site on its first successful deployment.
-          # Without this, a new private repository fails before the deploy step.
-          enablement: true
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

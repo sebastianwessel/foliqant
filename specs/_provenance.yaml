@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:525781bf6ba1f83dde518e17036753173c38b46e7296b54a581ad8449fb9af38
-  source_revision: working-tree-baabcfd-configuration-dx-2026-09-21
-  generated_at: 2026-09-21T16:57:19.505Z
+  content_digest: sha256:314db3d87cf3c8bd59597b4b9b99f2493836a8db0d6b5205173d8a616ec2cc69
+  source_revision: working-tree-6db4bca-ci-pages-gate
+  generated_at: 2026-09-21T17:26:52.480Z

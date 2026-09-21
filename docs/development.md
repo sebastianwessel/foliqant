@@ -90,7 +90,9 @@ git diff --check
 GitHub Pages is not enabled automatically. For a private repository it also
 requires an eligible GitHub plan. When eligible, a repository administrator must
 choose **Settings > Pages > Source > GitHub Actions** before the deployment job
-can publish the site.
+can publish the site, then add the repository Actions variable
+`FOLIQANT_PUBLISH_PAGES=true`. This explicit switch keeps build-and-test CI
+green while Pages is unavailable or intentionally disabled.
 
 CI reports three checks: **Python quality gate**, **Runtime package quality
 gate**, and **Documentation build**. The Pages deployment on `main` waits for all
