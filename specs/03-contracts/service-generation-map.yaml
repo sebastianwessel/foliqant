@@ -80,3 +80,8 @@ entries:
       - graph dominance, local file confinement, category normalization and semantic checks
       - cross-field invariants remain strict Pydantic runtime validators
     verification: [../../service/tests/test_compiler.py, ../../service/tests/test_bindings.py]
+
+# Internal dataclasses and SQL are not a second public JSON Schema contract.
+# Persistence reuses generated envelope/execution boundaries above; the owned
+# SQL migration is hashed and verified explicitly at migrate/use time.
+# Custom row mapping and digest vectors are covered by MAP-SERVICE-DURABLE-ROWS.

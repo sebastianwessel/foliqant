@@ -14,6 +14,24 @@ applicability:
     - CAP-CURATE
     - CAP-NATIVE-DATA
 shapes:
+  - shape_id: service.durable-state
+    representation_class: domain
+    canonical_source: ../service/src/foliqant/core/storage.py
+    owner: service-durable-storage
+    stability: internal
+    open_policy: closed
+    allowed_consumers: [durable-worker, storage-adapters]
+    source_contract_refs: [CONTRACT-SERVICE-STORAGE-V1]
+    mapping_refs: [MAP-SERVICE-DURABLE-ROWS]
+  - shape_id: service.postgres-rows
+    representation_class: persistence
+    canonical_source: 12-durable-execution.md
+    owner: service-postgres
+    stability: versioned
+    open_policy: closed
+    allowed_consumers: [service-postgres]
+    source_contract_refs: [CONTRACT-SERVICE-STORAGE-V1]
+    mapping_refs: [MAP-SERVICE-DURABLE-ROWS]
   - shape_id: service.envelope
     representation_class: boundary
     canonical_source: ../service/src/foliqant/contracts/envelope.py
@@ -496,6 +514,14 @@ shapes:
     mapping_refs:
       - MAP-SCOPED-SOURCE-PROJECTION
 mappings:
+  - mapping_id: MAP-SERVICE-DURABLE-ROWS
+    from_shape: service.durable-state
+    to_shape: service.postgres-rows
+    direction: custom
+    allowed_differences: [database-clock-timestamps, canonical-digests, lease-fences, normalized-json]
+    redaction_or_loss_policy: Preserve accepted content and identity privately; no credentials or raw SQL errors in diagnostics.
+    field_operations: [identity:exact-scope, input:canonical-digest, checkpoints:immutable, usage:preserve-unknown]
+    verification: [service/tests/test_postgres_store.py, 12-durable-execution.md]
   - mapping_id: MAP-SERVICE-ACCEPT-ENVELOPE
     from_shape: service.envelope
     to_shape: service.accepted-envelope

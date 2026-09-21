@@ -183,13 +183,37 @@ these SDK/transport tests.
   [bootstrap/HTTP review](reviews/service-bootstrap-http.md) for acceptance limits
   and review findings.
 
+## PostgreSQL storage slice
+
+- An async storage port and immutable core values now support exact-scope
+  idempotent acceptance, database-clock claim dispositions, lease fencing,
+  heartbeat/release, cancellation requests, checkpoints and durable attempts.
+- The optional Psycopg adapter uses bounded async connections and transactions,
+  explicit version/hash-checked migration, and atomic terminal result/outbox
+  commits. JSON storage preserves decision order and native JSON values.
+- `PersistentStepBudget` reserves attempts before I/O and reloads consumed counts
+  after adapter restart. Missing token measurements stay unknown. It implements
+  the existing budget port without changing the nondurable runner.
+- Independent delivery leases, persisted attempts and bounded exhaustion recovery
+  allow output retries without reopening the completed execution. Consumers still
+  deduplicate event IDs; exactly-once remote effects are not promised.
+- `examples/durable-storage` executes a real database round trip with no model
+  calls. Storage docs and the service skill distinguish this adapter from pending
+  worker/transport integration. CI now supplies an isolated PostgreSQL service.
+
+This is storage acceptance, not a durable production service. The current CLI/HTTP
+runner still does not use this adapter. Worker resume/heartbeat, effect journal,
+broker/webhook delivery, durable HTTP endpoints and child execution remain
+required. Local checks and independent findings are recorded in the
+[storage review](reviews/service-postgres-storage.md).
+
 ## Remaining implementation sequence
 
 1. Complete production MCP credential storage/login operations, TLS deployment
    guidance, provider conformance, and live collector/provider qualification.
-2. Freeze durable SQL/operation contracts, then implement PostgreSQL inbox,
-   leases/fencing, persisted budgets/effect identity, checkpoints/outbox, async
-   HTTP retrieval/cancellation, Redis recovery/output and webhook delivery.
+2. Integrate the implemented PostgreSQL store with worker resume/heartbeat,
+   persisted effect identity/reconciliation, async HTTP retrieval/cancellation,
+   Redis recovery/output and webhook delivery.
 3. Implement bounded child dispatch/join, per-child authorization, dependency and
    conditional holds, correction/reconciliation and retention/deletion operations.
    Real broker/database crash/redelivery tests are required.

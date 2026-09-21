@@ -31,7 +31,7 @@ def main() -> int:
             *root.joinpath("docs").rglob("*.md"),
             *root.joinpath("skills").rglob("*.md"),
             *root.joinpath("model").glob("*/README.md"),
-            root / "service" / "README.md",
+            *root.joinpath("service").glob("*.md"),
             *root.joinpath("examples").rglob("README.md"),
         ]
     )

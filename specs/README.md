@@ -30,3 +30,9 @@ readiness gaps. Additive category authoring/normalization is implemented without
 changing the V1 generation contract. Candidate
 [domain datasets](research/business-process-datasets.md) remain research until
 their rights, mappings and acquisition profiles are separately reviewed.
+
+The [Python workflow service](11-workflow-service.md) implements the service side
+separately from model tooling. Its [durable storage contract](12-durable-execution.md)
+defines transactional state, fencing, persisted budgets and output delivery.
+[Implementation status](../plans/workflow-service-status.md) distinguishes tested
+adapters from pending worker/transport and production acceptance.

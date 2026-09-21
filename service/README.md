@@ -10,8 +10,10 @@ core values, bounded admission and blocking execution, the offline compiler,
 embedded runner, model execution, read-only MCP tools, safe OTel observations,
 an executable CLI/bootstrap, and authenticated synchronous HTTP ingress. The
 current runtime is nondurable: durable jobs, retrieval/cancellation endpoints,
-Redis/PostgreSQL recovery, child workflows, and reconciled writes remain future
-work. See the [implementation status](../plans/workflow-service-status.md) for
+worker/broker recovery, child workflows, and reconciled writes remain future
+work. A separate [PostgreSQL storage adapter](STORAGE.md) provides acceptance,
+fenced leases, checkpoints, persisted budgets and a transactional result outbox;
+it is not yet connected to the runner. See the [implementation status](../plans/workflow-service-status.md) for
 verified scope.
 
 ## Development environment

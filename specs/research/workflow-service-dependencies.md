@@ -42,6 +42,7 @@ version and must be covered by adapter tests.
 | Bedrock extra | `pydantic-ai-slim[bedrock]==2.46.0` | Bedrock Converse adapter | [PydanticAI Bedrock models](https://pydantic.dev/docs/ai/models/bedrock/) |
 | AWS SDK | `boto3==1.43.98`, `botocore==1.43.98` | Transitive, locked Bedrock client | [Boto3 Bedrock Runtime](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-runtime.html) |
 | Azure identity | `azure-identity==1.25.3` | Optional Entra ID/managed identity; unnecessary for API-key-only Azure OpenAI | [PyPI](https://pypi.org/project/azure-identity/1.25.3/) |
+| PostgreSQL client | `psycopg[binary]==3.3.6`, `psycopg-pool==3.3.2` | Optional native async storage and bounded connection pool | [Psycopg async](https://www.psycopg.org/psycopg3/docs/advanced/async.html), [pool release](https://pypi.org/project/psycopg-pool/3.3.2/) |
 | MCP SDK | `mcp==2.2.0` | Official low-level/high-level client behind the Foliqant port | [PyPI](https://pypi.org/project/mcp/2.2.0/) |
 | MCP HTTP client | `httpx2==2.13.0` | MCP and Anthropic HTTP implementation | [PyPI](https://pypi.org/project/httpx2/2.13.0/) |
 | MCP crypto | `cryptography==50.0.1` | MCP HTTP authentication support | [PyPI](https://pypi.org/project/cryptography/50.0.1/) |

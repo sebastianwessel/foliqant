@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:3c0587100aa87bcdc10da78a0e69e07219804c42bfdf7c2032638fcb55a51523
-  source_revision: working-tree-5d42dce-bootstrap-http
-  generated_at: 2026-09-21T12:36:47.865Z
+  content_digest: sha256:0038e550b483092ead1baf21143dd344a368f29d6b32034c5cfbf76414eaba9f
+  source_revision: working-tree-2ad9e57-durable-storage
+  generated_at: 2026-09-21T13:00:40.522Z

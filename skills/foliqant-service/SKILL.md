@@ -11,8 +11,9 @@ Use the [service guide](../../service/README.md) and
 implemented API authority. The CLI/bootstrap and authenticated synchronous HTTP
 boundary are implemented alongside the embedded runner, model executor, read-only
 MCP adapters, and safe telemetry. Durable jobs, HTTP retrieval/cancellation,
-database/broker recovery, child workflows, and reconciled writes are not
-implemented. Never present those planned capabilities as working features.
+worker/broker recovery, child workflows, and reconciled writes are not
+implemented. The separate PostgreSQL storage adapter is available but is not
+connected to that runner. Never present those planned capabilities as working features.
 
 Keep the service in its own uv project and environment. Select only needed extras
 for production; use the dev group for testing. Never import training or curation
@@ -116,6 +117,22 @@ Use native async I/O. A blocking-only SDK uses the owned bounded
 cancellation. Keep request identity, auth and trace state off shared mutable
 adapters. Only safe allowlisted events reach the JSON logger, never raw errors,
 prompts, responses or credentials.
+
+## Durable storage boundaries
+
+Read the [storage guide](../../service/STORAGE.md) for the async `ExecutionStore`,
+`PostgresStore`, and `PersistentStepBudget`. Keep SQL and Psycopg imports in the
+storage adapter; immutable values and the port stay dependency-free. Migration
+is explicit. Configure safe logging before SDK startup, including pool startup.
+Use a real disposable PostgreSQL database to test recovery and transactions.
+
+Every write needs live ownership and a fence; never use local wall time to
+replace database lease/deadline checks. Preserve exact optional identity scope,
+idempotency input identity, checkpoint transitions, and attempt counts across
+reclaim. Reserve before external I/O, never keep the transaction open during it,
+and never turn missing usage into zero. Result delivery has independent attempts
+and fencing; consumers deduplicate its stable ID. This storage implementation
+does not enable write effects or make the current HTTP runner durable.
 
 ## Safe observations
 

@@ -1,6 +1,22 @@
 reuse_inventory_version: 1
-discovery_revision: working-tree-7e15ced-python-service-foundation
+discovery_revision: working-tree-2ad9e57-durable-storage
 assets:
+  - asset_id: service.durable-storage
+    kind: module
+    path: ../service/src/foliqant/ports/storage.py
+    public_export: ExecutionStore
+    owner: workflow-service
+    stability: experimental
+    consumers: [durable-worker, durable-ingress, outbox-delivery]
+    extension_policy: Preserve exact scopes, immutable checkpoints, live fences and pre-I/O reservations.
+  - asset_id: service.execution-values
+    kind: module
+    path: ../service/src/foliqant/core/execution.py
+    public_export: RunResult, StepRecord, Usage, TokenUsage
+    owner: workflow-service
+    stability: experimental
+    consumers: [embedded-runner, durable-storage, result-adapters]
+    extension_policy: Reuse immutable values and existing boundary serializers; unknown usage stays unknown.
   - asset_id: service.envelope
     kind: schema
     path: ../service/src/foliqant/contracts/envelope.py

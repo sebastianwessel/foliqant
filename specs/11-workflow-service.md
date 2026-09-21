@@ -585,7 +585,8 @@ Internal states accepted/running/terminal are separate from delivery
 pending/delivered/exhausted. Review is a terminal business hold. An authorized
 reconciliation operation records an external outcome before any resumed action;
 no API accepts an arbitrary edited model response as a verified result. Exact
-durable SQL/operation schemas are frozen in the durability slice before coding.
+durable SQL/operation schemas are refined in
+[the durable storage contract](12-durable-execution.md) before integration.
 
 Dispatch follows specification 10: persist one parent and distinct host-owned
 child/action IDs per request instance, including same-category units. Hold partial,
