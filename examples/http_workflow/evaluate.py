@@ -34,9 +34,11 @@ def dataset() -> EvaluationDataset:
 
 
 async def run_evaluations(
-    *, live: bool = False, output: Path | None = None
+    *, live: bool = False, output: Path | None = None, repeat: int = 1
 ) -> dict[str, JsonValue]:
     """Exercise ASGI without a listening socket; only --live calls the model."""
+    if type(repeat) is not int or repeat < 1:
+        raise ValueError("repeat must be a positive integer")
     output = private_output_path(output)
     gold = dataset()
     spec = gold.suites[0]
@@ -51,8 +53,8 @@ async def run_evaluations(
             prepared=prepared,
         ) as application:
 
-            async def run(payload: dict[str, JsonValue]) -> ExecutionResult:
-                return await application.run("support_triage", Envelope(payload=payload))
+            async def run(envelope: Envelope) -> ExecutionResult:
+                return await application.run("support_triage", envelope)
 
             yield run
 
@@ -78,6 +80,7 @@ async def run_evaluations(
                 ),
                 include_details=True,
                 metrics=metric_specs(spec),
+                repeat=repeat,
                 timeout=620 if live else 10,
             )
     return await evaluation_output(
@@ -89,13 +92,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true", help="use the configured local model")
     parser.add_argument("--output", type=Path, help="write a private full report artifact")
+    parser.add_argument("--repeat", type=int, default=1, help="attempts per authored case")
     parser.add_argument(
         "--write-dataset", type=Path, help="export synthetic gold without inference"
     )
     args = parser.parse_args()
     if args.write_dataset is not None:
         return command(lambda: write_example_dataset(dataset(), args.write_dataset))
-    return command(lambda: run_evaluations(live=args.live, output=args.output))
+    return command(lambda: run_evaluations(live=args.live, output=args.output, repeat=args.repeat))
 
 
 if __name__ == "__main__":

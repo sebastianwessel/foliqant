@@ -5,6 +5,13 @@ inspection, replay, or workflow quality measurement. The
 [public cookbook](../../../docs/guides/testing-and-evaluation.md) contains the
 complete JSON format and a runnable model-free example.
 
+## Contents
+
+- [Author the dataset](#choose-evidence-and-author-the-dataset)
+- [Run the right check](#run-the-right-check)
+- [Interpret results](#deliver-and-interpret)
+- [Compare and group observations](#compare-and-group-saved-observations)
+
 ## Choose evidence and author the dataset
 
 1. Inspect the configured workflow and its public results. Identify the business
@@ -21,11 +28,17 @@ complete JSON format and a runnable model-free example.
 4. A dataset has version `1`, `name`, `revision`, and `suites`. Each suite has
    `name`, configured `workflow`, optional `step`, optional `metrics`, and
    `cases`. Each case has `id`, envelope `input`, and named `expectations` with
-   `path`, authored `expected`, and optional `comparison: exact|set`.
+   `path`, authored `expected`, and optional `comparison: exact|set|source_span`.
 5. Use RFC 6901 pointers over public results: `/payload/...`,
    `/execution/status`, `/decisions/<step>/result/...`. Workflow bindings use
    `/steps/...`; those are not evaluation result paths. Exact preserves types
    and ordering. Set comparison ignores only top-level array order/duplicates.
+
+For extractive fields, `source_span` gold contains `input_path`, `required`, and
+`allowed`. Independently annotate nonempty Unicode code-point ranges with
+exclusive ends. Required must lie inside allowed; the candidate must be an exact
+source occurrence containing required and contained in allowed. Do not derive
+permitted spans from predictions or use this as a semantic paraphrase judge.
 
 Keep cases inline for a small suite, or use a string reference such as
 `"cases": "classify.json"` in the main JSON manifest. Both forms can coexist in
@@ -53,6 +66,14 @@ Multilabel accuracy compares sets independently of assertion comparison: an exac
 array assertion may fail on order while the metric counts the same set as correct.
 Use an explicit set assertion when order is irrelevant to the user's contract.
 
+Per-label precision/recall/F1 and micro/macro summaries use valid observed
+predictions. Undefined denominators yield null. Macro uses the whole declared
+catalog; do not drop unsupported labels to produce a better number. Read these
+scores alongside all-gold accuracy, coverage, and unavailable counts. Prefer
+small explicit checks for actions, review outcomes, evidence, and preserved
+metadata over one aggregate label score. Exact spans validate extractive outputs;
+they cannot establish that a free paraphrase is faithful.
+
 ## Run the right check
 
 - `foliqant evaluate --check`: validate strict JSON, configured targets, structural
@@ -67,6 +88,12 @@ Use an explicit set assertion when order is irrelevant to the user's contract.
 Defaults are sequential suites, `--max-concurrency 1`, and `--timeout 300` per
 case. Runtime/model/tool limits continue to apply. Do not introduce hidden
 retries, endpoint discovery, judge calls, or automatic prompt optimization.
+
+Use explicit `--repeat N` (or Python `repeat=N`) for variability measurements.
+It makes additional calls, preserving source IDs and one-based repetition
+indices. `case_count` counts authored sources; `attempt_count` counts executions.
+Every source receives the same repeat count and failures remain in denominators.
+Keep related examples and translations together when selecting a holdout.
 Custom `RegisteredScorer` functions remain an explicit Python API; configuration
 cannot import code. No heavy evaluation framework is required.
 
@@ -91,3 +118,20 @@ label the evidence as wiring only. Include an independently authored expectation
 and a changed-gold negative control. A small synthetic suite is not model quality
 evidence. For quality comparisons, use the same development gold across explicit
 variants and confirm the selected variant on a separate untouched holdout.
+
+## Compare and group saved observations
+
+Use `foliqant evaluate --compare CANDIDATE --baseline BASELINE` for offline
+comparison without clients or configuration loading. Inputs, gold, target,
+scorers, catalogs and attempt identities must match; configuration revisions may
+differ. Preserve mixed improvements/regressions. An intended review is not an
+operational failure. Comparison is descriptive, without inferred thresholds;
+exit zero means a valid comparison was produced, not that no regressions exist.
+Replay rescoring preserves original case timings and step usage but its suite
+wall time is not execution latency. Each saved repeated attempt is rescored once.
+
+`group_report(report, input_pointer="/metadata/language")` groups a detailed
+Python report by an explicit scalar input value without rerunning work. Missing
+and null differ; no inferred language or hidden scorer calls. This API does not
+load saved artifact paths. Example evaluators persist full private reports by
+default; their console summaries are not the complete result.

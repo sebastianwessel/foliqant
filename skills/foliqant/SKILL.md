@@ -51,6 +51,8 @@ changing bootstrap, CLI or the thin HTTP example.
 
 Use explicit `ModelProfiles`, model aliases and provider IDs. Structured output
 uses supported native or tool mode, followed by independent host validation.
+Native decisions append shared contract guidance for answerability, exact
+citations, and concise explanations; keep business criteria in the workflow.
 Refusals, truncation and invalid values remain failures. Never weaken validation
 or silently fall back to prompted JSON to get an accepted answer.
 
@@ -85,6 +87,14 @@ suites and explicit versioned async scorers. Keep missing/skipped/error outcomes
 in denominators; do not confuse schema validity, confidence, or assertion pass
 rate with classification accuracy. Use a separate holdout after selecting
 explicit prompt/model variants. No automatic prompt optimization is implied.
+
+Diagnose gold/contract mismatches before tuning prompts. Correct independently
+established semantics with a new gold revision and retain the original report;
+never rewrite expectations just to match predictions. Score the required action,
+metadata propagation, and intended review/routing as well as category labels.
+Use verbatim evidence for extractive contracts; exact substring checks do not
+prove a free-form explanation is semantically correct. Keep repeated attempts
+distinct from independent source cases and report unknown usage as unknown.
 
 ## Async safety and verification
 

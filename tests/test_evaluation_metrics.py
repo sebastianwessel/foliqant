@@ -299,3 +299,123 @@ async def test_details_and_metrics_preserve_cancellation():
     with pytest.raises(asyncio.CancelledError):
         await task
     assert finished.is_set()
+
+
+async def test_precision_recall_f1_include_undefined_labels_without_dropping_catalog():
+    values = [("a", "a"), ("a", "b"), ("b", "b"), ("b", "b"), ("a", None)]
+    gold = cases(*[(Expectation("label", "/payload", expected),) for expected, _ in values])
+
+    async def run(envelope):
+        return result(values[envelope.payload["index"]][1])
+
+    metric = (
+        await evaluate(
+            gold,
+            variant(run),
+            metrics=(MetricSpec("label", "/payload", "classification", ("a", "b", "c")),),
+        )
+    ).metrics[0]
+    a, b, c = metric.per_label
+    assert (a.precision, a.recall, a.f1) == (1, 0.5, 2 / 3)
+    assert (b.precision, b.recall, b.f1) == (2 / 3, 1, 0.8)
+    assert c.precision is c.recall is c.f1 is None
+    assert metric.micro.precision == metric.micro.recall == metric.micro.f1 == 0.75
+    assert metric.macro.precision is metric.macro.recall is metric.macro.f1 is None
+    assert metric.coverage == 4 / 5
+    assert metric.accuracy == 3 / 5
+    serialized = (
+        await evaluate(
+            gold,
+            variant(run),
+            metrics=(MetricSpec("label", "/payload", "classification", ("a", "b")),),
+        )
+    ).to_dict()["metrics"][0]
+    assert serialized["macro"]["precision"] == (1 + 2 / 3) / 2
+    assert serialized["macro"]["recall"] == 0.75
+    assert serialized["macro"]["f1"] == (2 / 3 + 0.8) / 2
+
+
+async def test_multilabel_missed_positive_has_zero_f1_with_undefined_precision():
+    async def run(envelope):
+        return result([])
+
+    report = await evaluate(
+        cases((Expectation("label", "/payload", ["a"], "set"),)),
+        variant(run),
+        metrics=(MetricSpec("label", "/payload", "multilabel", ("a", "b")),),
+    )
+    metric = report.metrics[0]
+    a, b = metric.per_label
+    assert a.precision is None
+    assert a.recall == a.f1 == 0
+    assert b.precision is b.recall is b.f1 is None
+    assert metric.micro.precision is None
+    assert metric.micro.recall == metric.micro.f1 == 0
+    assert metric.macro.f1 is None
+    assert metric.coverage == 1
+
+
+def test_latency_quantiles_and_empty_samples_do_not_fabricate_zero():
+    from foliqant.evaluation.summaries import summarize_latency
+
+    summary = summarize_latency([float(index) for index in range(1, 21)] + [None])
+    assert (summary.count, summary.unavailable) == (20, 1)
+    assert (summary.minimum, summary.median, summary.p95, summary.maximum) == (1, 10.5, 19, 20)
+    empty = summarize_latency([None, None])
+    assert (empty.count, empty.unavailable) == (0, 2)
+    assert empty.minimum is empty.median is empty.p95 is empty.maximum is None
+    zero = summarize_latency([0.0])
+    assert zero.minimum == zero.median == zero.p95 == zero.maximum == 0
+
+
+async def test_step_measurement_summary_preserves_missing_and_partial_token_fields():
+    from foliqant.contracts.execution import Usage as BoundaryUsage
+
+    gold = cases(*[(Expectation("label", "/payload", "a"),) for _ in range(3)])
+    usage = BoundaryUsage(
+        model_requests=1,
+        tool_calls=0,
+        input_tokens=10,
+        output_tokens=None,
+        cache_read_input_tokens=0,
+        cache_write_input_tokens=None,
+        reasoning_output_tokens=None,
+    )
+
+    async def run(envelope):
+        returned = result("a")
+        index = envelope.payload["index"]
+        if index == 0:
+            returned.decisions["classify"] = StepResult(
+                status="completed", result="a", elapsed_seconds=0.0, usage=usage
+            )
+            returned = returned.model_copy(
+                update={"execution": returned.execution.model_copy(update={"usage": usage})}
+            )
+        elif index == 1:
+            returned.decisions["classify"] = StepResult(status="skipped")
+        else:
+            del returned.decisions["classify"]
+        return returned
+
+    report = await evaluate(gold, variant(run))
+    step = next(step for step in report.steps if step.name == "classify")
+    assert (step.latency.count, step.latency.unavailable, step.latency.p95) == (1, 2, 0)
+    assert (step.usage.input_tokens.observed, step.usage.input_tokens.unknown) == (1, 2)
+    assert step.usage.input_tokens.known_total == 10
+    assert step.usage.input_tokens.total is None
+    assert step.usage.output_tokens.known_total is None
+    assert step.usage.output_tokens.total is None
+    assert step.usage.cache_read_input_tokens.known_total == 0
+    assert report.usage.input_tokens.total == 10
+    assert report.usage.output_tokens.total is None
+    assert report.usage.output_tokens.known_total == 0
+    assert report.usage.output_tokens.unknown == 1
+
+
+@pytest.mark.parametrize("value", [True, -1, float("inf"), float("nan")])
+def test_invalid_latency_measurements_are_not_summarized(value):
+    from foliqant.evaluation.summaries import summarize_latency
+
+    with pytest.raises(ValueError, match="latency"):
+        summarize_latency([value])

@@ -12,12 +12,12 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from examples.support_triage.run import open_configured
+from foliqant import Envelope
 from foliqant.contracts.decoding import MAX_ENVELOPE_BYTES, decode_envelope
 from foliqant.contracts.execution import ExecutionResult
 from foliqant.core.errors import ErrorCode, ServiceError
-from foliqant.core.json import JsonValue
 
-type SupportRun = Callable[[dict[str, JsonValue]], Awaitable[ExecutionResult]]
+type SupportRun = Callable[[Envelope], Awaitable[ExecutionResult]]
 type RunContext = Callable[[], AbstractAsyncContextManager[SupportRun]]
 
 
@@ -49,7 +49,7 @@ def create_app(run_context: RunContext = open_configured) -> Starlette:
             if not isinstance(envelope.payload, dict):
                 raise ServiceError(ErrorCode.INVALID_INPUT)
             run_support = cast(SupportRun, request.app.state.run_support)
-            result = await run_support(envelope.payload)
+            result = await run_support(envelope)
             return JSONResponse(result.model_dump(mode="json"))
         except ServiceError as error:
             status = 400 if error.code in {ErrorCode.INVALID_INPUT, ErrorCode.FORBIDDEN} else 503

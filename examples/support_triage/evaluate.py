@@ -26,29 +26,85 @@ from foliqant.evaluation import (
 )
 from foliqant.evaluation.dataset import EvaluationDataset, metric_specs
 
+_MESSAGES = {
+    "explicit_cancellation": "Cancel renewal for account C-1049 by 30 September 2026.",
+    "billing_dispute": "I dispute invoice INV-882. Please review the duplicate charge.",
+    "insufficient_information": "Please help.",
+    "service_change": "Add priority support to account A-2205 by 15 October 2026.",
+    "german_cancellation": (
+        "Bitte stoppen Sie die automatische Verlängerung für Kundenkonto "
+        "K-771 bis 31. Dezember 2026."
+    ),
+    "german_billing_dispute": (
+        "Ich widerspreche der doppelten Belastung auf Rechnung RE-550. "
+        "Bitte prüfen Sie die doppelte Belastung bis 15. Oktober 2026."
+    ),
+    "multiple_active_intents": (
+        "Please cancel renewal for account C-3300 and add priority support "
+        "to the same account. Both requests are current."
+    ),
+    "unresolved_contradiction": (
+        "Please cancel renewal for account C-4400. Please also keep the "
+        "renewal active. Neither instruction supersedes the other."
+    ),
+    "explicit_correction": (
+        "Earlier I asked to cancel renewal for account A-3100. Correction: "
+        "do not cancel it. Please add priority support to account A-3100 "
+        "by 1 November 2026."
+    ),
+}
+
+
+def _action(case_id: str, required: str, allowed: str) -> Expectation:
+    """Author an extractive action core and its legitimate source boundaries."""
+    source = _MESSAGES[case_id]
+    allowed_start = source.index(allowed)
+    required_start = source.index(required, allowed_start, allowed_start + len(allowed))
+    return Expectation(
+        "action",
+        "/payload/requested_action",
+        {
+            "input_path": "/payload/message",
+            "required": (required_start, required_start + len(required)),
+            "allowed": (allowed_start, allowed_start + len(allowed)),
+        },
+        "source_span",
+    )
+
 
 def _gold_suite() -> EvaluationSuite:
-    """Independent expected values for five explicit requests and one unclear request."""
+    """Independent gold for clear, incomplete, competing, and corrected requests."""
     return EvaluationSuite(
         name="support_triage",
-        revision="3",
+        revision="5",
         cases=(
             EvaluationCase(
                 "explicit_cancellation",
                 Envelope(
                     payload={
                         "requestId": "eval-001",
-                        "message": "Cancel renewal for account C-1049 by 30 September 2026.",
+                        "message": _MESSAGES["explicit_cancellation"],
                     },
                     metadata=Metadata.model_validate({"language": "en"}),
                 ),
                 (
                     Expectation("completed", "/execution/status", "completed"),
+                    Expectation("language", "/metadata/language", "en"),
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "cancellation"
                     ),
+                    Expectation(
+                        "evidence_source",
+                        "/decisions/classify/result/explanation/evidence/0/sourceId",
+                        "message",
+                    ),
+                    _action(
+                        "explicit_cancellation",
+                        "Cancel renewal",
+                        "Cancel renewal for account C-1049",
+                    ),
                     Expectation("account", "/payload/account_reference", "C-1049"),
-                    Expectation("deadline", "/payload/deadline", "30 September 2026"),
+                    Expectation("deadline", "/payload/deadline", "by 30 September 2026"),
                 ),
             ),
             EvaluationCase(
@@ -56,14 +112,25 @@ def _gold_suite() -> EvaluationSuite:
                 Envelope(
                     payload={
                         "requestId": "eval-002",
-                        "message": "I dispute invoice INV-882. Please review the duplicate charge.",
+                        "message": _MESSAGES["billing_dispute"],
                     },
                     metadata=Metadata.model_validate({"language": "en"}),
                 ),
                 (
                     Expectation("completed", "/execution/status", "completed"),
+                    Expectation("language", "/metadata/language", "en"),
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "billing_dispute"
+                    ),
+                    Expectation(
+                        "evidence_source",
+                        "/decisions/classify/result/explanation/evidence/0/sourceId",
+                        "message",
+                    ),
+                    _action(
+                        "billing_dispute",
+                        "review the duplicate charge",
+                        "Please review the duplicate charge",
                     ),
                     Expectation("not_an_account", "/payload/account_reference", None),
                     Expectation("deadline_absent", "/payload/deadline", None),
@@ -72,15 +139,25 @@ def _gold_suite() -> EvaluationSuite:
             EvaluationCase(
                 "insufficient_information",
                 Envelope(
-                    payload={"requestId": "eval-003", "message": "Please help."},
+                    payload={
+                        "requestId": "eval-003",
+                        "message": _MESSAGES["insufficient_information"],
+                    },
                     metadata=Metadata.model_validate({"language": "en"}),
                 ),
                 (
                     Expectation("review", "/execution/status", "needs_review"),
+                    Expectation("language", "/metadata/language", "en"),
                     Expectation(
-                        "undetermined",
+                        "not_answerable",
                         "/decisions/classify/result/answerability/status",
-                        "undetermined",
+                        "not_answerable",
+                    ),
+                    Expectation(
+                        "missing_information",
+                        "/decisions/classify/result/answerability/issues",
+                        ("missing_information",),
+                        comparison="set",
                     ),
                     Expectation("no_answer", "/decisions/classify/result/answer", None),
                     Expectation("safe_output", "/payload/status", "needs_review"),
@@ -91,17 +168,28 @@ def _gold_suite() -> EvaluationSuite:
                 Envelope(
                     payload={
                         "requestId": "eval-004",
-                        "message": "Add priority support to account A-2205 by 15 October 2026.",
+                        "message": _MESSAGES["service_change"],
                     },
                     metadata=Metadata.model_validate({"language": "en"}),
                 ),
                 (
                     Expectation("completed", "/execution/status", "completed"),
+                    Expectation("language", "/metadata/language", "en"),
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "service_change"
                     ),
+                    Expectation(
+                        "evidence_source",
+                        "/decisions/classify/result/explanation/evidence/0/sourceId",
+                        "message",
+                    ),
+                    _action(
+                        "service_change",
+                        "Add priority support",
+                        "Add priority support to account A-2205",
+                    ),
                     Expectation("account", "/payload/account_reference", "A-2205"),
-                    Expectation("deadline", "/payload/deadline", "15 October 2026"),
+                    Expectation("deadline", "/payload/deadline", "by 15 October 2026"),
                 ),
             ),
             EvaluationCase(
@@ -109,20 +197,28 @@ def _gold_suite() -> EvaluationSuite:
                 Envelope(
                     payload={
                         "requestId": "eval-005",
-                        "message": (
-                            "Bitte stoppen Sie die automatische Verlängerung für Kundenkonto "
-                            "K-771 bis 31. Dezember 2026."
-                        ),
+                        "message": _MESSAGES["german_cancellation"],
                     },
                     metadata=Metadata.model_validate({"language": "de"}),
                 ),
                 (
                     Expectation("completed", "/execution/status", "completed"),
+                    Expectation("language", "/metadata/language", "de"),
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "cancellation"
                     ),
+                    Expectation(
+                        "evidence_source",
+                        "/decisions/classify/result/explanation/evidence/0/sourceId",
+                        "message",
+                    ),
+                    _action(
+                        "german_cancellation",
+                        "stoppen Sie die automatische Verlängerung",
+                        "stoppen Sie die automatische Verlängerung für Kundenkonto K-771",
+                    ),
                     Expectation("account", "/payload/account_reference", "K-771"),
-                    Expectation("deadline", "/payload/deadline", "31. Dezember 2026"),
+                    Expectation("deadline", "/payload/deadline", "bis 31. Dezember 2026"),
                 ),
             ),
             EvaluationCase(
@@ -130,20 +226,111 @@ def _gold_suite() -> EvaluationSuite:
                 Envelope(
                     payload={
                         "requestId": "eval-006",
-                        "message": (
-                            "Ich widerspreche der doppelten Belastung auf Rechnung RE-550. "
-                            "Bitte prüfen Sie die doppelte Belastung bis 15. Oktober 2026."
-                        ),
+                        "message": _MESSAGES["german_billing_dispute"],
                     },
                     metadata=Metadata.model_validate({"language": "de"}),
                 ),
                 (
                     Expectation("completed", "/execution/status", "completed"),
+                    Expectation("language", "/metadata/language", "de"),
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "billing_dispute"
                     ),
+                    Expectation(
+                        "evidence_source",
+                        "/decisions/classify/result/explanation/evidence/0/sourceId",
+                        "message",
+                    ),
+                    _action(
+                        "german_billing_dispute",
+                        "prüfen Sie die doppelte Belastung",
+                        "Bitte prüfen Sie die doppelte Belastung",
+                    ),
                     Expectation("not_an_account", "/payload/account_reference", None),
-                    Expectation("deadline", "/payload/deadline", "15. Oktober 2026"),
+                    Expectation("deadline", "/payload/deadline", "bis 15. Oktober 2026"),
+                ),
+            ),
+            EvaluationCase(
+                "multiple_active_intents",
+                Envelope(
+                    payload={
+                        "requestId": "eval-007",
+                        "message": _MESSAGES["multiple_active_intents"],
+                    },
+                    metadata=Metadata.model_validate({"language": "en"}),
+                ),
+                (
+                    Expectation("review", "/execution/status", "needs_review"),
+                    Expectation("language", "/metadata/language", "en"),
+                    Expectation(
+                        "not_answerable",
+                        "/decisions/classify/result/answerability/status",
+                        "not_answerable",
+                    ),
+                    Expectation(
+                        "multiple_valid_options",
+                        "/decisions/classify/result/answerability/issues",
+                        ("multiple_valid_options",),
+                        comparison="set",
+                    ),
+                    Expectation("no_answer", "/decisions/classify/result/answer", None),
+                    Expectation("safe_output", "/payload/status", "needs_review"),
+                ),
+            ),
+            EvaluationCase(
+                "unresolved_contradiction",
+                Envelope(
+                    payload={
+                        "requestId": "eval-008",
+                        "message": _MESSAGES["unresolved_contradiction"],
+                    },
+                    metadata=Metadata.model_validate({"language": "en"}),
+                ),
+                (
+                    Expectation("review", "/execution/status", "needs_review"),
+                    Expectation("language", "/metadata/language", "en"),
+                    Expectation(
+                        "not_answerable",
+                        "/decisions/classify/result/answerability/status",
+                        "not_answerable",
+                    ),
+                    Expectation(
+                        "conflicting_information",
+                        "/decisions/classify/result/answerability/issues",
+                        ("conflicting_information",),
+                        comparison="set",
+                    ),
+                    Expectation("no_answer", "/decisions/classify/result/answer", None),
+                    Expectation("safe_output", "/payload/status", "needs_review"),
+                ),
+            ),
+            EvaluationCase(
+                "explicit_correction",
+                Envelope(
+                    payload={
+                        "requestId": "eval-009",
+                        "message": _MESSAGES["explicit_correction"],
+                    },
+                    metadata=Metadata.model_validate({"language": "en"}),
+                ),
+                (
+                    Expectation("completed", "/execution/status", "completed"),
+                    Expectation("language", "/metadata/language", "en"),
+                    Expectation(
+                        "queue", "/decisions/classify/result/answer/optionId", "service_change"
+                    ),
+                    Expectation(
+                        "evidence_source",
+                        "/decisions/classify/result/explanation/evidence/0/sourceId",
+                        "message",
+                    ),
+                    _action(
+                        "explicit_correction",
+                        "add priority support",
+                        "Please add priority support to account A-3100",
+                    ),
+                    Expectation("account", "/payload/account_reference", "A-3100"),
+                    Expectation("deadline", "/payload/deadline", "by 1 November 2026"),
                 ),
             ),
         ),
@@ -154,8 +341,11 @@ def _gold_step_suite(step: str) -> EvaluationSuite:
     """Use resolved inputs and explicit per-step gold; never run upstream steps."""
     cases = []
     for case in _gold_suite().cases:
-        if step == "extract" and case.id == "insufficient_information":
-            continue  # Extraction is intentionally skipped on this pipeline branch.
+        status = next(
+            check.expected for check in case.expectations if check.path == "/execution/status"
+        )
+        if step == "extract" and status == "needs_review":
+            continue  # Extraction is intentionally skipped on every review branch.
         payload = case.envelope().payload
         assert isinstance(payload, dict)
         checks = tuple(
@@ -176,7 +366,7 @@ def _gold_step_suite(step: str) -> EvaluationSuite:
                 checks,
             )
         )
-    return EvaluationSuite(name=f"support_{step}", revision="3", cases=tuple(cases))
+    return EvaluationSuite(name=f"support_{step}", revision="5", cases=tuple(cases))
 
 
 def dataset() -> EvaluationDataset:
@@ -197,7 +387,7 @@ def dataset() -> EvaluationDataset:
         {
             "version": 1,
             "name": "support_triage_examples",
-            "revision": "3",
+            "revision": "5",
             "suites": [
                 suite_document(_gold_suite(), workflow="support_triage", metrics=[queue, status]),
                 suite_document(
@@ -227,8 +417,10 @@ def step_suite(step: str) -> EvaluationSuite:
 
 
 async def run_evaluations(
-    *, live: bool = False, output: Path | None = None
+    *, live: bool = False, output: Path | None = None, repeat: int = 1
 ) -> dict[str, JsonValue]:
+    if type(repeat) is not int or repeat < 1:
+        raise ValueError("repeat must be a positive integer")
     output = private_output_path(output)
     gold = dataset()
     prepared = prepare_application(CONFIG_PATH)
@@ -261,6 +453,7 @@ async def run_evaluations(
                     include_details=True,
                     metrics=metric_specs(spec),
                     max_concurrency=1,
+                    repeat=repeat,
                     timeout=620 if live else 10,
                 )
             )
@@ -277,13 +470,14 @@ def main() -> int:
         help="measure the configured local model instead of scripted wiring",
     )
     parser.add_argument("--output", type=Path, help="write a private full report artifact")
+    parser.add_argument("--repeat", type=int, default=1, help="attempts per authored case")
     parser.add_argument(
         "--write-dataset", type=Path, help="export synthetic gold without inference"
     )
     args = parser.parse_args()
     if args.write_dataset is not None:
         return command(lambda: write_example_dataset(dataset(), args.write_dataset))
-    return command(lambda: run_evaluations(live=args.live, output=args.output))
+    return command(lambda: run_evaluations(live=args.live, output=args.output, repeat=args.repeat))
 
 
 if __name__ == "__main__":

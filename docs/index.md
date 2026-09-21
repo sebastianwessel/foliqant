@@ -21,6 +21,8 @@ workflow that needs no endpoint or credentials. Then continue with:
   profiles, execution limits, telemetry, environment values, and CLI behavior.
 - [Testing and evaluation](guides/testing-and-evaluation.md) for local fakes,
   JSON golden datasets, offline checks, saved-result replay, and live evaluation.
+- [Evaluation results](guides/evaluation-results.md) for interpreting metrics,
+  comparing observations, and diagnosing errors without tuning to the test set.
 
 Runnable examples cover
 [support triage](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/README.md),

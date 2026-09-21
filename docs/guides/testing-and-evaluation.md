@@ -11,6 +11,9 @@ to score saved results again without model or tool calls. Unit tests with fakes,
 synthetic workflow checks, and quality measurements against reviewed gold answer
 different questions; keep their evidence separate.
 
+See [understand evaluation results](evaluation-results.md) for interpreting
+scores, diagnosing failures, and choosing useful coverage before optimizing.
+
 ## Start with a model-free evaluation
 
 Create a project using the [runtime installation](../getting-started/runtime.md):
@@ -145,8 +148,11 @@ assert each business field that matters. An expected abstention or review should
 have an explicit status/result assertion, rather than being omitted from the gold.
 
 Custom async scorers remain available through the Python API. Dataset
-configuration supports only exact and set comparisons; it never imports Python
+configuration supports exact, set, and source-span comparisons; it never imports Python
 code or calls an implicit model judge.
+
+For verbatim extraction with flexible boundaries, use
+[`source_span` gold](evaluation-results.md#score-verbatim-extraction).
 
 ## Keep cases together or split them by step
 
@@ -264,8 +270,9 @@ Metric reports expose the following counts:
 
 | Field | Meaning |
 | --- | --- |
-| `support` | Cases with a matching gold expectation |
-| `excluded` | Cases without gold at this metric path |
+| `support` | Attempts with a matching gold expectation |
+| `excluded` | Attempts without gold at this metric path |
+| `source_support` / `source_excluded` | Corresponding distinct authored case counts |
 | `observed` | Valid predictions in the declared label vocabulary |
 | `abstained` | Explicit JSON `null` prediction |
 | `missing` / `skipped` | Unavailable pointer / target step skipped |
@@ -330,8 +337,10 @@ must match the saved run; gold and metric definitions can change. Saved
 invocation failed. Input comparison preserves numeric distinctions such as
 `1` versus `1.0`. It cannot
 measure a changed prompt, model, or workflow. Those changes need a new
-execution against the same gold. Replay case durations measure replay/scoring
-work; use the original report to assess end-to-end execution latency.
+execution against the same gold. Replay preserves each saved attempt's source
+invocation duration and step usage; the suite's wall time measures rescoring.
+It reuses each saved repetition once and never fabricates extra repetitions.
+Use the original execution reports for performance comparisons.
 
 Stdout contains a content-free summary. The saved artifact contains full case
 inputs, gold, and public results, including public explanation/evidence fields.
@@ -431,11 +440,12 @@ uv run --no-sync python -m examples.http_workflow.evaluate
 ```
 
 Support triage checks full pipelines and isolated classification/extraction.
-Its six authored inputs cover all three queue categories, missing information,
+Its nine authored inputs cover all three queue categories, missing information,
+multiple active intents, contradictory instructions, explicit corrections,
 and English/German inputs. Extraction gold checks account versus invoice
 references, absent values, and unchanged deadline wording. The HTTP example
 reuses these same inputs; the MCP example adds two synthetic request lookups.
-These are eight distinct scenarios, not separate data for every repeated step.
+These are eleven distinct scenarios, not separate data for every repeated step.
 Its default scripted model verifies wiring. MCP uses a real local stdio server
 without a model. HTTP uses an in-process ASGI client. Support and HTTP accept
 `--live` to use the explicitly configured model; those small suites remain smoke

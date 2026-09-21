@@ -32,6 +32,7 @@ nav:
       - Runtime and model development: concepts/runtime-and-model-development.md
       - Build workflows: guides/build-workflows.md
       - Test and evaluate: guides/testing-and-evaluation.md
+      - Understand evaluation results: guides/evaluation-results.md
       - Configuration and CLI: reference/runtime-configuration.md
   - Model development:
       - Overview: model-development.md

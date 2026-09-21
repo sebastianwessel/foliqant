@@ -1,6 +1,7 @@
 """Explicit JSON ground truth, loaded only when evaluation is requested."""
 
 import json
+import math
 import os
 import stat
 from pathlib import Path
@@ -26,7 +27,7 @@ class GoldExpectation(BoundaryModel):
     name: NonBlank
     path: str
     expected: JsonValue
-    comparison: Literal["exact", "set"] = "exact"
+    comparison: Literal["exact", "set", "source_span"] = "exact"
 
     def expectation(self) -> Expectation:
         return Expectation(self.name, self.path, freeze_json(self.expected), self.comparison)
@@ -162,6 +163,12 @@ def read_json(path: Path, *, max_bytes: int = MAX_DATASET_BYTES) -> object:
     def constant(value: str) -> object:
         raise ValueError("nonfinite JSON number")
 
+    def finite_float(value: str) -> float:
+        parsed = float(value)
+        if not math.isfinite(parsed):
+            raise ValueError("nonfinite JSON number")
+        return parsed
+
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     with os.fdopen(descriptor, "rb") as stream:
         details = os.fstat(stream.fileno())
@@ -170,7 +177,9 @@ def read_json(path: Path, *, max_bytes: int = MAX_DATASET_BYTES) -> object:
         raw = stream.read(max_bytes + 1)
     if len(raw) > max_bytes:
         raise ValueError("JSON file exceeds size limit")
-    return json.loads(raw, object_pairs_hook=pairs, parse_constant=constant)
+    return json.loads(
+        raw, object_pairs_hook=pairs, parse_constant=constant, parse_float=finite_float
+    )
 
 
 def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) -> None:

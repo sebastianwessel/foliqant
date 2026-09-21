@@ -185,6 +185,11 @@ Provider preflight occurs before admission and attempt reservation.
 
 PydanticAI executes native decisions and text/schema LLM steps. Native decisions
 use the shared strict output contract plus independent semantic validation.
+Both native and tool output modes append generic contract guidance to authored
+business instructions: allowed IDs/citations, answerability/null rules, the
+meaning of statuses and issue codes from the native decision contract, and
+concise public explanations (aim 160 characters, hard maximum 400). This does not
+truncate responses, change criteria, retry invalid answers, or weaken validation.
 Authored JSON Schemas are fully inlined from frozen local resources for providers,
 then results are checked against the original host schema. Unsupported recursive
 or dynamic schemas and unsupported provider/mode combinations fail before I/O;
@@ -303,12 +308,28 @@ dependencies. Its Python entry points are `evaluate` and `compare_variants`, wit
 `RegisteredScorer` and `MetricSpec`. Immutable dataclasses remain the scoring
 representation. The optional JSON boundary converts into those same values;
 there is no second scheduler or evaluation framework.
+Source-span comparison uses independently authored `input_path`, `required`, and
+`allowed` gold. Ranges use Unicode code-point offsets with an exclusive end;
+required is nonempty and nested inside allowed, both within the input string.
+Candidates must match a verbatim occurrence containing required and contained
+within allowed. No normalization, semantic judge or prediction-derived gold is
+implied. Invalid ranges and nonstring/missing source pointers fail offline.
+
 Set comparison ignores top-level array ordering and duplicates while retaining
 JSON type distinctions. Custom scorers are registered async functions with an
 explicit revision. `evaluate` defaults to one worker and a 300-second per-case
 timeout including scoring; results retain suite order. `compare_variants` runs
 variants sequentially. Hosts own ground truth and holdout selection. The library
 neither certifies holdout separation nor optimizes prompts.
+
+`repeat` defaults to 1 and requires a positive integer, excluding booleans.
+Each source case runs that many times in case-major order. Original case IDs
+remain unchanged; `repetition` identifies attempts from 1 through `repeat`.
+`case_count`/`source_case_count` describe distinct authored cases and
+`attempt_count` describes executions. Assertion, outcome, and classification
+counts cover attempts; equal repetitions preserve equal weighting per source.
+Repeated outcomes never become independent gold. Work is scheduled lazily with
+the same bounded concurrency and cancellation ownership as ordinary evaluation.
 
 Regular deployment configuration optionally contains `evaluation.dataset`, a
 literal filesystem path relative to the configuration file (absolute paths also
@@ -324,7 +345,7 @@ case array, relative to the main dataset file (absolute paths also work). Mixed
 inline/separate step and pipeline files are supported through the same loader;
 nested references are not. Every case contains `id`, an envelope `input`, and
 named `expectations` (`path`, explicit `expected`, optional `comparison`
-`exact|set`). Step inputs are already-resolved inputs, not upstream pipeline
+`exact|set|source_span`). Step inputs are already-resolved inputs, not upstream pipeline
 inputs. File configuration never imports scorer functions or executable code.
 The generated `evaluation-dataset.schema.json` describes this boundary. Loading
 rejects duplicate keys, duplicate IDs/names, nonfinite values, invalid pointers,
@@ -340,9 +361,11 @@ and a 300-second case deadline, still subject to normal runtime limits.
 resolving credentials or calling models/tools. Replay requires matching dataset
 identity, suite/case identity and order, input values, configuration/workflow
 revisions and requested workflow/isolated target, including all-error runs;
-revised gold is permitted. Replay cannot measure a changed prompt. Its wall
-times describe rescoring; saved step usage and measurements describe source
-execution. Missing saved outcomes are rejected; recorded execution errors remain
+revised gold is permitted. Replay cannot measure a changed prompt. Its suite wall
+time describes rescoring; saved case latency, step usage and measurements describe
+source execution. Repetitions are inferred from the saved artifact unless an
+explicit matching count is supplied. Each saved attempt is rescored exactly once.
+Missing saved outcomes are rejected; recorded execution errors remain
 errors. No replayed failure triggers inference.
 
 The CLI writes a versioned full report atomically to a new owner-readable file;
@@ -359,6 +382,22 @@ codes are 0 for passing checks, 1 for disagreement, 2 for invalid config/data,
 3 for missing dependencies, 4 for runtime failures (even if expected by gold),
 130 for interrupt. The repository `scripts/evaluate` forwards to this command.
 
+`evaluate --compare CANDIDATE --baseline BASELINE` and Python `compare_reports`
+compare private saved reports offline without loading configuration or clients.
+Require matching inputs, gold, scorers, metric catalogs, targets and complete
+attempt identities; configuration/variant revisions may differ. Recompute
+aggregates from validated observations. Retain mixed per-case changes and
+operational failures. Completion and intended review have equal operational
+rank; authored assertions determine correctness. Replay reports cannot establish
+latency improvements. Comparison output is descriptive, not significance or
+automatic acceptance policy.
+
+`group_report` accepts a detailed Python report and an explicit input pointer.
+Groups use scalar, type-sensitive keys, separating missing from null; retain
+first-observed order and complete source repetitions. Reuse existing metrics
+and measured latency/usage; never infer groups, rerun scorers or call endpoints.
+Saved artifact loading is not part of this grouping API.
+
 Metrics use explicit label catalogs and gold expectations at their declared
 result pointer. Classification matrices have expected rows and predicted
 columns in catalog order. Multilabel reports include per-label TP/FP/FN/TN and
@@ -370,12 +409,31 @@ only valid observations and are read alongside coverage. Wrong labels/types do
 not become valid predictions. No acceptance thresholds are inferred. An exact
 array assertion still preserves ordering, independently of set-based metrics.
 
+Each label also reports observed-only precision, recall, and F1. Precision and
+recall are null on a zero denominator; F1 uses `2TP/(2TP+FP+FN)` and is null when
+that denominator is zero. `micro` pools label counts. `macro` averages the whole
+declared catalog for each measure, yielding null if any label has an undefined
+value for that measure. Coverage and unobserved outcomes remain separate rather
+than inventing label predictions. With repetition, `support`/`excluded` count
+attempts and `source_support`/`source_excluded` identify authored cases.
+
+Report and step summaries include measured latency count, unavailable count,
+minimum, median, p95, and maximum in seconds. The median averages middle values
+for an even sample; p95 uses nearest rank `ceil(0.95*n)`. No measured samples
+means null statistics. Suite latency uses measured execution durations, including
+errors; replay wall time remains replay measurement, not source model latency.
+Usage summaries preserve observed/unknown counts and known totals separately:
+the complete total is null when any observation is unknown, and even known-total
+is null when there were no known observations. No unknown count becomes zero.
+
 Every runnable example includes executable evaluation with explicit ground
 truth. Model examples default to clearly labeled scripted wiring checks and
 require `--live` for local-model measurements. Step suites use `run_step`; full
 suites use `run`. The HTTP wrapper reuses the same workflow suite through its
 ASGI boundary; it does not duplicate business logic. Failed assertions result in
-a nonzero evaluation command status. No example's expected values are generated
+a nonzero evaluation command status. Example evaluators save a new private
+report by default and print counts and its path; core Python evaluation remains
+in memory unless the host explicitly writes it. No example's expected values are generated
 from its observed response. Synthetic checks do not establish population accuracy.
 Support fixtures cover each declared queue label and review, including English
 and German inputs with unchanged English category keys. Gold is authored

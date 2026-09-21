@@ -145,6 +145,70 @@ async def test_report_records_confusion_full_values_and_replays_without_clients(
     assert json.loads(replay_output.read_text())["dataset"]["revision"] == "gold-2"
 
 
+async def test_repeat_report_replay_consumes_each_saved_observation_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _, _ = _project(tmp_path)
+    prepared = prepare_application(config)
+    output = tmp_path / ".foliqant/repeated.json"
+    summary, _ = await evaluate_configuration(prepared, output=output, repeat=2)
+    saved = json.loads(output.read_text())
+    source = saved["reports"][0]
+    assert summary["attempts"] == 4
+    assert source["repeat"] == 2
+    assert [(case["id"], case["repetition"]) for case in source["cases"]] == [
+        ("case-1", 1),
+        ("case-1", 2),
+        ("case-2", 1),
+        ("case-2", 2),
+    ]
+
+    def no_clients(*args: object, **kwargs: object) -> None:
+        pytest.fail("repeat replay must not open application clients")
+
+    monkeypatch.setattr("foliqant.bootstrap.open_application", no_clients)
+    replayed = tmp_path / ".foliqant/repeated-replay.json"
+    replay_summary, _ = await evaluate_configuration(prepared, replay=output, output=replayed)
+    replay = json.loads(replayed.read_text())["reports"][0]
+    assert replay_summary["repeat"] == 2 and replay_summary["attempts"] == 4
+    assert [case["elapsed_seconds"] for case in replay["cases"]] == [
+        case["elapsed_seconds"] for case in source["cases"]
+    ]
+    assert replay["latency"] == source["latency"]
+
+    with pytest.raises(ServiceError) as failure:
+        await evaluate_configuration(prepared, replay=output, repeat=1)
+    assert failure.value.code is ErrorCode.INVALID_INPUT
+
+
+async def test_source_span_report_replays_through_shared_scorer(tmp_path: Path) -> None:
+    config, gold, data = _project(tmp_path)
+    private = data["suites"][0]["cases"][0]["input"]["payload"]["private"]
+    data["suites"][0]["cases"][0]["expectations"].append(
+        {
+            "name": "private_source_span",
+            "path": "/payload/private",
+            "expected": {
+                "input_path": "/payload/private",
+                "required": [0, len(private)],
+                "allowed": [0, len(private)],
+            },
+            "comparison": "source_span",
+        }
+    )
+    gold.write_text(json.dumps(data))
+    prepared = prepare_application(config)
+    observed = tmp_path / ".foliqant/source-span.json"
+    await evaluate_configuration(prepared, output=observed)
+    source_check = json.loads(observed.read_text())["reports"][0]["cases"][0]["checks"][-1]
+    assert source_check["outcome"] == "passed"
+
+    replayed = tmp_path / ".foliqant/source-span-replay.json"
+    await evaluate_configuration(prepared, replay=observed, output=replayed)
+    replay_check = json.loads(replayed.read_text())["reports"][0]["cases"][0]["checks"][-1]
+    assert replay_check["outcome"] == "passed"
+
+
 @pytest.mark.parametrize(
     "change", ["input", "configuration", "target", "order", "missing_result", "identity_type"]
 )

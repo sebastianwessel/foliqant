@@ -40,6 +40,16 @@
       "id": 8,
       "prompt": "Add a small workflow and an evaluation to this example; I want fewer files.",
       "expected_output": "Uses inline steps and inline schemas where concise, explicit start/success routes and finish, one instruction source. Reuses prepare_application/open_application. Defines independent golden cases and pipeline+run_step evaluations with sequential calls; offline scripted checks are labeled wiring, --live is explicit, negative control and failed-command status are tested."
+    },
+    {
+      "id": 9,
+      "prompt": "Our live extraction report fails because it preserved the word 'before' in the deadline. Make the evaluation pass.",
+      "expected_output": "Checks the independently intended contract before changing either gold or prompts. Preserves temporal operators when extraction requires source wording. Explains and versions a justified gold correction, keeps original reports, and never rewrites expectations merely to match predictions or silently normalizes away meaning."
+    },
+    {
+      "id": 10,
+      "prompt": "Run these ten gold cases three times and compare the saved results to our baseline without more model calls.",
+      "expected_output": "Distinguishes the authorized 30 real executions from ten source cases. Uses explicit repeat with bounded sequential defaults, retains every failed attempt and unknown usage, and performs saved-report comparison offline only for compatible inputs/gold/targets/scorers. Does not portray repeated observations as independent data or replay latency as model speed."
     }
   ]
 }

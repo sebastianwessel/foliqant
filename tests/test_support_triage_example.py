@@ -26,7 +26,8 @@ async def test_pipeline_and_each_model_step_have_passing_offline_evaluations() -
     report = await run_evaluations()
     assert report["ok"] is True
     assert report["mode"] == "offline_wiring"
-    reports = report["reports"]
+    assert isinstance(report["report"], str)
+    reports = json.loads(Path(report["report"]).read_text())["reports"]
     assert isinstance(reports, list)
     assert len(reports) == 3
     assert all(isinstance(item, dict) and item["check_coverage"] == 1.0 for item in reports)

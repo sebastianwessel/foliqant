@@ -19,6 +19,7 @@ from pydantic_ai.output import OutputSpec, StructuredDict
 from pydantic_ai.settings import ModelSettings
 
 from foliqant.adapters.decisions import build_decision_input, validate_decision_result
+from foliqant.adapters.decisions.instructions import decision_instructions
 from foliqant.adapters.validation import WorkflowSchemas
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import StepOutcome
@@ -300,7 +301,7 @@ class ModelExecutor:
         agent = self._agent(
             binding,
             context,
-            instructions=step.instructions,
+            instructions=decision_instructions(step.instructions),
             output_type=output_type,
         )
         result = await agent.run(task.model_dump_json(by_alias=True), retries=0)

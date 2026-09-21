@@ -68,10 +68,17 @@ Use stable status and issue codes in code. Explanation text is for people:
 | `not_answerable` | The evidence or question constraints do not support an answer. |
 | `undetermined` | The assessment could not establish answerability. |
 
-Issue codes are `missing_information`, `conflicting_information`,
-`multiple_valid_options`, and `no_matching_option`. A missing attachment or
-unclear reference uses `missing_information`. Several clear requests are valid
-when a collection question permits them. A predicate uses `unknown` when the
+Issue codes distinguish different obstacles:
+
+- `missing_information`: a required fact or referent is absent.
+- `conflicting_information`: incompatible evidence has no stated resolution.
+- `multiple_valid_options`: multiple positively supported answers exceed the
+  question’s permitted cardinality.
+- `no_matching_option`: a supported fact or request falls outside the catalog.
+
+An unknown request is not an established out-of-catalog request. A missing
+attachment or unclear reference uses `missing_information`. Several clear
+requests are valid when a collection question permits them. A predicate uses `unknown` when the
 evidence establishes neither true nor false; an explicit absence can support
 `false` for a presence predicate.
 
@@ -106,7 +113,10 @@ safety of an external action remain application responsibilities.
 ## Treat explanations as evidence summaries
 
 An explanation summary is a bounded human-readable reason, not a transcript of
-hidden model reasoning. It may contain at most 400 characters; generation aims
+hidden model reasoning. The runtime adds generic contract guidance alongside
+your decision instructions in both native and tool output modes. It preserves
+your criteria and rejects invalid responses instead of truncating or retrying
+them. An explanation may contain at most 400 characters; generation aims
 for 160 or fewer. Put exact quotations in citation fields, where text must match
 the declared source exactly. The validator checks structure and declared
 references; it cannot establish semantic truth or financial accuracy.

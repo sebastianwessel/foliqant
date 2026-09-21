@@ -2,8 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "requested_action": {"type": "string", "minLength": 1},
-    "deadline": {"type": ["string", "null"]},
+    "requested_action": {
+      "description": "A concise verbatim span for the currently active request, preserved in the source language.",
+      "type": "string",
+      "minLength": 1
+    },
+    "deadline": {
+      "description": "The complete deadline wording from the message, including its operator, or null when absent.",
+      "type": ["string", "null"]
+    },
     "account_reference": {
       "description": "An identifier explicitly linked to the sender's customer account. Invoice, order, case, and claim references are not account references.",
       "type": ["string", "null"]

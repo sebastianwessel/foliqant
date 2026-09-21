@@ -20,46 +20,79 @@ ENVIRONMENT = {
 
 
 def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-    """Return fixed outputs only for the published synthetic input phrases."""
+    """Return authored fixtures only for the published synthetic inputs.
+
+    These values prove example wiring and validation, never model quality.
+    """
     text = repr(messages)
     extracted: dict[str, str | None] | None
+    status = "answerable"
+    issues: list[str] = []
+    contrary: list[dict[str, str]] = []
+    missing: list[str] = []
     if "Cancel renewal for account C-1049 by 30 September 2026." in text:
         option, quote = "cancellation", "Cancel renewal"
         extracted = {
-            "requested_action": "cancel renewal",
-            "deadline": "30 September 2026",
+            "requested_action": "Cancel renewal",
+            "deadline": "by 30 September 2026",
             "account_reference": "C-1049",
         }
     elif "I dispute invoice INV-882." in text:
         option, quote = "billing_dispute", "I dispute invoice INV-882."
         extracted = {
-            "requested_action": "review duplicate charge",
+            "requested_action": "review the duplicate charge",
             "deadline": None,
             "account_reference": None,
         }
     elif "Add priority support to account A-2205" in text:
         option, quote = "service_change", "Add priority support"
         extracted = {
-            "requested_action": "add priority support",
-            "deadline": "15 October 2026",
+            "requested_action": "Add priority support",
+            "deadline": "by 15 October 2026",
             "account_reference": "A-2205",
         }
     elif "K-771" in text:
         option, quote = "cancellation", "automatische Verlängerung"
         extracted = {
-            "requested_action": "automatische Verlängerung stoppen",
-            "deadline": "31. Dezember 2026",
+            "requested_action": "stoppen Sie die automatische Verlängerung",
+            "deadline": "bis 31. Dezember 2026",
             "account_reference": "K-771",
         }
     elif "RE-550" in text:
         option, quote = "billing_dispute", "doppelten Belastung"
         extracted = {
-            "requested_action": "doppelte Belastung prüfen",
-            "deadline": "15. Oktober 2026",
+            "requested_action": "prüfen Sie die doppelte Belastung",
+            "deadline": "bis 15. Oktober 2026",
             "account_reference": None,
+        }
+    elif "Both requests are current." in text:
+        option, quote, extracted = None, None, None
+        status = "not_answerable"
+        issues = ["multiple_valid_options"]
+        contrary = [
+            {"sourceId": "message", "quote": "cancel renewal"},
+            {"sourceId": "message", "quote": "add priority support"},
+        ]
+    elif "Neither instruction supersedes the other." in text:
+        option, quote, extracted = None, None, None
+        status = "not_answerable"
+        issues = ["conflicting_information"]
+        contrary = [
+            {"sourceId": "message", "quote": "cancel renewal"},
+            {"sourceId": "message", "quote": "keep the renewal active"},
+        ]
+    elif "Correction: do not cancel it." in text:
+        option, quote = "service_change", "Please add priority support"
+        extracted = {
+            "requested_action": "add priority support",
+            "deadline": "by 1 November 2026",
+            "account_reference": "A-3100",
         }
     elif "Please help." in text:
         option, quote, extracted = None, None, None
+        status = "not_answerable"
+        issues = ["missing_information"]
+        missing = ["The requested action is missing."]
     else:
         raise ValueError("No scripted response for this synthetic input")
     if '"id":"classify"' in text:
@@ -70,17 +103,19 @@ def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
                     "questionId": "classify",
                     "type": "choice",
                     "answerability": {
-                        "status": "answerable" if option else "undetermined",
-                        "issues": [] if option else ["missing_information"],
+                        "status": status,
+                        "issues": issues,
                     },
                     "answer": {"optionId": option} if option else None,
                     "explanation": {
-                        "summary": "The sender explicitly states the request."
-                        if option
-                        else "No actionable request is stated.",
+                        "summary": (
+                            "The supplied message supports one current queue."
+                            if option
+                            else "The supplied message does not support one queue."
+                        ),
                         "evidence": [{"sourceId": "message", "quote": quote}] if quote else [],
-                        "contraryEvidence": [],
-                        "missingFacts": [] if option else ["The requested action is missing."],
+                        "contraryEvidence": contrary,
+                        "missingFacts": missing,
                     },
                 }
             ],

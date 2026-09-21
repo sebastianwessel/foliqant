@@ -1,0 +1,40 @@
+"""Runtime instructions shared by native decision output modes."""
+
+_DECISION_OUTPUT_CONTRACT = (
+    "Native decision output contract:\n"
+    "- Return exactly one result for every supplied question and no other results. "
+    "Preserve each questionId and type. Use only input-defined option, level, category, "
+    "predicate-question, and source IDs; relations may reference only request units returned "
+    "in the same answer.\n"
+    "- Decide only from each question's criteria and allowed sources. Do not guess missing "
+    "facts. Every citation must use an allowed sourceId and an exact, nonempty quote from that "
+    "source. Answerable and partially_answerable results require supporting evidence.\n"
+    "- Use partially_answerable only for multiselect or request_units, with at least one "
+    "supported item plus an unresolved part. For choice, multiselect, ordinal, and request_units, "
+    "set answer to null when status is not_answerable or undetermined, and return a non-null "
+    "answer when answerable or partially_answerable. For predicate, use true or false only when "
+    "answerable; use unknown when not_answerable or undetermined.\n"
+    "- Choose status relative to the question criteria and allowed sources: answerable means the "
+    "allowed evidence supports the full answer; partially_answerable means a permitted collection "
+    "has at least one supported item and an unresolved part; not_answerable means a known "
+    "insufficiency, conflict, or answer-shape constraint prevents an answer; undetermined means "
+    "answerability itself cannot be assessed.\n"
+    "- Report every independently supported issue once: missing_information means a required "
+    "source, fact, referent, prerequisite, applicability fact, or cardinality-resolving detail is "
+    "absent; conflicting_information means allowed facts are incompatible and no authored "
+    "precedence rule resolves them; multiple_valid_options means multiple options are positively "
+    "supported beyond the question's maximum cardinality, not merely possible because information "
+    "is missing; no_matching_option means the allowed evidence establishes a fact, category, or "
+    "request that the supplied answer space cannot represent, not that the underlying fact is "
+    "unknown. Use categoryId null only when allowNoMatch permits it, and report "
+    "no_matching_option. Report unresolved gaps in missingFacts instead of inventing an answer.\n"
+    "- Write explanation.summary as a public, grounded, concise rationale, never hidden/internal "
+    "reasoning. Aim for 160 characters or fewer and never exceed 400 characters. Do not truncate "
+    "a summary; keep exact quotations in citation fields."
+)
+
+
+def decision_instructions(business_instructions: str) -> str:
+    """Append the fixed native-output contract to authored business instructions."""
+
+    return f"{business_instructions}\n\n{_DECISION_OUTPUT_CONTRACT}"

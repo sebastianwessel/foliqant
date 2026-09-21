@@ -2,8 +2,9 @@
 
 This optional example exposes the same
 [support-triage workflow](../support_triage/README.md) through one loopback HTTP
-route. The wrapper reads a strict envelope, awaits the in-memory workflow, and
-returns its result. It adds no business steps of its own.
+route. The wrapper reads a strict envelope, passes its payload and permitted
+metadata to the in-memory workflow, and returns its result. It adds no business
+steps of its own.
 
 Install the local-model and HTTP dependencies, then start it explicitly:
 
@@ -29,7 +30,8 @@ curl --fail-with-body http://127.0.0.1:8765/run \
 The handler is deliberately unauthenticated and binds only to loopback. It
 rejects tenant or principal claims in the request body; a production host must
 authenticate the caller and establish trusted identity before calling Foliqant.
-The example bounds request size and read time and returns safe errors.
+Other validated envelope metadata is preserved in the result. The example bounds
+request size and read time and returns safe errors.
 
 HTTP remains application code. The package provides no server, route, database,
 job ID, retry queue, or result store. Tests inject an offline support runner into
@@ -47,6 +49,11 @@ connection is opened. Transport rejection checks are in `tests/test_http_example
 Use `--live` to measure the configured local Qwen model through this boundary.
 The command exits nonzero on failed expectations. Per-step evaluations remain in
 `examples.support_triage.evaluate`, avoiding duplicated business cases.
+
+Each evaluation saves a new private report by default and prints its path. Use
+`--output` to choose another new path, or `--repeat 3` to make three independent
+attempts per authored case. Repetition measures variation over the same synthetic
+gold; it does not add case coverage or establish model quality.
 
 Export the shared pipeline gold or save a full private report:
 

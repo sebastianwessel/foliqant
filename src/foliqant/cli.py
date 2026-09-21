@@ -157,7 +157,7 @@ def _parser() -> argparse.ArgumentParser:
     evaluation = commands.add_parser(
         "evaluate", help="Measure configured ground truth; save detailed private results"
     )
-    evaluation.add_argument("--config", type=Path, default=Path("foliqant.yaml"))
+    evaluation.add_argument("--config", type=Path)
     mode = evaluation.add_mutually_exclusive_group()
     mode.add_argument(
         "--check", action="store_true", help="validate gold and targets without I/O to providers"
@@ -165,13 +165,20 @@ def _parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--replay", type=Path, metavar="REPORT", help="rescore saved results without inference"
     )
+    mode.add_argument(
+        "--compare", type=Path, metavar="REPORT", help="compare a saved candidate report offline"
+    )
+    evaluation.add_argument(
+        "--baseline", type=Path, metavar="REPORT", help="saved baseline report for --compare"
+    )
     evaluation.add_argument(
         "--output", type=Path, help="new private report file; never overwritten"
     )
-    evaluation.add_argument("--max-concurrency", type=int, default=1)
+    evaluation.add_argument("--max-concurrency", type=int)
     evaluation.add_argument(
-        "--timeout", type=float, default=300.0, help="per-case deadline in seconds"
+        "--timeout", type=float, help="per-case deadline in seconds (default: 300)"
     )
+    evaluation.add_argument("--repeat", type=int, help="attempts per source case (default: 1)")
 
     return parser
 
@@ -453,18 +460,31 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object], int]:
     if args.command == "doctor":
         return _doctor(args.config), 0
     if args.command == "evaluate":
-        from foliqant.evaluation.command import evaluate_configuration
+        from foliqant.evaluation.command import compare_report_files, evaluate_configuration
 
         if args.check and args.output is not None:
             raise _CliFailure("invalid_arguments", _EXIT_INPUT)
+        if args.compare is not None:
+            if (
+                args.baseline is None
+                or args.config is not None
+                or args.max_concurrency is not None
+                or args.timeout is not None
+                or args.repeat is not None
+            ):
+                raise _CliFailure("invalid_arguments", _EXIT_INPUT)
+            return compare_report_files(args.compare, args.baseline, output=args.output)
+        if args.baseline is not None:
+            raise _CliFailure("invalid_arguments", _EXIT_INPUT)
         return asyncio.run(
             evaluate_configuration(
-                _prepare(args.config),
+                _prepare(args.config or Path("foliqant.yaml")),
                 check=args.check,
                 replay=args.replay,
                 output=args.output,
-                max_concurrency=args.max_concurrency,
-                timeout=args.timeout,
+                max_concurrency=1 if args.max_concurrency is None else args.max_concurrency,
+                timeout=300.0 if args.timeout is None else args.timeout,
+                repeat=args.repeat,
             )
         )
     return asyncio.run(_run(args))

@@ -12,7 +12,7 @@ from foliqant.compiler import CompilationError
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.json import JsonValue, thaw_json
 from foliqant.evaluation import EvaluationReport, EvaluationSuite
-from foliqant.evaluation.artifact import write_report
+from foliqant.evaluation.artifact import default_artifact_path, write_report
 from foliqant.evaluation.dataset import EvaluationDataset
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,34 +55,30 @@ async def evaluation_output(
     dataset: EvaluationDataset,
     output: Path | None = None,
 ) -> dict[str, JsonValue]:
-    """Expose measured reports, retaining failed assertions in the command status."""
-    if output is not None:
-        await asyncio.to_thread(
-            write_report,
-            output,
-            reports,
-            mode=mode,
-            dataset_name=dataset.name,
-            dataset_revision=dataset.revision,
-        )
-    summaries: list[JsonValue] = []
-    for report in reports:
-        document = report.to_dict()  # Fresh mutable JSON; original detailed report stays intact.
-        cases = document["cases"]
-        assert isinstance(cases, list)
-        for case in cases:
-            assert isinstance(case, dict)
-            case.pop("details", None)
-            checks = case["checks"]
-            assert isinstance(checks, list)
-            for check in checks:
-                assert isinstance(check, dict)
-                check.pop("details", None)
-        summaries.append(document)
+    """Persist the full private report and return only safe counts plus its path."""
+    destination = (
+        private_output_path(output)
+        if output is not None
+        else default_artifact_path(ROOT / ".foliqant/evaluations", prefix="example-report")
+    )
+    assert destination is not None
+    await asyncio.to_thread(
+        write_report,
+        destination,
+        reports,
+        mode=mode,
+        dataset_name=dataset.name,
+        dataset_revision=dataset.revision,
+    )
     return {
         "ok": all(report.checks.passed == report.checks.total for report in reports),
         "mode": mode,
-        "reports": summaries,
+        "suites": len(reports),
+        "cases": sum(report.source_case_count or len(report.cases) for report in reports),
+        "attempts": sum(len(report.cases) for report in reports),
+        "passed_checks": sum(report.checks.passed for report in reports),
+        "total_checks": sum(report.checks.total for report in reports),
+        "report": str(destination.absolute()),
     }
 
 

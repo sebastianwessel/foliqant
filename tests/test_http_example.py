@@ -11,17 +11,19 @@ from uuid import uuid4
 import httpx2
 import uvicorn
 
+from foliqant import Envelope
 from foliqant.contracts.execution import ExecutionResult, to_execution_result
 from foliqant.core.execution import RunResult, Usage
-from foliqant.core.json import JsonValue, freeze_json
+from foliqant.core.json import freeze_json
 
 ROOT = Path(__file__).resolve().parents[1]
-type SupportRun = Callable[[dict[str, JsonValue]], Awaitable[ExecutionResult]]
+type SupportRun = Callable[[Envelope], Awaitable[ExecutionResult]]
 
 
 @asynccontextmanager
 async def offline_support() -> AsyncIterator[SupportRun]:
-    async def run(payload: dict[str, JsonValue]) -> ExecutionResult:
+    async def run(envelope: Envelope) -> ExecutionResult:
+        assert isinstance(envelope.payload, dict)
         return to_execution_result(
             RunResult(
                 str(uuid4()),
@@ -30,12 +32,12 @@ async def offline_support() -> AsyncIterator[SupportRun]:
                 "completed",
                 freeze_json(
                     {
-                        "requested_action": payload["message"],
+                        "requested_action": envelope.payload["message"],
                         "deadline": None,
                         "account_reference": None,
                     }
                 ),
-                {"source": "http_test"},
+                envelope.metadata.model_dump(mode="json"),
                 (),
                 Usage(),
             )
@@ -69,6 +71,7 @@ async def test_http_example_runs_each_request_without_storage() -> None:
             result = first.json()
             assert result["execution"]["status"] == "completed"
             assert result["payload"]["requested_action"] == "Cancel renewal."
+            assert result["metadata"] == {"reference": "synthetic"}
             assert result["execution"]["id"] != second.json()["execution"]["id"]
             assert (await client.get("/runs/anything")).status_code == 404
 

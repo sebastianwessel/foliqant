@@ -55,7 +55,8 @@
           "default": "exact",
           "enum": [
             "exact",
-            "set"
+            "set",
+            "source_span"
           ],
           "title": "Comparison",
           "type": "string"

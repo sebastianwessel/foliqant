@@ -38,7 +38,12 @@ synthetic cases check returned reference, status, due date, team and operation
 counts. A failed assertion gives a nonzero exit. The fixed example records do
 not establish correctness for a production records-office system.
 
-Export the same cases as a reusable dataset, or save full private reports:
+Each evaluation saves a new private report by default and prints its path.
+Use `--output` to select another new path, or `--repeat 3` to perform three
+independent lookups per case. Repetitions remain grouped by source case and do
+not increase the number of distinct synthetic requests.
+
+Export the same cases as a reusable dataset, or choose a report destination:
 
 ```sh
 uv run --no-sync python -m examples.public_request_mcp.evaluate \

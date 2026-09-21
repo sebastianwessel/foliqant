@@ -19,8 +19,10 @@ from foliqant.core.envelope import AcceptedEnvelope
 from foliqant.core.json import MAX_JSON_DEPTH, FrozenJson, JsonValue, freeze_json, thaw_json
 
 from .metrics import MetricReport
+from .spans import source_span, source_span_source
+from .summaries import LatencySummary, UsageSummary, summarize_latency, summarize_usage
 
-type Comparison = Literal["exact", "set", "custom"]
+type Comparison = Literal["exact", "set", "source_span", "custom"]
 type CheckOutcome = Literal["passed", "failed", "missing", "skipped", "error"]
 type Pipeline = Callable[[Envelope], Awaitable[ExecutionResult]]
 type Scorer = Callable[[FrozenJson, FrozenJson], Awaitable[bool]]
@@ -41,6 +43,7 @@ class Expectation:
 
     Exact comparison preserves array order and JSON scalar types. Set comparison
     requires arrays and ignores only their top-level ordering and duplicates.
+    Source-span comparison uses independently authored ranges over case input.
     A custom comparison names a registered async scorer; its revision is recorded.
     """
 
@@ -60,10 +63,12 @@ class Expectation:
         ):
             raise ValueError("expectation path must be an RFC 6901 JSON pointer")
         object.__setattr__(self, "expected", freeze_json(self.expected))
-        if self.comparison not in {"exact", "set", "custom"}:
+        if self.comparison not in {"exact", "set", "source_span", "custom"}:
             raise ValueError("unknown comparison")
         if self.comparison == "set" and not isinstance(self.expected, tuple):
             raise ValueError("set expectations require a JSON array")
+        if self.comparison == "source_span":
+            source_span(self.expected)
         if self.comparison == "custom":
             if self.scorer is None:
                 raise ValueError("custom expectations require a scorer name")
@@ -88,6 +93,16 @@ class EvaluationCase:
             raise ValueError("each case requires typed expectations")
         if len({check.name for check in checks}) != len(checks):
             raise ValueError("expectation names must be unique within a case")
+        case_input = freeze_json(
+            {
+                "payload": snapshot.payload,
+                "metadata": snapshot.metadata.model_dump(mode="json"),
+            },
+            max_depth=MAX_JSON_DEPTH + 1,
+        )
+        for check in checks:
+            if check.comparison == "source_span":
+                source_span_source(check.expected, case_input)
         object.__setattr__(self, "id", id)
         object.__setattr__(
             self,
@@ -244,6 +259,14 @@ class StepReport:
 
 @dataclass(frozen=True, slots=True)
 class CaseReport:
+    """One attempt; ``id`` retains source identity, ``repetition`` is one-based.
+
+    ``elapsed_seconds`` measures invocation and output validation, excluding
+    assertion scoring. Replay preserves the saved source invocation measurement.
+    Group attempts by ``id`` to inspect variation without treating repeat inputs
+    as independent new gold cases.
+    """
+
     id: str
     status: str
     checks: tuple[CheckReport, ...]
@@ -254,6 +277,7 @@ class CaseReport:
     workflow_revision: str | None
     error_code: str | None
     details: CaseDetails | None = None
+    repetition: int = 1
 
     @property
     def passed(self) -> bool:
@@ -288,6 +312,8 @@ class StepSummary:
     skipped_cases: int
     failed_cases: int
     review_cases: int
+    latency: LatencySummary = field(default_factory=lambda: summarize_latency(()))
+    usage: UsageSummary = field(default_factory=lambda: summarize_usage(()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,6 +322,11 @@ class EvaluationReport:
 
     pass_rate is assertion agreement with authored gold, not model confidence or
     a claim about population accuracy. Failed/review runs may match expected gold.
+    ``case_pass_rate`` is all-assertion agreement across attempts; every source has
+    ``repeat`` attempts and therefore equal weight. ``source_case_count`` counts
+    authored cases; ``len(cases)`` counts attempts, including failures. Suite wall
+    ``elapsed_seconds`` includes scheduling/scoring; ``latency`` summarizes source
+    invocation measurements. Per-step summaries retain missing observations.
     """
 
     suite_name: str
@@ -317,13 +348,18 @@ class EvaluationReport:
     metrics: tuple[MetricReport, ...] = ()
     target_step: str | None = None
     target_workflow: str | None = None
+    repeat: int = 1
+    source_case_count: int = 0
+    latency: LatencySummary | None = None
+    usage: UsageSummary | None = None
 
     def to_dict(self) -> dict[str, JsonValue]:
         """Return a fresh JSON-compatible report, including explicit metric denominators."""
         value = cast(dict[str, JsonValue], _json(self))
         value["check_pass_rate"] = self.checks.pass_rate
         value["check_coverage"] = self.checks.coverage
-        value["case_count"] = len(self.cases)
+        value["case_count"] = self.source_case_count or len({case.id for case in self.cases})
+        value["attempt_count"] = len(self.cases)
         return value
 
 

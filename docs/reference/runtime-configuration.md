@@ -194,7 +194,8 @@ foliqant explain [--config PATH] [--workflow NAME]
 foliqant run [--config PATH] --workflow NAME --input PATH|-
              [--tenant-id ID] [--principal-id ID] [--debug]
 foliqant evaluate [--config PATH] [--check | --replay REPORT]
-                  [--output PATH] [--max-concurrency 1] [--timeout 300]
+                  [--output PATH] [--max-concurrency 1] [--timeout 300] [--repeat N]
+foliqant evaluate --compare CANDIDATE --baseline BASELINE [--output PATH]
 ```
 
 `init` refuses to overwrite an existing destination. The other commands default
@@ -215,6 +216,13 @@ content-free summary; the artifact contains sensitive inputs, gold, and public
 results. Exit codes are `0` for passing checks, `1` for gold mismatch, `2` for
 invalid input/configuration, `3` for missing dependencies, and `4` for runtime
 failure. Runtime failure takes precedence even when an assertion expected it.
+
+`--repeat N` requests additional attempts per source case; it does not create
+new independent gold. Replayed attempts retain their original repetition
+identities. `--compare` compares two compatible saved reports fully offline and
+does not load application configuration. See
+[evaluation results](../guides/evaluation-results.md) for interpreting metrics,
+repeatability, and per-case changes without confusing coverage with accuracy.
 
 Success is one JSON object on stdout. Failures use a fixed safe error object and
 nonzero exit status. `--debug` changes approved diagnostics only; it does not

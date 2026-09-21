@@ -48,14 +48,12 @@ async def open_example(
 
 
 @asynccontextmanager
-async def open_configured() -> AsyncIterator[
-    Callable[[dict[str, JsonValue]], Awaitable[ExecutionResult]]
-]:
-    """Adapt the public application to the thin HTTP example's callback."""
+async def open_configured() -> AsyncIterator[Callable[[Envelope], Awaitable[ExecutionResult]]]:
+    """Expose the public envelope call to the thin HTTP example."""
     async with open_example() as application:
 
-        async def run(payload: dict[str, JsonValue]) -> ExecutionResult:
-            return await application.run("support_triage", Envelope(payload=payload))
+        async def run(envelope: Envelope) -> ExecutionResult:
+            return await application.run("support_triage", envelope)
 
         yield run
 

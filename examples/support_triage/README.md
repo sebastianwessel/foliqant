@@ -2,7 +2,8 @@
 
 This example turns a synthetic customer email into two bounded operations. A
 native decision selects the queue from quoted evidence, then a schema-output
-step extracts the requested action, deadline, and account reference. The
+step extracts the current requested action as a concise verbatim source span,
+the full deadline wording, and the account reference. The
 workflow routes an unanswerable classification to review.
 
 Install the runtime with the OpenAI-compatible adapter:
@@ -44,12 +45,15 @@ uv run --no-sync python -m examples.support_triage.evaluate
 ```
 
 The default uses scripted `FunctionModel` responses without contacting a model.
-It checks six synthetic pipeline cases: all three queue labels, missing details,
-and German cancellation and billing requests. Four inputs are English and two
-are German; category keys remain English. It also checks classification on all
-six inputs and extraction on the five actionable inputs. Expected answers
-are authored in `evaluate.py`; the scripted outputs in `offline.py` only exercise
-wiring and validation. A negative-control test proves mismatched gold fails.
+It checks nine independently authored synthetic pipeline cases: all three queue
+labels, a missing action, two simultaneous active queues, unresolved conflicting
+instructions, an explicit correction, and English and German requests. Seven
+inputs are English and two are German; category keys remain English. It checks
+classification on all nine inputs and extraction on the six single-action inputs.
+Extraction retains source-language action wording and deadline operators such as
+`by` and `bis`. Expected answers live in `evaluate.py`; scripted outputs in
+`offline.py` only exercise wiring and validation. A negative-control test proves
+mismatched gold fails.
 
 To measure the configured Qwen model sequentially on the same cases:
 
@@ -58,11 +62,16 @@ PYDANTIC_AI_NO_BANNER=1 \
   uv run --no-sync python -m examples.support_triage.evaluate --live
 ```
 
-Both commands return nonzero on failed expectations. Reports contain outcomes,
-latency, usage and revisions, without input/expected/actual business values.
+Both commands return nonzero on failed expectations. Each run saves a new private
+report by default and prints its path. Reports contain outcomes, latency, usage
+and revisions, without input/expected/actual business values in console output.
 These small synthetic suites are smoke checks, not accuracy claims. Store real
 reviewed cases and reports under ignored `.foliqant/evaluations/` and preserve
 an untouched holdout when optimizing prompts.
+
+Use `--repeat 3` to run three independent attempts per authored case. Repetition
+can expose variation, but it does not create more distinct gold cases or establish
+model quality.
 
 Export the authored cases in the shared evaluation dataset format, then validate
 that file without opening a model client:
@@ -73,7 +82,7 @@ uv run --no-sync python -m examples.support_triage.evaluate \
 uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yaml --check
 ```
 
-Save a complete private report from the scripted run and rescore its saved outputs:
+Choose a report path for the scripted run and rescore its saved outputs:
 
 ```sh
 uv run --no-sync python -m examples.support_triage.evaluate \
@@ -88,5 +97,5 @@ configured dataset is loaded only for evaluation; ordinary workflow startup does
 not require the file. Console reports omit case/check details. The private
 artifact retains inputs, expected and actual values, model explanations within
 returned results, and safe mismatch reasons. Queue classification reports include
-an ordered confusion matrix; the unclear case has no queue gold and is counted
-as excluded. Isolated reports identify `classify` or `extract` explicitly.
+an ordered confusion matrix; the three review cases have no queue gold and are
+counted as excluded. Isolated reports identify `classify` or `extract` explicitly.

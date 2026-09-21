@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from foliqant.core.bindings import resolve_binding
@@ -62,6 +62,29 @@ class MetricSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class RateSummary:
+    """Observed-only precision/recall/F1; None denotes an undefined denominator.
+
+    F1 is 2TP / (2TP + FP + FN), so a missed positive gives zero even when
+    precision is undefined. These rates never replace all-gold coverage/accuracy.
+    Micro pools label counts. Macro averages the entire declared catalog, with
+    each rate None if any label's corresponding rate is undefined.
+    """
+
+    precision: float | None
+    recall: float | None
+    f1: float | None
+
+
+def _rates(tp: int, fp: int, fn: int) -> RateSummary:
+    return RateSummary(
+        tp / (tp + fp) if tp + fp else None,
+        tp / (tp + fn) if tp + fn else None,
+        2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class LabelCounts:
     """One-vs-rest counts among valid observed predictions only.
 
@@ -74,17 +97,29 @@ class LabelCounts:
     false_positive: int
     false_negative: int
     true_negative: int
+    precision: float | None = field(init=False)
+    recall: float | None = field(init=False)
+    f1: float | None = field(init=False)
+
+    def __post_init__(self) -> None:
+        rates = _rates(self.true_positive, self.false_positive, self.false_negative)
+        object.__setattr__(self, "precision", rates.precision)
+        object.__setattr__(self, "recall", rates.recall)
+        object.__setattr__(self, "f1", rates.f1)
 
 
 @dataclass(frozen=True, slots=True)
 class MetricReport:
     """Catalog-ordered counts with support including unavailable observations.
 
-    ``support + excluded`` equals suite case count. ``observed`` plus abstained,
-    missing, skipped, errors and invalid equals support. Accuracy is correct /
-    support (exact-set accuracy for multilabel); coverage is observed / support.
+    ``support + excluded`` equals attempted case count (source count * repeat).
+    ``observed`` plus abstained, missing, skipped, errors and invalid equals support.
+    Accuracy is correct / support (exact-set accuracy for multilabel); coverage
+    is observed / support.
     Both are None when support is zero. Confusion rows are expected labels and
-    columns predicted labels; their sum is observed. No raw case values appear.
+    columns predicted labels; their sum is observed. ``source_support`` and
+    ``source_excluded`` count distinct authored cases, independent of repeat.
+    No raw case values appear.
     """
 
     name: str
@@ -104,6 +139,11 @@ class MetricReport:
     coverage: float | None
     confusion_matrix: tuple[tuple[int, ...], ...] = ()
     per_label: tuple[LabelCounts, ...] = ()
+    micro: RateSummary = RateSummary(None, None, None)
+    macro: RateSummary = RateSummary(None, None, None)
+    source_support: int = 0
+    source_excluded: int = 0
+    repeat: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,7 +219,10 @@ def observe_metrics(
 
 
 def summarize_metrics(
-    specs: tuple[MetricSpec, ...], observations: Sequence[tuple[MetricObservation, ...]]
+    specs: tuple[MetricSpec, ...],
+    observations: Sequence[tuple[MetricObservation, ...]],
+    *,
+    repeat: int = 1,
 ) -> tuple[MetricReport, ...]:
     reports = []
     for index, spec in enumerate(specs):
@@ -206,6 +249,21 @@ def summarize_metrics(
             )
             for label in spec.labels
         )
+        micro = _rates(
+            sum(label.true_positive for label in per_label),
+            sum(label.false_positive for label in per_label),
+            sum(label.false_negative for label in per_label),
+        )
+
+        def macro_rate(values: Sequence[float | None]) -> float | None:
+            known = [value for value in values if value is not None]
+            return sum(known) / len(values) if len(known) == len(values) else None
+
+        macro = RateSummary(
+            macro_rate([label.precision for label in per_label]),
+            macro_rate([label.recall for label in per_label]),
+            macro_rate([label.f1 for label in per_label]),
+        )
         reports.append(
             MetricReport(
                 spec.name,
@@ -225,6 +283,11 @@ def summarize_metrics(
                 len(observed) / support if support else None,
                 matrix,
                 per_label,
+                micro,
+                macro,
+                support // repeat,
+                excluded // repeat,
+                repeat,
             )
         )
     return tuple(reports)
