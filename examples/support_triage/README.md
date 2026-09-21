@@ -61,3 +61,30 @@ latency, usage and revisions, without input/expected/actual business values.
 These small synthetic suites are smoke checks, not accuracy claims. Store real
 reviewed cases and reports under ignored `.foliqant/evaluations/` and preserve
 an untouched holdout when optimizing prompts.
+
+Export the authored cases in the shared evaluation dataset format, then validate
+that file without opening a model client:
+
+```sh
+uv run --no-sync python -m examples.support_triage.evaluate \
+  --write-dataset .foliqant/evaluation/support-triage.json
+uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yaml --check
+```
+
+Save a complete private report from the scripted run and rescore its saved outputs:
+
+```sh
+uv run --no-sync python -m examples.support_triage.evaluate \
+  --output .foliqant/evaluation/support-report.json
+uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yaml \
+  --replay .foliqant/evaluation/support-report.json \
+  --output .foliqant/evaluation/support-rescored.json
+```
+
+Both exports require a new path. `--write-dataset` performs no inference. The
+configured dataset is loaded only for evaluation; ordinary workflow startup does
+not require the file. Console reports omit case/check details. The private
+artifact retains inputs, expected and actual values, model explanations within
+returned results, and safe mismatch reasons. Queue classification reports include
+an ordered confusion matrix; the unclear case has no queue gold and is counted
+as excluded. Isolated reports identify `classify` or `extract` explicitly.

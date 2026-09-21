@@ -9,11 +9,13 @@ from typing import cast
 from foliqant.contracts.execution import ExecutionResult
 from foliqant.core.bindings import resolve_binding
 from foliqant.core.errors import ErrorCode, ServiceError
-from foliqant.core.json import FrozenJson, freeze_json
+from foliqant.core.json import MAX_JSON_DEPTH, FrozenJson, freeze_json
 from foliqant.core.plan import BindingPlan
 
 from .contracts import (
+    CaseDetails,
     CaseReport,
+    CheckDetails,
     CheckOutcome,
     CheckReport,
     CheckSummary,
@@ -26,6 +28,13 @@ from .contracts import (
     StepReport,
     StepSummary,
     canonical,
+)
+from .metrics import (
+    MetricObservation,
+    MetricSpec,
+    observe_metrics,
+    summarize_metrics,
+    validate_metrics,
 )
 
 
@@ -44,8 +53,10 @@ async def _check(
     result: ExecutionResult,
     scorers: Mapping[str, RegisteredScorer],
     deadline: float,
+    include_details: bool,
+    target_step: str | None,
 ) -> CheckReport:
-    step = _step(expected.path)
+    step = _step(expected.path) or target_step
     outcome: CheckOutcome
     try:
         actual = resolve_binding(BindingPlan(kind="pointer", pointer=expected.path), document)
@@ -58,7 +69,14 @@ async def _check(
             if record is not None and record.status in {"failed", "cancelled"}
             else "missing"
         )
-        return CheckReport(expected.name, expected.path, outcome, step)
+        return CheckReport(
+            expected.name,
+            expected.path,
+            outcome,
+            step,
+            outcome,
+            CheckDetails(False, None, expected.expected) if include_details else None,
+        )
     try:
         if expected.comparison == "custom":
             assert expected.scorer is not None
@@ -78,7 +96,14 @@ async def _check(
     except Exception:
         # Never retain customer/provider/scorer exception messages.
         outcome = "error"
-    return CheckReport(expected.name, expected.path, outcome, step)
+    return CheckReport(
+        expected.name,
+        expected.path,
+        outcome,
+        step,
+        "match" if outcome == "passed" else "mismatch" if outcome == "failed" else "scorer_error",
+        CheckDetails(True, actual, expected.expected) if include_details else None,
+    )
 
 
 async def _case(
@@ -86,9 +111,16 @@ async def _case(
     variant: EvaluationVariant,
     scorers: Mapping[str, RegisteredScorer],
     timeout: float,
-) -> CaseReport:
+    metrics: tuple[MetricSpec, ...],
+    include_details: bool,
+) -> tuple[CaseReport, tuple[MetricObservation, ...]]:
     started = perf_counter()
     deadline = asyncio.get_running_loop().time() + timeout
+    private_input = (
+        freeze_json(case.envelope().model_dump(mode="json"), max_depth=MAX_JSON_DEPTH + 1)
+        if include_details
+        else None
+    )
     try:
         async with asyncio.timeout_at(deadline):
             returned = await variant.run(case.envelope())
@@ -98,6 +130,13 @@ async def _case(
             raise ServiceError(ErrorCode.INVALID_OUTPUT)
         # Revalidate and detach any nested mutable dictionaries before scoring.
         result = ExecutionResult.model_validate(returned.model_dump(mode="json"), strict=True)
+        # Payload and each step result retain their business-value depth bound.
+        # The public result adds at most three container levels around those values.
+        freeze_json(result.payload)
+        for record in result.decisions.values():
+            if "result" in record.model_fields_set:
+                freeze_json(record.result)
+        document = freeze_json(result.model_dump(mode="json"), max_depth=MAX_JSON_DEPTH + 3)
     except Exception as error:
         code = (
             "timeout"
@@ -106,11 +145,18 @@ async def _case(
             if isinstance(error, ServiceError)
             else "evaluation_execution_error"
         )
-        return CaseReport(
+        report = CaseReport(
             case.id,
             "error",
             tuple(
-                CheckReport(check.name, check.path, "error", _step(check.path))
+                CheckReport(
+                    check.name,
+                    check.path,
+                    "error",
+                    _step(check.path) or variant.step,
+                    "execution_error",
+                    CheckDetails(False, None, check.expected) if include_details else None,
+                )
                 for check in case.expectations
             ),
             (),
@@ -119,17 +165,21 @@ async def _case(
             None,
             None,
             code,
+            CaseDetails(private_input, case.expectations, None) if include_details else None,
         )
+        return report, observe_metrics(metrics, case, None, "error")
     elapsed = perf_counter() - started
-    document = freeze_json(result.model_dump(mode="json"))
     checks = tuple(
-        [await _check(check, document, result, scorers, deadline) for check in case.expectations]
+        [
+            await _check(check, document, result, scorers, deadline, include_details, variant.step)
+            for check in case.expectations
+        ]
     )
     steps = tuple(
         StepReport(name, step.status, step.elapsed_seconds, step.usage)
         for name, step in result.decisions.items()
     )
-    return CaseReport(
+    report = CaseReport(
         case.id,
         result.execution.status,
         checks,
@@ -139,7 +189,9 @@ async def _case(
         result.execution.workflow,
         result.execution.revision,
         result.execution.error.code.value if result.execution.error is not None else None,
+        CaseDetails(private_input, case.expectations, document) if include_details else None,
     )
+    return report, observe_metrics(metrics, case, document, result.execution.status)
 
 
 def _summary(checks: Iterable[CheckReport]) -> CheckSummary:
@@ -206,6 +258,8 @@ async def evaluate(
     max_concurrency: int = 1,
     timeout: float = 300.0,
     scorers: tuple[RegisteredScorer, ...] = (),
+    metrics: tuple[MetricSpec, ...] = (),
+    include_details: bool = False,
 ) -> EvaluationReport:
     """Run each case once; score final and intermediate results against gold.
 
@@ -213,19 +267,27 @@ async def evaluate(
     propagates and owned workers are joined. At most max_concurrency workers exist;
     results retain suite order. Async callables must cooperate with cancellation.
     No content is logged, no report is saved, and no provider endpoint is discovered.
+    ``include_details=True`` retains private immutable input, gold and complete
+    results for explicit caller-owned serialization. Defaults remain content-free.
     """
     registry = _options(suite, max_concurrency, timeout, scorers)
+    if type(include_details) is not bool:
+        raise ValueError("include_details must be a boolean")
+    metrics = tuple(metrics)
+    validate_metrics(suite, metrics)
     fingerprint = suite.fingerprint
     started = perf_counter()
     iterator = iter(enumerate(suite.cases))
-    completed: dict[int, CaseReport] = {}
+    completed: dict[int, tuple[CaseReport, tuple[MetricObservation, ...]]] = {}
     workers: list[asyncio.Task[None]] = []
 
     async def worker() -> None:
         try:
             for index, case in iterator:
                 await asyncio.sleep(0)
-                completed[index] = await _case(case, variant, registry, timeout)
+                completed[index] = await _case(
+                    case, variant, registry, timeout, metrics, include_details
+                )
         except asyncio.CancelledError:
             # TaskGroup treats a self-cancelled child as successful termination.
             # Cancel siblings and propagate it explicitly after they are joined.
@@ -239,7 +301,7 @@ async def evaluate(
             workers.append(group.create_task(worker()))
     if len(completed) != len(suite.cases):
         raise asyncio.CancelledError
-    cases = tuple(completed[index] for index in range(len(suite.cases)))
+    cases = tuple(completed[index][0] for index in range(len(suite.cases)))
     return EvaluationReport(
         suite.name,
         suite.revision,
@@ -257,6 +319,9 @@ async def evaluate(
         sum(case.status in {"failed", "cancelled", "error"} for case in cases) / len(cases),
         sum(case.status == "needs_review" for case in cases) / len(cases),
         perf_counter() - started,
+        summarize_metrics(metrics, [completed[index][1] for index in range(len(suite.cases))]),
+        variant.step,
+        variant.workflow,
     )
 
 
@@ -267,6 +332,8 @@ async def compare_variants(
     max_concurrency: int = 1,
     timeout: float = 300.0,
     scorers: tuple[RegisteredScorer, ...] = (),
+    metrics: tuple[MetricSpec, ...] = (),
+    include_details: bool = False,
 ) -> tuple[EvaluationReport, ...]:
     """Evaluate variants sequentially on identical case snapshots and gold.
 
@@ -279,7 +346,13 @@ async def compare_variants(
     return tuple(
         [
             await evaluate(
-                suite, variant, max_concurrency=max_concurrency, timeout=timeout, scorers=scorers
+                suite,
+                variant,
+                max_concurrency=max_concurrency,
+                timeout=timeout,
+                scorers=scorers,
+                metrics=metrics,
+                include_details=include_details,
             )
             for variant in variants
         ]

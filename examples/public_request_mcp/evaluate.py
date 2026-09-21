@@ -1,6 +1,15 @@
 """Evaluate the real local MCP workflow and its isolated lookup step."""
 
-from examples.common import command, evaluation_output
+import argparse
+from pathlib import Path
+
+from examples.common import (
+    command,
+    evaluation_output,
+    private_output_path,
+    suite_document,
+    write_example_dataset,
+)
 from examples.public_request_mcp.run import CONFIG_PATH, open_example
 from foliqant import Envelope, ExecutionResult, prepare_application
 from foliqant.core.json import JsonValue
@@ -11,9 +20,10 @@ from foliqant.evaluation import (
     Expectation,
     evaluate,
 )
+from foliqant.evaluation.dataset import EvaluationDataset, metric_specs
 
 
-def suite() -> EvaluationSuite:
+def _gold_suite() -> EvaluationSuite:
     return EvaluationSuite(
         name="public_request_lookup",
         revision="1",
@@ -36,11 +46,37 @@ def suite() -> EvaluationSuite:
     )
 
 
-async def run_evaluations() -> dict[str, JsonValue]:
+def dataset() -> EvaluationDataset:
+    """Reuse the same authored expectations for pipeline and isolated lookup."""
+    gold = _gold_suite()
+    isolated = EvaluationSuite("public_request_lookup_step", gold.revision, gold.cases)
+    return EvaluationDataset.model_validate(
+        {
+            "version": 1,
+            "name": "public_request_mcp_examples",
+            "revision": "1",
+            "suites": [
+                suite_document(gold, workflow="public_request_lookup"),
+                suite_document(isolated, workflow="public_request_lookup", step="lookup"),
+            ],
+        },
+        strict=True,
+    )
+
+
+def suite() -> EvaluationSuite:
+    gold = dataset()
+    return gold.to_suite(gold.suites[0])
+
+
+async def run_evaluations(*, output: Path | None = None) -> dict[str, JsonValue]:
+    output = private_output_path(output)
+    gold = dataset()
     prepared = prepare_application(CONFIG_PATH)
     async with open_example(prepared) as app:
         reports = []
-        for isolated in (False, True):
+        for spec in gold.suites:
+            isolated = spec.step is not None
 
             async def invoke(envelope: Envelope, step_only: bool = isolated) -> ExecutionResult:
                 if step_only:
@@ -49,18 +85,34 @@ async def run_evaluations() -> dict[str, JsonValue]:
 
             reports.append(
                 await evaluate(
-                    suite(),
+                    gold.to_suite(spec),
                     EvaluationVariant(
                         name="lookup_step" if isolated else "lookup_pipeline",
                         revision="1",
                         configuration_revision=prepared.configuration_digest,
+                        workflow="public_request_lookup",
                         run=invoke,
+                        step=spec.step,
                     ),
+                    include_details=True,
+                    metrics=metric_specs(spec),
                     timeout=10,
                 )
             )
-    return evaluation_output(reports, mode="local_stdio")
+    return await evaluation_output(reports, mode="local_stdio", dataset=gold, output=output)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, help="write a private full report artifact")
+    parser.add_argument(
+        "--write-dataset", type=Path, help="export synthetic gold without tool calls"
+    )
+    args = parser.parse_args()
+    if args.write_dataset is not None:
+        return command(lambda: write_example_dataset(dataset(), args.write_dataset))
+    return command(lambda: run_evaluations(output=args.output))
 
 
 if __name__ == "__main__":
-    raise SystemExit(command(run_evaluations))
+    raise SystemExit(main())

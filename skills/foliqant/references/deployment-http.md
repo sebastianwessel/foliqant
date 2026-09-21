@@ -15,7 +15,7 @@ Package import does not discover configuration or open clients.
 ## Deployment contract
 
 Version 1 requires `workflows` and accepts `models`, `mcp`, `execution` and
-`telemetry`. Workflow paths are relative to the configuration file, remain below
+`telemetry`, plus optional `evaluation: {dataset: <JSON path>}`. Workflow paths are relative to the configuration file, remain below
 its directory after resolution, and each key equals the compiled workflow name.
 The safe YAML loader rejects unknown/duplicate fields, aliases, custom tags and
 unrecognized unions. Deployment fields marked for environment use accept `$NAME`
@@ -36,6 +36,19 @@ current directory; `--config PATH` overrides it without parent-directory search.
 capabilities without opening endpoints. `run` reads one bounded envelope and waits
 for one terminal in-memory result. Public CLI output is one safe JSON object.
 Caught exception or validation text must not escape.
+
+`evaluate` defaults to `foliqant.yaml` too. Its dataset path resolves relative to
+that file; ordinary preparation/startup/validate/doctor never open or stat the
+optional reference. Evaluation metadata is excluded from the runtime digest.
+`evaluate --check` checks dataset/targets/structural pointers without execution;
+`--replay REPORT` scores saved full public results without opening SDK clients.
+Live execution reuses the ordinary application API, sequential suites and one
+case at a time by default. `--max-concurrency` and `--timeout` are explicit bounds.
+Reports default to unique `.foliqant/evaluations/report-TIMESTAMP.json` files under
+the config directory; `--output` may select a new path, never overwrite one.
+Only a content-free summary goes to stdout. Full artifacts include inputs, gold,
+and public result explanations/evidence, not private model reasoning. Keep them
+ignored and private. See [evaluation setup](evaluation.md) for gold authoring.
 
 Compilation errors expose safe file/field/reason/hint details, never authored
 values. Static checks catch graph gaps and provable schema incompatibilities;

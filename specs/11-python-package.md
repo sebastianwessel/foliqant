@@ -231,8 +231,9 @@ bounded shutdown; embedded hosts are never silently given a new global provider.
 ## Entry points, example and acceptance
 
 The package exposes embedded composition plus offline `init`, `validate`,
-`explain`, `doctor` and foreground `run` commands. Offline commands do not open
-model/MCP endpoints. `validate`, `explain`, `doctor` and `run` use `foliqant.yaml`
+`explain`, `doctor`, foreground `run` and explicit `evaluate` commands. Evaluation
+check/replay modes are offline; ordinary evaluation executes configured targets.
+Offline commands do not open model/MCP endpoints. Configuration-based commands use `foliqant.yaml`
 in the current directory unless `--config PATH` is supplied; no parent-directory
 search or endpoint discovery occurs. `init` creates a model-free workflow and a
 minimal version/workflows configuration and inline finish step; empty model and
@@ -258,7 +259,7 @@ Acceptance families require success and failure evidence:
 | `PACKAGE-MCP` | Current SDK HTTP/stdio behavior, OAuth isolation, declared catalog/schema checks, budgets, authorization and protected context propagation |
 | `PACKAGE-PRIVACY` | Secret/PII sentinel checks across safe logs and optional observations; telemetry failure remains nonfatal |
 | `PACKAGE-DX` | Locked install, public schema drift, CLI/example execution, documentation/skill checks and independent review |
-| `PACKAGE-EVALUATION` | Isolated-step parity, immutable ground truth, exact/set/custom scoring, failure/skip denominators, measured usage, privacy and bounded cancellation |
+| `PACKAGE-EVALUATION` | Isolated-step parity, immutable gold, exact/set/custom scoring, confusion/multilabel counts, failure/skip denominators, detailed private reports, offline validation/replay, startup independence and bounded cancellation |
 
 Tests use synthetic inputs and protocol fixtures. They do not claim live model
 accuracy, application security, durable recovery or production qualification.
@@ -296,16 +297,78 @@ and denominators. Custom scorers must be explicit host functions. No evaluator
 calls an LLM judge, discovers endpoints, alters prompts or accepts its own output
 as ground truth.
 
-The module ships in the standard wheel and needs no evaluation extra. Its public
-entry points are `evaluate` and `compare_variants`, with `EvaluationSuite`,
-`EvaluationCase`, `Expectation`, `EvaluationVariant` and `RegisteredScorer`.
-These are Python dataclasses, not CLI commands or a file-based suite loader.
+The module ships in the standard wheel and needs no evaluation extra or new
+dependencies. Its Python entry points are `evaluate` and `compare_variants`, with
+`EvaluationSuite`, `EvaluationCase`, `Expectation`, `EvaluationVariant`,
+`RegisteredScorer` and `MetricSpec`. Immutable dataclasses remain the scoring
+representation. The optional JSON boundary converts into those same values;
+there is no second scheduler or evaluation framework.
 Set comparison ignores top-level array ordering and duplicates while retaining
 JSON type distinctions. Custom scorers are registered async functions with an
 explicit revision. `evaluate` defaults to one worker and a 300-second per-case
 timeout including scoring; results retain suite order. `compare_variants` runs
-variants sequentially. Hosts own dataset loading, report persistence and holdout
-selection. The library neither certifies holdout separation nor optimizes prompts.
+variants sequentially. Hosts own ground truth and holdout selection. The library
+neither certifies holdout separation nor optimizes prompts.
+
+Regular deployment configuration optionally contains `evaluation.dataset`, a
+literal filesystem path relative to the configuration file (absolute paths also
+work). Preparation, application startup, `validate` and `doctor` never stat or
+open that dataset. The field is excluded from the runtime configuration digest;
+changing private gold locations does not revise execution. Gold need not be
+packaged or deployed. The reference is not an environment-expansion field.
+
+The version-1 strict JSON dataset has `name`, `revision` and named `suites`.
+Each suite declares a configured `workflow`, optional isolated `step`, optional
+`metrics`, and `cases`. Cases may be a nonempty inline array or a path to a JSON
+case array, relative to the main dataset file (absolute paths also work). Mixed
+inline/separate step and pipeline files are supported through the same loader;
+nested references are not. Every case contains `id`, an envelope `input`, and
+named `expectations` (`path`, explicit `expected`, optional `comparison`
+`exact|set`). Step inputs are already-resolved inputs, not upstream pipeline
+inputs. File configuration never imports scorer functions or executable code.
+The generated `evaluation-dataset.schema.json` describes this boundary. Loading
+rejects duplicate keys, duplicate IDs/names, nonfinite values, invalid pointers,
+unknown target workflows/steps, invalid gold catalogs and over-limit files.
+Static checks cover known result roots/step references, not arbitrary dynamic
+payload-field existence or the business correctness of ground truth.
+
+`foliqant evaluate --check` loads and validates only. Ordinary `evaluate` opens
+the configured application and runs suites sequentially with default one worker
+and a 300-second case deadline, still subject to normal runtime limits.
+`--max-concurrency` and `--timeout` change evaluator bounds only. Explicit
+`--replay REPORT` scores saved complete results without constructing clients,
+resolving credentials or calling models/tools. Replay requires matching dataset
+identity, suite/case identity and order, input values, configuration/workflow
+revisions and requested workflow/isolated target, including all-error runs;
+revised gold is permitted. Replay cannot measure a changed prompt. Its wall
+times describe rescoring; saved step usage and measurements describe source
+execution. Missing saved outcomes are rejected; recorded execution errors remain
+errors. No replayed failure triggers inference.
+
+The CLI writes a versioned full report atomically to a new owner-readable file;
+it never overwrites. Default destination is a unique
+`.foliqant/evaluations/report-TIMESTAMP.json` under the config directory;
+`--output` selects another new file. Stdout contains counts/status/path only.
+Reports contain private input, gold, complete public execution results and
+per-check actual/expected/presence/reason. Public explanations and evidence are
+retained; internal provider reasoning is not collected. Dataset/report files
+remain ignored and must not be uploaded as ordinary CI artifacts. Each dataset
+file is limited to 64 MiB; report publication/replay share a 256 MiB bound.
+Cancellation joins owned tasks and returns no fabricated complete report. Exit
+codes are 0 for passing checks, 1 for disagreement, 2 for invalid config/data,
+3 for missing dependencies, 4 for runtime failures (even if expected by gold),
+130 for interrupt. The repository `scripts/evaluate` forwards to this command.
+
+Metrics use explicit label catalogs and gold expectations at their declared
+result pointer. Classification matrices have expected rows and predicted
+columns in catalog order. Multilabel reports include per-label TP/FP/FN/TN and
+exact-set accuracy. Reports distinguish support (matching gold), excluded cases
+(no matching gold), valid observed outputs, null abstention, missing, skipped,
+errors and invalid predictions. Accuracy is correct/support, coverage is
+observed/support; zero support gives null. Confusion and per-label counts cover
+only valid observations and are read alongside coverage. Wrong labels/types do
+not become valid predictions. No acceptance thresholds are inferred. An exact
+array assertion still preserves ordering, independently of set-based metrics.
 
 Every runnable example includes executable evaluation with explicit ground
 truth. Model examples default to clearly labeled scripted wiring checks and
@@ -320,8 +383,10 @@ revision supplied by the caller and observed workflow revisions. They report
 check/case pass rates, execution failures and review rates, measured latency and
 available token usage. Compare prompt variants on the same suite, sequentially
 by default; opt-in concurrency is bounded. Cancellation propagates and joins
-evaluator-owned cooperative tasks; it does not prove remote or blocking work stopped. Reports contain no automatic raw input/output dumps.
-Caller-owned expected values and any explicitly retained results remain private.
+evaluator-owned cooperative tasks; it does not prove remote or blocking work
+stopped. Python reports omit business values unless `include_details=True`;
+the explicit evaluation CLI enables details for its private report. Ordinary
+application execution never persists evaluation data or results.
 
 Prompt optimization means comparing explicitly authored variants using these
 metrics, then validating a selected variant on a separate untouched holdout.

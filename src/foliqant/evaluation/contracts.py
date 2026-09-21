@@ -1,12 +1,12 @@
 """Immutable, caller-owned golden cases and evaluation reports.
 
-Reports contain identifiers and measurements, never input, expected or actual
-business values. Callers own any serialization/storage and must choose safe IDs.
+Reports omit business values by default. Explicitly requested details are private
+caller-owned snapshots. Callers own serialization/storage and must choose safe IDs.
 """
 
 import json
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
 from hashlib import sha256
 from typing import Literal, cast
@@ -17,6 +17,8 @@ from foliqant.contracts.envelope import Envelope
 from foliqant.contracts.execution import ExecutionResult, Usage
 from foliqant.core.envelope import AcceptedEnvelope
 from foliqant.core.json import MAX_JSON_DEPTH, FrozenJson, JsonValue, freeze_json, thaw_json
+
+from .metrics import MetricReport
 
 type Comparison = Literal["exact", "set", "custom"]
 type CheckOutcome = Literal["passed", "failed", "missing", "skipped", "error"]
@@ -171,12 +173,18 @@ class EvaluationVariant:
     revision: str
     run: Pipeline
     configuration_revision: str
+    step: str | None = None
+    workflow: str | None = None
 
     def __post_init__(self) -> None:
         for value in (self.name, self.revision, self.configuration_revision):
             _identifier(value)
         if not callable(self.run):
             raise ValueError("variant requires an async pipeline callable")
+        if self.step is not None:
+            _identifier(self.step)
+        if self.workflow is not None:
+            _identifier(self.workflow)
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,11 +203,35 @@ class RegisteredScorer:
 
 
 @dataclass(frozen=True, slots=True)
+class CheckDetails:
+    """Private detached values; presence distinguishes absent output from JSON null."""
+
+    actual_present: bool
+    actual: FrozenJson
+    expected: FrozenJson
+
+
+@dataclass(frozen=True, slots=True)
 class CheckReport:
     name: str
     path: str
     outcome: CheckOutcome
     step: str | None
+    reason_code: str | None = None
+    details: CheckDetails | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CaseDetails:
+    """Opt-in private input, authored expectations and complete public result JSON.
+
+    Values are immutable snapshots. A result is absent when invocation or result
+    validation failed; exception messages are never retained.
+    """
+
+    input: FrozenJson
+    expectations: tuple[Expectation, ...]
+    result: FrozenJson
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,6 +253,7 @@ class CaseReport:
     workflow: str | None
     workflow_revision: str | None
     error_code: str | None
+    details: CaseDetails | None = None
 
     @property
     def passed(self) -> bool:
@@ -281,6 +314,9 @@ class EvaluationReport:
     failure_rate: float
     review_rate: float
     elapsed_seconds: float
+    metrics: tuple[MetricReport, ...] = ()
+    target_step: str | None = None
+    target_workflow: str | None = None
 
     def to_dict(self) -> dict[str, JsonValue]:
         """Return a fresh JSON-compatible report, including explicit metric denominators."""
@@ -295,7 +331,13 @@ def _json(value: object) -> JsonValue:
     if isinstance(value, BaseModel):
         return cast(JsonValue, value.model_dump(mode="json"))
     if is_dataclass(value) and not isinstance(value, type):
-        return {field.name: _json(getattr(value, field.name)) for field in fields(value)}
+        return {
+            field.name: _json(getattr(value, field.name))
+            for field in fields(value)
+            if not (field.name == "details" and getattr(value, field.name) is None)
+        }
+    if isinstance(value, Mapping):
+        return {key: _json(item) for key, item in value.items()}
     if isinstance(value, tuple):
         return [_json(item) for item in value]
     return cast(JsonValue, value)

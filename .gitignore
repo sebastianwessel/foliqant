@@ -29,7 +29,7 @@ coverage/
 *.ckpt
 
 # Local model setup assets and generated data must never enter version control.
-/.foliqant/
+.foliqant/
 *.jsonl
 *.ndjson
 *.csv

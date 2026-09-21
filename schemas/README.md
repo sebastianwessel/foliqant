@@ -1,7 +1,8 @@
 # Generated JSON schemas
 
 `foliqant/runtime/` describes runtime boundaries. Its canonical Pydantic models
-live in `src/foliqant/contracts/`. `foliqant/decisions/` describes the native
+live in `src/foliqant/contracts/`; the optional evaluation dataset boundary lives
+in `src/foliqant/evaluation/dataset.py`. `foliqant/decisions/` describes the native
 decision contracts shared by runtime and model tooling; its canonical types live
 in `src/foliqant/decisions/`. Use `scripts/generate_schemas.py` to regenerate
 and check both library-owned schema sets.

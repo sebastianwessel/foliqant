@@ -26,6 +26,12 @@ Do not log payloads, identities, prompts, credentials or raw exceptions.
 Evaluation reuses `run_step` and the same validators; failed/skipped expectations
 remain in denominators. Golden data, results and holdout selection belong to the
 caller. Schema validity and confidence are not accuracy.
+Use `evaluation.dataset` plus the shared JSON suite loader for configuration-based
+evaluation. Cases may be inline or separate files per step/pipeline; never read
+them at runtime startup. Reuse `evaluate`/`write_report`, retain honest missing
+and failure denominators, and keep full private reports out of console logs/Git.
+Use `evaluate --check` or saved-result replay for offline verification; do not
+substitute either for live model quality evidence.
 Examples use the public application lifecycle and existing evaluation module,
 not a copied runner. Include an evaluation command and independent expected
 values; a failing expectation must fail that command. Default scripted examples

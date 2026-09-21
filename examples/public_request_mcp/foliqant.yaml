@@ -58,3 +58,5 @@ execution:
   queue_limit: 0
   run_timeout: 5
   tool_timeout: 3
+evaluation:
+  dataset: ../../.foliqant/evaluation/public-request-mcp.json

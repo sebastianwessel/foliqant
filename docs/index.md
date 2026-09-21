@@ -20,7 +20,7 @@ workflow that needs no endpoint or credentials. Then continue with:
 - [Runtime configuration](reference/runtime-configuration.md) for model and MCP
   profiles, execution limits, telemetry, environment values, and CLI behavior.
 - [Testing and evaluation](guides/testing-and-evaluation.md) for local fakes,
-  golden cases, and held-out comparisons.
+  JSON golden datasets, offline checks, saved-result replay, and live evaluation.
 
 Runnable examples cover
 [support triage](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/README.md),

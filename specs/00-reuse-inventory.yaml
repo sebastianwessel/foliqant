@@ -1,5 +1,5 @@
 reuse_inventory_version: 1
-discovery_revision: working-tree-baabcfd-configuration-dx-2026-09-21
+discovery_revision: working-tree-6bf0297-evaluation-dx-2026-09-21
 assets:
 - asset_id: package.environment
   kind: module
@@ -52,12 +52,30 @@ assets:
 - asset_id: package.evaluation
   kind: module
   path: ../src/foliqant/evaluation/__init__.py
-  public_export: EvaluationSuite, EvaluationCase, Expectation, EvaluationVariant, RegisteredScorer, evaluate, compare_variants
+  public_export: EvaluationSuite, EvaluationCase, Expectation, EvaluationVariant, RegisteredScorer, MetricSpec, evaluate, compare_variants
   owner: python-package
   stability: experimental
-  consumers: [embedding-application, evaluation-examples]
+  consumers: [embedding-application, evaluation-examples, evaluation-cli]
   extension_policy: Reuse the existing application and isolated-step executor;
-    explicit ground truth and revisions only, no automatic judge or persistence.
+    explicit ground truth and revisions only, no automatic judge or runtime persistence.
+- asset_id: package.evaluation-dataset
+  kind: schema
+  path: ../src/foliqant/evaluation/dataset.py
+  public_export: EvaluationDataset, SuiteSpec, load_dataset, metric_specs
+  owner: python-package
+  stability: experimental
+  consumers: [evaluation-cli, evaluation-examples, generated-schemas]
+  extension_policy: Convert strict private JSON into existing evaluation dataclasses;
+    load only on explicit evaluation, never during application startup.
+- asset_id: package.evaluation-artifact
+  kind: module
+  path: ../src/foliqant/evaluation/artifact.py
+  public_export: write_report
+  owner: python-package
+  stability: experimental
+  consumers: [evaluation-cli, evaluation-examples]
+  extension_policy: Explicit private atomic exclusive report publication; no runtime
+    persistence or upload, and no business contents in stdout summaries.
 - asset_id: package.bootstrap
   kind: module
   path: ../src/foliqant/bootstrap.py

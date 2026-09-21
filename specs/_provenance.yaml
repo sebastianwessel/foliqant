@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:314db3d87cf3c8bd59597b4b9b99f2493836a8db0d6b5205173d8a616ec2cc69
-  source_revision: working-tree-6db4bca-ci-pages-gate
-  generated_at: 2026-09-21T17:26:52.480Z
+  content_digest: sha256:b58a1bf88aebbe2a17cb4d95625e586b7bb2ef020113cc7409c4884b33d9a148
+  source_revision: working-tree-6bf0297-evaluation-dx-2026-09-21
+  generated_at: 2026-09-21T18:11:10.731Z

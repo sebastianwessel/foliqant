@@ -21,3 +21,5 @@ execution:
   queue_limit: 0
   model_timeout: 300
   run_timeout: 610
+evaluation:
+  dataset: ../../.foliqant/evaluation/support-triage.json

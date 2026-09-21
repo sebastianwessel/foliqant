@@ -454,6 +454,23 @@
       "title": "DeclaredToolCatalog",
       "type": "object"
     },
+    "EvaluationConfig": {
+      "additionalProperties": false,
+      "description": "Optional gold dataset reference, opened only by evaluation commands.\n\nRelative paths are based on the deployment file. The dataset may be omitted\nfrom production deployments even when this reference remains configured.",
+      "properties": {
+        "dataset": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Dataset",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataset"
+      ],
+      "title": "EvaluationConfig",
+      "type": "object"
+    },
     "ExecutionConfig": {
       "additionalProperties": false,
       "description": "Per-replica admission and per-run attempt/time bounds.",
@@ -1027,6 +1044,17 @@
   "additionalProperties": false,
   "description": "Configuration contains references and policy, never resolved credentials.",
   "properties": {
+    "evaluation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvaluationConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "execution": {
       "$ref": "#/$defs/ExecutionConfig"
     },

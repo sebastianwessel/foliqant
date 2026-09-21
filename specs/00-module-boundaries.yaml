@@ -9,6 +9,7 @@ modules:
   - Expectation
   - EvaluationVariant
   - RegisteredScorer
+  - MetricSpec
   - evaluate
   - compare_variants
   owned_concepts:
@@ -16,15 +17,19 @@ modules:
   - deterministic-scoring
   - variant-comparison
   - measured-coverage-and-usage
+  - private-dataset-and-report-boundaries
+  - offline-validation-and-rescoring
   allowed_dependencies:
   - standard-library
   - pydantic
   - package-contracts
+  - package-settings
+  - package-bootstrap-for-explicit-execution-only
   forbidden_dependencies:
   - model-training-runtime
   - persistence-client
   - automatic-llm-judge
-  architecture_check: tests/test_evaluation.py
+  architecture_check: tests/test_evaluation_configuration.py
 - module_id: package-core
   owner: python-package
   public_entrypoint: src/foliqant/core/__init__.py

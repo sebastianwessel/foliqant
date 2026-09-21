@@ -1,144 +1,428 @@
 # Test and evaluate workflows
 
-Use three different checks: compile workflow configuration offline, test your
-integration with local fakes, and evaluate selected variants against explicit
-golden cases. A passing unit test does not qualify a model, and a model evaluation
-does not test your inbound authentication or persistence layer.
+Add an optional dataset reference to your application configuration, then run
+`foliqant evaluate`. It runs the configured workflows against authored gold and
+saves a local report. No evaluation package, hosted account, or judge model is
+required. Workflows that use models or tools call their configured dependencies;
+a model-free workflow needs neither.
 
-## Test without a model endpoint
+Use `--check` to validate the dataset without executing anything. Use `--replay`
+to score saved results again without model or tool calls. Unit tests with fakes,
+synthetic workflow checks, and quality measurements against reviewed gold answer
+different questions; keep their evidence separate.
 
-Inject a PydanticAI `FunctionModel` or a small `StepExecutor` into the runtime.
-Return contract-shaped results and assert routing, output validation, review
-behavior, and safe failures. The support example's
-[`test_support_triage_example.py`](https://github.com/sebastianwessel/foliqant/blob/main/tests/test_support_triage_example.py)
-runs a native decision and a schema-output step without network access.
+## Start with a model-free evaluation
 
-Run the repository checks from the root project:
+Create a project using the [runtime installation](../getting-started/runtime.md):
 
 ```sh
-uv run --no-sync pytest
-uv run --no-sync mypy src
-uv run --no-sync ruff check src tests examples
-uv run --no-sync python scripts/generate_schemas.py --check
+uv run --no-sync foliqant init /tmp/foliqant-eval-demo
+mkdir -p /tmp/foliqant-eval-demo/.foliqant/evaluation
 ```
 
-Live model tests require an explicit marker or flag and exact endpoint/model
-configuration. Default tests must never discover or call a model.
+The generated `demo` workflow finishes successfully and returns the input
+payload. Replace `/tmp/foliqant-eval-demo/foliqant.yaml` with:
 
-## Define golden cases in code
-
-Evaluation cases are immutable Python values. Keeping a small synthetic suite in
-code avoids committing customer data or a mutable generated dataset:
-
-```python
-from foliqant.contracts.envelope import Envelope
-from foliqant.evaluation import EvaluationCase, EvaluationSuite, Expectation
-
-suite = EvaluationSuite(
-    name="support_triage",
-    revision="1",
-    cases=(
-        EvaluationCase(
-            id="explicit_cancellation",
-            envelope=Envelope(payload={
-                "requestId": "eval-001",
-                "message": "Cancel renewal for account C-1049.",
-            }),
-            expectations=(
-                Expectation("completed", "/execution/status", "completed"),
-                Expectation(
-                    "queue",
-                    "/decisions/classify/result/answer/optionId",
-                    "cancellation",
-                ),
-            ),
-        ),
-    ),
-)
+```yaml
+version: 1
+workflows:
+  demo: workflows/demo
+evaluation:
+  dataset: .foliqant/evaluation/gold.json
 ```
 
-Paths are RFC 6901 pointers over the public `ExecutionResult`. Exact comparison
-preserves JSON scalar types and array order. `comparison="set"` accepts a tuple
-and compares only the top-level array while ignoring order and duplicates.
-Custom comparison requires an explicitly named, versioned async
-`RegisteredScorer`; there is no built-in model judge.
+Save this complete synthetic dataset as
+`/tmp/foliqant-eval-demo/.foliqant/evaluation/gold.json`:
 
-## Run one or more variants
-
-Close over a prepared application's `run` or `run_step` method:
-
-```python
-from foliqant.evaluation import EvaluationVariant, evaluate
-
-variant = EvaluationVariant(
-    name="local_qwen",
-    revision="exact-configured-model-id",
-    configuration_revision=prepared.configuration_digest,
-    run=lambda envelope: application.run("support_triage", envelope),
-)
-report = await evaluate(suite, variant, max_concurrency=1, timeout=300)
-print(report.to_dict())
+```json
+{
+  "version": 1,
+  "name": "demo_gold",
+  "revision": "1",
+  "suites": [
+    {
+      "name": "demo_pipeline",
+      "workflow": "demo",
+      "metrics": [
+        {
+          "name": "category",
+          "path": "/payload/category",
+          "kind": "classification",
+          "labels": ["billing", "cancellation"]
+        }
+      ],
+      "cases": [
+        {
+          "id": "billing_request",
+          "input": {
+            "payload": {"category": "billing", "tags": ["invoice", "account"]},
+            "metadata": {}
+          },
+          "expectations": [
+            {"name": "completed", "path": "/execution/status", "expected": "completed"},
+            {"name": "category", "path": "/payload/category", "expected": "billing"},
+            {
+              "name": "tags",
+              "path": "/payload/tags",
+              "expected": ["account", "invoice"],
+              "comparison": "set"
+            }
+          ]
+        },
+        {
+          "id": "cancellation_request",
+          "input": {
+            "payload": {"category": "cancellation"},
+            "metadata": {}
+          },
+          "expectations": [
+            {"name": "completed", "path": "/execution/status", "expected": "completed"},
+            {"name": "category", "path": "/payload/category", "expected": "cancellation"}
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
 
-Use an isolated step variant when you need to distinguish one prompt or tool
-from upstream errors. In this mode, the evaluation envelope payload contains the
-resolved input keys for that step rather than the whole workflow input:
+Run the offline check, then execute the synthetic workflow:
 
-```python
-step_variant = EvaluationVariant(
-    name="local_qwen_classify",
-    revision="exact-configured-model-id",
-    configuration_revision=prepared.configuration_digest,
-    run=lambda envelope: application.run_step(
-        "support_triage", "classify", envelope
-    ),
-)
-step_report = await evaluate(step_suite, step_variant, max_concurrency=1)
+```sh
+uv run --no-sync foliqant evaluate \
+  --config /tmp/foliqant-eval-demo/foliqant.yaml --check
+uv run --no-sync foliqant evaluate \
+  --config /tmp/foliqant-eval-demo/foliqant.yaml
 ```
 
-For the `classify` step, a case payload would therefore be
-`{"message": "Cancel renewal for account C-1049."}`. The result still uses the
-public execution shape, so assertions can target
+The first command checks dataset structure, workflow/step targets, pointer syntax
+and known result roots/steps, and gold label catalogs. It cannot prove that a
+dynamic payload field will exist or that authored gold is correct. The second executes
+the finish-only workflow and should pass all five assertions. Its classification
+matrix should have one correct billing case and one correct cancellation case.
+This proves dataset loading, execution, and scoring work together; it does not
+measure a classifier or model.
+
+To verify that disagreement is caught, change only the first case's expected
+category to `"cancellation"`, keep its input unchanged, and rerun. The command
+should exit with status `1`. Restore the authored gold afterward.
+
+The dataset path resolves relative to `foliqant.yaml`, even when the command is
+run from another directory. Application startup, `validate`, and `doctor` do not
+open or inspect this optional dataset. Changing the evaluation reference does
+not change the runtime configuration digest.
+
+## Author gold for your workflow
+
+A dataset contains `version: 1`, a `name`, a `revision`, and nonempty `suites`.
+Each suite selects a configured `workflow`, names its cases, and may declare
+metrics. Dataset files use strict JSON, not YAML, JSONL, or executable imports.
+The optional YAML application setting only points to the JSON file. Each main
+dataset or referenced case file is limited to 64 MiB.
+
+Each case has a stable `id`, an `input` envelope with `payload` and `metadata`,
+and named `expectations`. Authors supply the expected values independently of
+model outputs. Include representative successes, ambiguous inputs, missing
+information, and relevant boundaries. Keep customer corpora outside Git; the
+inline values above are deliberately synthetic.
+
+Expectation paths are RFC 6901 JSON pointers over the public `ExecutionResult`:
+
+| What to check | Example path |
+| --- | --- |
+| Terminal workflow status | `/execution/status` |
+| Final payload field | `/payload/category` |
+| Native classification result | `/decisions/classify/result/answer/optionId` |
+| A schema-output field | `/decisions/extract/result/account_reference` |
+| Whether a step required review | `/decisions/classify/status` |
+
+`comparison` defaults to `exact`, preserving JSON scalar types and array order;
+for example, JSON `1` and `1.0` differ.
+`set` compares top-level arrays without order or duplicate sensitivity; nested
+values still use exact JSON comparison. Missing differs from explicit `null`.
+A successful schema check alone does not establish correct extracted values:
+assert each business field that matters. An expected abstention or review should
+have an explicit status/result assertion, rather than being omitted from the gold.
+
+Custom async scorers remain available through the Python API. Dataset
+configuration supports only exact and set comparisons; it never imports Python
+code or calls an implicit model judge.
+
+## Keep cases together or split them by step
+
+Keep small datasets inline, as in the cookbook. For larger suites, `cases` may
+instead be a path string. One manifest can mix inline case arrays and file
+references. The application still needs only one `evaluation.dataset` entry.
+
+For a configured `support_triage` workflow, a split manifest can be:
+
+```json
+{
+  "version": 1,
+  "name": "support_gold",
+  "revision": "1",
+  "suites": [
+    {
+      "name": "classification",
+      "workflow": "support_triage",
+      "step": "classify",
+      "cases": "classify.json",
+      "metrics": [{
+        "name": "queue",
+        "path": "/decisions/classify/result/answer/optionId",
+        "kind": "classification",
+        "labels": ["billing_dispute", "service_change", "cancellation"]
+      }]
+    },
+    {
+      "name": "extraction",
+      "workflow": "support_triage",
+      "step": "extract",
+      "cases": "extract.json"
+    },
+    {
+      "name": "pipeline",
+      "workflow": "support_triage",
+      "cases": "pipeline.json"
+    }
+  ]
+}
+```
+
+Each referenced file contains a JSON **array of cases**, with no dataset or
+suite wrapper. For example, `classify.json` could contain:
+
+```json
+[
+  {
+    "id": "explicit_cancellation",
+    "input": {
+      "payload": {"message": "Cancel renewal for account C-1049."},
+      "metadata": {}
+    },
+    "expectations": [{
+      "name": "queue",
+      "path": "/decisions/classify/result/answer/optionId",
+      "expected": "cancellation"
+    }]
+  }
+]
+```
+
+Create `extract.json` and `pipeline.json` with the same case shape, using inputs
+and gold appropriate to those targets. Workflow/step targets and metric catalogs
+stay in the manifest. A relative case-file path resolves from the **main dataset
+file's directory**, not from `foliqant.yaml` or the current directory. Absolute
+paths are also accepted. References have one level: case files contain arrays,
+not references to more files.
+
+Only `evaluate` (including `--check` and replay) reads the manifest and case
+files. Ordinary startup, `validate`, and `doctor` do not inspect those files.
+The same validation and scoring rules apply to inline and referenced cases.
+
+## Evaluate a step in isolation
+
+Add `"step": "classify"` to a suite to select an isolated step. Its case payload
+contains that step's **resolved input keys**, such as:
+
+```json
+{"payload": {"message": "Cancel renewal for account C-1049."}, "metadata": {}}
+```
+
+The evaluator calls `run_step` using the normal executor, limits, and output
+validation. It does not run upstream steps or follow subsequent routes. Paths
+still address the public result, for example
 `/decisions/classify/result/answer/optionId`.
 
-`compare_variants` evaluates several explicitly supplied variants against the
-same suite. The evaluator does not discover endpoints, retry calls, save files,
-or log business values. Each invocation receives a fresh input snapshot.
+For a native decision step, assertions can check the selected option, public
+explanation/evidence, and review status independently.
 
-```python
-from foliqant.evaluation import compare_variants
+A suite without `step` runs the full workflow. Checking the same intermediate
+path there measures the step with the inputs produced by the real upstream
+workflow. Use both modes to distinguish step errors from upstream/routing errors.
 
-reports = await compare_variants(
-    held_out_suite,
-    (baseline_variant, candidate_variant),
-    max_concurrency=1,
-)
-for report in reports:
-    print(report.variant_name, report.checks.pass_rate, report.review_rate)
+## Read assertions and metrics
+
+Assertions compare individual observed values with gold. A case passes only
+when all its assertions pass. Reports retain failed, missing, skipped, and errored
+checks instead of silently dropping them:
+
+- Check pass rate is passed checks divided by all declared checks.
+- Check coverage is passed plus failed checks divided by all declared checks.
+- Case pass rate, execution failure rate, and review rate describe different
+  outcomes; agreement with an expected review is possible.
+- Durations and model/tool usage reflect recorded execution. Unknown token counts
+  are not zero.
+
+Optional `metrics` summarize the labels at one expectation path across a suite.
+Use `classification` for one label and `multilabel` for arrays of labels. Declare
+the full label vocabulary explicitly; do not infer it from the predictions. The
+metric path identifies the matching authored expectation in each case. A metric
+requires at least one matching gold value; each matching case must have exactly
+one expectation at that path. Multilabel gold lists must contain unique labels.
+Metric reports expose the following counts:
+
+| Field | Meaning |
+| --- | --- |
+| `support` | Cases with a matching gold expectation |
+| `excluded` | Cases without gold at this metric path |
+| `observed` | Valid predictions in the declared label vocabulary |
+| `abstained` | Explicit JSON `null` prediction |
+| `missing` / `skipped` | Unavailable pointer / target step skipped |
+| `errors` | Failed execution, even if an earlier output exists |
+| `invalid` | Wrong output type or labels outside the vocabulary |
+| `correct` | Correct single label or exact multilabel set |
+| `accuracy` | `correct / support`, or `null` when support is zero |
+| `coverage` | `observed / support`, or `null` when support is zero |
+
+Unobserved predictions remain in `support`, so abstaining does not inflate
+accuracy. The classification confusion matrix and per-label counts cover
+`observed` predictions; read them alongside coverage. Per-label `true_positive`, `false_positive`,
+`false_negative`, and `true_negative` counts describe each label on those
+observations. For multilabel predictions, the set must match exactly to increment
+`correct`; partial label matches appear in the per-label counts. Numeric metric
+summaries are descriptive and do not create extra pass/fail assertions.
+Multilabel metric accuracy always compares sets, independently of the assertion's
+`comparison`. An exact array assertion can fail on order while its multilabel
+metric is correct; use `comparison: "set"` when assertion order should not matter.
+
+Metric gold must be a catalog label or label array, never `null`. If a case's gold
+is an abstention/review rather than a category, assert its status or surrounding
+result object and omit a categorical expectation at the metric path. It is then
+reported as excluded from that metric, while its business assertions still count.
+A `null` prediction for a case with categorical gold counts as an abstention.
+
+For the cookbook, read the confusion matrix with expected labels as rows and
+predicted labels as columns. In declared order `[billing, cancellation]`, a
+perfect matrix is:
+
+| Expected / predicted | billing | cancellation |
+| --- | ---: | ---: |
+| billing | 1 | 0 |
+| cancellation | 0 | 1 |
+
+An off-diagonal count shows which label was confused with another. With only two
+synthetic cases, this matrix describes those two observations, not an estimate
+of production accuracy.
+
+## Save and replay results
+
+Normal evaluation writes a unique
+`.foliqant/evaluations/report-TIMESTAMP.json` under the configuration directory.
+Select a new explicit destination with `--output`; existing files are never
+overwritten:
+
+```sh
+uv run --no-sync foliqant evaluate \
+  --config /tmp/foliqant-eval-demo/foliqant.yaml \
+  --output /tmp/foliqant-eval-demo/.foliqant/evaluations/baseline.json
+uv run --no-sync foliqant evaluate \
+  --config /tmp/foliqant-eval-demo/foliqant.yaml \
+  --replay /tmp/foliqant-eval-demo/.foliqant/evaluations/baseline.json \
+  --output /tmp/foliqant-eval-demo/.foliqant/evaluations/replayed.json
 ```
 
-This compares configurations; it is not an automatic prompt optimizer. Select
-changes against a development suite, then confirm the choice once on a separate
-reviewed holdout. Real holdouts belong in an access-controlled data workspace,
-outside Git, and should be loaded into `EvaluationCase` objects at runtime.
+Replay scores the saved results without opening SDK clients or running workflows.
+It is useful for inspecting revised expectations or metrics with the same
+observations. Dataset/suite/case identities, inputs, and runtime/workflow revisions
+must match the saved run; gold and metric definitions can change. Saved
+`target_workflow` and `target_step` identify the requested target even when
+invocation failed. Input comparison preserves numeric distinctions such as
+`1` versus `1.0`. It cannot
+measure a changed prompt, model, or workflow. Those changes need a new
+execution against the same gold. Replay case durations measure replay/scoring
+work; use the original report to assess end-to-end execution latency.
 
-The report records suite and configuration revisions, observed workflow
-revisions, case/step status, elapsed time, and measured usage. It includes:
+Stdout contains a content-free summary. The saved artifact contains full case
+inputs, gold, and public results, including public explanation/evidence fields.
+It does not capture private model reasoning. Treat the report as sensitive data:
+keep `.foliqant/` ignored by Git and restrict access to exported reports. The
+library's default Python report omits business values; the CLI deliberately
+retains them to support inspection and replay. Report writing and replay both
+enforce a 256 MiB limit.
 
-- `report.checks.pass_rate`: passed assertions divided by all assertions;
-- `report.checks.coverage`: passed plus failed assertions divided by all
-  assertions, excluding unavailable observations from the numerator;
-- `report.case_pass_rate`, `failure_rate`, and `review_rate`;
-- per-case and per-step measurements.
+## Use evaluations in CI
 
-Missing, skipped, and errored checks remain in the pass-rate denominator. Reports
-contain IDs, paths, outcomes, and measurements, but omit inputs and expected or
-actual business values. Caller-supplied model revisions identify configuration;
-they do not prove the provider served particular weights.
+Use `foliqant evaluate --check` for offline dataset/target validation. Execute a
+model-free workflow or a scripted example to verify wiring. Replay a saved report
+to check scoring without inference. Run `foliqant evaluate` against a model-backed
+configuration only when that endpoint execution is intended; unlike the scripted
+example commands, the generic command does not install fake model responses.
 
-## Evaluate each example
+From the repository checkout, `./scripts/evaluate` forwards the same options to
+`foliqant evaluate`.
 
-From the repository root after installing the development extras:
+Suites run sequentially, with one concurrent case by default. `--max-concurrency`
+opts into bounded case concurrency; `--timeout` defaults to 300 seconds per case.
+The configured runtime and dependency limits still apply. Avoid competing live
+evaluations against a capacity-limited local server.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Requested check or evaluation passed |
+| `1` | Results did not satisfy the authored gold |
+| `2` | Invalid configuration, dataset, or command input |
+| `3` | A required dependency is missing |
+| `4` | Runtime execution failed |
+
+A failed, cancelled, or errored execution yields `4` even if an assertion expected
+that status. Matching an intended `needs_review` result does not itself fail the
+command.
+
+No numeric score threshold or model judge is configured here. Review metrics
+alongside failed cases. Select prompt/model variants on development data, then
+confirm the choice on a separate reviewed holdout. Do not adjust gold to match
+an observed answer or repeatedly tune on the holdout. Caller-supplied model
+revisions identify configuration, not verified provider weights.
+
+## Use the Python API and local fakes
+
+Use `EvaluationCase`, `EvaluationSuite`, `Expectation`, `EvaluationVariant`,
+`evaluate`, and `compare_variants` from `foliqant.evaluation` when embedding
+custom scorers or comparing explicitly authored variants. Close over
+`application.run(workflow, envelope)` or
+`application.run_step(workflow, step, envelope)` in the variant's async `run`
+callable. Custom predicates use an explicit versioned `RegisteredScorer`;
+configuration never imports them. For an already opened `application` and its
+`prepared` configuration:
+
+```python
+from foliqant import Envelope
+from foliqant.evaluation import (
+    EvaluationCase, EvaluationSuite, EvaluationVariant, Expectation, evaluate,
+)
+
+suite = EvaluationSuite(
+    name="demo_pipeline",
+    revision="1",
+    cases=(EvaluationCase(
+        id="completed",
+        envelope=Envelope(payload={"message": "hello"}),
+        expectations=(Expectation("completed", "/execution/status", "completed"),),
+    ),),
+)
+variant = EvaluationVariant(
+    name="baseline",
+    revision="1",
+    configuration_revision=prepared.configuration_digest,
+    run=lambda envelope: application.run("demo", envelope),
+)
+report = await evaluate(suite, variant)
+print(report.checks.pass_rate)
+```
+
+Python evaluation returns an in-memory report and does not write a file. Pass
+`include_details=True` only when you need private input/gold/result snapshots;
+the caller owns their storage. The CLI selects this option for its replayable
+artifact. `compare_variants` runs explicit variants sequentially against one
+suite; it does not generate prompts or choose a winner automatically.
+
+Inject a PydanticAI `FunctionModel` or a small `StepExecutor` to test routing,
+validation, review behavior, and failures offline. The support example's
+[`test_support_triage_example.py`](https://github.com/sebastianwessel/foliqant/blob/main/tests/test_support_triage_example.py)
+exercises both native decisions and schema output without network access.
+
+After installing development extras, run the existing synthetic example suites:
 
 ```sh
 uv run --no-sync python -m examples.support_triage.evaluate
@@ -146,28 +430,11 @@ uv run --no-sync python -m examples.public_request_mcp.evaluate
 uv run --no-sync python -m examples.http_workflow.evaluate
 ```
 
-Support triage evaluates three pipeline cases, classification in isolation, and
-extraction in isolation. The cases cover cancellation, a billing dispute and
-insufficient information. The default injects a scripted `FunctionModel` through
-`RuntimePlugins`; it measures routing and validation wiring, not model quality.
-The MCP suite runs the real local stdio server, with no model. The HTTP suite
-reuses the support gold through an in-process ASGI client without opening a port.
-Each command exits nonzero if an assertion fails.
+Support triage checks full pipelines and isolated classification/extraction.
+Its default scripted model verifies wiring. MCP uses a real local stdio server
+without a model. HTTP uses an in-process ASGI client. Support and HTTP accept
+`--live` to use the explicitly configured model; those small suites remain smoke
+checks, not a reviewed quality benchmark.
 
-To measure the explicitly configured local model, add `--live` to the support or
-HTTP evaluation command. Calls remain sequential. Do not run both evaluations
-or data generation concurrently against a capacity-limited local server.
-
-```sh
-PYDANTIC_AI_NO_BANNER=1 \
-  uv run --no-sync python -m examples.support_triage.evaluate --live
-```
-
-Keep the authored expected results separate from scripted outputs. Repository
-tests deliberately change a gold value and verify that the example exits with a
-failure. Small synthetic suites are smoke checks, not a quality benchmark or a
-substitute for a reviewed holdout. Store private suites and reports under the
-ignored `.foliqant/evaluations/` directory or an explicit private workspace.
-
-For training-time held-out datasets, calibration, threshold selection, and
-artifact audit, use the separate [model evaluation guide](evaluate-and-audit.md).
+For training-time held-out datasets, calibration, and artifact audits, use the
+separate [model evaluation guide](evaluate-and-audit.md).

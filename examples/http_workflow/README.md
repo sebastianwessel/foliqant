@@ -47,3 +47,18 @@ connection is opened. Transport rejection checks are in `tests/test_http_example
 Use `--live` to measure the configured local Qwen model through this boundary.
 The command exits nonzero on failed expectations. Per-step evaluations remain in
 `examples.support_triage.evaluate`, avoiding duplicated business cases.
+
+Export the shared pipeline gold or save a full private report:
+
+```sh
+uv run --no-sync python -m examples.http_workflow.evaluate \
+  --write-dataset .foliqant/evaluation/http-support-triage.json
+uv run --no-sync python -m examples.http_workflow.evaluate \
+  --output .foliqant/evaluation/http-support-report.json
+```
+
+Dataset export performs no inference. Report output contains inputs, gold and
+returned results; console output omits those details while retaining metrics and
+safe failure reasons. Queue and execution-status confusion matrices use explicit
+label catalogs. Export paths must be new. Keep generated files under ignored
+`.foliqant/` or outside the checkout; add `--live` only for an intended model run.

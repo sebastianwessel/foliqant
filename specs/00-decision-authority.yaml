@@ -3,6 +3,14 @@ default_allowed_classes:
   - D0
   - D1
 decisions:
+  - decision_id: DEC-CONFIGURED-EVALUATION
+    class: D2
+    authority: project-owner request for regular-config ground-truth paths, offline/local/CI
+      measurement, confusion matrices, full per-entry results/explanations, startup independence
+      and aligned examples/docs/skills; shared or separate per-step files through one loader
+    scope_refs: [CAP-PACKAGE-EVALUATION, CAP-PACKAGE-DX]
+    source_refs: [11-python-package.md]
+    status: implementation mandate; no model-quality or production qualification
   - decision_id: DEC-PYTHON-PACKAGE
     class: D2
     authority: explicit project-owner instruction to keep the Python/PydanticAI

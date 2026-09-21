@@ -6,6 +6,7 @@ from pydantic import TypeAdapter
 
 from foliqant.core.json import JsonValue
 from foliqant.decisions import CategoryCatalog, DecisionInput, DecisionOutput
+from foliqant.evaluation.dataset import EvaluationDataset
 
 from .deployment import DeploymentConfig
 from .envelope import Envelope
@@ -22,6 +23,7 @@ def runtime_schemas() -> dict[str, dict[str, JsonValue]]:
         dict[str, dict[str, JsonValue]],
         {
             "deployment.schema.json": DeploymentConfig.model_json_schema(),
+            "evaluation-dataset.schema.json": EvaluationDataset.model_json_schema(),
             "envelope.schema.json": Envelope.model_json_schema(),
             "execution-result.schema.json": ExecutionResult.model_json_schema(),
             "model-profiles.schema.json": ModelProfiles.model_json_schema(),

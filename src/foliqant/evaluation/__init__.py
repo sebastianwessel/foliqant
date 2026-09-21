@@ -1,7 +1,9 @@
 """Golden-case evaluation of in-memory pipelines and isolated steps."""
 
 from .contracts import (
+    CaseDetails,
     CaseReport,
+    CheckDetails,
     CheckReport,
     CheckSummary,
     EvaluationCase,
@@ -13,10 +15,13 @@ from .contracts import (
     StepReport,
     StepSummary,
 )
+from .metrics import LabelCounts, MetricReport, MetricSpec
 from .runner import compare_variants, evaluate
 
 __all__ = [
+    "CaseDetails",
     "CaseReport",
+    "CheckDetails",
     "CheckReport",
     "CheckSummary",
     "EvaluationCase",
@@ -24,6 +29,9 @@ __all__ = [
     "EvaluationSuite",
     "EvaluationVariant",
     "Expectation",
+    "LabelCounts",
+    "MetricReport",
+    "MetricSpec",
     "RegisteredScorer",
     "StepReport",
     "StepSummary",

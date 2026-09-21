@@ -37,3 +37,19 @@ This uses the real bundled stdio server and no model/network calls. The two
 synthetic cases check returned reference, status, due date, team and operation
 counts. A failed assertion gives a nonzero exit. The fixed example records do
 not establish correctness for a production records-office system.
+
+Export the same cases as a reusable dataset, or save full private reports:
+
+```sh
+uv run --no-sync python -m examples.public_request_mcp.evaluate \
+  --write-dataset .foliqant/evaluation/public-request-mcp.json
+uv run --no-sync foliqant evaluate --config examples/public_request_mcp/foliqant.yaml --check
+uv run --no-sync python -m examples.public_request_mcp.evaluate \
+  --output .foliqant/evaluation/public-request-report.json
+```
+
+Dataset export and `--check` do not start the tool server. The report command
+executes the local server and records full inputs, gold and returned results in
+the private artifact. Console output omits those details. The isolated report
+identifies the `lookup` step. Export paths must be new; keep these generated files
+under ignored `.foliqant/` or outside the checkout.

@@ -80,7 +80,9 @@ def prepare_application(
             plans[name] = plan
         document = data
         # Secret literals are redacted; authored references retain their names.
-        digest_document = config.model_dump(mode="json", exclude_none=True)
+        # Evaluation-only references neither affect execution nor require gold
+        # to be deployed. Changing the reference must not revise runtime plans.
+        digest_document = config.model_dump(mode="json", exclude_none=True, exclude={"evaluation"})
         digest_input = {
             "settings": digest_document,
             "workflows": {name: plan.revision for name, plan in plans.items()},

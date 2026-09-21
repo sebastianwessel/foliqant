@@ -37,6 +37,16 @@ class ExecutionConfig(BoundaryModel):
         )
 
 
+class EvaluationConfig(BoundaryModel):
+    """Optional gold dataset reference, opened only by evaluation commands.
+
+    Relative paths are based on the deployment file. The dataset may be omitted
+    from production deployments even when this reference remains configured.
+    """
+
+    dataset: NonBlank
+
+
 class DeploymentConfig(BoundaryModel):
     """Configuration contains references and policy, never resolved credentials."""
 
@@ -46,3 +56,4 @@ class DeploymentConfig(BoundaryModel):
     mcp: Annotated[dict[Id, McpServerProfile], Field(max_length=128)] = Field(default_factory=dict)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     telemetry: TelemetryConfig | None = None
+    evaluation: EvaluationConfig | None = None

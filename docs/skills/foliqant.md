@@ -12,7 +12,11 @@ queue handling outside the package core.
 The skill treats the current package implementation and CLI help as the command
 authority. It preserves the boundary between deterministic workflow policy and
 untrusted model observations, and requires explicit expected results for
-evaluation cases.
+evaluation cases. Give the agent your workflow and independently reviewed gold;
+it can add the optional dataset reference, write strict JSON cases and explicit
+label catalogs, and run offline validation. It does not invent expected business
+outcomes, score thresholds, or implicit judge calls. See the evaluation guide for
+the difference between offline checks, saved-result replay, and model execution.
 
 Start with [runtime setup](../getting-started/runtime.md), then continue with
 [workflow authoring](../guides/build-workflows.md) and

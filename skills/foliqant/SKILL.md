@@ -66,33 +66,25 @@ configured overlay; never the complete process environment.
 
 ## Evaluate
 
-Every example or new workflow needs a golden evaluation setup as well as unit
-tests. Start from `examples/support_triage/evaluate.py`: explicit cases, full-run
-checks and isolated `run_step` suites with resolved inputs. Include successful,
-unclear and boundary cases. Reuse the workflow suite through transport wrappers;
-do not copy the workflow implementation or derive expected values from responses.
-Default example checks inject a scripted `FunctionModel` and label results as
-wiring evidence. A `--live` option may use the configured local model sequentially.
-Commands exit nonzero on unmet expectations, including missing/failed checks.
-Never claim scripted results measure model quality; add a negative control which
-changes expected gold or an output and proves the evaluation catches disagreement.
+When asked to set up evaluations, read [evaluation setup](references/evaluation.md)
+and the [public guide](../../docs/guides/testing-and-evaluation.md). Use the user's
+independently authored gold and business process as authority. Add the optional
+`evaluation.dataset` reference and strict JSON cases; declare metric labels
+explicitly. Ask for missing business outcomes instead of fabricating gold,
+thresholds, or acceptance policy. Never derive expected answers from predictions.
 
-Use `foliqant.evaluation` with explicit ground truth. Wrap `app.run` for complete
-pipelines; wrap `app.run_step(workflow, step_id, envelope)` for isolated steps.
-For isolated steps, payload keys are resolved input/source/argument names; no
-upstream steps run and no routes are followed. Both paths use the same executor,
-limits and output validation.
+`foliqant evaluate --check` is offline validation, `--replay REPORT` scores saved
+results without SDK/model calls, and normal `evaluate` runs configured workflows.
+Use full-pipeline suites and optional isolated-step suites with resolved inputs.
+No hidden judge calls or executable configuration imports. Store golden corpora
+and full reports outside Git. Report what was actually checked: synthetic or
+scripted successes prove wiring, not model quality or production reliability.
 
-Compare exact/set/custom checks on the same immutable suite. Missing/skipped
-outputs and scorer failures stay in denominators; schema validity and model
-confidence are not accuracy. Review/failure rates remain separate from assertion
-agreement. Durations and token usage are measured; unknown is not zero.
-
-Prompt variants are explicit caller configurations, not automatically generated
-by the evaluator. Record revisions, use a separate holdout after selection, and
-keep one request at a time by default. No hidden judge calls. Store real golden
-corpora and reports outside Git. Code-created synthetic cases demonstrate wiring,
-not population accuracy or production reliability.
+The existing Python `evaluate` and `compare_variants` APIs accept immutable
+suites and explicit versioned async scorers. Keep missing/skipped/error outcomes
+in denominators; do not confuse schema validity, confidence, or assertion pass
+rate with classification accuracy. Use a separate holdout after selecting
+explicit prompt/model variants. No automatic prompt optimization is implied.
 
 ## Async safety and verification
 

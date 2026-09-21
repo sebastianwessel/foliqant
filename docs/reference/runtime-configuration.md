@@ -10,7 +10,7 @@ workflows:
 ```
 
 Add `models`, `mcp`, `execution`, or `telemetry` only when the workflow needs
-them. Execution settings have safe defaults:
+them. An optional `evaluation` section points to local golden cases. Execution settings have safe defaults:
 
 | Setting | Default | Meaning |
 | --- | ---: | --- |
@@ -167,6 +167,23 @@ payloads, arbitrary metadata, credentials, prompts, model output, and exception
 text must not enter logs or telemetry. Only protected W3C `traceparent` and
 `tracestate` values are propagated; baggage is excluded.
 
+## Evaluation dataset
+
+```yaml
+evaluation:
+  dataset: .foliqant/evaluation/gold.json
+```
+
+The dataset is a strict JSON file resolved relative to the deployment file.
+`prepare_application`, application startup, `validate`, and `doctor` do not open
+or inspect it. Evaluation metadata is excluded from the runtime configuration
+digest. Only the explicit evaluation commands load gold or saved reports.
+
+Use [testing and evaluation](../guides/testing-and-evaluation.md) for a complete
+dataset, isolated-step checks, metric definitions, and replay. Keep gold and full
+result artifacts in an ignored private directory. No thresholds, model judges,
+or executable scorer imports are accepted in this configuration.
+
 ## CLI
 
 ```text
@@ -176,6 +193,8 @@ foliqant doctor [--config PATH]
 foliqant explain [--config PATH] [--workflow NAME]
 foliqant run [--config PATH] --workflow NAME --input PATH|-
              [--tenant-id ID] [--principal-id ID] [--debug]
+foliqant evaluate [--config PATH] [--check | --replay REPORT]
+                  [--output PATH] [--max-concurrency 1] [--timeout 300]
 ```
 
 `init` refuses to overwrite an existing destination. The other commands default
@@ -183,6 +202,19 @@ to `foliqant.yaml` in the current directory; they do not search parent
 directories. `validate`, `doctor`, and `explain` are offline. `run` reads one
 strict JSON envelope from a regular file or stdin and prints one result. It has
 no `serve`, worker, migration, or job status command.
+
+`evaluate --check` validates gold, targets, and structural result paths offline.
+`evaluate` runs dataset suites sequentially against the configured application;
+one case runs at a time by default. `--timeout` is a per-case deadline in seconds.
+`evaluate --replay REPORT` rescores saved full results without running workflows
+or opening model/tool clients. A normal or replay run writes a new report under
+`.foliqant/evaluations/` beside the configuration, unless `--output` selects a
+new path. Existing report files are never overwritten. Each dataset/case file is
+limited to 64 MiB; report writing and replay share a 256 MiB limit. Stdout contains only a
+content-free summary; the artifact contains sensitive inputs, gold, and public
+results. Exit codes are `0` for passing checks, `1` for gold mismatch, `2` for
+invalid input/configuration, `3` for missing dependencies, and `4` for runtime
+failure. Runtime failure takes precedence even when an assertion expected it.
 
 Success is one JSON object on stdout. Failures use a fixed safe error object and
 nonzero exit status. `--debug` changes approved diagnostics only; it does not

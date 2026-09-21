@@ -18,6 +18,9 @@ Implemented functionality:
 - Immutable golden suites, exact/set/custom checks, sequential-by-default bounded
   evaluation and prompt-variant comparison. Reports expose honest coverage,
   failures, review outcomes and measured step/pipeline latency and usage.
+- Optional `evaluation.dataset` configuration, offline dataset checks/replay,
+  explicit classification/multilabel metrics and private full-result artifacts.
+  Runtime startup neither reads gold nor requires it to be deployed.
 - Public package docs, local Qwen business examples and separate model-development
   guides and skills. Production dependencies exclude model-training and HTTP-host
   dependencies.
@@ -26,6 +29,7 @@ Persistence, queues, background jobs, app authentication and inbound transports
 are not package features or pending implementation work. Evaluation performs no
 hidden judge calls, automatic prompt changes or dataset/model downloads.
 
-Current verification is recorded in
-[the package/evaluation review](reviews/python-package-evaluation.md).
+Initial package verification is recorded in
+[the package/evaluation review](reviews/python-package-evaluation.md); configuration-based
+evaluation evidence is in [the evaluation DX record](reviews/evaluation-dx-proposal-2026-09-21.md).
 Small synthetic model runs verify integration only, not production accuracy.

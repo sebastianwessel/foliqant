@@ -19,6 +19,7 @@ A separate local toolchain prepares data and develops model artifacts.
 | --- | --- |
 | Add a workflow to an application | [Runtime setup](docs/getting-started/runtime.md) |
 | Configure models, MCP, limits, or telemetry | [Runtime configuration](docs/reference/runtime-configuration.md) |
+| Measure steps and pipelines against ground truth | [Workflow evaluation](docs/guides/testing-and-evaluation.md) |
 | Prepare or review training data | [Data workflows](docs/data.md) |
 | Train, evaluate, or export a model | [Model development](docs/model-development.md) |
 

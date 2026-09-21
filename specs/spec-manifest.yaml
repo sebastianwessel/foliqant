@@ -1,5 +1,5 @@
 spec_manifest_version: 1
-content_digest: sha256:314db3d87cf3c8bd59597b4b9b99f2493836a8db0d6b5205173d8a616ec2cc69
+content_digest: sha256:b58a1bf88aebbe2a17cb4d95625e586b7bb2ef020113cc7409c4884b33d9a148
 artifacts:
   - path: 00-applicability.yaml
     sha256: sha256:f4f27579afa175878b0f9202ebd507291e5791523a08ad1394f790ff91cce975
@@ -8,15 +8,15 @@ artifacts:
   - path: 00-conventions.md
     sha256: sha256:f4032cd2d4b481434c62df7241414209be32740036230a351d0b8479c61c05bd
   - path: 00-decision-authority.yaml
-    sha256: sha256:32e37e252483d1b0b1b6d5f3acee807510a73cadbff441ce9faa25a549e4d89a
+    sha256: sha256:46e797d4849615308022e276516478fb63b07be997d8e5705d288b3c0d995a89
   - path: 00-file-structure.md
     sha256: sha256:753c8851632274474cc088832bc1d605944bc2e720a85e36c91c50d7ac497888
   - path: 00-module-boundaries.yaml
-    sha256: sha256:7cb6a196eb5733b0a5a84ad949f723b352e4fad5f933d1ed89fed7dee7d1f708
+    sha256: sha256:d2afe9c2c87ff47918d35a0a69aa9ef7432729fba2e79c3379269483a2982afb
   - path: 00-policy-profile.yaml
     sha256: sha256:443ad4b39149ffe8048e7dd00cc1a9deb068b00fc1b9234bf40c79d66712e472
   - path: 00-reuse-inventory.yaml
-    sha256: sha256:31ac3e2f36b4b2a3d04fbfd6fdd0e784c93269a2e1b5e2b1d500ea216ef5c4c8
+    sha256: sha256:aeb28adadf769c8c60a66b886689a9b9922b5e41e5bd0c0624319d4be6a2de89
   - path: 00-stack.md
     sha256: sha256:b23fe7ea7364460d655088d59dc1dd3d1bbdc4eaceab774878285e7e67df9319
   - path: 00-traceability.yaml
@@ -54,7 +54,7 @@ artifacts:
   - path: 10-business-decisions-and-processes.md
     sha256: sha256:e56d27d054c10254ccba39d34c75689aa9409dbf5e8ff74677be2200fab6f1c5
   - path: 11-python-package.md
-    sha256: sha256:244a2c09c0558d1139beef5bce134ed8fec0278448b7d548700f1ca330694350
+    sha256: sha256:2f5112616952e5b4942638384ee2dba50c3dd244a82a923bfc84e4051734420d
   - path: README.md
     sha256: sha256:f72175c81ccb37266fb93f1c380cff22969897d327769e4856838600505ece06
   - path: _registry.yaml
@@ -94,6 +94,6 @@ artifacts:
   - path: research/workflow-service-proposal.md
     sha256: sha256:6114e68214a130ffdd8df207e31144228638152debf1736e13ce7ae44e6da80d
 provenance:
-  source_revision: working-tree-6db4bca-ci-pages-gate
-  generated_at: 2026-09-21T17:26:52.480Z
+  source_revision: working-tree-6bf0297-evaluation-dx-2026-09-21
+  generated_at: 2026-09-21T18:11:10.731Z
   generator: spec-manifest/v1

@@ -70,7 +70,7 @@ steps:
     outcome: completed
 """,
     ".env.example": "# Add only environment variables referenced by foliqant.yaml.\n",
-    ".gitignore": ".env\n",
+    ".gitignore": ".env\n.foliqant/\n",
     "envelope.json": """{
   "payload": {
     "message": "hello"
@@ -153,6 +153,25 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--tenant-id")
     run.add_argument("--principal-id")
     run.add_argument("--debug", action="store_true")
+
+    evaluation = commands.add_parser(
+        "evaluate", help="Measure configured ground truth; save detailed private results"
+    )
+    evaluation.add_argument("--config", type=Path, default=Path("foliqant.yaml"))
+    mode = evaluation.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--check", action="store_true", help="validate gold and targets without I/O to providers"
+    )
+    mode.add_argument(
+        "--replay", type=Path, metavar="REPORT", help="rescore saved results without inference"
+    )
+    evaluation.add_argument(
+        "--output", type=Path, help="new private report file; never overwritten"
+    )
+    evaluation.add_argument("--max-concurrency", type=int, default=1)
+    evaluation.add_argument(
+        "--timeout", type=float, default=300.0, help="per-case deadline in seconds"
+    )
 
     return parser
 
@@ -433,6 +452,21 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object], int]:
         return _explain(args.config, args.workflow), 0
     if args.command == "doctor":
         return _doctor(args.config), 0
+    if args.command == "evaluate":
+        from foliqant.evaluation.command import evaluate_configuration
+
+        if args.check and args.output is not None:
+            raise _CliFailure("invalid_arguments", _EXIT_INPUT)
+        return asyncio.run(
+            evaluate_configuration(
+                _prepare(args.config),
+                check=args.check,
+                replay=args.replay,
+                output=args.output,
+                max_concurrency=args.max_concurrency,
+                timeout=args.timeout,
+            )
+        )
     return asyncio.run(_run(args))
 
 
