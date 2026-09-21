@@ -15,6 +15,7 @@ from examples.common import (
 from examples.support_triage import offline
 from examples.support_triage.run import CONFIG_PATH, open_example
 from foliqant import Envelope, ExecutionResult, RuntimePlugins, prepare_application
+from foliqant.contracts.envelope import Metadata
 from foliqant.core.json import JsonValue
 from foliqant.evaluation import (
     EvaluationCase,
@@ -27,10 +28,10 @@ from foliqant.evaluation.dataset import EvaluationDataset, metric_specs
 
 
 def _gold_suite() -> EvaluationSuite:
-    """Independent expected values for two explicit requests and one unclear request."""
+    """Independent expected values for five explicit requests and one unclear request."""
     return EvaluationSuite(
         name="support_triage",
-        revision="2",
+        revision="3",
         cases=(
             EvaluationCase(
                 "explicit_cancellation",
@@ -38,7 +39,8 @@ def _gold_suite() -> EvaluationSuite:
                     payload={
                         "requestId": "eval-001",
                         "message": "Cancel renewal for account C-1049 by 30 September 2026.",
-                    }
+                    },
+                    metadata=Metadata.model_validate({"language": "en"}),
                 ),
                 (
                     Expectation("completed", "/execution/status", "completed"),
@@ -55,7 +57,8 @@ def _gold_suite() -> EvaluationSuite:
                     payload={
                         "requestId": "eval-002",
                         "message": "I dispute invoice INV-882. Please review the duplicate charge.",
-                    }
+                    },
+                    metadata=Metadata.model_validate({"language": "en"}),
                 ),
                 (
                     Expectation("completed", "/execution/status", "completed"),
@@ -68,7 +71,10 @@ def _gold_suite() -> EvaluationSuite:
             ),
             EvaluationCase(
                 "insufficient_information",
-                Envelope(payload={"requestId": "eval-003", "message": "Please help."}),
+                Envelope(
+                    payload={"requestId": "eval-003", "message": "Please help."},
+                    metadata=Metadata.model_validate({"language": "en"}),
+                ),
                 (
                     Expectation("review", "/execution/status", "needs_review"),
                     Expectation(
@@ -78,6 +84,66 @@ def _gold_suite() -> EvaluationSuite:
                     ),
                     Expectation("no_answer", "/decisions/classify/result/answer", None),
                     Expectation("safe_output", "/payload/status", "needs_review"),
+                ),
+            ),
+            EvaluationCase(
+                "service_change",
+                Envelope(
+                    payload={
+                        "requestId": "eval-004",
+                        "message": "Add priority support to account A-2205 by 15 October 2026.",
+                    },
+                    metadata=Metadata.model_validate({"language": "en"}),
+                ),
+                (
+                    Expectation("completed", "/execution/status", "completed"),
+                    Expectation(
+                        "queue", "/decisions/classify/result/answer/optionId", "service_change"
+                    ),
+                    Expectation("account", "/payload/account_reference", "A-2205"),
+                    Expectation("deadline", "/payload/deadline", "15 October 2026"),
+                ),
+            ),
+            EvaluationCase(
+                "german_cancellation",
+                Envelope(
+                    payload={
+                        "requestId": "eval-005",
+                        "message": (
+                            "Bitte stoppen Sie die automatische Verlängerung für Kundenkonto "
+                            "K-771 bis 31. Dezember 2026."
+                        ),
+                    },
+                    metadata=Metadata.model_validate({"language": "de"}),
+                ),
+                (
+                    Expectation("completed", "/execution/status", "completed"),
+                    Expectation(
+                        "queue", "/decisions/classify/result/answer/optionId", "cancellation"
+                    ),
+                    Expectation("account", "/payload/account_reference", "K-771"),
+                    Expectation("deadline", "/payload/deadline", "31. Dezember 2026"),
+                ),
+            ),
+            EvaluationCase(
+                "german_billing_dispute",
+                Envelope(
+                    payload={
+                        "requestId": "eval-006",
+                        "message": (
+                            "Ich widerspreche der doppelten Belastung auf Rechnung RE-550. "
+                            "Bitte prüfen Sie die doppelte Belastung bis 15. Oktober 2026."
+                        ),
+                    },
+                    metadata=Metadata.model_validate({"language": "de"}),
+                ),
+                (
+                    Expectation("completed", "/execution/status", "completed"),
+                    Expectation(
+                        "queue", "/decisions/classify/result/answer/optionId", "billing_dispute"
+                    ),
+                    Expectation("not_an_account", "/payload/account_reference", None),
+                    Expectation("deadline", "/payload/deadline", "15. Oktober 2026"),
                 ),
             ),
         ),
@@ -102,9 +168,15 @@ def _gold_step_suite(step: str) -> EvaluationSuite:
             )
         )
         cases.append(
-            EvaluationCase(case.id, Envelope(payload={"message": payload["message"]}), checks)
+            EvaluationCase(
+                case.id,
+                Envelope(
+                    payload={"message": payload["message"]}, metadata=case.envelope().metadata
+                ),
+                checks,
+            )
         )
-    return EvaluationSuite(name=f"support_{step}", revision="2", cases=tuple(cases))
+    return EvaluationSuite(name=f"support_{step}", revision="3", cases=tuple(cases))
 
 
 def dataset() -> EvaluationDataset:
@@ -125,7 +197,7 @@ def dataset() -> EvaluationDataset:
         {
             "version": 1,
             "name": "support_triage_examples",
-            "revision": "2",
+            "revision": "3",
             "suites": [
                 suite_document(_gold_suite(), workflow="support_triage", metrics=[queue, status]),
                 suite_document(

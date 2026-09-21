@@ -377,6 +377,10 @@ suites use `run`. The HTTP wrapper reuses the same workflow suite through its
 ASGI boundary; it does not duplicate business logic. Failed assertions result in
 a nonzero evaluation command status. No example's expected values are generated
 from its observed response. Synthetic checks do not establish population accuracy.
+Support fixtures cover each declared queue label and review, including English
+and German inputs with unchanged English category keys. Gold is authored
+independently of scripted responses. Explicit dataset export writes ignored
+private files; reproducible example constructors remain in source control.
 
 Reports identify the suite and its content fingerprint, the variant/configuration
 revision supplied by the caller and observed workflow revisions. They report

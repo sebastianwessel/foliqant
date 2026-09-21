@@ -44,8 +44,10 @@ uv run --no-sync python -m examples.support_triage.evaluate
 ```
 
 The default uses scripted `FunctionModel` responses without contacting a model.
-It checks three pipeline cases (cancellation, billing dispute, missing details),
-the classification step separately, and extraction separately. Expected answers
+It checks six synthetic pipeline cases: all three queue labels, missing details,
+and German cancellation and billing requests. Four inputs are English and two
+are German; category keys remain English. It also checks classification on all
+six inputs and extraction on the five actionable inputs. Expected answers
 are authored in `evaluate.py`; the scripted outputs in `offline.py` only exercise
 wiring and validation. A negative-control test proves mismatched gold fails.
 

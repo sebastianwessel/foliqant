@@ -1,5 +1,5 @@
 spec_manifest_version: 1
-content_digest: sha256:b58a1bf88aebbe2a17cb4d95625e586b7bb2ef020113cc7409c4884b33d9a148
+content_digest: sha256:0391f9966290d9d2261f0cbe51222bf0cd5b652caaafc45edfdd42ef0d18e6e8
 artifacts:
   - path: 00-applicability.yaml
     sha256: sha256:f4f27579afa175878b0f9202ebd507291e5791523a08ad1394f790ff91cce975
@@ -54,7 +54,7 @@ artifacts:
   - path: 10-business-decisions-and-processes.md
     sha256: sha256:e56d27d054c10254ccba39d34c75689aa9409dbf5e8ff74677be2200fab6f1c5
   - path: 11-python-package.md
-    sha256: sha256:2f5112616952e5b4942638384ee2dba50c3dd244a82a923bfc84e4051734420d
+    sha256: sha256:ec217f4b215c64b0bfed2091e90edbe72c1f4c336b9e7e521fc9c8f87fedeb92
   - path: README.md
     sha256: sha256:f72175c81ccb37266fb93f1c380cff22969897d327769e4856838600505ece06
   - path: _registry.yaml
@@ -94,6 +94,6 @@ artifacts:
   - path: research/workflow-service-proposal.md
     sha256: sha256:6114e68214a130ffdd8df207e31144228638152debf1736e13ce7ae44e6da80d
 provenance:
-  source_revision: working-tree-6bf0297-evaluation-dx-2026-09-21
-  generated_at: 2026-09-21T18:11:10.731Z
+  source_revision: working-tree-bf8fe6a-synthetic-evals
+  generated_at: 2026-09-21T18:20:05.098Z
   generator: spec-manifest/v1

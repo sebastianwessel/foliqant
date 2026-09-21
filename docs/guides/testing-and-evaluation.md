@@ -431,6 +431,11 @@ uv run --no-sync python -m examples.http_workflow.evaluate
 ```
 
 Support triage checks full pipelines and isolated classification/extraction.
+Its six authored inputs cover all three queue categories, missing information,
+and English/German inputs. Extraction gold checks account versus invoice
+references, absent values, and unchanged deadline wording. The HTTP example
+reuses these same inputs; the MCP example adds two synthetic request lookups.
+These are eight distinct scenarios, not separate data for every repeated step.
 Its default scripted model verifies wiring. MCP uses a real local stdio server
 without a model. HTTP uses an in-process ASGI client. Support and HTTP accept
 `--live` to use the explicitly configured model; those small suites remain smoke

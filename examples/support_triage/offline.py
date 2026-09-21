@@ -37,6 +37,27 @@ def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
             "deadline": None,
             "account_reference": None,
         }
+    elif "Add priority support to account A-2205" in text:
+        option, quote = "service_change", "Add priority support"
+        extracted = {
+            "requested_action": "add priority support",
+            "deadline": "15 October 2026",
+            "account_reference": "A-2205",
+        }
+    elif "K-771" in text:
+        option, quote = "cancellation", "automatische Verlängerung"
+        extracted = {
+            "requested_action": "automatische Verlängerung stoppen",
+            "deadline": "31. Dezember 2026",
+            "account_reference": "K-771",
+        }
+    elif "RE-550" in text:
+        option, quote = "billing_dispute", "doppelten Belastung"
+        extracted = {
+            "requested_action": "doppelte Belastung prüfen",
+            "deadline": "15. Oktober 2026",
+            "account_reference": None,
+        }
     elif "Please help." in text:
         option, quote, extracted = None, None, None
     else:

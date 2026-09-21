@@ -25,8 +25,8 @@ async def test_http_boundary_reuses_gold_suite_and_real_workflow() -> None:
     assert isinstance(result["reports"], list)
     report = result["reports"][0]
     assert isinstance(report, dict)
-    assert report["case_count"] == 3
-    assert report["review_rate"] == pytest.approx(1 / 3)
+    assert report["case_count"] == 6
+    assert report["review_rate"] == pytest.approx(1 / 6)
 
 
 def test_example_evaluation_fails_when_gold_disagrees(
@@ -66,11 +66,11 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
     reports = json.loads(artifact.read_text())["reports"]
     pipeline, classification, extraction = reports
     queue, status = pipeline["metrics"]
-    assert queue["support"] == queue["observed"] == 2
+    assert queue["support"] == queue["observed"] == 5
     assert queue["excluded"] == 1  # Review gold does not invent a queue label.
-    assert queue["confusion_matrix"] == [[1, 0, 0], [0, 1, 0], [0, 0, 0]]
+    assert queue["confusion_matrix"] == [[2, 0, 0], [0, 2, 0], [0, 0, 1]]
     assert queue["accuracy"] == queue["coverage"] == 1
-    assert status["support"] == 3
+    assert status["support"] == 6
     for report, step in ((classification, "classify"), (extraction, "extract")):
         assert report["target_step"] == step
         assert [entry["name"] for entry in report["steps"]] == [step]
@@ -85,8 +85,39 @@ async def test_http_metrics_reuse_shared_golden_catalog() -> None:
     result = await http_evaluations()
     metric = result["reports"][0]["metrics"][0]
     assert metric["labels"] == ["cancellation", "billing_dispute", "service_change"]
-    assert metric["confusion_matrix"] == [[1, 0, 0], [0, 1, 0], [0, 0, 0]]
-    assert metric["support"] == 2 and metric["excluded"] == 1
+    assert metric["confusion_matrix"] == [[2, 0, 0], [0, 2, 0], [0, 0, 1]]
+    assert metric["support"] == 5 and metric["excluded"] == 1
+
+
+def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(monkeypatch) -> None:
+    from collections import Counter
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("gold must never be derived from a scripted response")
+
+    monkeypatch.setattr(support_evaluation.offline, "scripted_response", forbidden)
+    dataset = support_evaluation.dataset()
+    pipeline, classification, extraction = dataset.suites
+    assert [len(spec.gold_cases) for spec in dataset.suites] == [6, 6, 5]
+    assert Counter(
+        case.input.metadata.model_dump()["language"] for case in pipeline.gold_cases
+    ) == {"en": 4, "de": 2}
+    category_path = "/decisions/classify/result/answer/optionId"
+    expected_categories = {
+        check.expected
+        for case in pipeline.gold_cases
+        for check in case.expectations
+        if check.path == category_path
+    }
+    assert expected_categories == set(pipeline.metrics[0].labels)
+    assert {case.id for case in extraction.gold_cases} == {
+        case.id for case in pipeline.gold_cases if case.id != "insufficient_information"
+    }
+    for step in (classification, extraction):
+        for isolated in step.gold_cases:
+            original = next(case for case in pipeline.gold_cases if case.id == isolated.id)
+            assert isolated.input.payload == {"message": original.input.payload["message"]}
+            assert isolated.input.metadata == original.input.metadata
 
 
 @pytest.mark.parametrize("example", ["support_triage", "http_workflow", "public_request_mcp"])
