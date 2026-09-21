@@ -11,6 +11,17 @@ entries:
       - raw JSON decoder rejects duplicate keys and enforces byte/depth limits
       - trusted identity binding and immutable core mapping
     verification: [../../service/tests/test_envelope.py, ../../service/tests/test_decoding.py]
+  - id: GEN-SERVICE-EXECUTION
+    canonical_source: ../../service/src/foliqant/contracts/execution.py
+    generated_outputs:
+      - ../../contracts/service/execution-result.schema.json
+      - ../../contracts/service/acceptance-receipt.schema.json
+    command: uv run --project service python service/scripts/generate_schemas.py
+    drift_check: uv run --project service python service/scripts/generate_schemas.py --check
+    handwritten_remainder:
+      - core-to-boundary mapping preserves omitted fields versus explicit null
+      - canonical error messages and token subset validation use shared core rules
+    verification: [../../service/tests/test_execution_contracts.py, ../../service/tests/test_embedded_example.py]
   - id: GEN-NATIVE-DECISION-REUSE
     canonical_source: ../../packages/decision-contracts/src/foliqant_decisions/contracts.py
     generated_outputs:

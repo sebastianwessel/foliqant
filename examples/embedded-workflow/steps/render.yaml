@@ -1,0 +1,6 @@
+type: handler
+handler: render_result
+input:
+  routed:
+    pointer: /steps/route/result
+next: done

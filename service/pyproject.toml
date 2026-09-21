@@ -10,6 +10,7 @@ dependencies = [
   "pydantic-ai-slim==2.46.0",
   "PyYAML==6.0.3",
   "jsonschema==4.26.0",
+  "referencing==0.37.0",
   "python-dotenv==1.2.3",
 ]
 
@@ -62,6 +63,9 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["foliqant"]
 
 [tool.mypy]
 python_version = "3.12"

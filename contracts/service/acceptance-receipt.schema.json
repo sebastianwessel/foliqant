@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "execution_id": {
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": ".*\\S.*",
+      "title": "Execution Id",
+      "type": "string"
+    },
+    "status": {
+      "const": "accepted",
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "execution_id",
+    "status"
+  ],
+  "title": "AcceptanceReceipt",
+  "type": "object"
+}

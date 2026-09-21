@@ -17,7 +17,7 @@ from pydantic.json_schema import SkipJsonSchema
 
 from foliqant.core.envelope import AcceptedEnvelope
 from foliqant.core.errors import ErrorCode, ServiceError
-from foliqant.core.identity import Identity
+from foliqant.core.identity import IDENTITY_MAX_LENGTH, IDENTITY_PATTERN, Identity
 from foliqant.core.json import JsonValue
 
 from .base import BoundaryModel
@@ -26,8 +26,8 @@ type IdentityId = Annotated[
     str,
     StringConstraints(
         min_length=1,
-        max_length=256,
-        pattern=r"^[^\x00-\x1f\x7f-\x9f]*[^\s\x00-\x1f\x7f-\x9f][^\x00-\x1f\x7f-\x9f]*$",
+        max_length=IDENTITY_MAX_LENGTH,
+        pattern=IDENTITY_PATTERN,
     ),
 ]
 _IDENTITY: TypeAdapter[str] = TypeAdapter(IdentityId)

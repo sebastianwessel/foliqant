@@ -1,5 +1,5 @@
 spec_manifest_version: 1
-content_digest: sha256:a5e31796625aeae791319324307fac111decf7f593d1d840c1535ec2d3114ade
+content_digest: sha256:67dc68198b9f9377665d9e9b0a3c672f9f93df394099584f37f958dc3a3995be
 artifacts:
   - path: 00-applicability.yaml
     sha256: sha256:0982cb434f46a6d2f83f2544fce27c7b24644696210c0af23954ead564a3bf48
@@ -36,7 +36,7 @@ artifacts:
   - path: 03-contracts/representation-catalog.yaml
     sha256: sha256:99061414c844951f37f72a1cc22b786b8634266fa4bf0fa92ac83ce10ab842bc
   - path: 03-contracts/service-generation-map.yaml
-    sha256: sha256:b3f2c524bd30a81e089aa8630f3eaf222f93c91e92e1a77741d63193d21df292
+    sha256: sha256:13d4bf880115fe1b7e13533611cbc41e26e9335f09d29efe7b4a27161a61bc7f
   - path: 03-flows/e2e-coverage.md
     sha256: sha256:1ee8fa604489b1a729218059cc8d6eee26728b4c5f2884c5123f705124d330f7
   - path: 04-operations/security-release.md
@@ -54,7 +54,7 @@ artifacts:
   - path: 10-business-decisions-and-processes.md
     sha256: sha256:4c787f27dfd46cc4216cd955a50677985a8c4ab559f6503e9b02454c2929e4ce
   - path: 11-workflow-service.md
-    sha256: sha256:8f1126f2b63ca4259818c5df49daf0eb1ef5474ae224e04d85900550380620e3
+    sha256: sha256:6cfa8aba050b3d4fa61809402232d5b84638a3431c441433916043d511bbef2f
   - path: README.md
     sha256: sha256:f3821193e712d036e87566012fbc044f85b92c52205b2317297ff505247a4dd3
   - path: _registry.yaml
@@ -86,10 +86,10 @@ artifacts:
   - path: research/modular-workflow-service.md
     sha256: sha256:599bf3b81766fdf61287cda65cbfbaeddcc87445366d37ee82848176a32e4da9
   - path: research/workflow-service-dependencies.md
-    sha256: sha256:d8b0eae26f5505d3bf6ffae2dcf1234a5b2824dfd16c96f96f1c170489a1b658
+    sha256: sha256:551c9746b331049eb7a38ce07b99e92c7a3d46443661120dd35863b7a3ec2953
   - path: research/workflow-service-proposal.md
     sha256: sha256:c822ff78eaa2a9ae2c64105b781e02a45c485fa333a48a4098232fe5fa14a2ac
 provenance:
-  source_revision: working-tree-7e15ced-python-service-async-foundation
-  generated_at: 2026-09-21T10:08:41.211Z
+  source_revision: working-tree-c86d216-embedded-runtime
+  generated_at: 2026-09-21T10:30:37.572Z
   generator: spec-manifest/v1

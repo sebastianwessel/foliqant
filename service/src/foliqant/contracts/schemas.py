@@ -7,6 +7,7 @@ from pydantic import TypeAdapter
 from foliqant.core.json import JsonValue
 
 from .envelope import Envelope
+from .execution import AcceptanceReceipt, ExecutionResult
 from .workflow import DeclaredToolCatalog, StepAuthoring, WorkflowAuthoring
 
 
@@ -16,6 +17,8 @@ def service_schemas() -> dict[str, dict[str, JsonValue]]:
         dict[str, dict[str, JsonValue]],
         {
             "envelope.schema.json": Envelope.model_json_schema(),
+            "execution-result.schema.json": ExecutionResult.model_json_schema(),
+            "acceptance-receipt.schema.json": AcceptanceReceipt.model_json_schema(),
             "workflow.schema.json": WorkflowAuthoring.model_json_schema(),
             "step.schema.json": TypeAdapter(StepAuthoring).json_schema(),
             "tool-catalog.schema.json": DeclaredToolCatalog.model_json_schema(),

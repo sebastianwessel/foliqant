@@ -1,0 +1,11 @@
+type: handler
+handler: route_request
+input:
+  request_id:
+    pointer: /payload/requestId
+  priority:
+    pointer: /payload/priority
+    optional: true
+    default: null
+next: render
+on_unresolved: review

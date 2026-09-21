@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "priority": {
+      "enum": [
+        "standard",
+        "urgent"
+      ]
+    }
+  },
+  "required": [
+    "requestId"
+  ],
+  "additionalProperties": false
+}

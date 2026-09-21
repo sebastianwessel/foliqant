@@ -1,0 +1,9 @@
+version: 1
+name: embedded_triage
+start: route
+input_schema: schemas/input.json
+output:
+  pointer: /steps/render/result
+  optional: true
+  default:
+    status: needs_review

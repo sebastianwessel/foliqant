@@ -28,3 +28,8 @@ follow [Generate typed decision research data](guides/native-decision-data.md).
 
 The small exercise checks the tooling. Its model and data do not establish
 accuracy for financial decisions, regulatory interpretation or legal advice.
+
+For the separate workflow service, see its [guide](../service/README.md),
+[offline embedded example](../examples/embedded-workflow/README.md) and
+[operating skill](../skills/foliqant-service/SKILL.md). The embedded runtime is
+available; the complete model-enabled, durable service remains under implementation.

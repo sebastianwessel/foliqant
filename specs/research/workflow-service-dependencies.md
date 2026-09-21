@@ -32,6 +32,7 @@ version and must be covered by adapter tests.
 | Pydantic | `2.13.5` | Strict configuration and boundary models | [PyPI](https://pypi.org/project/pydantic/2.13.5/) |
 | PydanticAI slim | `2.46.0` | Agent/model adapter only | [PyPI](https://pypi.org/project/pydantic-ai-slim/2.46.0/) |
 | JSON Schema | `jsonschema==4.26.0` | Independent schema and value validation | [PyPI](https://pypi.org/project/jsonschema/4.26.0/) |
+| Schema references | `referencing==0.37.0` | Closed in-memory registry; no runtime network or filesystem retrieval | [PyPI](https://pypi.org/project/referencing/0.37.0/) |
 | YAML | `PyYAML==6.0.3` | Authoring input | [PyPI](https://pypi.org/project/PyYAML/6.0.3/) |
 | Environment files | `python-dotenv==1.2.3` | Local configuration only | [PyPI](https://pypi.org/project/python-dotenv/1.2.3/) |
 | OpenAI extra | `pydantic-ai-slim[openai]==2.46.0` | OpenAI, Azure OpenAI, and explicitly profiled OpenAI-compatible endpoints | [PydanticAI OpenAI models](https://pydantic.dev/docs/ai/models/openai/) |

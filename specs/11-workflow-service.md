@@ -279,6 +279,25 @@ invalid pointer or a failed output schema. Binding errors expose no source data.
 
 ## Models and tools
 
+### Embedded execution boundary
+
+The embedded runner accepts a compiled plan, accepted envelope and explicit trusted
+identity. It rechecks their identity agreement and validates the workflow input
+before admission. Each execution owns its step results and budgets; no request
+state lives on the shared runner. The step adapter receives resolved immutable
+arguments, identity/metadata, a host execution ID, a monotonic deadline and an
+attempt budget. Reserve model/tool attempts before I/O, including attempts that
+fail. Missing usage for any reserved model attempt makes its token aggregate
+unknown. No model call is charged for a finish or pure handler step.
+
+The first embedded runner is explicitly nondurable. It exposes the same bounded
+step execution boundary that durable workers will use, but does not pretend that
+in-memory budgets or cancellation records survive process termination. Cancellation
+propagates; no detached business tasks remain. Untrusted adapter exceptions map to
+fixed dependency failures. An adapter that performs an external mutation must
+translate uncertain timeout/cancellation outcomes through the effect-store policy
+before production mutation support is enabled.
+
 Use `pydantic-ai-slim` with only selected provider extras. PydanticAI owns the
 agent/tool conversation and typed output; Foliqant owns business routing, budgets,
 authorization, durable state and transport. Do not maintain a second model loop.

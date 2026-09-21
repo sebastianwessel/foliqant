@@ -35,3 +35,25 @@ jobs:
       - run: uv run --no-sync python scripts/check_docs.py
       - run: uv run --no-sync python scripts/check_tracked_data.py --git git
       - run: git diff --check
+
+  service:
+    name: Workflow service quality gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --project service --locked --all-extras --group dev
+      - run: uv run --project service --no-sync python -m pytest service/tests -q
+        env:
+          UV_OFFLINE: '1'
+      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml service/src examples/embedded-workflow/run.py
+      - run: uv run --project service --no-sync ruff check --config service/pyproject.toml service/src service/tests service/scripts examples/embedded-workflow
+      - run: uv run --project service --no-sync ruff format --check --config service/pyproject.toml service/src service/tests service/scripts examples/embedded-workflow
+      - run: uv run --project service --no-sync python service/scripts/generate_schemas.py --check
+      - run: git diff --check

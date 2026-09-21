@@ -8,7 +8,8 @@ identity, authorization, admission, persistence and transports.
 Implementation is in progress. Available foundations are strict envelopes,
 protected metadata validation, immutable core values, safe errors and bounded
 async admission, bounded blocking-I/O execution, safe JSON logging, an offline
-workflow compiler and shared native decision validation. The executable CLI, model/MCP integration,
+workflow compiler, embedded async runner, public execution results and shared native
+decision validation. The executable CLI, model/MCP integration,
 durable transports and full application example are not yet complete. See the
 [implementation status](../plans/workflow-service-status.md) for verified scope.
 
@@ -63,7 +64,37 @@ tags and YAML aliases are rejected. Workflow schemas support confined local file
 and fragments; declared tool schemas use internal fragments only. Schema `$id`
 is unsupported, with depth and node limits enforced. JSON data inside schema
 `const`, `default` and examples is not interpreted as schema instructions.
-Generate/check the four public schemas using the development commands above.
+Generate/check the six public schemas using the development commands above.
+
+## Embedded execution
+
+The [offline example](../examples/embedded-workflow/README.md) combines a compiled
+workflow, frozen input schemas, an async handler and a public execution result.
+From the repository root, run:
+
+```sh
+uv run --project service --no-sync python examples/embedded-workflow/run.py
+```
+
+Construct `WorkflowSchemas(plan)` once and pass it to `WorkflowRunner` alongside
+an async `StepExecutor`, a shared `CapacityLimiter`, and optional `ExecutionLimits`.
+Pass an accepted envelope and explicit trusted `Identity` to `await runner.run(...)`.
+Use `to_execution_result(...)` to validate and serialize the returned core result.
+The runner rechecks identity claims and input schemas before admission; these
+boundary errors raise `ServiceError`. Execution failures return a failed result
+with fixed safe error text. `CancelledError` propagates to the caller.
+
+The executor receives immutable inputs and a separate context for each step.
+It owns result validation and operation timeouts within the original run deadline.
+Reserve every model/tool attempt through `context.budget` before starting I/O.
+Failed requests still count. Report measured token usage once per model ticket;
+unavailable counts remain null rather than becoming zero. Pure handlers and
+finish steps do not consume model or tool attempts.
+
+This runner is nondurable: it has no restart recovery, persisted budgets or
+external mutation reconciliation. It does not launch background business tasks.
+The offline example demonstrates these boundaries without model calls or external
+dependencies; it is not the complete model-enabled service application.
 
 ## Async execution rules
 

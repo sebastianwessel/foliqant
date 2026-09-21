@@ -311,6 +311,7 @@ dependencies = [
     { name = "pydantic-ai-slim" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "referencing" },
 ]
 
 [package.optional-dependencies]
@@ -381,6 +382,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.2.3" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "redis", marker = "extra == 'redis'", specifier = "==8.1.0" },
+    { name = "referencing", specifier = "==0.37.0" },
     { name = "starlette", marker = "extra == 'http'", specifier = "==1.6.0" },
     { name = "uvicorn", marker = "extra == 'http'", specifier = "==0.53.0" },
 ]

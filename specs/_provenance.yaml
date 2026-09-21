@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:a5e31796625aeae791319324307fac111decf7f593d1d840c1535ec2d3114ade
-  source_revision: working-tree-7e15ced-python-service-async-foundation
-  generated_at: 2026-09-21T10:08:41.211Z
+  content_digest: sha256:67dc68198b9f9377665d9e9b0a3c672f9f93df394099584f37f958dc3a3995be
+  source_revision: working-tree-c86d216-embedded-runtime
+  generated_at: 2026-09-21T10:30:37.572Z
