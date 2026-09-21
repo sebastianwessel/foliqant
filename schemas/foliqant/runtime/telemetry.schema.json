@@ -1,0 +1,129 @@
+{
+  "$id": "https://foliqant.local/schemas/foliqant/runtime/telemetry.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Explicit OTLP/HTTP settings; header values remain outside configuration.",
+  "properties": {
+    "allow_insecure_http": {
+      "default": false,
+      "title": "Allow Insecure Http",
+      "type": "boolean"
+    },
+    "export_timeout": {
+      "default": 10.0,
+      "exclusiveMinimum": 0,
+      "maximum": 30,
+      "title": "Export Timeout",
+      "type": "number"
+    },
+    "metric_export_batch_size": {
+      "default": 512,
+      "maximum": 65536,
+      "minimum": 1,
+      "title": "Metric Export Batch Size",
+      "type": "integer"
+    },
+    "metric_export_interval": {
+      "default": 60.0,
+      "exclusiveMinimum": 0,
+      "maximum": 3600,
+      "title": "Metric Export Interval",
+      "type": "number"
+    },
+    "metrics_endpoint": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Metrics Endpoint"
+    },
+    "metrics_headers_env": {
+      "maxProperties": 64,
+      "patternProperties": {
+        "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "type": "string"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "title": "Metrics Headers Env",
+      "type": "object"
+    },
+    "service_name": {
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]*$",
+      "title": "Service Name",
+      "type": "string"
+    },
+    "shutdown_timeout": {
+      "default": 10.0,
+      "exclusiveMinimum": 0,
+      "maximum": 30,
+      "title": "Shutdown Timeout",
+      "type": "number"
+    },
+    "span_batch_size": {
+      "default": 512,
+      "maximum": 4096,
+      "minimum": 1,
+      "title": "Span Batch Size",
+      "type": "integer"
+    },
+    "span_queue_capacity": {
+      "default": 2048,
+      "maximum": 65536,
+      "minimum": 1,
+      "title": "Span Queue Capacity",
+      "type": "integer"
+    },
+    "span_schedule_delay": {
+      "default": 5.0,
+      "exclusiveMinimum": 0,
+      "maximum": 3600,
+      "title": "Span Schedule Delay",
+      "type": "number"
+    },
+    "traces_endpoint": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Traces Endpoint"
+    },
+    "traces_headers_env": {
+      "maxProperties": 64,
+      "patternProperties": {
+        "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "type": "string"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "title": "Traces Headers Env",
+      "type": "object"
+    }
+  },
+  "required": [
+    "service_name"
+  ],
+  "title": "TelemetryConfig",
+  "type": "object"
+}

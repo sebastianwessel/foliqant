@@ -38,7 +38,7 @@ def main() -> int:
     documents = sorted(
         [
             root / "README.md",
-            root / "contracts" / "README.md",
+            root / "schemas" / "README.md",
             root / "model" / "README.md",
             *root.joinpath("docs").rglob("*.md"),
             *root.joinpath("skills").rglob("*.md"),

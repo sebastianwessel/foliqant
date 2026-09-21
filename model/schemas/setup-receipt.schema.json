@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "FileEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "sha256"
+      ],
+      "title": "FileEntry",
+      "type": "object"
+    }
+  },
+  "$id": "https://foliqant.local/schemas/model/setup-receipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Successful acquisition, conversion and prepared artifact identities.",
+  "properties": {
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/FileEntry"
+      },
+      "title": "Assets",
+      "type": "array"
+    },
+    "customerDatasetArtifactId": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Customerdatasetartifactid",
+      "type": "string"
+    },
+    "generatedFiles": {
+      "items": {
+        "$ref": "#/$defs/FileEntry"
+      },
+      "title": "Generatedfiles",
+      "type": "array"
+    },
+    "modelArtifactId": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Modelartifactid",
+      "type": "string"
+    },
+    "profileName": {
+      "const": "smoke-v1",
+      "title": "Profilename",
+      "type": "string"
+    },
+    "profileSha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Profilesha256",
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "sharedDatasetArtifactId": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Shareddatasetartifactid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "profileName",
+    "profileSha256",
+    "assets",
+    "generatedFiles",
+    "modelArtifactId",
+    "sharedDatasetArtifactId",
+    "customerDatasetArtifactId"
+  ],
+  "title": "SetupReceipt",
+  "type": "object"
+}

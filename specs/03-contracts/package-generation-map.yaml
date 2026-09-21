@@ -4,7 +4,7 @@ authority: ../11-python-package.md
 entries:
   - id: GEN-PACKAGE-DEPLOYMENT
     canonical_source: ../../src/foliqant/contracts/deployment.py
-    generated_outputs: [../../contracts/foliqant/deployment.schema.json]
+    generated_outputs: [../../schemas/foliqant/runtime/deployment.schema.json]
     command: uv run python scripts/generate_schemas.py
     drift_check: uv run python scripts/generate_schemas.py --check
     handwritten_remainder:
@@ -13,7 +13,7 @@ entries:
     verification: [../../tests/test_bootstrap.py, ../../tests/test_cli.py]
   - id: GEN-PACKAGE-TELEMETRY
     canonical_source: ../../src/foliqant/contracts/telemetry.py
-    generated_outputs: [../../contracts/foliqant/telemetry.schema.json]
+    generated_outputs: [../../schemas/foliqant/runtime/telemetry.schema.json]
     command: uv run python scripts/generate_schemas.py
     drift_check: uv run python scripts/generate_schemas.py --check
     handwritten_remainder:
@@ -22,7 +22,7 @@ entries:
     verification: [../../tests/test_telemetry_runtime.py, ../../tests/test_trace_privacy.py, ../../tests/test_workflow_telemetry.py, ../../tests/test_model_telemetry.py, ../../tests/test_mcp_telemetry.py]
   - id: GEN-PACKAGE-MCP-PROFILES
     canonical_source: ../../src/foliqant/contracts/mcp.py
-    generated_outputs: [../../contracts/foliqant/mcp-profiles.schema.json]
+    generated_outputs: [../../schemas/foliqant/runtime/mcp-profiles.schema.json]
     command: uv run python scripts/generate_schemas.py
     drift_check: uv run python scripts/generate_schemas.py --check
     handwritten_remainder:
@@ -30,7 +30,7 @@ entries:
     verification: [../../tests/test_mcp_configuration.py, ../../tests/test_mcp_catalog.py, ../../tests/test_mcp_runtime.py, ../../tests/test_mcp_transport.py]
   - id: GEN-PACKAGE-MODEL-PROFILES
     canonical_source: ../../src/foliqant/contracts/models.py
-    generated_outputs: [../../contracts/foliqant/model-profiles.schema.json]
+    generated_outputs: [../../schemas/foliqant/runtime/model-profiles.schema.json]
     command: uv run python scripts/generate_schemas.py
     drift_check: uv run python scripts/generate_schemas.py --check
     handwritten_remainder:
@@ -38,7 +38,7 @@ entries:
     verification: [../../tests/test_model_configuration.py, ../../tests/test_model_providers.py]
   - id: GEN-PACKAGE-ENVELOPE
     canonical_source: ../../src/foliqant/contracts/envelope.py
-    generated_outputs: [../../contracts/foliqant/envelope.schema.json]
+    generated_outputs: [../../schemas/foliqant/runtime/envelope.schema.json]
     command: uv run python scripts/generate_schemas.py
     drift_check: uv run python scripts/generate_schemas.py --check
     handwritten_remainder:
@@ -48,7 +48,7 @@ entries:
   - id: GEN-PACKAGE-EXECUTION
     canonical_source: ../../src/foliqant/contracts/execution.py
     generated_outputs:
-      - ../../contracts/foliqant/execution-result.schema.json
+      - ../../schemas/foliqant/runtime/execution-result.schema.json
     command: uv run python scripts/generate_schemas.py
     drift_check: uv run python scripts/generate_schemas.py --check
     handwritten_remainder:
@@ -58,20 +58,20 @@ entries:
   - id: GEN-NATIVE-DECISION-REUSE
     canonical_source: ../../src/foliqant/decisions/contracts.py
     generated_outputs:
-      - ../../contracts/model/decision-input.schema.json
-      - ../../contracts/model/decision-output.schema.json
-      - ../../contracts/model/category-catalog.schema.json
-    command: uv run --project model python scripts/generate_model_schemas.py --maintenance-output contracts/model
-    drift_check: uv run --project model python scripts/generate_model_schemas.py --check contracts/model
+      - ../../schemas/foliqant/decisions/decision-input.schema.json
+      - ../../schemas/foliqant/decisions/decision-output.schema.json
+      - ../../schemas/foliqant/decisions/category-catalog.schema.json
+    command: uv run python scripts/generate_schemas.py
+    drift_check: uv run python scripts/generate_schemas.py --check
     handwritten_remainder:
       - native cross-field semantic validation and category normalization remain shared code
     verification: [../../model/tests/test_decision_contracts.py, ../../model/tests/test_category_catalog.py]
   - id: GEN-PACKAGE-AUTHORING
     canonical_source: ../../src/foliqant/contracts/workflow.py
     generated_outputs:
-      - ../../contracts/foliqant/workflow.schema.json
-      - ../../contracts/foliqant/step.schema.json
-      - ../../contracts/foliqant/tool-catalog.schema.json
+      - ../../schemas/foliqant/runtime/workflow.schema.json
+      - ../../schemas/foliqant/runtime/step.schema.json
+      - ../../schemas/foliqant/runtime/tool-catalog.schema.json
     command: uv run python scripts/generate_schemas.py
     drift_check: uv run python scripts/generate_schemas.py --check
     handwritten_remainder:

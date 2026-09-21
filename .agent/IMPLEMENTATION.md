@@ -13,11 +13,13 @@ and have concise docstrings. Keep MLX imports inside the isolated backend so
 offline commands work without GPU libraries. Do not change global Python or
 operating-system memory settings.
 
-Pydantic classes in `contracts/` within the Python package are canonical. The
-root `contracts/model/` directory contains generated JSON Schema, not a second
-handwritten source. Regenerate reviewed contract changes with
-`scripts/generate_model_schemas.py --maintenance-output contracts/model`, then
-run the drift check. External JSON/YAML must pass strict runtime validation.
+Pydantic classes in `src/foliqant/contracts/` and `src/foliqant/decisions/` are
+canonical for library-owned boundaries. Their generated schemas live in
+`schemas/foliqant/runtime/` and `schemas/foliqant/decisions/`. Model-tooling
+contracts are canonical in `model/src/foliqant_model/` and generate only into
+`model/schemas/`. Regenerate reviewed model schema changes with
+`scripts/generate_model_schemas.py --maintenance-output model/schemas`, then
+run both drift checks. External JSON/YAML must pass strict runtime validation.
 
 Use the existing redacted `ModelError` categories. CLI success is one JSON object
 on stdout; failure is a final JSON error on stderr with no success output. Never
@@ -52,7 +54,7 @@ The tiny setup model tests the toolchain; it is not a financial quality benchmar
 uv run --project model --no-sync python -m pytest -c model/pyproject.toml model/tests
 uv run --project model --no-sync mypy --config-file model/pyproject.toml model/src
 uv run --project model --no-sync ruff check model/src model/tests scripts
-uv run --project model --no-sync python scripts/generate_model_schemas.py --check contracts/model
+uv run --project model --no-sync python scripts/generate_model_schemas.py --check model/schemas
 uv run --project model --no-sync python scripts/check_docs.py
 uv run --project model --no-sync python scripts/check_tracked_data.py
 git diff --check

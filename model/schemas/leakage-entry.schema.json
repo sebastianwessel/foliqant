@@ -1,0 +1,55 @@
+{
+  "$id": "https://foliqant.local/schemas/model/leakage-entry.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "componentId": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Componentid",
+      "type": "string"
+    },
+    "conversationHash": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Conversationhash",
+      "type": "string"
+    },
+    "groupKeyHashes": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Groupkeyhashes",
+      "type": "array"
+    },
+    "promptHash": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Prompthash",
+      "type": "string"
+    },
+    "recordId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Recordid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "recordId",
+    "componentId",
+    "groupKeyHashes",
+    "conversationHash",
+    "promptHash"
+  ],
+  "title": "LeakageEntry",
+  "type": "object"
+}

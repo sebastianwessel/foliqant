@@ -35,3 +35,7 @@ The [runtime and model-development boundary](concepts/runtime-and-model-developm
 explains which project owns each job. [Artifact operations](operations/artifacts.md)
 and the [model configuration reference](reference/configuration.md) cover the
 model lifecycle in more detail.
+
+Agents working in this checkout can use the [runtime skill](skills/foliqant.md)
+or the [model operating skill](skills/foliqant-model.md); both point back to
+these public guides and the implemented commands.

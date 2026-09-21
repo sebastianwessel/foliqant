@@ -1,0 +1,294 @@
+{
+  "$defs": {
+    "DeclaredTool": {
+      "additionalProperties": false,
+      "description": "Operator-reviewed tool metadata used by offline compilation only.",
+      "properties": {
+        "effect": {
+          "enum": [
+            "read",
+            "write"
+          ],
+          "title": "Effect",
+          "type": "string"
+        },
+        "input_schema": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Input Schema",
+          "type": "object"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        }
+      },
+      "required": [
+        "input_schema",
+        "effect"
+      ],
+      "title": "DeclaredTool",
+      "type": "object"
+    },
+    "DeclaredToolCatalog": {
+      "additionalProperties": false,
+      "properties": {
+        "tools": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DeclaredTool"
+          },
+          "title": "Tools",
+          "type": "object"
+        }
+      },
+      "required": [
+        "tools"
+      ],
+      "title": "DeclaredToolCatalog",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "McpHttpTransport": {
+      "additionalProperties": false,
+      "description": "Current Streamable HTTP endpoint; HTTPS is the deployment default.",
+      "properties": {
+        "allow_insecure_http": {
+          "default": false,
+          "title": "Allow Insecure Http",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "type": {
+          "const": "streamable_http",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "endpoint"
+      ],
+      "title": "McpHttpTransport",
+      "type": "object"
+    },
+    "McpServerProfile": {
+      "additionalProperties": false,
+      "description": "One trusted server binding and its operator-reviewed host policy.",
+      "properties": {
+        "auth": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Auth"
+        },
+        "catalog": {
+          "$ref": "#/$defs/DeclaredToolCatalog"
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "identity_meta_key": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 5,
+              "pattern": "^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}/[A-Za-z0-9](?:[A-Za-z0-9._~/-]*[A-Za-z0-9._~-])?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identity Meta Key"
+        },
+        "output_limit_bytes": {
+          "default": 1048576,
+          "maximum": 67108864,
+          "minimum": 1,
+          "title": "Output Limit Bytes",
+          "type": "integer"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "transport": {
+          "discriminator": {
+            "mapping": {
+              "stdio": "#/$defs/McpStdioTransport",
+              "streamable_http": "#/$defs/McpHttpTransport"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/McpHttpTransport"
+            },
+            {
+              "$ref": "#/$defs/McpStdioTransport"
+            }
+          ],
+          "title": "Transport"
+        }
+      },
+      "required": [
+        "transport",
+        "catalog"
+      ],
+      "title": "McpServerProfile",
+      "type": "object"
+    },
+    "McpStdioTransport": {
+      "additionalProperties": false,
+      "description": "Trusted child settings plus an overlay on the SDK's fixed safe environment.",
+      "properties": {
+        "args": {
+          "items": {
+            "maxLength": 8192,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Args",
+          "type": "array"
+        },
+        "command": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Command",
+          "type": "string"
+        },
+        "cwd": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cwd"
+        },
+        "env": {
+          "maxProperties": 128,
+          "patternProperties": {
+            "^[A-Za-z_][A-Za-z0-9_]*$": {
+              "maxLength": 8192,
+              "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+              "type": "string"
+            }
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "type": {
+          "const": "stdio",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "command"
+      ],
+      "title": "McpStdioTransport",
+      "type": "object"
+    }
+  },
+  "$id": "https://foliqant.local/schemas/foliqant/runtime/mcp-profiles.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Named MCP servers have no reserved alias or implicit endpoint discovery.",
+  "properties": {
+    "servers": {
+      "maxProperties": 128,
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+          "$ref": "#/$defs/McpServerProfile"
+        }
+      },
+      "title": "Servers",
+      "type": "object"
+    }
+  },
+  "required": [
+    "servers"
+  ],
+  "title": "McpProfiles",
+  "type": "object"
+}

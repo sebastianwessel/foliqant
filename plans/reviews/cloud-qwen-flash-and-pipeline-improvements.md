@@ -112,9 +112,9 @@ offline checks. Spec digest:
 
 ## Separate deferred research
 
-[Evaluation workstream](../research/evaluation-workstream.md) scopes rubric-based
+[Evaluation workstream](../../specs/research/evaluation-workstream.md) scopes rubric-based
 judging, independent labels and bias/robustness checks for later work.
-[Custom inference options](../research/custom-inference-options.md) compares
+[Custom inference options](../../specs/research/custom-inference-options.md) compares
 ordinary causal inference, supported classifiers and custom heads. Neither plan
 changes current serving requirements or authorizes training/model downloads.
 

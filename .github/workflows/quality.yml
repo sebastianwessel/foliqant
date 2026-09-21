@@ -31,7 +31,7 @@ jobs:
       - run: uv run --project model --no-sync mypy --config-file model/pyproject.toml model/src
       - run: uv run --project model --no-sync ruff format --check --config model/pyproject.toml model/src model/tests
       - run: uv run --project model --no-sync ruff check --config model/pyproject.toml model/src model/tests
-      - run: uv run --project model --no-sync python scripts/generate_model_schemas.py --check contracts/model
+      - run: uv run --project model --no-sync python scripts/generate_model_schemas.py --check model/schemas
       - run: uv run --project model --no-sync python scripts/check_docs.py
       - run: uv run --project model --no-sync python scripts/check_tracked_data.py --git git
       - run: git diff --check

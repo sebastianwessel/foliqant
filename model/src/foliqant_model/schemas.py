@@ -9,8 +9,6 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from foliqant.decisions import CategoryCatalog, DecisionInput, DecisionOutput
-
 from .contracts import (
     ArtifactManifest,
     CliFailure,
@@ -38,7 +36,6 @@ from .errors import ModelError
 
 SCHEMAS: dict[str, type[BaseModel]] = {
     "artifact-manifest.schema.json": ArtifactManifest,
-    "category-catalog.schema.json": CategoryCatalog,
     "candidate-job.schema.json": CandidateJob,
     "candidate-outcome.schema.json": CandidateOutcome,
     "cli-failure.schema.json": CliFailure,
@@ -47,8 +44,6 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "curation-plan.schema.json": CurationPlan,
     "data-record.schema.json": DataRecord,
     "dataset-config.schema.json": DatasetConfig,
-    "decision-input.schema.json": DecisionInput,
-    "decision-output.schema.json": DecisionOutput,
     "evaluation-config.schema.json": EvaluationConfig,
     "frozen-family-assignment.schema.json": FrozenFamilyAssignment,
     "generation-provenance.schema.json": GenerationProvenance,
@@ -70,7 +65,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
 def schema_bytes(filename: str, model: type[BaseModel]) -> bytes:
     schema = model.model_json_schema(mode="validation")
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-    schema["$id"] = f"https://foliqant.local/contracts/model/{filename}"
+    schema["$id"] = f"https://foliqant.local/schemas/model/{filename}"
     return (
         json.dumps(schema, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n"
     ).encode("utf-8")

@@ -12,8 +12,8 @@ distinguishes operational correspondence from financial QA and market sentiment.
 
 Current refinement: [input answerability and evidence-backed decisions](input-answerability-and-reliability.md) defines the proposed state-plus-typed-questions contract, complete request handling, reasoning, and separate input-sufficiency and answer-adequacy estimates. It supersedes interpreting confidence as a token-score property alone. [Answerability research](confidence-answerability-research.md) and [risk methods](confidence-risk-methods.md) record the primary evidence and limitations.
 
-Separate research tracks (2026-09-20): [rubric-based evaluations](../../plans/research/evaluation-workstream.md)
-is deferred work, independent of the current generation validator. [Custom inference options](../../plans/research/custom-inference-options.md)
+Separate research tracks (2026-09-20): [rubric-based evaluations](evaluation-workstream.md)
+is deferred work, independent of the current generation validator. [Custom inference options](custom-inference-options.md)
 compares supported classifiers and custom heads with the ordinary causal-model baseline.
 Neither track changes the current serving requirement or authorizes training.
 

@@ -316,7 +316,7 @@ def test_field_correctness_does_not_control_applicable_validity() -> None:
 
 
 def test_generated_schemas_are_valid_closed_draft_2020_12_documents() -> None:
-    schema_dir = Path(__file__).parents[2] / "contracts" / "model"
+    schema_dir = Path(__file__).parents[2] / "model" / "schemas"
     paths = sorted(schema_dir.glob("*.schema.json"))
     assert {path.name for path in paths} == set(SCHEMAS)
     for path in paths:

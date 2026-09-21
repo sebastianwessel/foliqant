@@ -1,0 +1,256 @@
+{
+  "$defs": {
+    "DecisionDataSettings": {
+      "additionalProperties": false,
+      "description": "Bounded native decision-data generation settings.",
+      "properties": {
+        "examplesPerScenario": {
+          "default": 4,
+          "maximum": 10000,
+          "minimum": 4,
+          "title": "Examplesperscenario",
+          "type": "integer"
+        },
+        "minimumAcceptedPerCell": {
+          "default": 1,
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Minimumacceptedpercell",
+          "type": "integer"
+        },
+        "sourceExamplesPerSource": {
+          "default": 100,
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Sourceexamplespersource",
+          "type": "integer"
+        }
+      },
+      "title": "DecisionDataSettings",
+      "type": "object"
+    },
+    "GenerationSettings": {
+      "additionalProperties": false,
+      "description": "Explicit bounded generation; quarantine never becomes human review.",
+      "properties": {
+        "languages": {
+          "items": {
+            "enum": [
+              "en",
+              "de"
+            ],
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Languages",
+          "type": "array"
+        },
+        "maxAttempts": {
+          "default": 2,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Maxattempts",
+          "type": "integer"
+        },
+        "maxCandidates": {
+          "default": 100,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maxcandidates",
+          "type": "integer"
+        },
+        "maxInputCharacters": {
+          "default": 16000,
+          "maximum": 131072,
+          "minimum": 256,
+          "title": "Maxinputcharacters",
+          "type": "integer"
+        },
+        "scenarioFamilies": {
+          "default": 20,
+          "maximum": 10000,
+          "minimum": 4,
+          "title": "Scenariofamilies",
+          "type": "integer"
+        },
+        "scenarios": {
+          "items": {
+            "$ref": "#/$defs/Scenario"
+          },
+          "minItems": 1,
+          "title": "Scenarios",
+          "type": "array"
+        }
+      },
+      "title": "GenerationSettings",
+      "type": "object"
+    },
+    "LocalEndpointConfig": {
+      "additionalProperties": false,
+      "description": "Validated location and limits for one trusted generation endpoint.\n\nThe default permits only a loopback endpoint.  A numeric RFC1918 or IPv6\nunique-local address requires the explicit ``allowPrivateNetwork`` opt-in;\npublic addresses, DNS names, credentials, redirects and proxies remain\nunsupported.",
+      "properties": {
+        "allowPrivateNetwork": {
+          "default": false,
+          "title": "Allowprivatenetwork",
+          "type": "boolean"
+        },
+        "baseUrl": {
+          "default": "http://127.0.0.1:1234/v1",
+          "minLength": 1,
+          "title": "Baseurl",
+          "type": "string"
+        },
+        "maxResponseBytes": {
+          "default": 8388608,
+          "maximum": 16777216,
+          "minimum": 1024,
+          "title": "Maxresponsebytes",
+          "type": "integer"
+        },
+        "maxTokens": {
+          "default": 2048,
+          "maximum": 32768,
+          "minimum": 1,
+          "title": "Maxtokens",
+          "type": "integer"
+        },
+        "model": {
+          "$ref": "#/$defs/Omitted_Annotated_str__StringConstraints__AfterValidator__",
+          "default": null
+        },
+        "reasoningEffort": {
+          "$ref": "#/$defs/Omitted_Literal__low____medium____xhigh___",
+          "default": null
+        },
+        "structuredOutput": {
+          "default": "json-schema",
+          "enum": [
+            "json-schema",
+            "prompt"
+          ],
+          "title": "Structuredoutput",
+          "type": "string"
+        },
+        "temperature": {
+          "default": 0.3,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Temperature",
+          "type": "number"
+        },
+        "timeoutSeconds": {
+          "default": 120,
+          "maximum": 600,
+          "minimum": 1,
+          "title": "Timeoutseconds",
+          "type": "integer"
+        }
+      },
+      "title": "LocalEndpointConfig",
+      "type": "object"
+    },
+    "Omitted_Annotated_str__StringConstraints__AfterValidator__": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "Omitted_Literal__low____medium____xhigh___": {
+      "enum": [
+        "low",
+        "medium",
+        "xhigh"
+      ],
+      "type": "string"
+    },
+    "Scenario": {
+      "enum": [
+        "withdrawn-request",
+        "multiple-intents",
+        "missing-evidence",
+        "conflicting-information",
+        "changed-deadline"
+      ],
+      "type": "string"
+    },
+    "SourceSelection": {
+      "additionalProperties": false,
+      "description": "Select a pinned built-in source and a bounded conversion size.",
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "maxRecords": {
+          "default": 1000,
+          "maximum": 100000,
+          "minimum": 4,
+          "title": "Maxrecords",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "SourceSelection",
+      "type": "object"
+    }
+  },
+  "$id": "https://foliqant.local/schemas/model/curation-config.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Complete recipe for the source corpus and local augmentation workflow.",
+  "properties": {
+    "decisionData": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DecisionDataSettings"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "endpoint": {
+      "$ref": "#/$defs/LocalEndpointConfig"
+    },
+    "generation": {
+      "$ref": "#/$defs/GenerationSettings"
+    },
+    "name": {
+      "default": "financial-decisions-en-v1",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "seed": {
+      "default": 42,
+      "maximum": 4294967295,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceSelection"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "title": "CurationConfig",
+  "type": "object"
+}

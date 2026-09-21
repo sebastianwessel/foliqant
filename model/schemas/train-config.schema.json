@@ -1,0 +1,128 @@
+{
+  "$id": "https://foliqant.local/schemas/model/train-config.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "batchSize": {
+      "default": 1,
+      "maximum": 64,
+      "minimum": 1,
+      "title": "Batchsize",
+      "type": "integer"
+    },
+    "dropout": {
+      "default": 0.0,
+      "exclusiveMaximum": 1,
+      "minimum": 0,
+      "title": "Dropout",
+      "type": "number"
+    },
+    "gradientAccumulation": {
+      "default": 1,
+      "maximum": 1024,
+      "minimum": 1,
+      "title": "Gradientaccumulation",
+      "type": "integer"
+    },
+    "gradientCheckpointing": {
+      "default": true,
+      "title": "Gradientcheckpointing",
+      "type": "boolean"
+    },
+    "learningRate": {
+      "default": 0.0001,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Learningrate",
+      "type": "number"
+    },
+    "maxSequenceLength": {
+      "default": 2048,
+      "maximum": 131072,
+      "minimum": 64,
+      "title": "Maxsequencelength",
+      "type": "integer"
+    },
+    "name": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "numLayers": {
+      "default": -1,
+      "maximum": 1024,
+      "minimum": -1,
+      "title": "Numlayers",
+      "type": "integer"
+    },
+    "rank": {
+      "default": 8,
+      "maximum": 256,
+      "minimum": 1,
+      "title": "Rank",
+      "type": "integer"
+    },
+    "saveEvery": {
+      "default": 25,
+      "maximum": 1000000,
+      "minimum": 1,
+      "title": "Saveevery",
+      "type": "integer"
+    },
+    "scale": {
+      "default": 20.0,
+      "exclusiveMinimum": 0,
+      "maximum": 256,
+      "title": "Scale",
+      "type": "number"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "seed": {
+      "default": 42,
+      "maximum": 4294967295,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "steps": {
+      "default": 100,
+      "maximum": 1000000,
+      "minimum": 1,
+      "title": "Steps",
+      "type": "integer"
+    },
+    "timeoutSeconds": {
+      "default": 3600,
+      "maximum": 604800,
+      "minimum": 1,
+      "title": "Timeoutseconds",
+      "type": "integer"
+    },
+    "validationBatches": {
+      "default": 10,
+      "maximum": 1000000,
+      "minimum": 1,
+      "title": "Validationbatches",
+      "type": "integer"
+    },
+    "validationEvery": {
+      "default": 25,
+      "maximum": 1000000,
+      "minimum": 1,
+      "title": "Validationevery",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "name"
+  ],
+  "title": "TrainConfig",
+  "type": "object"
+}

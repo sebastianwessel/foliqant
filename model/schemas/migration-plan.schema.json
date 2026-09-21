@@ -1,0 +1,1064 @@
+{
+  "$defs": {
+    "ChatMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "system",
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "ChatMessage",
+      "type": "object"
+    },
+    "CurationConfig": {
+      "additionalProperties": false,
+      "description": "Complete recipe for the source corpus and local augmentation workflow.",
+      "properties": {
+        "decisionData": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecisionDataSettings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "endpoint": {
+          "$ref": "#/$defs/LocalEndpointConfig"
+        },
+        "generation": {
+          "$ref": "#/$defs/GenerationSettings"
+        },
+        "name": {
+          "default": "financial-decisions-en-v1",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "default": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "seed": {
+          "default": 42,
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/SourceSelection"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "title": "CurationConfig",
+      "type": "object"
+    },
+    "DataRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "familyId": {
+          "$ref": "#/$defs/foliqant_model__contracts__base__Omitted_Annotated_str__StringConstraints____1",
+          "default": null
+        },
+        "generation": {
+          "$ref": "#/$defs/Omitted_GenerationProvenance_",
+          "default": null
+        },
+        "groupKeys": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Groupkeys",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "language": {
+          "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
+          "title": "Language",
+          "type": "string"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/ChatMessage"
+          },
+          "maxItems": 256,
+          "minItems": 2,
+          "title": "Messages",
+          "type": "array"
+        },
+        "origin": {
+          "enum": [
+            "human",
+            "synthetic",
+            "teacher"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "reviewed": {
+          "title": "Reviewed",
+          "type": "boolean"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "sourceId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Sourceid",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "sourceId",
+        "language",
+        "groupKeys",
+        "messages",
+        "origin",
+        "reviewed"
+      ],
+      "title": "DataRecord",
+      "type": "object"
+    },
+    "DecisionDataSettings": {
+      "additionalProperties": false,
+      "description": "Bounded native decision-data generation settings.",
+      "properties": {
+        "examplesPerScenario": {
+          "default": 4,
+          "maximum": 10000,
+          "minimum": 4,
+          "title": "Examplesperscenario",
+          "type": "integer"
+        },
+        "minimumAcceptedPerCell": {
+          "default": 1,
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Minimumacceptedpercell",
+          "type": "integer"
+        },
+        "sourceExamplesPerSource": {
+          "default": 100,
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Sourceexamplespersource",
+          "type": "integer"
+        }
+      },
+      "title": "DecisionDataSettings",
+      "type": "object"
+    },
+    "DecisionSeed": {
+      "additionalProperties": false,
+      "description": "One native parent whose final two messages contain the input and oracle.",
+      "properties": {
+        "mode": {
+          "enum": [
+            "rewrite",
+            "annotate"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "parent": {
+          "$ref": "#/$defs/DataRecord"
+        },
+        "rewriteSourceIds": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Rewritesourceids",
+          "type": "array"
+        },
+        "scenario": {
+          "minLength": 1,
+          "title": "Scenario",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parent",
+        "scenario",
+        "mode",
+        "rewriteSourceIds"
+      ],
+      "title": "DecisionSeed",
+      "type": "object"
+    },
+    "EndpointModelIdentity": {
+      "additionalProperties": false,
+      "description": "Runtime-observed model identity; it is not a verified weight revision.",
+      "properties": {
+        "architecture": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Architecture"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "enum": [
+                "gguf",
+                "mlx"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Format"
+        },
+        "immutableRevision": {
+          "default": null,
+          "title": "Immutablerevision",
+          "type": "null"
+        },
+        "maxContextLength": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Maxcontextlength"
+        },
+        "metadataSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Metadatasha256",
+          "type": "string"
+        },
+        "modelId": {
+          "minLength": 1,
+          "title": "Modelid",
+          "type": "string"
+        },
+        "modelType": {
+          "enum": [
+            "llm",
+            "embedding",
+            "unknown"
+          ],
+          "title": "Modeltype",
+          "type": "string"
+        },
+        "publisher": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Publisher"
+        },
+        "quantization": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Quantization"
+        },
+        "sizeBytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sizebytes"
+        },
+        "structuredOutput": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "verified-for-request"
+          ],
+          "title": "Structuredoutput",
+          "type": "string"
+        }
+      },
+      "required": [
+        "modelId",
+        "modelType",
+        "publisher",
+        "architecture",
+        "format",
+        "quantization",
+        "sizeBytes",
+        "maxContextLength",
+        "metadataSha256"
+      ],
+      "title": "EndpointModelIdentity",
+      "type": "object"
+    },
+    "FrozenFamilyAssignment": {
+      "additionalProperties": false,
+      "properties": {
+        "sourceSplits": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Sourcesplits",
+          "type": "array"
+        },
+        "split": {
+          "$ref": "#/$defs/Split"
+        }
+      },
+      "required": [
+        "split",
+        "sourceSplits"
+      ],
+      "title": "FrozenFamilyAssignment",
+      "type": "object"
+    },
+    "GenerationProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "modelId": {
+          "minLength": 1,
+          "title": "Modelid",
+          "type": "string"
+        },
+        "modelIdentitySha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Modelidentitysha256",
+          "type": "string"
+        },
+        "modelWeightsSha256": {
+          "$ref": "#/$defs/foliqant_model__contracts__base__Omitted_Annotated_str__StringConstraints____2",
+          "default": null
+        },
+        "parametersSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Parameterssha256",
+          "type": "string"
+        },
+        "parentRecordIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Parentrecordids",
+          "type": "array"
+        },
+        "promptSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Promptsha256",
+          "type": "string"
+        },
+        "provider": {
+          "const": "openai-compatible",
+          "title": "Provider",
+          "type": "string"
+        },
+        "requestSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Requestsha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "modelId",
+        "modelIdentitySha256",
+        "promptSha256",
+        "parametersSha256",
+        "requestSha256",
+        "parentRecordIds"
+      ],
+      "title": "GenerationProvenance",
+      "type": "object"
+    },
+    "GenerationSettings": {
+      "additionalProperties": false,
+      "description": "Explicit bounded generation; quarantine never becomes human review.",
+      "properties": {
+        "languages": {
+          "items": {
+            "enum": [
+              "en",
+              "de"
+            ],
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Languages",
+          "type": "array"
+        },
+        "maxAttempts": {
+          "default": 2,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Maxattempts",
+          "type": "integer"
+        },
+        "maxCandidates": {
+          "default": 100,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maxcandidates",
+          "type": "integer"
+        },
+        "maxInputCharacters": {
+          "default": 16000,
+          "maximum": 131072,
+          "minimum": 256,
+          "title": "Maxinputcharacters",
+          "type": "integer"
+        },
+        "scenarioFamilies": {
+          "default": 20,
+          "maximum": 10000,
+          "minimum": 4,
+          "title": "Scenariofamilies",
+          "type": "integer"
+        },
+        "scenarios": {
+          "items": {
+            "$ref": "#/$defs/Scenario"
+          },
+          "minItems": 1,
+          "title": "Scenarios",
+          "type": "array"
+        }
+      },
+      "title": "GenerationSettings",
+      "type": "object"
+    },
+    "LocalEndpointConfig": {
+      "additionalProperties": false,
+      "description": "Validated location and limits for one trusted generation endpoint.\n\nThe default permits only a loopback endpoint.  A numeric RFC1918 or IPv6\nunique-local address requires the explicit ``allowPrivateNetwork`` opt-in;\npublic addresses, DNS names, credentials, redirects and proxies remain\nunsupported.",
+      "properties": {
+        "allowPrivateNetwork": {
+          "default": false,
+          "title": "Allowprivatenetwork",
+          "type": "boolean"
+        },
+        "baseUrl": {
+          "default": "http://127.0.0.1:1234/v1",
+          "minLength": 1,
+          "title": "Baseurl",
+          "type": "string"
+        },
+        "maxResponseBytes": {
+          "default": 8388608,
+          "maximum": 16777216,
+          "minimum": 1024,
+          "title": "Maxresponsebytes",
+          "type": "integer"
+        },
+        "maxTokens": {
+          "default": 2048,
+          "maximum": 32768,
+          "minimum": 1,
+          "title": "Maxtokens",
+          "type": "integer"
+        },
+        "model": {
+          "$ref": "#/$defs/Omitted_Annotated_str__StringConstraints__AfterValidator__",
+          "default": null
+        },
+        "reasoningEffort": {
+          "$ref": "#/$defs/Omitted_Literal__low____medium____xhigh___",
+          "default": null
+        },
+        "structuredOutput": {
+          "default": "json-schema",
+          "enum": [
+            "json-schema",
+            "prompt"
+          ],
+          "title": "Structuredoutput",
+          "type": "string"
+        },
+        "temperature": {
+          "default": 0.3,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Temperature",
+          "type": "number"
+        },
+        "timeoutSeconds": {
+          "default": 120,
+          "maximum": 600,
+          "minimum": 1,
+          "title": "Timeoutseconds",
+          "type": "integer"
+        }
+      },
+      "title": "LocalEndpointConfig",
+      "type": "object"
+    },
+    "MigrationEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "provenance": {
+          "$ref": "#/$defs/MigrationProvenance"
+        },
+        "record": {
+          "$ref": "#/$defs/DataRecord"
+        }
+      },
+      "required": [
+        "record",
+        "provenance"
+      ],
+      "title": "MigrationEntry",
+      "type": "object"
+    },
+    "MigrationPending": {
+      "additionalProperties": false,
+      "description": "A train-family task explicitly selected for a fresh bounded attempt.",
+      "properties": {
+        "previousJobId": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 64,
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previousjobid"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "seed": {
+          "$ref": "#/$defs/DecisionSeed"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/MigrationSource"
+          },
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "seed",
+        "reason",
+        "sources"
+      ],
+      "title": "MigrationPending",
+      "type": "object"
+    },
+    "MigrationProvenance": {
+      "additionalProperties": false,
+      "description": "Explain derivation without rewriting historical generation provenance.",
+      "properties": {
+        "evidenceStatus": {
+          "enum": [
+            "historical-accepted",
+            "authored-reference",
+            "source-annotation",
+            "deterministic-computation",
+            "derived-reference",
+            "model-verified"
+          ],
+          "title": "Evidencestatus",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "retained",
+            "reprojected",
+            "source-projection",
+            "question-variant",
+            "rerun"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "parentRecordIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "title": "Parentrecordids",
+          "type": "array"
+        },
+        "recordId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Recordid",
+          "type": "string"
+        },
+        "rule": {
+          "minLength": 1,
+          "title": "Rule",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/MigrationSource"
+          },
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "recordId",
+        "operation",
+        "evidenceStatus",
+        "parentRecordIds",
+        "sources",
+        "rule"
+      ],
+      "title": "MigrationProvenance",
+      "type": "object"
+    },
+    "MigrationReview": {
+      "additionalProperties": false,
+      "description": "Excluded or disputed material retained for inspection, without label chasing.",
+      "properties": {
+        "previousJobId": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 64,
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previousjobid"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "recordId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Recordid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recordId",
+        "reason"
+      ],
+      "title": "MigrationReview",
+      "type": "object"
+    },
+    "MigrationSource": {
+      "additionalProperties": false,
+      "description": "Original dataset identity and annotation record behind a derived row.",
+      "properties": {
+        "datasetId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Datasetid",
+          "type": "string"
+        },
+        "originalId": {
+          "minLength": 1,
+          "title": "Originalid",
+          "type": "string"
+        },
+        "recordId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Recordid",
+          "type": "string"
+        },
+        "rightsSourceId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Rightssourceid",
+          "type": "string"
+        },
+        "snapshotSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Snapshotsha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "datasetId",
+        "recordId",
+        "originalId",
+        "snapshotSha256",
+        "rightsSourceId"
+      ],
+      "title": "MigrationSource",
+      "type": "object"
+    },
+    "Omitted_Annotated_str__StringConstraints__AfterValidator__": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "Omitted_GenerationProvenance_": {
+      "$ref": "#/$defs/GenerationProvenance"
+    },
+    "Omitted_Literal__low____medium____xhigh___": {
+      "enum": [
+        "low",
+        "medium",
+        "xhigh"
+      ],
+      "type": "string"
+    },
+    "ResolvedSourceDeclaration": {
+      "additionalProperties": false,
+      "properties": {
+        "attribution": {
+          "title": "Attribution",
+          "type": "string"
+        },
+        "authorizationRef": {
+          "$ref": "#/$defs/Omitted_Annotated_str__StringConstraints__AfterValidator__",
+          "default": null
+        },
+        "commercialUse": {
+          "enum": [
+            "allowed",
+            "restricted",
+            "unknown"
+          ],
+          "title": "Commercialuse",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "license": {
+          "minLength": 1,
+          "title": "License",
+          "type": "string"
+        },
+        "licenseEvidence": {
+          "minLength": 1,
+          "title": "Licenseevidence",
+          "type": "string"
+        },
+        "privacy": {
+          "enum": [
+            "public",
+            "private"
+          ],
+          "title": "Privacy",
+          "type": "string"
+        },
+        "redistributionAllowed": {
+          "title": "Redistributionallowed",
+          "type": "boolean"
+        },
+        "restrictions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Restrictions",
+          "type": "array"
+        },
+        "sharedTrainingAllowed": {
+          "title": "Sharedtrainingallowed",
+          "type": "boolean"
+        },
+        "trainingAllowed": {
+          "const": true,
+          "title": "Trainingallowed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "license",
+        "licenseEvidence",
+        "trainingAllowed",
+        "sharedTrainingAllowed",
+        "redistributionAllowed",
+        "privacy",
+        "attribution",
+        "commercialUse",
+        "restrictions"
+      ],
+      "title": "ResolvedSourceDeclaration",
+      "type": "object"
+    },
+    "Scenario": {
+      "enum": [
+        "withdrawn-request",
+        "multiple-intents",
+        "missing-evidence",
+        "conflicting-information",
+        "changed-deadline"
+      ],
+      "type": "string"
+    },
+    "SourceSelection": {
+      "additionalProperties": false,
+      "description": "Select a pinned built-in source and a bounded conversion size.",
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "maxRecords": {
+          "default": 1000,
+          "maximum": 100000,
+          "minimum": 4,
+          "title": "Maxrecords",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "SourceSelection",
+      "type": "object"
+    },
+    "Split": {
+      "enum": [
+        "train",
+        "validation",
+        "calibration",
+        "test"
+      ],
+      "type": "string"
+    },
+    "foliqant_model__contracts__base__Omitted_Annotated_str__StringConstraints____1": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "foliqant_model__contracts__base__Omitted_Annotated_str__StringConstraints____2": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://foliqant.local/schemas/model/migration-plan.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Frozen migration inputs, transformed rows and the exact remaining queue.",
+  "properties": {
+    "config": {
+      "$ref": "#/$defs/CurationConfig"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/MigrationEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "families": {
+      "patternProperties": {
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$": {
+          "$ref": "#/$defs/FrozenFamilyAssignment"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "title": "Families",
+      "type": "object"
+    },
+    "model": {
+      "$ref": "#/$defs/EndpointModelIdentity"
+    },
+    "parentArtifactId": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Parentartifactid",
+      "type": "string"
+    },
+    "parentFiles": {
+      "additionalProperties": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Parentfiles",
+      "type": "object"
+    },
+    "parentRun": {
+      "title": "Parentrun",
+      "type": "string"
+    },
+    "pending": {
+      "items": {
+        "$ref": "#/$defs/MigrationPending"
+      },
+      "title": "Pending",
+      "type": "array"
+    },
+    "projectionCounts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Projectioncounts",
+      "type": "object"
+    },
+    "recipeSha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Recipesha256",
+      "type": "string"
+    },
+    "review": {
+      "items": {
+        "$ref": "#/$defs/MigrationReview"
+      },
+      "title": "Review",
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/ResolvedSourceDeclaration"
+      },
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "recipeSha256",
+    "parentRun",
+    "parentArtifactId",
+    "parentFiles",
+    "config",
+    "model",
+    "sources",
+    "families",
+    "entries",
+    "pending",
+    "review",
+    "projectionCounts"
+  ],
+  "title": "MigrationPlan",
+  "type": "object"
+}

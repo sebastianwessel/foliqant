@@ -523,7 +523,7 @@ question = ChoiceQuestion(
 Canonical IDs match `[a-z][a-z0-9]*(?:_[a-z0-9]+)*`. Collisions after normalization,
 unrepresentable IDs and whitespace-only descriptions are rejected. Descriptions can be
 English or German while the same English machine keys stay stable.
-See the [catalog schema](../../contracts/model/category-catalog.schema.json).
+See the [catalog schema](../../schemas/foliqant/decisions/category-catalog.schema.json).
 The normalizer accepts printable ASCII IDs up to 128 characters, lowercases
 letters, replaces each run of punctuation/spaces with `_`, and removes outer
 separators. The result must start with a letter. Unicode letters and control
@@ -595,9 +595,9 @@ fields. Escape quotation marks, backslashes and control characters when writing
 JSON strings. After JSON decoding, each citation must match the source exactly;
 the generator does not silently repair malformed JSON or change quoted evidence.
 
-Validate JSON with [the output schema](../../contracts/model/decision-output.schema.json)
+Validate JSON with [the output schema](../../schemas/foliqant/decisions/decision-output.schema.json)
 and then validate its question IDs, allowed answers and citations against
-[the input contract](../../contracts/model/decision-input.schema.json). Python
+[the input contract](../../schemas/foliqant/decisions/decision-input.schema.json). Python
 callers can use `DecisionInput`, `DecisionOutput`, and
 `validate_decision_output` from `foliqant.decisions.contracts`.
 The validator checks structure and declared references, not semantic truth.

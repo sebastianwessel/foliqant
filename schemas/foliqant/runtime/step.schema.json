@@ -1,0 +1,1254 @@
+{
+  "$defs": {
+    "CategoryCatalog": {
+      "additionalProperties": false,
+      "description": "A bounded classification catalog prepared before model inference.\n\nCategory keys are normalized deterministically and descriptions are\npreserved exactly. Unsupported external taxonomies require an explicit\nmapping before they enter this contract.",
+      "properties": {
+        "categories": {
+          "items": {
+            "$ref": "#/$defs/CategoryDefinition"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "title": "Categories",
+          "type": "array"
+        }
+      },
+      "required": [
+        "categories"
+      ],
+      "title": "CategoryCatalog",
+      "type": "object"
+    },
+    "CategoryDefinition": {
+      "additionalProperties": false,
+      "description": "One stable machine key with caller-authored category semantics.",
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "description": "Printable ASCII authoring key. The Python CategoryCatalog parser serializes its deterministic lowercase snake_case normalization.",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[\\x20-\\x7e]+$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "description"
+      ],
+      "title": "CategoryDefinition",
+      "type": "object"
+    },
+    "ChoiceQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 1024,
+          "minItems": 2,
+          "title": "Options",
+          "type": "array"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "choice",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "options"
+      ],
+      "title": "ChoiceQuestion",
+      "type": "object"
+    },
+    "ChoiceQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "$ref": "#/$defs/CategoryCatalog"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "type": {
+          "const": "choice",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria",
+        "catalog"
+      ],
+      "title": "ChoiceQuestionShorthand",
+      "type": "object"
+    },
+    "DecisionOption": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "description"
+      ],
+      "title": "DecisionOption",
+      "type": "object"
+    },
+    "DecisionQuestion": {
+      "discriminator": {
+        "mapping": {
+          "choice": "#/$defs/ChoiceQuestion",
+          "multiselect": "#/$defs/MultiselectQuestion",
+          "ordinal": "#/$defs/OrdinalQuestion",
+          "predicate": "#/$defs/PredicateQuestion",
+          "request_units": "#/$defs/RequestUnitsQuestion"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ChoiceQuestion"
+        },
+        {
+          "$ref": "#/$defs/MultiselectQuestion"
+        },
+        {
+          "$ref": "#/$defs/PredicateQuestion"
+        },
+        {
+          "$ref": "#/$defs/OrdinalQuestion"
+        },
+        {
+          "$ref": "#/$defs/RequestUnitsQuestion"
+        }
+      ]
+    },
+    "DecisionStepAuthoring": {
+      "additionalProperties": false,
+      "properties": {
+        "instructions": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "next": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next"
+        },
+        "on_answer": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Answer"
+        },
+        "on_unresolved": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Unresolved"
+        },
+        "question": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "choice": "#/$defs/ChoiceQuestionShorthand",
+                  "multiselect": "#/$defs/MultiselectQuestionShorthand",
+                  "ordinal": "#/$defs/OrdinalQuestionShorthand",
+                  "predicate": "#/$defs/PredicateQuestionShorthand",
+                  "request_units": "#/$defs/RequestUnitsQuestionShorthand"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ChoiceQuestionShorthand"
+                },
+                {
+                  "$ref": "#/$defs/MultiselectQuestionShorthand"
+                },
+                {
+                  "$ref": "#/$defs/PredicateQuestionShorthand"
+                },
+                {
+                  "$ref": "#/$defs/OrdinalQuestionShorthand"
+                },
+                {
+                  "$ref": "#/$defs/RequestUnitsQuestionShorthand"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question"
+        },
+        "questions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DecisionQuestion"
+              },
+              "maxItems": 64,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Questions"
+        },
+        "sources": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                }
+              ]
+            }
+          },
+          "title": "Sources",
+          "type": "object"
+        },
+        "type": {
+          "const": "decision",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "sources",
+        "instructions"
+      ],
+      "title": "DecisionStepAuthoring",
+      "type": "object"
+    },
+    "FinishStepAuthoring": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "outcome": {
+          "enum": [
+            "completed",
+            "needs_review"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "type": {
+          "const": "finish",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "outcome"
+      ],
+      "title": "FinishStepAuthoring",
+      "type": "object"
+    },
+    "HandlerStepAuthoring": {
+      "additionalProperties": false,
+      "properties": {
+        "handler": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Handler",
+          "type": "string"
+        },
+        "input": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                }
+              ]
+            }
+          },
+          "title": "Input",
+          "type": "object"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "next": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next"
+        },
+        "on_unresolved": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Unresolved"
+        },
+        "type": {
+          "const": "handler",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "handler",
+        "input"
+      ],
+      "title": "HandlerStepAuthoring",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "LiteralBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "literal": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "literal"
+      ],
+      "title": "LiteralBinding",
+      "type": "object"
+    },
+    "LlmStepAuthoring": {
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                }
+              ]
+            }
+          },
+          "title": "Input",
+          "type": "object"
+        },
+        "instructions": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "next": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next"
+        },
+        "on_unresolved": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Unresolved"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "const": "text",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/SchemaOutput"
+            }
+          ],
+          "title": "Output"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "const": "llm",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "input",
+        "instructions",
+        "output"
+      ],
+      "title": "LlmStepAuthoring",
+      "type": "object"
+    },
+    "McpStepAuthoring": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                }
+              ]
+            }
+          },
+          "title": "Arguments",
+          "type": "object"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "next": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next"
+        },
+        "on_unresolved": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Unresolved"
+        },
+        "server": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Server",
+          "type": "string"
+        },
+        "tool": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Tool",
+          "type": "string"
+        },
+        "type": {
+          "const": "mcp",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "server",
+        "tool",
+        "arguments"
+      ],
+      "title": "McpStepAuthoring",
+      "type": "object"
+    },
+    "MultiselectQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "maxSelections": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Maxselections",
+          "type": "integer"
+        },
+        "minSelections": {
+          "maximum": 1024,
+          "minimum": 0,
+          "title": "Minselections",
+          "type": "integer"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "title": "Options",
+          "type": "array"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "multiselect",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "options",
+        "minSelections",
+        "maxSelections"
+      ],
+      "title": "MultiselectQuestion",
+      "type": "object"
+    },
+    "MultiselectQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "$ref": "#/$defs/CategoryCatalog"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "maxSelections": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Maxselections",
+          "type": "integer"
+        },
+        "minSelections": {
+          "maximum": 1024,
+          "minimum": 0,
+          "title": "Minselections",
+          "type": "integer"
+        },
+        "type": {
+          "const": "multiselect",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria",
+        "catalog",
+        "minSelections",
+        "maxSelections"
+      ],
+      "title": "MultiselectQuestionShorthand",
+      "type": "object"
+    },
+    "NamedToolChoice": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "NamedToolChoice",
+      "type": "object"
+    },
+    "OrdinalQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "levels": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 128,
+          "minItems": 2,
+          "title": "Levels",
+          "type": "array"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "ordinal",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "levels"
+      ],
+      "title": "OrdinalQuestion",
+      "type": "object"
+    },
+    "OrdinalQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "levels": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 128,
+          "minItems": 2,
+          "title": "Levels",
+          "type": "array"
+        },
+        "type": {
+          "const": "ordinal",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria",
+        "levels"
+      ],
+      "title": "OrdinalQuestionShorthand",
+      "type": "object"
+    },
+    "PointerBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "optional": {
+          "default": false,
+          "title": "Optional",
+          "type": "boolean"
+        },
+        "pointer": {
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "PointerBinding",
+      "type": "object"
+    },
+    "PredicateQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "predicate",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type"
+      ],
+      "title": "PredicateQuestion",
+      "type": "object"
+    },
+    "PredicateQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "type": {
+          "const": "predicate",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria"
+      ],
+      "title": "PredicateQuestionShorthand",
+      "type": "object"
+    },
+    "RequestUnitsQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowNoMatch": {
+          "title": "Allownomatch",
+          "type": "boolean"
+        },
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "catalog": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 1024,
+          "title": "Catalog",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "request_units",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "catalog",
+        "allowNoMatch"
+      ],
+      "title": "RequestUnitsQuestion",
+      "type": "object"
+    },
+    "RequestUnitsQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "allowNoMatch": {
+          "title": "Allownomatch",
+          "type": "boolean"
+        },
+        "catalog": {
+          "$ref": "#/$defs/CategoryCatalog"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "type": {
+          "const": "request_units",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria",
+        "catalog",
+        "allowNoMatch"
+      ],
+      "title": "RequestUnitsQuestionShorthand",
+      "type": "object"
+    },
+    "SchemaOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema"
+      ],
+      "title": "SchemaOutput",
+      "type": "object"
+    },
+    "ToolPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Allow",
+          "type": "array"
+        },
+        "choice": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "required"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/NamedToolChoice"
+            }
+          ],
+          "title": "Choice"
+        },
+        "server": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Server",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server",
+        "allow",
+        "choice"
+      ],
+      "title": "ToolPolicy",
+      "type": "object"
+    }
+  },
+  "$id": "https://foliqant.local/schemas/foliqant/runtime/step.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "discriminator": {
+    "mapping": {
+      "decision": "#/$defs/DecisionStepAuthoring",
+      "finish": "#/$defs/FinishStepAuthoring",
+      "handler": "#/$defs/HandlerStepAuthoring",
+      "llm": "#/$defs/LlmStepAuthoring",
+      "mcp": "#/$defs/McpStepAuthoring"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/DecisionStepAuthoring"
+    },
+    {
+      "$ref": "#/$defs/LlmStepAuthoring"
+    },
+    {
+      "$ref": "#/$defs/McpStepAuthoring"
+    },
+    {
+      "$ref": "#/$defs/HandlerStepAuthoring"
+    },
+    {
+      "$ref": "#/$defs/FinishStepAuthoring"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ Follow [.agent/IMPLEMENTATION.md](.agent/IMPLEMENTATION.md) for conventions. Pre
 
 Use temporary fixtures or test doubles for isolated failure tests; real model execution is required for lifecycle acceptance. Keep customer data, secrets, model weights, generated datasets, and evaluation holdouts out of Git. Paid compute, downloads of large model artifacts, and deployment are separate from repository setup.
 
-Verification: `uv run --project model --no-sync python -m pytest -c model/pyproject.toml model/tests`, `uv run --project model --no-sync mypy --config-file model/pyproject.toml model/src`, `uv run --project model --no-sync ruff check model/src model/tests`, `uv run --project model --no-sync python scripts/generate_model_schemas.py --check contracts/model`, and `git diff --check`. Verify current CLI help and real behavior before documenting commands. Use the schema generator maintenance flag only for reviewed repository schema updates, never as an artifact overwrite path.
+Verification: `uv run --project model --no-sync python -m pytest -c model/pyproject.toml model/tests`, `uv run --project model --no-sync mypy --config-file model/pyproject.toml model/src`, `uv run --project model --no-sync ruff check model/src model/tests`, `uv run --project model --no-sync python scripts/generate_model_schemas.py --check model/schemas`, and `git diff --check`. Verify current CLI help and real behavior before documenting commands. Use the schema generator maintenance flag only for reviewed repository schema updates, never as an artifact overwrite path.
 
 Update schemas, examples, area docs, and compatibility notes together when a public contract changes. Version workflow/model artifacts explicitly. Never relabel an old artifact without recording the change.
 

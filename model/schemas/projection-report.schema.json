@@ -1,0 +1,223 @@
+{
+  "$defs": {
+    "ProjectionSourceCounts": {
+      "additionalProperties": false,
+      "description": "Audit and selection counts for one frozen auxiliary source.",
+      "properties": {
+        "eligibleMultiIntentRecords": {
+          "minimum": 0,
+          "title": "Eligiblemultiintentrecords",
+          "type": "integer"
+        },
+        "eligibleRecords": {
+          "minimum": 0,
+          "title": "Eligiblerecords",
+          "type": "integer"
+        },
+        "exclusionCounts": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Exclusioncounts",
+          "type": "object"
+        },
+        "rawRecords": {
+          "minimum": 0,
+          "title": "Rawrecords",
+          "type": "integer"
+        },
+        "selectedFamilies": {
+          "minimum": 0,
+          "title": "Selectedfamilies",
+          "type": "integer"
+        },
+        "selectedMultiIntentRecords": {
+          "minimum": 0,
+          "title": "Selectedmultiintentrecords",
+          "type": "integer"
+        },
+        "selectedRecords": {
+          "minimum": 0,
+          "title": "Selectedrecords",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rawRecords",
+        "eligibleRecords",
+        "eligibleMultiIntentRecords",
+        "selectedRecords",
+        "selectedMultiIntentRecords",
+        "selectedFamilies"
+      ],
+      "title": "ProjectionSourceCounts",
+      "type": "object"
+    }
+  },
+  "$id": "https://foliqant.local/schemas/model/projection-report.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Complete deterministic audit summary for one projection plan.",
+  "properties": {
+    "eligibleLanguageCounts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Eligiblelanguagecounts",
+      "type": "object"
+    },
+    "eligibleRecords": {
+      "minimum": 0,
+      "title": "Eligiblerecords",
+      "type": "integer"
+    },
+    "eligibleSplitCounts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Eligiblesplitcounts",
+      "type": "object"
+    },
+    "exclusionCounts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Exclusioncounts",
+      "type": "object"
+    },
+    "familyCounts": {
+      "patternProperties": {
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "title": "Familycounts",
+      "type": "object"
+    },
+    "questionTypeCounts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Questiontypecounts",
+      "type": "object"
+    },
+    "rawRecords": {
+      "minimum": 0,
+      "title": "Rawrecords",
+      "type": "integer"
+    },
+    "selectedFamilies": {
+      "minimum": 0,
+      "title": "Selectedfamilies",
+      "type": "integer"
+    },
+    "selectedLanguageCounts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Selectedlanguagecounts",
+      "type": "object"
+    },
+    "selectedQuestionTypeCounts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Selectedquestiontypecounts",
+      "type": "object"
+    },
+    "selectedRecords": {
+      "minimum": 0,
+      "title": "Selectedrecords",
+      "type": "integer"
+    },
+    "selectedSourceCounts": {
+      "patternProperties": {
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "title": "Selectedsourcecounts",
+      "type": "object"
+    },
+    "selectedSplitCounts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Selectedsplitcounts",
+      "type": "object"
+    },
+    "sourceCounts": {
+      "patternProperties": {
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$": {
+          "$ref": "#/$defs/ProjectionSourceCounts"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "title": "Sourcecounts",
+      "type": "object"
+    }
+  },
+  "required": [
+    "rawRecords",
+    "eligibleRecords",
+    "selectedRecords",
+    "selectedFamilies",
+    "sourceCounts",
+    "selectedSourceCounts",
+    "eligibleLanguageCounts",
+    "selectedLanguageCounts",
+    "eligibleSplitCounts",
+    "selectedSplitCounts",
+    "familyCounts",
+    "questionTypeCounts",
+    "selectedQuestionTypeCounts",
+    "exclusionCounts"
+  ],
+  "title": "ProjectionReport",
+  "type": "object"
+}

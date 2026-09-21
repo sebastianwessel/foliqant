@@ -1,0 +1,1689 @@
+{
+  "$defs": {
+    "ArtifactKind": {
+      "enum": [
+        "dataset",
+        "checkpoint",
+        "quantized",
+        "adapter",
+        "merged",
+        "export",
+        "evaluation",
+        "policy",
+        "audit"
+      ],
+      "type": "string"
+    },
+    "AuditResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "command": {
+          "const": "audit",
+          "title": "Command",
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/$defs/RiskSampleSummary"
+        },
+        "coverage": {
+          "ge": 0,
+          "le": 1,
+          "title": "Coverage",
+          "type": "number"
+        },
+        "status": {
+          "enum": [
+            "insufficient",
+            "meets-bound",
+            "fails-bound"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "upperErrorBound": {
+          "anyOf": [
+            {
+              "ge": 0,
+              "le": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Uppererrorbound"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "status",
+        "counts",
+        "coverage",
+        "upperErrorBound"
+      ],
+      "title": "AuditResult",
+      "type": "object"
+    },
+    "AuditSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "audit",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/AuditResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "AuditSuccess",
+      "type": "object"
+    },
+    "CalibrateResult": {
+      "additionalProperties": false,
+      "properties": {
+        "abstainAll": {
+          "title": "Abstainall",
+          "type": "boolean"
+        },
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "command": {
+          "const": "calibrate",
+          "title": "Command",
+          "type": "string"
+        },
+        "selection": {
+          "$ref": "#/$defs/RiskSampleSummary"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "maximum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Threshold"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "threshold",
+        "selection",
+        "abstainAll"
+      ],
+      "title": "CalibrateResult",
+      "type": "object"
+    },
+    "CalibrateSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "calibrate",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/CalibrateResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "CalibrateSuccess",
+      "type": "object"
+    },
+    "CliSuccessValue": {
+      "discriminator": {
+        "mapping": {
+          "audit": "#/$defs/AuditSuccess",
+          "calibrate": "#/$defs/CalibrateSuccess",
+          "curate": "#/$defs/CurateSuccess",
+          "customize": "#/$defs/CustomizeSuccess",
+          "doctor": "#/$defs/DoctorSuccess",
+          "evaluate": "#/$defs/EvaluateSuccess",
+          "export": "#/$defs/ExportSuccess",
+          "fetch": "#/$defs/FetchSuccess",
+          "merge": "#/$defs/MergeSuccess",
+          "migrate-decisions": "#/$defs/MigrateDecisionsSuccess",
+          "prepare": "#/$defs/PrepareSuccess",
+          "prepare-source-projections": "#/$defs/ProjectionPreparationSuccess",
+          "quantize": "#/$defs/QuantizeSuccess",
+          "rerun-migrated-decisions": "#/$defs/RerunMigratedDecisionsSuccess",
+          "schema": "#/$defs/SchemaSuccess",
+          "setup": "#/$defs/SetupSuccess",
+          "train": "#/$defs/TrainSuccess",
+          "verify": "#/$defs/VerifySuccess"
+        },
+        "propertyName": "command"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DoctorSuccess"
+        },
+        {
+          "$ref": "#/$defs/SchemaSuccess"
+        },
+        {
+          "$ref": "#/$defs/SetupSuccess"
+        },
+        {
+          "$ref": "#/$defs/FetchSuccess"
+        },
+        {
+          "$ref": "#/$defs/PrepareSuccess"
+        },
+        {
+          "$ref": "#/$defs/ProjectionPreparationSuccess"
+        },
+        {
+          "$ref": "#/$defs/MigrateDecisionsSuccess"
+        },
+        {
+          "$ref": "#/$defs/RerunMigratedDecisionsSuccess"
+        },
+        {
+          "$ref": "#/$defs/CurateSuccess"
+        },
+        {
+          "$ref": "#/$defs/QuantizeSuccess"
+        },
+        {
+          "$ref": "#/$defs/TrainSuccess"
+        },
+        {
+          "$ref": "#/$defs/CustomizeSuccess"
+        },
+        {
+          "$ref": "#/$defs/EvaluateSuccess"
+        },
+        {
+          "$ref": "#/$defs/CalibrateSuccess"
+        },
+        {
+          "$ref": "#/$defs/AuditSuccess"
+        },
+        {
+          "$ref": "#/$defs/MergeSuccess"
+        },
+        {
+          "$ref": "#/$defs/ExportSuccess"
+        },
+        {
+          "$ref": "#/$defs/VerifySuccess"
+        }
+      ]
+    },
+    "Command": {
+      "enum": [
+        "doctor",
+        "schema",
+        "setup",
+        "fetch",
+        "prepare",
+        "prepare-source-projections",
+        "migrate-decisions",
+        "rerun-migrated-decisions",
+        "curate",
+        "quantize",
+        "train",
+        "customize",
+        "evaluate",
+        "calibrate",
+        "audit",
+        "merge",
+        "export",
+        "verify"
+      ],
+      "type": "string"
+    },
+    "CountRate": {
+      "additionalProperties": false,
+      "properties": {
+        "eligibleCount": {
+          "minimum": 0,
+          "title": "Eligiblecount",
+          "type": "integer"
+        },
+        "passedCount": {
+          "minimum": 0,
+          "title": "Passedcount",
+          "type": "integer"
+        },
+        "rate": {
+          "anyOf": [
+            {
+              "ge": 0,
+              "le": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rate"
+        }
+      },
+      "required": [
+        "eligibleCount",
+        "passedCount",
+        "rate"
+      ],
+      "title": "CountRate",
+      "type": "object"
+    },
+    "CreatedArtifactResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Artifactid",
+          "type": "string"
+        },
+        "customer": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Customer"
+        },
+        "kind": {
+          "$ref": "#/$defs/ArtifactKind"
+        },
+        "outputPath": {
+          "title": "Outputpath",
+          "type": "string"
+        },
+        "stage": {
+          "$ref": "#/$defs/Stage"
+        }
+      },
+      "required": [
+        "outputPath",
+        "artifactId",
+        "kind",
+        "stage",
+        "customer"
+      ],
+      "title": "CreatedArtifactResult",
+      "type": "object"
+    },
+    "CurateResult": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "curate",
+          "title": "Command",
+          "type": "string"
+        },
+        "configurationSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Configurationsha256",
+          "type": "string"
+        },
+        "datasets": {
+          "items": {
+            "$ref": "#/$defs/CreatedArtifactResult"
+          },
+          "minItems": 1,
+          "title": "Datasets",
+          "type": "array"
+        },
+        "generatedAccepted": {
+          "minimum": 0,
+          "title": "Generatedaccepted",
+          "type": "integer"
+        },
+        "generatedQuarantined": {
+          "minimum": 0,
+          "title": "Generatedquarantined",
+          "type": "integer"
+        },
+        "reportPath": {
+          "title": "Reportpath",
+          "type": "string"
+        },
+        "runPath": {
+          "title": "Runpath",
+          "type": "string"
+        },
+        "sourceRecords": {
+          "minimum": 0,
+          "title": "Sourcerecords",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "prepared",
+            "completed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "command",
+        "status",
+        "runPath",
+        "configurationSha256",
+        "sourceRecords",
+        "generatedAccepted",
+        "generatedQuarantined",
+        "datasets",
+        "reportPath",
+        "warnings"
+      ],
+      "title": "CurateResult",
+      "type": "object"
+    },
+    "CurateSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "curate",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/CurateResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "CurateSuccess",
+      "type": "object"
+    },
+    "CustomizeResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "command": {
+          "const": "customize",
+          "title": "Command",
+          "type": "string"
+        },
+        "elapsedSeconds": {
+          "ge": 0,
+          "title": "Elapsedseconds",
+          "type": "number"
+        },
+        "finalLoss": {
+          "ge": 0,
+          "title": "Finalloss",
+          "type": "number"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "finalLoss",
+        "elapsedSeconds"
+      ],
+      "title": "CustomizeResult",
+      "type": "object"
+    },
+    "CustomizeSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "customize",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/CustomizeResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "CustomizeSuccess",
+      "type": "object"
+    },
+    "DoctorResult": {
+      "additionalProperties": false,
+      "properties": {
+        "availableCommands": {
+          "items": {
+            "$ref": "#/$defs/Command"
+          },
+          "title": "Availablecommands",
+          "type": "array"
+        },
+        "command": {
+          "const": "doctor",
+          "title": "Command",
+          "type": "string"
+        },
+        "components": {
+          "items": {
+            "$ref": "#/$defs/VersionedComponent"
+          },
+          "title": "Components",
+          "type": "array"
+        },
+        "freeDiskBytes": {
+          "minimum": 0,
+          "title": "Freediskbytes",
+          "type": "integer"
+        },
+        "machine": {
+          "minLength": 1,
+          "title": "Machine",
+          "type": "string"
+        },
+        "mlxAvailable": {
+          "title": "Mlxavailable",
+          "type": "boolean"
+        },
+        "mlxDeviceAvailable": {
+          "title": "Mlxdeviceavailable",
+          "type": "boolean"
+        },
+        "platform": {
+          "minLength": 1,
+          "title": "Platform",
+          "type": "string"
+        },
+        "pythonVersion": {
+          "minLength": 1,
+          "title": "Pythonversion",
+          "type": "string"
+        },
+        "unavailableCommands": {
+          "items": {
+            "$ref": "#/$defs/Command"
+          },
+          "title": "Unavailablecommands",
+          "type": "array"
+        }
+      },
+      "required": [
+        "command",
+        "pythonVersion",
+        "platform",
+        "machine",
+        "mlxAvailable",
+        "mlxDeviceAvailable",
+        "freeDiskBytes",
+        "availableCommands",
+        "unavailableCommands",
+        "components"
+      ],
+      "title": "DoctorResult",
+      "type": "object"
+    },
+    "DoctorSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "doctor",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/DoctorResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "DoctorSuccess",
+      "type": "object"
+    },
+    "EvaluateResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "command": {
+          "const": "evaluate",
+          "title": "Command",
+          "type": "string"
+        },
+        "exact": {
+          "$ref": "#/$defs/CountRate"
+        },
+        "exampleCount": {
+          "minimum": 0,
+          "title": "Examplecount",
+          "type": "integer"
+        },
+        "predictionsPath": {
+          "title": "Predictionspath",
+          "type": "string"
+        },
+        "representativeCount": {
+          "minimum": 0,
+          "title": "Representativecount",
+          "type": "integer"
+        },
+        "split": {
+          "enum": [
+            "validation",
+            "calibration",
+            "test"
+          ],
+          "title": "Split",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "split",
+        "exampleCount",
+        "representativeCount",
+        "exact",
+        "predictionsPath"
+      ],
+      "title": "EvaluateResult",
+      "type": "object"
+    },
+    "EvaluateSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "evaluate",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/EvaluateResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "EvaluateSuccess",
+      "type": "object"
+    },
+    "ExportResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "command": {
+          "const": "export",
+          "title": "Command",
+          "type": "string"
+        },
+        "compatibilityStatus": {
+          "const": "unverified",
+          "title": "Compatibilitystatus",
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "checkpoint",
+            "gguf"
+          ],
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "format",
+        "compatibilityStatus"
+      ],
+      "title": "ExportResult",
+      "type": "object"
+    },
+    "ExportSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "export",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/ExportResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "ExportSuccess",
+      "type": "object"
+    },
+    "FetchResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "command": {
+          "const": "fetch",
+          "title": "Command",
+          "type": "string"
+        },
+        "fileCount": {
+          "minimum": 1,
+          "title": "Filecount",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "fileCount"
+      ],
+      "title": "FetchResult",
+      "type": "object"
+    },
+    "FetchSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "fetch",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/FetchResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "FetchSuccess",
+      "type": "object"
+    },
+    "MergeResult": {
+      "additionalProperties": false,
+      "properties": {
+        "adapterArtifactId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Adapterartifactid",
+          "type": "string"
+        },
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "command": {
+          "const": "merge",
+          "title": "Command",
+          "type": "string"
+        },
+        "modelArtifactId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Modelartifactid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "modelArtifactId",
+        "adapterArtifactId"
+      ],
+      "title": "MergeResult",
+      "type": "object"
+    },
+    "MergeSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "merge",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/MergeResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "MergeSuccess",
+      "type": "object"
+    },
+    "MigrateDecisionsSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "migrate-decisions",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/MigrationResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "MigrateDecisionsSuccess",
+      "type": "object"
+    },
+    "MigrationResult": {
+      "additionalProperties": false,
+      "description": "Published migration paths and bounded remaining-work counts.",
+      "properties": {
+        "artifactId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Artifactid",
+          "type": "string"
+        },
+        "command": {
+          "enum": [
+            "migrate-decisions",
+            "rerun-migrated-decisions"
+          ],
+          "title": "Command",
+          "type": "string"
+        },
+        "datasetPath": {
+          "title": "Datasetpath",
+          "type": "string"
+        },
+        "migrationPath": {
+          "title": "Migrationpath",
+          "type": "string"
+        },
+        "pendingTasks": {
+          "minimum": 0,
+          "title": "Pendingtasks",
+          "type": "integer"
+        },
+        "records": {
+          "minimum": 0,
+          "title": "Records",
+          "type": "integer"
+        },
+        "reportPath": {
+          "title": "Reportpath",
+          "type": "string"
+        },
+        "reviewItems": {
+          "minimum": 0,
+          "title": "Reviewitems",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "migrationPath",
+        "datasetPath",
+        "artifactId",
+        "reportPath",
+        "records",
+        "pendingTasks",
+        "reviewItems"
+      ],
+      "title": "MigrationResult",
+      "type": "object"
+    },
+    "PrepareResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "command": {
+          "const": "prepare",
+          "title": "Command",
+          "type": "string"
+        },
+        "datasetContentId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Datasetcontentid",
+          "type": "string"
+        },
+        "diagnostic": {
+          "title": "Diagnostic",
+          "type": "boolean"
+        },
+        "partitionRecords": {
+          "$ref": "#/$defs/SplitRecordCounts"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "datasetContentId",
+        "partitionRecords",
+        "diagnostic"
+      ],
+      "title": "PrepareResult",
+      "type": "object"
+    },
+    "PrepareSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "prepare",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/PrepareResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "PrepareSuccess",
+      "type": "object"
+    },
+    "ProjectionPreparationResult": {
+      "additionalProperties": false,
+      "description": "Offline source projection paths and candidate counts; no inference is performed.",
+      "properties": {
+        "command": {
+          "const": "prepare-source-projections",
+          "title": "Command",
+          "type": "string"
+        },
+        "eligibleRecords": {
+          "minimum": 0,
+          "title": "Eligiblerecords",
+          "type": "integer"
+        },
+        "planPath": {
+          "title": "Planpath",
+          "type": "string"
+        },
+        "rawRecords": {
+          "minimum": 0,
+          "title": "Rawrecords",
+          "type": "integer"
+        },
+        "reportPath": {
+          "title": "Reportpath",
+          "type": "string"
+        },
+        "selectedFamilies": {
+          "minimum": 0,
+          "title": "Selectedfamilies",
+          "type": "integer"
+        },
+        "selectedRecords": {
+          "minimum": 0,
+          "title": "Selectedrecords",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "planPath",
+        "reportPath",
+        "rawRecords",
+        "eligibleRecords",
+        "selectedRecords",
+        "selectedFamilies"
+      ],
+      "title": "ProjectionPreparationResult",
+      "type": "object"
+    },
+    "ProjectionPreparationSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "prepare-source-projections",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/ProjectionPreparationResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "ProjectionPreparationSuccess",
+      "type": "object"
+    },
+    "QuantizeResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "bits": {
+          "enum": [
+            4,
+            8
+          ],
+          "title": "Bits",
+          "type": "integer"
+        },
+        "command": {
+          "const": "quantize",
+          "title": "Command",
+          "type": "string"
+        },
+        "groupSize": {
+          "const": 64,
+          "title": "Groupsize",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "bits",
+        "groupSize"
+      ],
+      "title": "QuantizeResult",
+      "type": "object"
+    },
+    "QuantizeSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "quantize",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/QuantizeResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "QuantizeSuccess",
+      "type": "object"
+    },
+    "RerunMigratedDecisionsSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "rerun-migrated-decisions",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/MigrationResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "RerunMigratedDecisionsSuccess",
+      "type": "object"
+    },
+    "RiskSampleSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptedCount": {
+          "minimum": 0,
+          "title": "Acceptedcount",
+          "type": "integer"
+        },
+        "eligibleCount": {
+          "minimum": 0,
+          "title": "Eligiblecount",
+          "type": "integer"
+        },
+        "errors": {
+          "minimum": 0,
+          "title": "Errors",
+          "type": "integer"
+        },
+        "representativeCount": {
+          "minimum": 0,
+          "title": "Representativecount",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "representativeCount",
+        "eligibleCount",
+        "acceptedCount",
+        "errors"
+      ],
+      "title": "RiskSampleSummary",
+      "type": "object"
+    },
+    "SchemaResult": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "schema",
+          "title": "Command",
+          "type": "string"
+        },
+        "directory": {
+          "title": "Directory",
+          "type": "string"
+        },
+        "driftCount": {
+          "const": 0,
+          "title": "Driftcount",
+          "type": "integer"
+        },
+        "mode": {
+          "enum": [
+            "output",
+            "check"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "schemaCount": {
+          "minimum": 0,
+          "title": "Schemacount",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "mode",
+        "directory",
+        "schemaCount",
+        "driftCount"
+      ],
+      "title": "SchemaResult",
+      "type": "object"
+    },
+    "SchemaSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "schema",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/SchemaResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "SchemaSuccess",
+      "type": "object"
+    },
+    "SetupResult": {
+      "additionalProperties": false,
+      "description": "Locations ready for an explicit training command; setup never trains.",
+      "properties": {
+        "command": {
+          "const": "setup",
+          "title": "Command",
+          "type": "string"
+        },
+        "customerDatasetPath": {
+          "title": "Customerdatasetpath",
+          "type": "string"
+        },
+        "downloadedFiles": {
+          "minimum": 0,
+          "title": "Downloadedfiles",
+          "type": "integer"
+        },
+        "evaluationConfigPath": {
+          "title": "Evaluationconfigpath",
+          "type": "string"
+        },
+        "modelPath": {
+          "title": "Modelpath",
+          "type": "string"
+        },
+        "profilePath": {
+          "title": "Profilepath",
+          "type": "string"
+        },
+        "profileSha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Profilesha256",
+          "type": "string"
+        },
+        "receiptPath": {
+          "title": "Receiptpath",
+          "type": "string"
+        },
+        "reusedFiles": {
+          "minimum": 0,
+          "title": "Reusedfiles",
+          "type": "integer"
+        },
+        "sharedDatasetPath": {
+          "title": "Shareddatasetpath",
+          "type": "string"
+        },
+        "trainConfigPath": {
+          "title": "Trainconfigpath",
+          "type": "string"
+        },
+        "workspacePath": {
+          "title": "Workspacepath",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "workspacePath",
+        "profilePath",
+        "receiptPath",
+        "profileSha256",
+        "downloadedFiles",
+        "reusedFiles",
+        "modelPath",
+        "sharedDatasetPath",
+        "customerDatasetPath",
+        "trainConfigPath",
+        "evaluationConfigPath"
+      ],
+      "title": "SetupResult",
+      "type": "object"
+    },
+    "SetupSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "setup",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/SetupResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "SetupSuccess",
+      "type": "object"
+    },
+    "SplitRecordCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "calibration": {
+          "minimum": 0,
+          "title": "Calibration",
+          "type": "integer"
+        },
+        "test": {
+          "minimum": 0,
+          "title": "Test",
+          "type": "integer"
+        },
+        "train": {
+          "minimum": 0,
+          "title": "Train",
+          "type": "integer"
+        },
+        "validation": {
+          "minimum": 0,
+          "title": "Validation",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "train",
+        "validation",
+        "calibration",
+        "test"
+      ],
+      "title": "SplitRecordCounts",
+      "type": "object"
+    },
+    "Stage": {
+      "enum": [
+        "upstream",
+        "shared",
+        "customer",
+        "none"
+      ],
+      "type": "string"
+    },
+    "TrainResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/CreatedArtifactResult"
+        },
+        "command": {
+          "const": "train",
+          "title": "Command",
+          "type": "string"
+        },
+        "elapsedSeconds": {
+          "ge": 0,
+          "title": "Elapsedseconds",
+          "type": "number"
+        },
+        "finalLoss": {
+          "ge": 0,
+          "title": "Finalloss",
+          "type": "number"
+        }
+      },
+      "required": [
+        "command",
+        "artifact",
+        "finalLoss",
+        "elapsedSeconds"
+      ],
+      "title": "TrainResult",
+      "type": "object"
+    },
+    "TrainSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "train",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/TrainResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "TrainSuccess",
+      "type": "object"
+    },
+    "VerifyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Artifactid",
+          "type": "string"
+        },
+        "command": {
+          "const": "verify",
+          "title": "Command",
+          "type": "string"
+        },
+        "customer": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Customer"
+        },
+        "fileCount": {
+          "minimum": 0,
+          "title": "Filecount",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/ArtifactKind"
+        },
+        "lineageNodeCount": {
+          "minimum": 0,
+          "title": "Lineagenodecount",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "stage": {
+          "$ref": "#/$defs/Stage"
+        },
+        "valid": {
+          "const": true,
+          "title": "Valid",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "command",
+        "path",
+        "artifactId",
+        "kind",
+        "stage",
+        "customer",
+        "fileCount",
+        "lineageNodeCount",
+        "valid"
+      ],
+      "title": "VerifyResult",
+      "type": "object"
+    },
+    "VerifySuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "verify",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/VerifyResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "VerifySuccess",
+      "type": "object"
+    },
+    "VersionedComponent": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "backend",
+            "converter",
+            "inference-runtime",
+            "library"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "role"
+      ],
+      "title": "VersionedComponent",
+      "type": "object"
+    }
+  },
+  "$id": "https://foliqant.local/schemas/model/cli-success.schema.json",
+  "$ref": "#/$defs/CliSuccessValue",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CliSuccess"
+}

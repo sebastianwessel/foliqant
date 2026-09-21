@@ -2,8 +2,10 @@
 
 Contract version: `1`. The canonical Python classes live in
 `model/src/foliqant_model/contracts/__init__.py`; `schema --output` generates their JSON
-Schemas under `contracts/model/`. The generated schemas, not parallel handwritten
-DTOs, are the machine-readable boundary.
+Schemas outside the repository or, for reviewed copies, under `model/schemas/`.
+The generated schemas, not parallel handwritten DTOs, are the machine-readable
+model-tooling boundary. Shared native-decision schemas are owned by the runtime
+package and generated under `schemas/foliqant/decisions/`.
 
 All objects are closed. Every field is required unless this document says
 **optional** or gives a default. Optional fields are omitted; JSON `null` is used

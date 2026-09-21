@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "Omitted_Annotated_str__StringConstraints__": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://foliqant.local/schemas/model/generation-provenance.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "modelId": {
+      "minLength": 1,
+      "title": "Modelid",
+      "type": "string"
+    },
+    "modelIdentitySha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Modelidentitysha256",
+      "type": "string"
+    },
+    "modelWeightsSha256": {
+      "$ref": "#/$defs/Omitted_Annotated_str__StringConstraints__",
+      "default": null
+    },
+    "parametersSha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Parameterssha256",
+      "type": "string"
+    },
+    "parentRecordIds": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Parentrecordids",
+      "type": "array"
+    },
+    "promptSha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Promptsha256",
+      "type": "string"
+    },
+    "provider": {
+      "const": "openai-compatible",
+      "title": "Provider",
+      "type": "string"
+    },
+    "requestSha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Requestsha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider",
+    "modelId",
+    "modelIdentitySha256",
+    "promptSha256",
+    "parametersSha256",
+    "requestSha256",
+    "parentRecordIds"
+  ],
+  "title": "GenerationProvenance",
+  "type": "object"
+}
