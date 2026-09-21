@@ -9,11 +9,12 @@ Implemented foundations include strict envelopes, protected metadata, immutable
 core values, bounded admission and blocking execution, the offline compiler,
 embedded runner, model execution, read-only MCP tools, safe OTel observations,
 an executable CLI/bootstrap, and authenticated synchronous HTTP ingress. The
-current runtime is nondurable: durable jobs, retrieval/cancellation endpoints,
-worker/broker recovery, child workflows, and reconciled writes remain future
+current CLI/HTTP path is nondurable: durable jobs, retrieval/cancellation endpoints,
+broker recovery, child workflows, and reconciled writes remain future
 work. A separate [PostgreSQL storage adapter](STORAGE.md) provides acceptance,
-fenced leases, checkpoints, persisted budgets and a transactional result outbox;
-it is not yet connected to the runner. See the [implementation status](../plans/workflow-service-status.md) for
+fenced leases, checkpoints, persisted budgets and a transactional result outbox.
+The [embedded durable worker](WORKERS.md) restores read-only executions using
+shared routing; it is not yet connected to the CLI/HTTP runner. See the [implementation status](../plans/workflow-service-status.md) for
 verified scope.
 
 ## Development environment
@@ -33,7 +34,7 @@ The local shared decision-contract package is resolved through `tool.uv.sources`
 Keep its source directory alongside this project when building from the repository.
 Production dependency installation uses `uv sync --locked --no-dev` with only
 the selected adapter extras, for example `--extra openai --extra http`. This is
-dependency separation; it does not add durable execution or qualify a provider
+dependency separation; it does not wire durable execution or qualify a provider
 deployment. The root model-tooling environment is separate.
 
 ## Boundaries
@@ -161,7 +162,7 @@ Trusted Python hosts can pass named `HandlerRegistration` objects through
 `open_application(..., plugins=RuntimePlugins(...))`. Handler callbacks are async,
 receive frozen inputs and a per-call `StepContext`, and return `StepOutcome`.
 Their declared input/output schemas are checked independently of the callback;
-selected write handlers cannot be prepared until durable execution exists.
+selected write handlers cannot be prepared until effect tracking and reconciliation exist.
 Use the lower-level runner below only when the host needs to own that composition.
 
 The [offline example](../examples/embedded-workflow/README.md) combines a compiled

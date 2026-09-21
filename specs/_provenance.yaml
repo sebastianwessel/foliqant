@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:0038e550b483092ead1baf21143dd344a368f29d6b32034c5cfbf76414eaba9f
-  source_revision: working-tree-2ad9e57-durable-storage
-  generated_at: 2026-09-21T13:00:40.522Z
+  content_digest: sha256:b81b7efb55e1df0a269e06475ec5018c1cdbd03846eba509baa101c2bbdf14d1
+  source_revision: working-tree-44b1339-durable-worker
+  generated_at: 2026-09-21T13:23:05.820Z

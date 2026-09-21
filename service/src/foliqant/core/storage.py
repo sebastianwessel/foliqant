@@ -68,10 +68,17 @@ class StoredExecution:
 
 @dataclass(frozen=True, slots=True)
 class ClaimedExecution:
+    """A live claim with database-clock duration for a monotonic worker deadline.
+
+    Anchor ``remaining_seconds`` to local monotonic time captured before claim;
+    never compare the database deadline with the worker's wall clock.
+    """
+
     execution: StoredExecution
     lease: Lease
     lease_until: datetime
     disposition: Literal["run", "terminalize_timeout", "terminalize_cancel"]
+    remaining_seconds: float
 
 
 @dataclass(frozen=True, slots=True)

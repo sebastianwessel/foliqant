@@ -11,9 +11,9 @@ Use the [service guide](../../service/README.md) and
 implemented API authority. The CLI/bootstrap and authenticated synchronous HTTP
 boundary are implemented alongside the embedded runner, model executor, read-only
 MCP adapters, and safe telemetry. Durable jobs, HTTP retrieval/cancellation,
-worker/broker recovery, child workflows, and reconciled writes are not
-implemented. The separate PostgreSQL storage adapter is available but is not
-connected to that runner. Never present those planned capabilities as working features.
+broker recovery, child workflows, and reconciled writes are not
+implemented. The PostgreSQL store and embedded durable worker are available but
+are not connected to that CLI/HTTP runner. Never present those planned capabilities as working features.
 
 Keep the service in its own uv project and environment. Select only needed extras
 for production; use the dev group for testing. Never import training or curation
@@ -37,7 +37,7 @@ trusted identity and validated frozen arguments for every call.
 
 `run` and HTTP execute synchronously through the nondurable in-process runner.
 Do not add detached background tasks or describe 202 acceptance, job retrieval,
-cancellation, restart recovery, or write reconciliation as available.
+cancellation, restart recovery, or write reconciliation as available on that path.
 
 ## Workflow and runtime boundaries
 
@@ -133,6 +133,21 @@ reclaim. Reserve before external I/O, never keep the transaction open during it,
 and never turn missing usage into zero. Result delivery has independent attempts
 and fencing; consumers deduplicate its stable ID. This storage implementation
 does not enable write effects or make the current HTTP runner durable.
+
+For recovery work, read the [worker guide](../../service/WORKERS.md). Reuse
+`ExecutionMachine` for binding, routing, restore validation and terminal output;
+do not fork a second routing implementation. `ExecutionWorker` accepts exact
+revision bindings and owns bounded polling, heartbeat and cancellation tasks.
+Remaining time comes from the database and is anchored before claim on the local
+monotonic clock. Refresh ownership/check cancellation before I/O. Read total
+persisted usage before finalization; preserve store-error provenance through
+executor exception handling. A failed checkpoint discards uncommitted local state.
+
+Shutdown closes intake and retains uncooperative work/lease guardians. Check
+`aclose()`; false forbids closing shared clients. Do not release ownership while
+an old read remains active or claim that coroutine cancellation stopped a remote
+operation. Add real PostgreSQL recovery/cancellation tests, not a memory-only
+simulation. CLI/HTTP durability and write effects still need their own integration.
 
 ## Safe observations
 

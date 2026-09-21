@@ -3,7 +3,8 @@
 The `postgres` extra provides an async execution store and a persistent step
 budget. This adapter is implemented separately from the current CLI/HTTP runner:
 `run` and `serve` still execute synchronously without database recovery. There is
-no durable worker, result-delivery worker, or write-effect reconciliation yet.
+a separate [durable worker API](WORKERS.md), but no result-delivery worker or
+write-effect reconciliation yet.
 
 Install `uv sync --locked --no-dev --extra postgres` from `service/`. Configure
 safe application logging before opening SDK clients, including PostgreSQL.

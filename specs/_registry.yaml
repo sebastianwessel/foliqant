@@ -1,5 +1,7 @@
 registry_version: 1
 contracts:
+  - id: CONTRACT-SERVICE-WORKER-V1
+    path: 13-durable-worker.md
   - id: CONTRACT-SERVICE-STORAGE-V1
     path: 12-durable-execution.md
   - id: CONTRACT-SERVICE-V1

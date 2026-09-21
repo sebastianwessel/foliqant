@@ -72,6 +72,9 @@ rows can still be claimed for terminalization, never for new external calls.
 The claim returns a database-derived disposition: `run`, `terminalize_timeout`,
 or `terminalize_cancel`; cancellation takes precedence when both conditions are
 present. Workers do not compare their wall clock to choose that disposition.
+Claims also return `remaining_seconds`, calculated from deadline minus the final
+live database clock and clamped to zero. Workers anchor that duration to their
+monotonic time before claiming, not to their wall clock.
 Every claim increments the fence. A final database-clock lease check after
 materialization rejects and rolls back claims that have already expired. Every worker mutation checks ID, owner, fence,
 running status and a lease still live on the database clock. Row locking plus current-step comparison
@@ -106,7 +109,8 @@ idempotent; changing a report conflicts. Usage reports identify model tickets;
 reports and usage reads also work for prior steps or after cancellation/deadline,
 provided the execution lease remains live. They account for already-incurred I/O,
 and must not reuse the stricter new-reservation gate. The store derives aggregate usage from
-all reservations. Finalization validates it against the result.
+all reservations. `execution_usage(lease)` reads the full execution total under
+live ownership, including prior steps. Finalization validates it against the result.
 
 Terminalization checks the live fence and exact execution/workflow/revision,
 accepted metadata (including protected identity claims), and persisted usage,
@@ -151,7 +155,8 @@ requires JSONB indexing. Golden digest vectors live in `test_storage_mapping.py`
 No inference or customer dataset is needed. SQL constraints and live database
 behavior are acceptance evidence; in-memory doubles do not establish durability.
 
-The remaining goal includes runner resume/heartbeat, effect ledger/reconciliation,
+The [durable worker](13-durable-worker.md) implements resume and heartbeat.
+The remaining goal includes effect ledger/reconciliation,
 durable HTTP/Redis/Webhook adapters, child workflows, retention/deletion and
 production operations. This storage milestone does not replace those deliverables.
 

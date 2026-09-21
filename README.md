@@ -43,6 +43,7 @@ final structured content matching the requested JSON Schema.
 
 - [Workflow service setup and CLI](service/README.md)
 - [PostgreSQL storage adapter](service/STORAGE.md)
+- [Resumable execution workers](service/WORKERS.md)
 - [Python workflow service specification](specs/11-workflow-service.md)
 - [Authenticated HTTP example](examples/http-workflow/README.md)
 - [Embedded workflow example](examples/embedded-workflow/README.md)

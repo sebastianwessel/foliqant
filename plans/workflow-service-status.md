@@ -201,23 +201,47 @@ these SDK/transport tests.
   calls. Storage docs and the service skill distinguish this adapter from pending
   worker/transport integration. CI now supplies an isolated PostgreSQL service.
 
-This is storage acceptance, not a durable production service. The current CLI/HTTP
-runner still does not use this adapter. Worker resume/heartbeat, effect journal,
-broker/webhook delivery, durable HTTP endpoints and child execution remain
-required. Local checks and independent findings are recorded in the
+This was storage acceptance, not a durable production service. At that checkpoint,
+worker resume/heartbeat, effect journal, broker/webhook delivery, durable HTTP
+endpoints and child execution remained required. The following worker slice
+supersedes only the read-only worker portion; the current CLI/HTTP runner still
+does not use this adapter. Local checks and independent findings are recorded in the
 [storage review](reviews/service-postgres-storage.md).
+
+## Resumable execution worker slice
+
+- Embedded and durable execution now share a pure `ExecutionMachine`: binding,
+  deterministic routing, restore validation and terminal result construction
+  have one implementation. Persisted steps are restored in execution order and
+  never reexecuted merely because result delivery or the worker restarts.
+- `ExecutionWorker` binds exact revisions, renews ownership, checks cancellation,
+  and persists each validated transition. Database-derived remaining time is
+  conservatively anchored to the local monotonic clock. Full persisted usage is
+  checked before finalization, including unknown interrupted model usage.
+- Store-error provenance survives executors that translate exceptions. Infrastructure
+  and stale-lease failures abandon for recovery; executor failures become safe
+  terminal results. In-memory advances are discarded after failed checkpoint writes.
+- Fixed concurrent polling loops bound intake. Shutdown stops new claims, drains,
+  and retains tasks/lease supervision when a handler ignores cancellation. No
+  stale checkpoint or new attempt is allowed after interruption; incomplete
+  cleanup is explicit and forbids closing shared clients.
+- `examples/durable-workflow` compiles YAML and executes validated deterministic
+  handlers through PostgreSQL without model calls. The worker guide, service
+  skill and specifications distinguish this embedded API from pending CLI/HTTP
+  durable composition. See the [worker review](reviews/service-durable-worker.md)
+  for evidence and remaining production boundaries.
 
 ## Remaining implementation sequence
 
 1. Complete production MCP credential storage/login operations, TLS deployment
    guidance, provider conformance, and live collector/provider qualification.
-2. Integrate the implemented PostgreSQL store with worker resume/heartbeat,
-   persisted effect identity/reconciliation, async HTTP retrieval/cancellation,
-   Redis recovery/output and webhook delivery.
+2. Wire the implemented worker into deployment/bootstrap/CLI, explicit migration
+   and worker commands, and durable HTTP retrieval/cancellation; add persisted
+   effect identity/reconciliation, Redis recovery/output and webhook delivery.
 3. Implement bounded child dispatch/join, per-child authorization, dependency and
    conditional holds, correction/reconciliation and retention/deletion operations.
    Real broker/database crash/redelivery tests are required.
-4. Finish install/container/CI checks, full root regression,
+4. Finish the CLI test command, install/container/CI checks, full root regression,
    runnable examples/Compose, generated configuration docs and service skill.
    Independent end-to-end review must close findings before completion.
 

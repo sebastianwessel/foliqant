@@ -1,6 +1,22 @@
 reuse_inventory_version: 1
-discovery_revision: working-tree-2ad9e57-durable-storage
+discovery_revision: working-tree-44b1339-durable-worker
 assets:
+  - asset_id: service.execution-machine
+    kind: module
+    path: ../service/src/foliqant/core/machine.py
+    public_export: ExecutionMachine
+    owner: workflow-service
+    stability: experimental
+    consumers: [embedded-runner, durable-worker]
+    extension_policy: One implementation of binding, deterministic routing and checkpoint restore; no I/O.
+  - asset_id: service.execution-worker
+    kind: module
+    path: ../service/src/foliqant/workers/execution.py
+    public_export: ExecutionWorker, WorkflowBinding
+    owner: workflow-service
+    stability: experimental
+    consumers: [embedded-hosts, future-worker-bootstrap]
+    extension_policy: Preserve exact revisions, persistent accounting and owned shutdown; never enable unreconciled writes.
   - asset_id: service.durable-storage
     kind: module
     path: ../service/src/foliqant/ports/storage.py

@@ -34,5 +34,7 @@ their rights, mappings and acquisition profiles are separately reviewed.
 The [Python workflow service](11-workflow-service.md) implements the service side
 separately from model tooling. Its [durable storage contract](12-durable-execution.md)
 defines transactional state, fencing, persisted budgets and output delivery.
+The [worker contract](13-durable-worker.md) defines shared routing and bounded
+read-only recovery.
 [Implementation status](../plans/workflow-service-status.md) distinguishes tested
 adapters from pending worker/transport and production acceptance.

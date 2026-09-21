@@ -1,5 +1,20 @@
 module_boundary_version: 1
 modules:
+  - module_id: service-execution-machine
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/core/machine.py
+    public_symbols: [ExecutionMachine, validate_execution_identity]
+    owned_concepts: [deterministic-transitions, checkpoint-restore, terminal-result]
+    allowed_dependencies: [standard-library, service-core]
+    forbidden_dependencies: [provider-sdk, storage-sdk, transport-client]
+    architecture_check: service/tests/test_architecture.py
+  - module_id: service-execution-worker
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/workers/execution.py
+    public_symbols: [ExecutionWorker, WorkflowBinding]
+    owned_concepts: [bounded-polling, live-lease-supervision, durable-resume]
+    allowed_dependencies: [standard-library, service-core, service-ports, persistent-budget, safe-logging]
+    forbidden_dependencies: [model-training-runtime, storage-sdk, transport-client]
   - module_id: service-durable-storage
     owner: workflow-service
     public_entrypoint: service/src/foliqant/ports/storage.py

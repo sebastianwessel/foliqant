@@ -167,6 +167,7 @@ class ExecutionOperations(StoreBase):
                 Lease(str(row["execution_id"]), owner, row["fence"]),
                 row["lease_until"],
                 disposition,
+                max(0.0, (row["deadline"] - now).total_seconds()),
             )
 
     async def heartbeat(self, lease: Lease, *, lease_seconds: float) -> datetime:
@@ -328,6 +329,18 @@ class ExecutionOperations(StoreBase):
                 "SELECT kind, usage FROM foliqant.attempts "
                 "WHERE execution_id = %s AND step_id = %s",
                 (row["execution_id"], step_id),
+            )
+            usage = mapping.aggregate(await cursor.fetchall())
+            await self._live(conn, row, lease.owner, lease.fence, expected="running")
+            return usage
+
+    async def execution_usage(self, lease: Lease) -> Usage:
+        """Read total persisted usage even after run cancellation or deadline expiry."""
+        async with self._transaction() as conn:
+            row = await self._locked(conn, lease)
+            cursor = await conn.execute(
+                "SELECT kind, usage FROM foliqant.attempts WHERE execution_id = %s",
+                (row["execution_id"],),
             )
             usage = mapping.aggregate(await cursor.fetchall())
             await self._live(conn, row, lease.owner, lease.fence, expected="running")

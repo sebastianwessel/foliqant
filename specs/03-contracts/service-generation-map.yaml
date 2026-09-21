@@ -85,3 +85,7 @@ entries:
 # Persistence reuses generated envelope/execution boundaries above; the owned
 # SQL migration is hashed and verified explicitly at migrate/use time.
 # Custom row mapping and digest vectors are covered by MAP-SERVICE-DURABLE-ROWS.
+
+# ExecutionMachine and WorkflowBinding are internal Python composition, not a
+# new wire format. Worker restore reuses storage Checkpoint and generated public
+# ExecutionResult boundaries; no handwritten duplicate JSON schemas are added.
