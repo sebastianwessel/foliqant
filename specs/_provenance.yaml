@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:67dc68198b9f9377665d9e9b0a3c672f9f93df394099584f37f958dc3a3995be
-  source_revision: working-tree-c86d216-embedded-runtime
-  generated_at: 2026-09-21T10:30:37.572Z
+  content_digest: sha256:ccf6c791689355f9600c1e161a982edae954bc49e0c7e373503909af7d58ecd0
+  source_revision: working-tree-5966e79-model-execution
+  generated_at: 2026-09-21T11:05:13.626Z

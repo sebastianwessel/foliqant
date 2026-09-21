@@ -66,13 +66,39 @@ files including the example; lint, formatting, six service schema snapshots,
 27 unchanged native schema snapshots, documentation links and skill validation
 passed. The matching CI job has been added but has not run remotely.
 
+## Model execution slice
+
+- Closed model profiles select explicit IDs, APIs, structured output modes,
+  environment credential references, capabilities and bounded settings. One
+  application lifespan owns the async OpenAI, compatible, Azure and Anthropic
+  clients. No model discovery or hidden SDK retries occur.
+- PydanticAI executes native decisions and text/schema LLM steps under per-alias
+  admission and per-step deadlines/budgets. Host validation checks decisions,
+  evidence and original schemas. Refusals/truncation never become successful
+  partial decisions. Unreported usage remains unknown.
+- Provider schemas fully inline frozen local references, preserve intersections
+  and annotation data, and enforce expansion limits. Authored schemas retain
+  their constraints with non-strict provider output. Unsupported native-mode
+  combinations fail preflight before charging attempts; no silent mode switches.
+- `examples/inbox` provides Markdown decision steps, profiles, safe logging and
+  embedded routing. It is nondurable and uses a demonstration identity, not an
+  authentication implementation. Tests use offline model doubles and transports.
+- Review closed SDK timeout/accounting and schema-conversion issues; see
+  [model adapter review](reviews/service-model-adapters.md). Final verification:
+  359 service tests, strict typing, lint/format and seven schema snapshots.
+
+The full service remains incomplete. Bedrock is explicitly disabled until its
+credential discovery and worker lifetime can be bounded. Tools, MCP/OAuth,
+production telemetry, durable transports and child workflows still need their
+implementation and acceptance checks.
+
 ## Remaining implementation sequence
 
 1. Complete deployment/provider settings and concrete durable-operation contracts;
    retain the shared extraction and execution-contract regressions.
-2. Deliver the embedded/CLI vertical slice: Markdown/YAML compiler, strict bindings,
-   native/text/schema model adapter via PydanticAI, deterministic routing, bounded
-   runtime, safe observations and minimal `examples/inbox` application.
+2. Complete executable service CLI/bootstrap and safe observations around the
+   implemented compiler, bounded embedded runner and PydanticAI model adapter;
+   extend the current `examples/inbox` application as these capabilities land.
 3. Add authenticated HTTP and host-owned current MCP stdio/HTTP with declared
    catalogs, schema verification, OAuth/credential hooks, protected metadata and
    required-tool success semantics. Verify concurrent callers cannot share auth

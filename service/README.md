@@ -8,9 +8,10 @@ identity, authorization, admission, persistence and transports.
 Implementation is in progress. Available foundations are strict envelopes,
 protected metadata validation, immutable core values, safe errors and bounded
 async admission, bounded blocking-I/O execution, safe JSON logging, an offline
-workflow compiler, embedded async runner, public execution results and shared native
-decision validation. The executable CLI, model/MCP integration,
-durable transports and full application example are not yet complete. See the
+workflow compiler, embedded async runner, public execution results, PydanticAI
+model execution and shared native decision validation. A model-enabled inbox
+example is available. The executable service CLI, MCP integration and durable
+transports are not yet complete. See the
 [implementation status](../plans/workflow-service-status.md) for verified scope.
 
 ## Development environment
@@ -64,7 +65,7 @@ tags and YAML aliases are rejected. Workflow schemas support confined local file
 and fragments; declared tool schemas use internal fragments only. Schema `$id`
 is unsupported, with depth and node limits enforced. JSON data inside schema
 `const`, `default` and examples is not interpreted as schema instructions.
-Generate/check the six public schemas using the development commands above.
+Generate/check the public schemas using the development commands above.
 
 ## Embedded execution
 
@@ -94,7 +95,74 @@ finish steps do not consume model or tool attempts.
 This runner is nondurable: it has no restart recovery, persisted budgets or
 external mutation reconciliation. It does not launch background business tasks.
 The offline example demonstrates these boundaries without model calls or external
-dependencies; it is not the complete model-enabled service application.
+dependencies; it is not the complete production service application.
+
+## PydanticAI model execution
+
+`ModelProfiles` validates named deployment profiles. Select a provider, explicit
+model ID and `output_mode` (`native` or `tool`). This chooses how structured
+results are requested; it does not authorize external tools. The service does
+not discover model names or reserve aliases such as `primary`.
+
+```python
+from foliqant.adapters.models import ModelExecutor
+from foliqant.adapters.models.providers import open_model_bindings
+from foliqant.contracts.models import ModelProfiles
+
+profiles = ModelProfiles.model_validate({
+    "models": {
+        "deciding": {
+            "provider": "openai_compatible",
+            "model": "your-configured-model-id",
+            "base_url": "http://127.0.0.1:1234/v1",
+            "allow_insecure_http": True,
+            "output_mode": "native",
+            "concurrency": 1,
+            "options": {"max_tokens": 2048, "temperature": 0.1},
+        }
+    }
+}, strict=True)
+
+# Within an async application, with WorkflowSchemas(plan) already constructed:
+async with open_model_bindings(profiles, environment={}) as bindings:
+    executor = ModelExecutor(bindings, schemas)
+    # Inject executor into WorkflowRunner and await runner.run(...).
+```
+
+For authenticated providers, use `api_key_env` to reference an environment key
+and pass the resolved environment snapshot to the factory. Never embed secrets
+in profiles. An absent key reference on a compatible profile means deliberately
+unauthenticated access. Official OpenAI, Azure OpenAI (versioned or v1) and
+Anthropic clients use explicit API selection, zero SDK retries and bounded
+timeouts. Client cleanup also runs after partial initialization failure. Unsafe
+ambient SDK header/account overrides are rejected instead of silently changing
+configured requests. Bedrock remains disabled pending its bounded credential and
+worker integration; Azure managed identity and broader Foundry APIs are not yet
+implemented. Offline protocol tests do not qualify a live deployment.
+
+PydanticAI owns the model conversation. The executor independently validates native
+decision semantics and source evidence before routing. A schema-output LLM step
+uses a provider object containing `value`, then exposes only the unwrapped,
+validated value to the workflow. Local schema references are fully inlined from
+the frozen plan, preserving sibling constraints as intersections. Dynamic references and SDK-unsupported recursive output schemas fail
+before inference; input validation retains its separate supported schema scope.
+Authored LLM schemas use non-strict provider output mode so SDK conversion cannot
+close dictionaries or erase authored constraints. Providers must accept that mode;
+Anthropic authored schema steps require `tool` mode, while canonical native
+decisions also support Anthropic `native` mode. Unsupported combinations fail
+local validation before consuming an attempt; there is no automatic mode switch.
+The host always validates the original output schema.
+
+See the [model-enabled inbox example](../examples/inbox/README.md) for a runnable
+application with Markdown decision steps, profiles and safe logging.
+
+Requests consume a budget only after admission, immediately before I/O. Each
+request has an operation timeout within the original run deadline. Failed
+requests count, missing token measurements stay null, and truncation/refusal is
+an invalid output rather than a successful partial decision. Automatic output
+repairs are currently disabled. Tool-bearing LLM steps are rejected until MCP
+integration is available. Model instrumentation is explicitly off until the safe
+OTel integration is connected.
 
 ## Async execution rules
 

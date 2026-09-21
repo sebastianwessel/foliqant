@@ -406,3 +406,30 @@ authentication, endpoint reachability, schema enforcement, tool-choice behavior,
 streaming behavior, usage accuracy, error mapping, or production support for any
 specific provider/model/deployment. Those require adapter contract tests and
 opt-in endpoint conformance tests with no customer data.
+
+## Model adapter wire regressions
+
+The implemented adapter was checked against the locked SDK source and offline
+`httpx2.MockTransport` responses. These observations refine the construction-only
+smoke above:
+
+- Responses usage may synthesize `details.reasoning_tokens=0` when the response
+  omitted that measurement. Use presence of the normalized
+  `output_reasoning_tokens` field, preserving unknown, explicit zero and positive
+  counts separately.
+- PydanticAI wraps provider SDK timeout exceptions in `ModelAPIError`. Classify
+  the typed direct cause using the configured provider's timeout type; do not
+  guess from exception text. Failed attempts remain counted.
+- Strict schema transformation can close a dynamic dictionary and remove size
+  assertions, making an authored nonempty dictionary impossible to satisfy.
+  Authored schema steps use non-strict output and original host validation.
+  Anthropic rejects native non-strict output locally; explicit tool mode works.
+- `StructuredDict` inlines only some JSON Schema applicators and merges reference
+  siblings by replacement. Fully inline frozen references before passing the
+  schema to it; preserve siblings through `allOf`, literal annotations as data,
+  and bounded expansion. Reject reachable recursion and dynamic references.
+- Validate provider request parameters before admission and budget reservation.
+  The actual SDK request still owns its wire preparation; preflight makes no I/O.
+
+The tests establish local schema and request behavior, not live provider
+acceptance of every JSON Schema keyword or financial decision accuracy.

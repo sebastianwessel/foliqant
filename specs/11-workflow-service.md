@@ -314,6 +314,56 @@ URLs, retries, streaming and privacy controls. Retention controls such as OpenAI
 Capability checks happen offline from declared profiles; optional live probes
 require an explicit operator command. Unsupported combinations fail clearly.
 
+### Model profile boundary
+
+`ModelProfiles` is a closed `models: {alias: profile}` boundary. Every profile
+names a model and explicitly selects `output_mode: native|tool`; it also declares
+text/schema support, per-profile concurrency/queue bounds and an SDK request
+timeout. It does not grant permission for tools. Native/schema support is a
+deployment assertion to verify against the chosen server, not inferred from an
+endpoint probe. No alias is reserved. The shared maximum-output default is 4096
+tokens; unspecified sampling settings are left to the provider.
+
+OpenAI explicitly selects Chat Completions or Responses. Compatible profiles
+require a base URL, an explicit opt-in for plain HTTP and select the server's
+`max_tokens` versus `max_completion_tokens` field. Azure distinguishes its
+versioned resource-root API (explicit version required) from `/openai/v1`
+(version forbidden). This is not blanket support for all Foundry catalog APIs.
+API keys are referenced by environment-variable name, never embedded in profile
+documents. The composition root passes one resolved environment snapshot;
+request handlers do not read environment variables. An absent compatible-server
+key reference means explicitly unauthenticated; it never borrows another
+provider's ambient key.
+
+Provider option models are closed. Reject options the SDK would silently discard
+(such as a Responses seed or incompatible sampling/reasoning settings), rather
+than accepting an ineffective setting. OpenAI retention settings are host-owned
+and use `store=false`. Disable all SDK retries. Provider clients are owned by an
+async application context and are cleaned up on partial startup failure as well
+as normal exit. No SDK construction discovers models.
+
+The first execution adapter uses explicit NativeOutput/ToolOutput, zero automatic
+output repairs and independently validates native decision semantics or authored
+JSON Schema before returning route facts. Each actual request is measured by a
+run-scoped wrapper and charged before I/O. SDK usage field defaults are not
+evidence that a provider measured zero. Missing reports remain unavailable.
+Provider schemas fully inline frozen local references and wrap the authored value in
+an object; public results expose the unwrapped value only after host validation.
+Dynamic reference scopes and recursive schemas unsupported by StructuredDict
+fail before inference. Reference siblings remain intersecting constraints, not
+overwriting dictionary keys. Use non-strict provider output for authored LLM
+schemas, retaining original host validation. Providers that require strict native
+schemas must reject this combination before I/O; explicitly configured tool mode
+is the supported alternative for Anthropic authored schemas. Canonical native
+decisions use their fixed strict output definition and independent semantic
+validation. Provider preflight precedes admission and attempt reservation.
+Bound reference expansion before passing schemas to the
+SDK, preserving literal annotation values and the original host validator.
+Instrumented spans and MCP tools are added through their dedicated integrations;
+until those are present, model instrumentation is explicitly disabled and
+tool-bearing steps fail before making a request. Bedrock remains disabled until
+credential discovery and its worker-thread lifecycle are explicitly bounded.
+
 One owner enforces retry budgets: disable provider SDK retries. PydanticAI may
 perform bounded output-validation repairs within the model request budget; it
 must not repeat uncertain side effects. All actual attempts count toward usage

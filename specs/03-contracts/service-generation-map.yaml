@@ -2,6 +2,14 @@ generation_map_version: 1
 contract_ref: CONTRACT-SERVICE-V1
 authority: ../11-workflow-service.md
 entries:
+  - id: GEN-SERVICE-MODEL-PROFILES
+    canonical_source: ../../service/src/foliqant/contracts/models.py
+    generated_outputs: [../../contracts/service/model-profiles.schema.json]
+    command: uv run --project service python service/scripts/generate_schemas.py
+    drift_check: uv run --project service python service/scripts/generate_schemas.py --check
+    handwritten_remainder:
+      - endpoint and API-flavor validation, SDK capability checks and credential resolution
+    verification: [../../service/tests/test_model_configuration.py, ../../service/tests/test_model_providers.py]
   - id: GEN-SERVICE-ENVELOPE
     canonical_source: ../../service/src/foliqant/contracts/envelope.py
     generated_outputs: [../../contracts/service/envelope.schema.json]

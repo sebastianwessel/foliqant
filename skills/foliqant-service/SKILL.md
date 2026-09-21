@@ -6,9 +6,10 @@ description: "Build and test Foliqant workflow bundles and embedded async servic
 # Foliqant workflow service
 
 Use the [service guide](../../service/README.md) and
-[runnable embedded example](../../examples/embedded-workflow/README.md) as the
+[offline example](../../examples/embedded-workflow/README.md) and
+[model-enabled inbox example](../../examples/inbox/README.md) as the
 implemented API authority. The service is still under implementation: the
-embedded runner works, but a deployable CLI, provider/MCP adapters, durable
+embedded runner and PydanticAI model executor work, but a deployable CLI, MCP adapters, durable
 transports and recovery are not yet available. Never present planned commands or
 production guarantees as working features.
 
@@ -22,7 +23,7 @@ packages. Native decision types and semantic validation come from the shared
 - Compile YAML/Markdown bundles with `compile_workflow` and explicit registries.
   Compilation never discovers endpoints. Use supported `decision`, `llm`, `mcp`,
   `handler` and `finish` authoring; dispatch is not implemented. Provider/tool
-  execution still needs an injected executor. Do not infer executable support
+  execution needs a configured executor. Do not infer executable support
   merely because a step compiles.
 - Bind data explicitly with `{pointer: /payload/...}` or `{literal: ...}`.
   Previous step results live under `/steps/<id>/result`. Public output uses
@@ -45,6 +46,25 @@ packages. Native decision types and semantic validation come from the shared
   ordinary routing. Technical failures are safe errors, not answerability values.
   Cancellation propagates. The embedded runner does not persist or reconcile
   effects; never claim that local cancellation proves a remote mutation stopped.
+
+For model steps, construct `ModelProfiles`, then own `open_model_bindings` in the
+application lifespan. Inject `ModelExecutor(bindings, schemas)` into the runner.
+Aliases and model IDs are explicit; no `/models` discovery. Structured output
+mode is `native` or `tool`, not a prompt-only fallback. Tool mode only formats the
+output; it does not grant function-tool access. Store credentials outside profiles
+and pass environment references. The factory disables SDK retries, validates
+effective options and closes clients even when startup fails.
+
+Native decisions use shared semantic/evidence validation. LLM schema references are fully inlined
+offline for providers; public results unwrap the provider's `value` object and
+are checked against the original schema. Dynamic/recursive provider schemas fail
+before inference. Use non-strict provider mode for authored schemas to preserve
+constraints; Anthropic requires `tool` mode for these steps. Local provider
+preflight precedes admission and accounting; unsupported modes never silently
+switch or consume an attempt. Never relax validation to accept a refusal or truncated reply.
+Missing token measurements remain unknown. Bedrock, MCP tools and model OTel
+integration remain incomplete; do not imply they are ready because their
+dependencies or contracts exist.
 
 Use native async I/O. A blocking-only SDK uses the owned bounded
 `BlockingExecutor` plus SDK timeouts; started workers retain capacity after caller

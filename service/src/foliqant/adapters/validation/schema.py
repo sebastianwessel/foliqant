@@ -11,8 +11,10 @@ from referencing import exceptions as referencing_exceptions
 from referencing.jsonschema import DRAFT202012, Schema, SchemaRegistry
 
 from foliqant.core.errors import ErrorCode, ServiceError
-from foliqant.core.json import FrozenJson, thaw_json
+from foliqant.core.json import FrozenJson, JsonValue, thaw_json
 from foliqant.core.plan import LlmStepPlan, SchemaResourcePlan, WorkflowPlan
+
+from .provider_schema import inline_provider_schema
 
 _MAX_SCHEMA_DEPTH = 64
 _MAX_SCHEMA_NODES = 10_000
@@ -78,6 +80,7 @@ class WorkflowSchemas:
                 plan.input_schema,
             )
             outputs: dict[str, Draft202012Validator] = {}
+            output_paths: dict[str, str] = {}
             for step in plan.steps:
                 if not isinstance(step, LlmStepPlan):
                     continue
@@ -91,9 +94,13 @@ class WorkflowSchemas:
                     if validator is None:
                         _fail(ErrorCode.INVALID_CONFIGURATION)
                     outputs[step.name] = validator
+                    if step.output_schema_path is None:
+                        _fail(ErrorCode.INVALID_CONFIGURATION)
+                    output_paths[step.name] = step.output_schema_path
                 elif step.output_schema_path is not None or step.output_schema is not None:
                     _fail(ErrorCode.INVALID_CONFIGURATION)
             self._outputs = outputs
+            self._output_paths = output_paths
         except ServiceError:
             raise
         except (
@@ -174,6 +181,23 @@ class WorkflowSchemas:
         if validator is None:
             _fail(ErrorCode.INVALID_CONFIGURATION)
         self._validate(validator, value, ErrorCode.INVALID_OUTPUT)
+
+    def provider_output_schema(self, step_id: str) -> dict[str, JsonValue]:
+        """Return an independent schema bundle with no external references or I/O."""
+        try:
+            path = self._output_paths[step_id]
+            return inline_provider_schema(self._resources[path], self._uri(path), self._registry)
+        except ServiceError:
+            raise
+        except (
+            KeyError,
+            LookupError,
+            RecursionError,
+            TypeError,
+            ValueError,
+            referencing_exceptions.Unresolvable,
+        ):
+            _fail(ErrorCode.INVALID_CONFIGURATION)
 
     @staticmethod
     def _validate(validator: Draft202012Validator, value: FrozenJson, code: ErrorCode) -> None:

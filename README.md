@@ -43,6 +43,7 @@ final structured content matching the requested JSON Schema.
 
 - [Python workflow service specification](specs/11-workflow-service.md)
 - [Embedded workflow example](examples/embedded-workflow/README.md)
+- [Model-enabled inbox example](examples/inbox/README.md)
 - [Workflow service agent skill](skills/foliqant-service/SKILL.md)
 - [Apple Silicon training and model lineage](specs/research/apple-silicon.md)
 - [Model research, datasets, calibration, and hosting](specs/research/model-research.md)
