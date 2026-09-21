@@ -92,6 +92,10 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/configure-pages@v5
+        with:
+          # Create/configure the Pages site on its first successful deployment.
+          # Without this, a new private repository fails before the deploy step.
+          enablement: true
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
