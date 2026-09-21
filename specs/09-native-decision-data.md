@@ -20,6 +20,13 @@ The scoped source-projection extension below is implemented and verified through
 offline tests. Its planned live pilot has not run, so this status carries no
 generated-data quality or model-validation acceptance claim.
 
+The completed-run rejection investigation led to a new recipe with phase-specific
+recovery, review-required semantic disagreement, explicit source category
+definitions and relation-preserving WANLI tasks. The earlier acceptance applies
+only to its named recipe/artifacts; it does not qualify this revision. Current
+tests and the diagnostic pilot are recorded separately in
+[the recovery verification report](../plans/reviews/curation-recovery-source-quality.md).
+
 ## Required outcome
 
 One local command prepares a native Foliqant decision corpus without manual
@@ -492,6 +499,11 @@ sentence is reserved for a decisive limitation. The 400-character bound applies
 only to `summary`, not to citation quotes, `missingFacts`, or the explanation
 object as a whole. Generation never truncates a summary: an oversized response
 is invalid and follows the ordinary retained-rejection and repair path.
+Solver guidance requests paraphrased summaries and reserves verbatim quotations
+for citation fields. Every string must use correct JSON escaping for quotation
+marks, backslashes and control characters; decoded citation text must still
+match its source exactly. This is versioned prompt guidance, not permission to
+rewrite malformed JSON or alter evidence after generation.
 
 Because the current explanation fields contain free prose rather than
 machine-checkable claim-to-citation links, automatic publication does not trust
@@ -649,9 +661,18 @@ generation lineage.
 
 The default compatibility policy remains deliberately narrow:
 
-- BANKING77: one `choice` question over the supplied intent catalog;
-- WANLI: one `predicate` question whose true/false/unknown values preserve the
-  supported/contradicted/insufficient source semantics;
+- BANKING77: one `choice` question over the complete intent catalog, with
+  versioned editorial definitions and contrastive boundaries. Definitions are
+  Foliqant task guidance, not additional source gold. Overlap without an explicit
+  distinction must remain ambiguity, not an invented tie-break. Preserve the
+  original source label as an unreviewed reference; unknown catalog labels fail
+  closed rather than falling back to raw names as definitions;
+- WANLI: one `choice` question classifying the relation between the two supplied
+  texts as `entailment`, `contradiction` or `neutral`, with explicit definitions.
+  Neutral is a relation category, not fabricated native predicate answerability
+  or a missing-fact annotation. Preserve both original texts, including questions,
+  and the source relation label. This replaces the former truth-predicate
+  projection for new recipes only; old artifacts and schemas remain readable;
 - typed-decisions, MultiDoGO and TAT-QA: not projected by the default recipes.
   Their records remain in `source-corpus`, and exclusions are counted. The
   explicit offline plan below is the only path that enables their bounded
@@ -772,13 +793,35 @@ repair a candidate, or promote its review status. Model-reported support or
 confidence is not truth. Connection and integrity failures stop the run;
 bounded semantic failures are quarantined with safe reasons.
 
-When `maxAttempts` permits another inline attempt, only a rejected job continues. The
-next request receives the previous bounded final assistant output and safe
-rejection code as untrusted correction context, without the oracle, target
-answer, hidden scenario label or exception details. The second pass is a fresh
-generation followed by the same full validation; it is never a direct edit or
-promotion. The immutable outcome keeps both attempt traces, while accepted
-first-pass records retain their original content and are not called again.
+For model requests, project the canonical output schema onto only result types
+present in the caller's task and remove unreachable definitions. Preserve schema
+declaration order, all surviving constraints, IDs and value domains. The public
+V1 output schema and full post-response validation remain unchanged. Bind the
+projection rule version into the recipe and the actual projected schema into
+request/cache identity. Verify all nonempty combinations of the five result
+types; an all-types task must retain the full schema. This reduces request
+complexity without treating smaller schemas as evidence of model correctness.
+
+When `maxAttempts` permits another inline attempt, only a recoverable rejected
+job continues. Feedback contains the previous bounded final assistant output
+from the failing phase and actionable contract guidance, without the oracle,
+target answer, hidden scenario label or exception details. A failed rewrite
+repairs rewriting; a valid rewrite followed by an invalid solver response
+retains the candidate state and repairs only the solver response. Recovery must
+reconstruct the same validated candidate from verified call caches after
+interruption or external repair. Every new solver response passes the complete
+validation sequence; no response is edited directly or promoted automatically.
+The immutable outcome retains attempt traces and call provenance. Accepted
+records are not called again.
+
+A schema-valid `solver-semantic-mismatch` is terminal for automatic recovery,
+both inline and through native `--repair-from`: preserve its quarantine for
+reference review rather than repeatedly cueing the model to change its label.
+No disagreement is evidence that the source reference or the model is correct.
+Ordinary structural validation remains strict, including the prohibition on an
+answerable predicate with value unknown. Feedback makes that constraint explicit.
+Calendar-year-end phrasing equivalences are permitted by the lexical guard;
+actual durations, rates, year values and calendar boundaries remain protected.
 
 The separate `--repair-from <run>` operation follows the immutable child-run
 contract in specification 08. It must additionally verify the native seed and
@@ -786,6 +829,13 @@ family snapshots, preserve accepted training lineage, and permit a fully
 processed coverage-failed parent. It does not relax coverage or promote
 quarantined rows. The new child retains all statuses in its outcome ledger;
 only accepted rows enter the published training lineage.
+
+These changes require a fresh generation-recipe identity. An older completed
+run stays intact and readable; changed source tasks/prompts must not be passed
+off as a same-recipe repair or continuation. New runs may reuse verified source
+downloads, but must not transplant old outcomes into changed tasks. A bounded
+sequential pilot precedes a new full run. Native integration and human quality
+qualification remain separate from offline recovery tests.
 
 ## Publication, coverage and completion
 
@@ -935,3 +985,55 @@ Training, assessor fitting, probability calibration, policy selection, runtime
 decision APIs, workflow automation, human-review tooling and production
 qualification are outside this data-only change. Frontend, hosted API, webhook,
 queue, PURISTA, Harness and Voyage work remain not applicable.
+
+## Explicit deterministic migration and question variants
+
+The approved migration path creates a new dataset from a verified completed
+native run without inference or downloads. It is separate from continuation and
+repair: prompt/transport revisions alone do not invalidate existing records.
+Retain compatible authored records with their exact historical generation
+provenance; reproject changed imported tasks from their pinned original annotations
+and current task definitions. Reprojected rows are source-annotation references,
+not claims of fresh blind model verification. Never convert reference disagreement
+into historical acceptance. Preserve the original run and all rejection evidence.
+
+Include the existing deterministic MultiDoGO, typed-decisions and TAT-QA projections
+after the same whole-group deduplication, contradiction, family and split checks.
+These rows can enter the explicitly diagnostic migrated dataset with their actual
+source-annotation or deterministic-computation status. This explicit offline import
+does not change the blind-verification requirement of ordinary curation extensions.
+Keep all five typed-decisions questions and original distributions in provenance;
+derive no model-confidence values. TAT-QA comparisons use the displayed numeric
+cells, never the original QA answer. Complete raw annotations stay linked by source
+record ID and immutable source snapshot digest.
+
+Derived question variants reuse the identical state, source rights, family and
+split. A complete, answerable multiselect reference can yield an exact-one choice
+question: one selected option yields that option; several yield a null answer and
+`multiple_valid_options`. Do not invent a primary intent, merge unrelated messages,
+or treat missing annotations as negative facts. Preserve German prose and stable
+English enums. New variants have distinct IDs and explicit deterministic parent
+links, not fabricated model-generation metadata.
+
+Every migrated row has a typed provenance entry linking original dataset IDs,
+source record IDs, annotation snapshot digests, source-rights IDs, parent records,
+transformation rule and evidence status. Export ordinary conversational JSONL and
+the full records through the existing artifact preparation/verification boundary.
+Preserve source restrictions and frozen family assignments. Count old published
+rows, retained/reprojected rows, added sources, variants, independent families,
+split/language totals, exclusions, review items and remaining inference tasks.
+
+`migrate-decisions --from-run RUN [--output DIR]` and `scripts/migrate-data` perform
+that offline operation with immutable resumable publication. A frozen pending queue
+contains only unresolved training tasks. Unchanged semantic disagreements go to
+review; changed question semantics can justify a fresh bounded verification task.
+`rerun-migrated-decisions --from-migration DIR [--output DIR] [--limit N]
+[--job-id RECORD_ID] [--progress auto|always|never]` and `scripts/rerun-migrated-data`
+operate only on that queue. Selection and recipe are hash-bound, completed outcomes
+and requests resume without new calls, and fatal transport errors preserve progress.
+Completed rejected jobs leave the pending queue for review; they are not repeatedly
+sampled until agreement. Successful rows are published with current verification
+and explicit ancestry in an immutable child containing the unchanged migrated rows.
+Neither command implicitly uploads, trains, changes source labels, or reassigns
+held-out families. Tests cover offline network prohibition, unchanged parent bytes,
+tamper rejection, exact labels/evidence, variants, rights, queue isolation and resume.

@@ -42,7 +42,7 @@ from .task_input import (
 
 _GENERATOR_PROMPT_VERSION = "candidate-scoped-input-v4"
 _CHECKER_PROMPT_VERSION = "candidate-independent-check-v6"
-_RETRY_FEEDBACK_VERSION = "rejection-only-untrusted-prefix-v1"
+_RETRY_FEEDBACK_VERSION = "rejection-only-untrusted-prefix-phase-specific-v2"
 _MAX_RETRY_FEEDBACK_CHARACTERS = 32_768
 _RETRY_FEEDBACK_INSTRUCTION = (
     "Correct the previous response and return the originally requested structured "
@@ -222,7 +222,7 @@ def _retry_feedback_recipe() -> dict[str, object]:
         "phasePolicy": {
             "candidate": "generator",
             "decisionAnnotate": "solver",
-            "decisionRewrite": "rewrite",
+            "decisionRewrite": "failed-phase-retain-validated-state",
         },
     }
 
@@ -419,13 +419,15 @@ def _prior_rejection_feedback(
     if (outcome.jobId != job.jobId and not allow_remapped_job) or outcome.status != "quarantined":
         raise ModelError("ARGUMENT_INVALID", "Repair requires this job's quarantined outcome")
     final_response: str | None = None
-    if outcome.attemptTrace:
-        for call in reversed(outcome.attemptTrace[-1].calls):
-            if preferred_phase is not None and call.phase != preferred_phase:
-                continue
-            if call.finalAssistantResponsePreview is not None:
-                final_response = call.finalAssistantResponsePreview
-                break
+    for attempt in reversed(outcome.attemptTrace):
+        selected = [
+            call
+            for call in attempt.calls
+            if preferred_phase is None or call.phase == preferred_phase
+        ]
+        if selected:
+            final_response = selected[-1].finalAssistantResponsePreview
+            break
     if retained_response is not None:
         final_response = retained_response
     return final_response, outcome.reason
@@ -449,7 +451,7 @@ def load_cached_final_response(cache_dir: Path, call_id: str) -> str | None:
     try:
         if "response" in payload:
             response = GenerationResponse.model_validate(payload["response"], strict=True)
-            return response.finalAssistantResponse
+            return _retained_response(response)[0]
         rejection = GenerationRejection.model_validate(payload["rejection"], strict=True)
         return rejection.finalAssistantResponse
     except ValidationError as error:

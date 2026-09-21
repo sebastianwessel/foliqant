@@ -7,8 +7,8 @@ from typing import Annotated
 
 from pydantic import BeforeValidator, Field, StringConstraints, field_validator
 
-from ..contracts.base import ContractModel
-from .decision_contracts import DecisionOption
+from .base import ContractModel
+from .contracts import DecisionOption
 
 _CATEGORY_KEY = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 

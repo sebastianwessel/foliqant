@@ -1,12 +1,34 @@
 module_boundary_version: 1
 modules:
-  - module_id: business-process-target
-    owner: workflow-proposal
-    public_entrypoint: service/README.md
-    public_symbols: []
-    owned_concepts: [proposed-process-configuration, proposed-task-plan, proposed-child-lifecycle]
-    allowed_dependencies: [versioned-language-neutral-decision-contract, typed-adapter-ports]
-    forbidden_dependencies: [model-training-runtime, provider-sdk-in-core, transport-client-in-core]
+  - module_id: service-core
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/core/__init__.py
+    public_symbols: [Identity, CapacityLimiter, ServiceError, freeze_json, thaw_json]
+    owned_concepts: [immutable-execution-values, bounded-admission, safe-error-codes]
+    allowed_dependencies: [standard-library, service-ports]
+    forbidden_dependencies: [pydantic, model-training-runtime, provider-sdk, transport-client]
+    architecture_check: service/tests/test_architecture.py
+  - module_id: service-contracts
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/contracts/envelope.py
+    public_symbols: [Envelope, Metadata, TraceCarrier, accept_envelope]
+    owned_concepts: [strict-envelope, protected-identity, boundary-to-core-mapping]
+    allowed_dependencies: [pydantic, service-core, shared-decision-contracts]
+    forbidden_dependencies: [model-training-runtime, provider-sdk, transport-client]
+  - module_id: service-blocking-execution
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/adapters/execution/blocking.py
+    public_symbols: [BlockingExecutor]
+    owned_concepts: [bounded-sdk-workers, worker-lifecycle, cancellation-capacity]
+    allowed_dependencies: [standard-library, service-core]
+    forbidden_dependencies: [model-training-runtime, transport-client]
+  - module_id: service-safe-logging
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/adapters/telemetry/logging.py
+    public_symbols: [LogEvent, LogLabels, SafeJsonFormatter, emit_event, configure_logging]
+    owned_concepts: [allowlisted-log-events, bounded-sanitized-log-queue]
+    allowed_dependencies: [standard-library, service-core]
+    forbidden_dependencies: [model-training-runtime, transport-client]
   - module_id: acquisition
     owner: model-tooling
     public_entrypoint: model/src/foliqant_model/acquisition.py

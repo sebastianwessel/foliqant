@@ -1,28 +1,44 @@
 reuse_inventory_version: 1
-discovery_revision: 7742096
+discovery_revision: working-tree-7e15ced-python-service-foundation
 assets:
+  - asset_id: service.envelope
+    kind: schema
+    path: ../service/src/foliqant/contracts/envelope.py
+    public_export: Envelope, Metadata, TraceCarrier, accept_envelope
+    owner: workflow-service
+    stability: experimental
+    consumers: [service-input-adapters, embedded-callers]
+    extension_policy: Keep protected identity and trace semantics aligned with specification 11.
+  - asset_id: service.admission
+    kind: module
+    path: ../service/src/foliqant/core/admission.py
+    public_export: CapacityLimiter
+    owner: workflow-service
+    stability: experimental
+    consumers: [service-engine, model-adapters, tool-adapters]
+    extension_policy: Local bounded resource admission; never imply global provider rate control.
   - asset_id: model.category-catalog
     kind: schema
-    path: ../model/src/foliqant_model/curation/category_catalog.py
+    path: ../packages/decision-contracts/src/foliqant_decisions/category_catalog.py
     public_export: CategoryCatalog, CategoryDefinition, normalize_category_key
     owner: native-decision-data
     stability: experimental
-    consumers: [caller-question-authoring]
+    consumers: [caller-question-authoring, service-compiler]
     extension_policy: Reuse DecisionOption; normalize new keys and check collisions;
       preserve V1 record readers and generation recipe identity.
   - asset_id: model.native-decision-contract
     kind: schema
-    path: ../model/src/foliqant_model/curation/decision_contracts.py
+    path: ../packages/decision-contracts/src/foliqant_decisions/contracts.py
     public_export: DecisionInput, DecisionOutput, Citation, RequestUnit, validate_decision_output
     owner: native-decision-data
     stability: versioned
-    consumers: [curation, future-business-decisions]
+    consumers: [curation, service-native-validation]
     extension_policy: Preserve V1 and existing jobs; specify a new version before adding
       per-label evidence, trusted thread metadata or extract. Do not duplicate task enums.
   - asset_id: concept.workflow-service
     kind: research
-    path: research/workflow-service-proposal.md
-    public_export: none; proposed workflow core and adapter boundaries
+    path: research/modular-workflow-service.md
+    public_export: none; proposed typed workflow core, Markdown/YAML authoring and adapter boundaries
     owner: workflow-proposal
     stability: experimental
     consumers: [future-process-branching]

@@ -1,5 +1,11 @@
 # Model lifecycle specifications
 
+Active service implementation: [Python workflow service](11-workflow-service.md)
+selects PydanticAI, current MCP/OAuth, protected identity/trace metadata, durable
+transports and safe OpenTelemetry. The [design rationale](research/modular-workflow-service.md)
+is historical where specification 11 supersedes it. Implementation acceptance is
+separate from design approval; current model lifecycle artifacts remain unchanged.
+
 Status: the complete local lifecycle is implemented and has native execution evidence, including shared/customer training, QLoRA, held-out evaluation, policy/audit and independent exported-model inference. Final review repairs and packaging checks are recorded in `plans/`; no formal human digest approval or financial production qualification is asserted. This directory owns implementation intent. `research/` records background, not additional requirements. User documentation belongs in `docs/` and explains the working product without implementation history.
 
 Read in order: [scope](00-vision.md), [lifecycle](01-model-lifecycle.md), [contracts](03-contracts/model-contracts.md), [operations](04-operations/security-release.md), [documentation and skills](05-documentation-and-skills.md), and [pinned backend](06-backend-and-dependencies.md), and [local setup](07-local-setup.md). The capability inventory and traceability register bind requirements to acceptance evidence. Later reviews must test behavior, not merely count files.

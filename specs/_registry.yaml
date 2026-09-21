@@ -1,5 +1,7 @@
 registry_version: 1
 contracts:
+  - id: CONTRACT-SERVICE-V1
+    path: 11-workflow-service.md
   - id: CONTRACT-BUSINESS-PROCESS-TARGET
     path: 10-business-decisions-and-processes.md
   - id: CONTRACT-MODEL-V1
@@ -11,6 +13,20 @@ contracts:
   - id: CONTRACT-NATIVE-DECISION-V1
     path: 09-native-decision-data.md
 capabilities:
+  - id: CAP-SERVICE-CONTRACTS
+    path: 11-workflow-service.md
+  - id: CAP-SERVICE-COMPILER
+    path: 11-workflow-service.md
+  - id: CAP-SERVICE-RUNTIME
+    path: 11-workflow-service.md
+  - id: CAP-SERVICE-MCP
+    path: 11-workflow-service.md
+  - id: CAP-SERVICE-DURABILITY
+    path: 11-workflow-service.md
+  - id: CAP-SERVICE-PRIVACY
+    path: 11-workflow-service.md
+  - id: CAP-SERVICE-DX
+    path: 11-workflow-service.md
   - id: CAP-BUSINESS-DECISIONS
     path: 10-business-decisions-and-processes.md
   - id: CAP-PROCESS-BRANCHING

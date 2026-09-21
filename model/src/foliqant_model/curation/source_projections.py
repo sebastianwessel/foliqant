@@ -10,9 +10,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Literal, cast
 
-from ..contracts.base import canonical_digest
-from .contracts import ImportedRecord
-from .decision_contracts import (
+from foliqant_decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,
@@ -36,6 +34,9 @@ from .decision_contracts import (
     PredicateQuestion,
     PredicateResult,
 )
+
+from ..contracts.base import canonical_digest
+from .contracts import ImportedRecord
 from .decision_seeds import DecisionSeed, _projected_seed
 
 PROJECTION_VERSION = "auxiliary-native-projections-v1"

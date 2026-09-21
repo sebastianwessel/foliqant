@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "DeclaredTool": {
+      "additionalProperties": false,
+      "description": "Operator-reviewed tool metadata used by offline compilation only.",
+      "properties": {
+        "effect": {
+          "enum": [
+            "read",
+            "write"
+          ],
+          "title": "Effect",
+          "type": "string"
+        },
+        "input_schema": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Input Schema",
+          "type": "object"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        }
+      },
+      "required": [
+        "input_schema",
+        "effect"
+      ],
+      "title": "DeclaredTool",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "tools": {
+      "additionalProperties": {
+        "$ref": "#/$defs/DeclaredTool"
+      },
+      "title": "Tools",
+      "type": "object"
+    }
+  },
+  "required": [
+    "tools"
+  ],
+  "title": "DeclaredToolCatalog",
+  "type": "object"
+}

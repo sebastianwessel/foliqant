@@ -4,11 +4,7 @@ import json
 from typing import Any, cast
 
 import pytest
-
-import foliqant_model.curation.source_projections as projection_module
-from foliqant_model.contracts import ChatMessage, DataRecord
-from foliqant_model.curation.contracts import ImportedRecord
-from foliqant_model.curation.decision_contracts import (
+from foliqant_decisions import (
     ChoiceResult,
     MultiselectQuestion,
     MultiselectResult,
@@ -17,6 +13,10 @@ from foliqant_model.curation.decision_contracts import (
     PredicateResult,
     validate_decision_output,
 )
+
+import foliqant_model.curation.source_projections as projection_module
+from foliqant_model.contracts import ChatMessage, DataRecord
+from foliqant_model.curation.contracts import ImportedRecord
 from foliqant_model.curation.source_projections import (
     PROJECTION_VERSION,
     project_auxiliary,

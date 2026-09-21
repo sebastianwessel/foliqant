@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from foliqant_decisions import semantic_signature
 from pydantic import ValidationError
 
 from ..artifacts import require_disjoint_output, sha256_file
@@ -15,7 +16,6 @@ from ..contracts.cli import ProjectionPreparationResult
 from ..contracts.inputs import FrozenFamilyAssignment, ResolvedSourceDeclaration
 from ..errors import ModelError
 from .contracts import CurationConfig, CurationPlan, ImportedRecord, SourceBatch
-from .decision_contracts import semantic_signature
 from .decision_seeds import DecisionSeed
 from .planning import freeze_sources
 from .projection_contracts import ProjectionPlan, ProjectionReport, ProjectionSourceCounts

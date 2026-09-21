@@ -183,9 +183,11 @@
           "export": "#/$defs/ExportSuccess",
           "fetch": "#/$defs/FetchSuccess",
           "merge": "#/$defs/MergeSuccess",
+          "migrate-decisions": "#/$defs/MigrateDecisionsSuccess",
           "prepare": "#/$defs/PrepareSuccess",
           "prepare-source-projections": "#/$defs/ProjectionPreparationSuccess",
           "quantize": "#/$defs/QuantizeSuccess",
+          "rerun-migrated-decisions": "#/$defs/RerunMigratedDecisionsSuccess",
           "schema": "#/$defs/SchemaSuccess",
           "setup": "#/$defs/SetupSuccess",
           "train": "#/$defs/TrainSuccess",
@@ -211,6 +213,12 @@
         },
         {
           "$ref": "#/$defs/ProjectionPreparationSuccess"
+        },
+        {
+          "$ref": "#/$defs/MigrateDecisionsSuccess"
+        },
+        {
+          "$ref": "#/$defs/RerunMigratedDecisionsSuccess"
         },
         {
           "$ref": "#/$defs/CurateSuccess"
@@ -252,6 +260,8 @@
         "fetch",
         "prepare",
         "prepare-source-projections",
+        "migrate-decisions",
+        "rerun-migrated-decisions",
         "curate",
         "quantize",
         "train",
@@ -888,6 +898,97 @@
       "title": "MergeSuccess",
       "type": "object"
     },
+    "MigrateDecisionsSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "migrate-decisions",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/MigrationResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "MigrateDecisionsSuccess",
+      "type": "object"
+    },
+    "MigrationResult": {
+      "additionalProperties": false,
+      "description": "Published migration paths and bounded remaining-work counts.",
+      "properties": {
+        "artifactId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Artifactid",
+          "type": "string"
+        },
+        "command": {
+          "enum": [
+            "migrate-decisions",
+            "rerun-migrated-decisions"
+          ],
+          "title": "Command",
+          "type": "string"
+        },
+        "datasetPath": {
+          "title": "Datasetpath",
+          "type": "string"
+        },
+        "migrationPath": {
+          "title": "Migrationpath",
+          "type": "string"
+        },
+        "pendingTasks": {
+          "minimum": 0,
+          "title": "Pendingtasks",
+          "type": "integer"
+        },
+        "records": {
+          "minimum": 0,
+          "title": "Records",
+          "type": "integer"
+        },
+        "reportPath": {
+          "title": "Reportpath",
+          "type": "string"
+        },
+        "reviewItems": {
+          "minimum": 0,
+          "title": "Reviewitems",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "migrationPath",
+        "datasetPath",
+        "artifactId",
+        "reportPath",
+        "records",
+        "pendingTasks",
+        "reviewItems"
+      ],
+      "title": "MigrationResult",
+      "type": "object"
+    },
     "PrepareResult": {
       "additionalProperties": false,
       "properties": {
@@ -1099,6 +1200,37 @@
         "result"
       ],
       "title": "QuantizeSuccess",
+      "type": "object"
+    },
+    "RerunMigratedDecisionsSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "rerun-migrated-decisions",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/MigrationResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "RerunMigratedDecisionsSuccess",
       "type": "object"
     },
     "RiskSampleSummary": {

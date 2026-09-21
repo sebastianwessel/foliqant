@@ -1,4 +1,10 @@
-# Architecture proposal
+# Earlier architecture proposal
+
+Superseded for workflow-service language, envelopes, authoring and provider/MCP
+integration by the [2026-09-21 modular service proposal](modular-workflow-service.md).
+This file retains the earlier rationale and example history; its Go and YAML
+recommendations are not the current proposed implementation direction. The model
+lifecycle remains separate and unchanged.
 
 Date: 2026-09-19. Status: proposed implementation design. The user's approved direction is the separation of model building, customization, serving, and a configurable modular workflow service. Language choice and the YAML syntax below remain recommendations, not implemented public APIs.
 

@@ -45,6 +45,19 @@ def _parser() -> argparse.ArgumentParser:
     projections.add_argument("--from-run", type=Path, required=True)
     projections.add_argument("--output", type=Path)
     projections.add_argument("--pilot", action="store_true", help="Prepare 32 new training tasks")
+    migrate = commands.add_parser(
+        "migrate-decisions", help="Migrate a completed native run without model calls"
+    )
+    migrate.add_argument("--from-run", type=Path, required=True)
+    migrate.add_argument("--output", type=Path)
+    rerun = commands.add_parser(
+        "rerun-migrated-decisions", help="Run selected pending tasks from a frozen migration"
+    )
+    rerun.add_argument("--from-migration", type=Path, required=True)
+    rerun.add_argument("--output", type=Path)
+    rerun.add_argument("--limit", type=int)
+    rerun.add_argument("--job-id", dest="job_ids", action="append", metavar="RECORD_ID")
+    rerun.add_argument("--progress", choices=("auto", "always", "never"), default="auto")
     curate = commands.add_parser("curate", help="Prepare or resume automated dataset curation")
     curate.add_argument("--config", type=Path, required=True)
     curate.add_argument("--workspace", type=Path)
@@ -132,6 +145,8 @@ def main(argv: list[str] | None = None) -> int:
                     "fetch",
                     "prepare",
                     "prepare-source-projections",
+                    "migrate-decisions",
+                    "rerun-migrated-decisions",
                     "curate",
                     "train",
                     "customize",
@@ -209,6 +224,60 @@ def main(argv: list[str] | None = None) -> int:
 
             payload = prepare_source_projections(
                 args.from_run, args.output, pilot=args.pilot
+            ).model_dump(mode="json")
+        elif command == "migrate-decisions":
+            from .contracts.cli import MigrationResult
+            from .curation.migration import migrate_decisions
+
+            migrated = migrate_decisions(args.from_run, args.output)
+            payload = MigrationResult.model_validate(
+                {
+                    "command": command,
+                    **{
+                        field: migrated[field]
+                        for field in (
+                            "migrationPath",
+                            "datasetPath",
+                            "artifactId",
+                            "reportPath",
+                            "records",
+                            "pendingTasks",
+                            "reviewItems",
+                        )
+                    },
+                },
+                strict=True,
+            ).model_dump(mode="json")
+        elif command == "rerun-migrated-decisions":
+            from .contracts.cli import MigrationResult
+            from .curation.migration_rerun import rerun_migration
+            from .curation.runtime import CurationControl
+
+            rerun_control = CurationControl(progress=args.progress, handle_signals=True)
+            rerun_result = rerun_migration(
+                args.from_migration,
+                args.output,
+                limit=args.limit,
+                job_ids=args.job_ids,
+                control=rerun_control,
+            )
+            payload = MigrationResult.model_validate(
+                {
+                    "command": command,
+                    **{
+                        field: rerun_result[field]
+                        for field in (
+                            "migrationPath",
+                            "datasetPath",
+                            "artifactId",
+                            "reportPath",
+                            "records",
+                            "pendingTasks",
+                            "reviewItems",
+                        )
+                    },
+                },
+                strict=True,
             ).model_dump(mode="json")
         elif command == "curate":
             from .curation.runner import run_curation

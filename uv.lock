@@ -328,10 +328,22 @@ wheels = [
 ]
 
 [[package]]
+name = "foliqant-decisions"
+version = "0.1.0"
+source = { directory = "packages/decision-contracts" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = "==2.13.5" }]
+
+[[package]]
 name = "foliqant-model"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "foliqant-decisions" },
     { name = "gguf" },
     { name = "huggingface-hub" },
     { name = "jsonschema" },
@@ -364,6 +376,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "foliqant-decisions", directory = "packages/decision-contracts" },
     { name = "gguf", specifier = "==0.19.0" },
     { name = "huggingface-hub", specifier = "==1.32.0" },
     { name = "jsonschema", specifier = "==4.26.0" },

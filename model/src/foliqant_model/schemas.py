@@ -7,6 +7,7 @@ import os
 import stat
 from pathlib import Path
 
+from foliqant_decisions import CategoryCatalog, DecisionInput, DecisionOutput
 from pydantic import BaseModel
 
 from .contracts import (
@@ -29,9 +30,8 @@ from .contracts import (
     WorkerResult,
 )
 from .contracts.cli import SchemaResult
-from .curation.category_catalog import CategoryCatalog
 from .curation.contracts import CandidateJob, CandidateOutcome, CurationConfig, CurationPlan
-from .curation.decision_contracts import DecisionInput, DecisionOutput
+from .curation.migration_contracts import MigrationPlan
 from .curation.projection_contracts import ProjectionPlan, ProjectionReport
 from .errors import ModelError
 
@@ -53,6 +53,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "generation-provenance.schema.json": GenerationProvenance,
     "leakage-entry.schema.json": LeakageEntry,
     "lock-owner.schema.json": LockOwner,
+    "migration-plan.schema.json": MigrationPlan,
     "prediction.schema.json": Prediction,
     "projection-plan.schema.json": ProjectionPlan,
     "projection-report.schema.json": ProjectionReport,

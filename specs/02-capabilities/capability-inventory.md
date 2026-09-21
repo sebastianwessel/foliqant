@@ -1,5 +1,18 @@
 # Capability inventory
 
+## Workflow service implementation
+
+Specification [11](../11-workflow-service.md) owns the service scope, entrypoints,
+contracts and acceptance families. These are implementation targets until verified.
+
+- `CAP-SERVICE-CONTRACTS` → `ACCEPT-SERVICE-CONTRACTS`.
+- `CAP-SERVICE-COMPILER` → `ACCEPT-SERVICE-COMPILER`.
+- `CAP-SERVICE-RUNTIME` → `ACCEPT-SERVICE-RUNTIME`.
+- `CAP-SERVICE-MCP` → `ACCEPT-SERVICE-MCP`.
+- `CAP-SERVICE-DURABILITY` → `ACCEPT-SERVICE-DURABILITY`.
+- `CAP-SERVICE-PRIVACY` → `ACCEPT-SERVICE-PRIVACY`.
+- `CAP-SERVICE-DX` → `ACCEPT-SERVICE-DX`.
+
 ## Proposed business-process extension
 
 These are unimplemented target capabilities owned by

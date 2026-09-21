@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from .decision_contracts import (
+from foliqant_decisions import (
     ChoiceQuestion,
     Citation,
     DecisionInput,

@@ -56,6 +56,19 @@ class ProjectionPreparationResult(ContractModel):
     selectedFamilies: NonNegativeInt
 
 
+class MigrationResult(ContractModel):
+    """Published migration paths and bounded remaining-work counts."""
+
+    command: Literal["migrate-decisions", "rerun-migrated-decisions"]
+    migrationPath: LocalPath
+    datasetPath: LocalPath
+    artifactId: Digest
+    reportPath: LocalPath
+    records: NonNegativeInt
+    pendingTasks: NonNegativeInt
+    reviewItems: NonNegativeInt
+
+
 class DoctorResult(ContractModel):
     command: Literal["doctor"]
     pythonVersion: NonEmptyStr
@@ -287,6 +300,7 @@ type CliResultValue = Annotated[
     | SetupResult
     | FetchResult
     | PrepareResult
+    | MigrationResult
     | CurateResult
     | QuantizeResult
     | TrainResult
@@ -334,6 +348,16 @@ class PrepareSuccess(_CliSuccessCommon):
 class ProjectionPreparationSuccess(_CliSuccessCommon):
     command: Literal["prepare-source-projections"]
     result: ProjectionPreparationResult
+
+
+class MigrateDecisionsSuccess(_CliSuccessCommon):
+    command: Literal["migrate-decisions"]
+    result: MigrationResult
+
+
+class RerunMigratedDecisionsSuccess(_CliSuccessCommon):
+    command: Literal["rerun-migrated-decisions"]
+    result: MigrationResult
 
 
 class CurateSuccess(_CliSuccessCommon):
@@ -393,6 +417,8 @@ type CliSuccessValue = Annotated[
     | FetchSuccess
     | PrepareSuccess
     | ProjectionPreparationSuccess
+    | MigrateDecisionsSuccess
+    | RerunMigratedDecisionsSuccess
     | CurateSuccess
     | QuantizeSuccess
     | TrainSuccess

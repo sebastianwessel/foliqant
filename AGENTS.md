@@ -1,8 +1,8 @@
 # Foliqant contributor guide
 
-Read `README.md`, `specs/README.md`, and the relevant area README before changing code. `specs/research/model-research.md` owns model research; `specs/research/workflow-service-proposal.md` owns the current service proposal. `specs/research/background/` is historical context, not a source of implementation requirements.
+Read `README.md`, `specs/README.md`, and the relevant area README before changing code. `specs/research/model-research.md` owns model research; `specs/11-workflow-service.md` owns the Python service implementation. `specs/research/background/` is historical context, not a source of implementation requirements.
 
-The local model lifecycle is implemented according to `specs/`; `docs/` is end-user material only. The workflow service remains a scaffold. Do not describe planned capabilities or illustrative YAML as implemented. The language recommendation and configuration syntax remain proposals until selected.
+The local model lifecycle is implemented according to `specs/`; `docs/` is end-user material only. The Python workflow service is under implementation in a separate uv project at `service/`. Read its specification and current implementation status; do not describe planned capabilities as implemented. Keep its environment and runtime dependencies separate from model tooling.
 
 Keep model development, customer customization, model serving, and workflow orchestration separate. Do not add dependencies on PURISTA, Harness, or Voyage without a new explicit decision. No Voyage work is in scope.
 

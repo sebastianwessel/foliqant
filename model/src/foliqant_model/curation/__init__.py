@@ -1,11 +1,12 @@
 """Automated local dataset curation."""
 
-from .category_catalog import (
+from foliqant_decisions import (
     CategoryCatalog,
     CategoryDefinition,
     CategoryKey,
     normalize_category_key,
 )
+
 from .endpoint import (
     EndpointModelIdentity,
     GenerationResponse,

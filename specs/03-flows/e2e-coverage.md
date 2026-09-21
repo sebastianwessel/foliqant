@@ -23,6 +23,24 @@ native dataset. Prepare-only ends after seed publication. Interruption resumes
 immutable outcomes. Network/integrity failure and coverage shortage never become
 semantic unanswerability or a completed-success result.
 
+Native recovery tests must distinguish invalid output from valid disagreement:
+preserve a verified rewritten state for solver-only correction, route rewrite
+defects to rewriting, retain phase-specific call history across interruption and
+external repair, and stop automatic label-chasing on semantic mismatch. Recovery
+must bind retained call hashes, schema and model identity before any endpoint
+request. Changed recipes reject incompatible repair/continuation rather than
+rewriting parent artifacts. Source projection tests cover all BANKING77 category
+definitions and WANLI neutral-as-relation behavior without fabricating missing
+facts. Legacy native records remain readable under their unchanged schema.
+
+Transport tests cover fragmented standard SSE, discarded reasoning, exact
+received-byte hashes, valid finish/usage/DONE framing, bounds and model identity.
+The 1,024-character unquoted JSON whitespace limit must retain exact partial
+final content and reach bounded phase repair, without firing inside escaped
+strings. Incomplete streams and timeouts remain fatal transport failures; no
+partial output, synthetic finish reason or silent fallback is accepted. A fresh
+sequential live pilot must qualify the changed request format before bulk use.
+
 ## Required behavioral cases
 
 The [semantic vectors](../03-contracts/fixtures/semantic-vectors.json) are language-neutral expected cases, not generated model outputs. Implement tests against actual parsers/scorers/loss masks, not copied test-only algorithms.
@@ -32,6 +50,7 @@ The [semantic vectors](../03-contracts/fixtures/semantic-vectors.json) are langu
 | Curation | Pinned imports, original holdouts, connected-family deduplication, conservative rights, loopback-only schema validation, automatic quarantine, immutable request cache, interruption/resume, and separate diagnostic regression publication. |
 | Native decision data | Every typed question/result variant; explicit absence versus unknown; exhaustive issue codes; explicit adequacy contracts; exact authored subject anchors; withdrawal and relation graph invariants; canonical reference-derived explanations; semantic date/value preservation; content-family isolation across values/paraphrases/translations; meaningful diversity counts; source projection verification with unreviewed status retained; accepted-parent-only train publication; no target leakage or held-out generation context; parent lineage; prepare/offline/resume; zero-acceptance and coverage-shortage OUTPUT_INVALID behavior with diagnostic state retained. |
 | Setup | Exact hashes/sizes, HTTPS-only redirects, offline hit/miss, corrupt-cache refusal, relative workspace paths, Git-ignore preflight, private outputs, unchanged rerun receipt and no implicit training. |
+| Explicit native migration | Offline reprojection from frozen annotations; unchanged authored/generated rows; complete source annotations and per-record rights links; same-state question variants retain scope, language and frozen family; source references never become model verification; pending-only generation, retained failed responses, immutable parents and cached resume. |
 | Parsing | Duplicate JSON/YAML keys, YAML aliases/tags, NaN, unknown fields, booleans where numeric values are required, oversized config/record and unsafe paths are rejected without printing content. |
 | Grouped data | A-B share a thread and B-C share a translation key: all three stay together regardless of source order. Reordering inputs yields identical partition contents. Four components give exactly one in each partition. |
 | Rights | Missing general training permission fails prepare; missing shared-training permission fails train. Private source without authorization fails. Restricted redistribution propagates through customization and export. |

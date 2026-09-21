@@ -1,5 +1,10 @@
 # Splash timeout and schema-order repair
 
+Historical incident report. Schema-order preservation remains implemented, but
+a different task in the new recovery pilot still times out. See
+[current verification](curation-recovery-source-quality.md); the successful
+checks below do not qualify the new recipe or establish a universal timeout fix.
+
 Date: 2026-09-20. Status: serialization repair implemented; bounded live checks
 passed. Full generation has not been restarted.
 

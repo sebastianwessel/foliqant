@@ -283,16 +283,15 @@ def initialize_repair_child(run: Path, repair: RepairPass, *, recipe_sha256: str
 def prior_response(repair: RepairPass, outcome: CandidateOutcome, *, phase: str) -> str | None:
     """Load the complete last retained response from the verified parent call cache."""
 
-    if not outcome.attemptTrace or not outcome.attemptTrace[-1].calls:
-        return None
     from .generation import load_cached_final_response
 
-    for call in reversed(outcome.attemptTrace[-1].calls):
-        if call.phase != phase or call.responseSource == "absent":
-            continue
-        response = load_cached_final_response(repair.parent / "requests", call.callId)
-        if response is not None:
-            return response
+    for attempt in reversed(outcome.attemptTrace):
+        for call in reversed(attempt.calls):
+            if call.phase != phase:
+                continue
+            if call.responseSource == "absent":
+                return None
+            return load_cached_final_response(repair.parent / "requests", call.callId)
     return None
 
 

@@ -1,7 +1,8 @@
 """Adequacy supervision must assess an explicit task, including required unknowns."""
 
+from foliqant_decisions import validate_decision_output
+
 from foliqant_model.curation.decision_adequacy_cases import build_adequacy_case
-from foliqant_model.curation.decision_contracts import validate_decision_output
 
 
 def test_all_adequacy_targets_have_explicit_tasks_and_grounded_assessment() -> None:

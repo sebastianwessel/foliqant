@@ -25,8 +25,12 @@ Recipe, task-contract and prompt changes create a fresh run identity. Resume
 only with the exact same recipe, effective `.env` and workspace; never copy or
 edit old request/outcome caches into a repaired run.
 
-The checked-in native recipes retain the default BANKING77/WANLI projection
-policy. Additional typed-decisions, MultiDoGO and TAT-QA mappings require an
+The native recipes project BANKING77 into choices with versioned editorial
+category definitions and WANLI into three-way text-relation choices. Neutral is
+an answerable relation category. These references remain unreviewed; valid model
+disagreement is quarantined without automatic label-chasing retries. Recoverable
+output errors receive phase-specific feedback, reusing an already valid rewrite.
+Additional typed-decisions, MultiDoGO and TAT-QA mappings require an
 explicit offline plan derived from an existing frozen run:
 
 ```sh

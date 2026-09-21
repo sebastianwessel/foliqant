@@ -1,5 +1,16 @@
 applicability_version: 1
 concerns:
+  - concern_id: service_runtime_security_and_operations
+    status: applicable
+    scope_refs: [CAP-SERVICE-CONTRACTS, CAP-SERVICE-COMPILER, CAP-SERVICE-RUNTIME,
+      CAP-SERVICE-MCP, CAP-SERVICE-DURABILITY, CAP-SERVICE-PRIVACY, CAP-SERVICE-DX]
+    rationale: Specification 11 covers HTTP/Redis/embedded execution, durable recovery,
+      authentication, MCP OAuth, privacy, telemetry, packaging and operator commands.
+  - concern_id: service_ui_cloud_deployment_and_model_training
+    status: not_applicable
+    scope_refs: [CAP-SERVICE-RUNTIME, CAP-SERVICE-DX]
+    rationale: Service implementation creates no hosted UI, cloud infrastructure or
+      training run; minimal CLI/HTTP examples and deployment artifacts are in scope.
   - concern_id: business_process_target_design
     status: applicable
     scope_refs: [CAP-BUSINESS-DECISIONS, CAP-PROCESS-BRANCHING, CAP-DOMAIN-DATA]

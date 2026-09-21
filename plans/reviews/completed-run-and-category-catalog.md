@@ -55,11 +55,14 @@ without inference and constructs a valid three-option question.
 
 ## Next sequence
 
-Run repair from the original checkout, which owns the matching `.env`, using
-the completed continuation as `--repair-from`. After repair completes, prepare
-new pilot/full projection plans against its child path. Plans prepared from the
-earlier continuation are not portable to the repair child. Review the sequential
-32-task projection pilot before a full extension.
+The subsequent [rejection investigation](completed-run-rejection-investigation.md)
+supersedes the initial recommendation to run repair immediately. Investigate and
+correct generic prompt/validation/recovery issues first; preserve questionable
+source labels in quarantine. No repair pass has run. If a repair or revised-recipe
+child is later chosen, prepare new pilot/full projection plans against that
+completed child. Plans prepared from the earlier continuation are not portable
+to a different parent. Review the sequential 32-task projection pilot before a
+full extension.
 
 NLU++ is the recommended next acquisition candidate; MAILEx follows for thread
 events after its external data files are pinned. Tobi-Bueck support tickets are

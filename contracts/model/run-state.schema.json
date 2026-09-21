@@ -44,6 +44,8 @@
         "fetch",
         "prepare",
         "prepare-source-projections",
+        "migrate-decisions",
+        "rerun-migrated-decisions",
         "curate",
         "quantize",
         "train",

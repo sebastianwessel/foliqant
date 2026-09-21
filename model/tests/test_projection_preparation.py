@@ -4,23 +4,12 @@ import json
 from pathlib import Path
 
 import pytest
-
-import foliqant_model.curation.projection_preparation as preparation
-from foliqant_model.contracts import ChatMessage, DataRecord
-from foliqant_model.contracts.base import canonical_digest
-from foliqant_model.curation.contracts import (
-    CurationConfig,
-    ImportedRecord,
-    SourceBatch,
-    SourceSelection,
-)
-from foliqant_model.curation.decision_contracts import (
+from foliqant_decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,
     ChoiceResult,
     Citation,
-    DecisionDataSettings,
     DecisionInput,
     DecisionOption,
     DecisionOutput,
@@ -31,6 +20,17 @@ from foliqant_model.curation.decision_contracts import (
     MultiselectQuestion,
     MultiselectResult,
 )
+
+import foliqant_model.curation.projection_preparation as preparation
+from foliqant_model.contracts import ChatMessage, DataRecord
+from foliqant_model.contracts.base import canonical_digest
+from foliqant_model.curation.contracts import (
+    CurationConfig,
+    ImportedRecord,
+    SourceBatch,
+    SourceSelection,
+)
+from foliqant_model.curation.decision_contracts import DecisionDataSettings
 from foliqant_model.curation.decision_seeds import _projected_seed
 from foliqant_model.curation.planning import freeze_sources
 from foliqant_model.curation.source_projections import ProjectionResult

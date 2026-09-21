@@ -3,22 +3,15 @@
 from __future__ import annotations
 
 import json
-from typing import Literal, TypedDict, cast
+from typing import Literal, TypedDict
 
-from pydantic import model_validator
-
-from ..contracts.base import ContractModel, NonEmptyStr, canonical_digest
-from ..contracts.inputs import ChatMessage, DataRecord
-from .contracts import ImportedRecord
-from .decision_adequacy_cases import build_adequacy_case
-from .decision_contracts import (
+from foliqant_decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,
     ChoiceResult,
     Citation,
     ConditionalRelation,
-    DecisionDataSettings,
     DecisionInput,
     DecisionOption,
     DecisionOutput,
@@ -44,11 +37,23 @@ from .decision_contracts import (
     RequestUnitsResult,
     RequiresRelation,
 )
+from pydantic import model_validator
+
+from ..contracts.base import ContractModel, NonEmptyStr, canonical_digest
+from ..contracts.inputs import ChatMessage, DataRecord
+from .contracts import ImportedRecord
+from .decision_adequacy_cases import build_adequacy_case
+from .decision_contracts import DecisionDataSettings
 from .decision_german_cases import localize_base_case
 from .decision_research_cases import build_research_case
+from .source_category_catalogs import (
+    BANKING77_CATALOG_VERSION,
+    banking77_catalog,
+    banking77_source_labels,
+)
 
 _SOURCE_ID = "foliqant-decisions"
-_RECIPE_VERSION = "native-decisions-v11"
+_RECIPE_VERSION = "native-decisions-v12"
 AUTHORED_CASES_PER_SCENARIO = 4
 _SYSTEM = (
     "Answer every caller-defined question using only its allowed state sources and criteria. "
@@ -62,7 +67,12 @@ _SYSTEM = (
     "summary mid-thought; revise it to fit. Choice, ordinal, "
     "multiselect, and request_units answers are null when not answerable or undetermined; "
     "predicate "
-    "uses value unknown. Status answerable means the allowed evidence is sufficient for the full "
+    "uses value unknown. For a predicate, true requires evidence for the proposition, false "
+    "requires evidence for its negation, and unknown means neither is established. An explicit "
+    "statement of absence can support false; absent evidence alone cannot. Predicate unknown "
+    "must use not_answerable or undetermined, never answerable. A choice asking for the relation "
+    "between two texts may be answerable with a neutral option; this is not predicate unknown. "
+    "Status answerable means the allowed evidence is sufficient for the full "
     "answer. Status partially_answerable applies only to a collection where some requested items "
     "are supported; return only those supported items and never create placeholders for missing "
     "material. A known gap in a requested collection prevents a complete answer even when all "
@@ -1209,15 +1219,35 @@ def _project_banking77(row: ImportedRecord) -> DecisionSeed | None:
         or intent not in labels
     ):
         return None
+    if len(labels) < 2 or len(labels) != len(set(labels)):
+        return None
+    if any(label not in banking77_source_labels() for label in labels):
+        return None
+    catalog = banking77_catalog(row.record.language)
+    options_by_id = {option.id: option for option in catalog.decision_options()}
+    option_ids = {label: catalog.resolve_id(label) for label in labels}
     if row.record.language == "de":
-        prompt = "Wähle die eine am besten passende Kategorie für Bankanfragen aus."
-        criteria = ["Verwende die Bedeutung der vollständigen Anfrage."]
-        summary = f"Die vollständige Anfrage entspricht der als {intent} beschriebenen Kategorie."
+        prompt = "Wähle die eine passende Kategorie für die vollständige Bankanfrage aus."
+        criteria = [
+            "Verwende Bedeutung und ausdrückliche Abgrenzungen der Kategoriebeschreibungen.",
+            "Diese versionierten redaktionellen Definitionen erläutern Quellbezeichnungen; "
+            "sie sind keine autoritative Goldannotation.",
+            "Erfinde bei überlappenden Kategorien keine exklusive Abgrenzung. Mehrere positiv "
+            "gestützte Optionen erfordern not_answerable mit multiple_valid_options; fehlende "
+            "Unterscheidungsmerkmale erfordern missing_information.",
+        ]
+        summary = f"Die vollständige Anfrage passt zur Kategorie {intent}."
     else:
-        prompt = "Choose the single best matching banking request category."
-        criteria = ["Use the meaning of the complete request."]
-        summary = f"The complete request matches the category described as {intent}."
-    option_ids = {label: f"label-{index:03d}" for index, label in enumerate(labels)}
+        prompt = "Choose the single matching category for the complete banking request."
+        criteria = [
+            "Use the meaning and explicit boundaries in the category descriptions.",
+            "These versioned editorial definitions explain source labels; they are not "
+            "authoritative gold annotations.",
+            "Do not invent exclusive boundaries for overlapping categories. Multiple positively "
+            "supported options require not_answerable with multiple_valid_options; missing "
+            "distinguishing facts require missing_information.",
+        ]
+        summary = f"The complete request matches the category {intent}."
     task = DecisionInput(
         state=DecisionState(sources=[DecisionSource(id="request", kind="message", text=request)]),
         questions=[
@@ -1227,7 +1257,7 @@ def _project_banking77(row: ImportedRecord) -> DecisionSeed | None:
                 prompt=prompt,
                 criteria=criteria,
                 allowedSourceIds=["request"],
-                options=[DecisionOption(id=option_ids[item], description=item) for item in labels],
+                options=[options_by_id[option_ids[item]] for item in labels],
             )
         ],
     )
@@ -1245,7 +1275,12 @@ def _project_banking77(row: ImportedRecord) -> DecisionSeed | None:
             )
         ]
     )
-    return _projected_seed(row, task, result)
+    return _projected_seed(
+        row,
+        task,
+        result,
+        projection_tags=[f"source-label:{intent}", f"category-catalog:{BANKING77_CATALOG_VERSION}"],
+    )
 
 
 def _project_wanli(row: ImportedRecord) -> DecisionSeed | None:
@@ -1257,80 +1292,125 @@ def _project_wanli(row: ImportedRecord) -> DecisionSeed | None:
     claim = source.get("claim") if isinstance(source, dict) else None
     evidence = source.get("evidence") if isinstance(source, dict) else None
     label = oracle.get("label") if isinstance(oracle, dict) else None
-    mapping = {"supported": "true", "contradicted": "false", "insufficient": "unknown"}
+    mapping = {
+        "supported": "entailment",
+        "contradicted": "contradiction",
+        "insufficient": "neutral",
+    }
     if not isinstance(claim, str) or not claim or not isinstance(evidence, str) or not evidence:
         return None
-    if label not in mapping:
+    if not isinstance(label, str) or label not in mapping:
         return None
-    value = cast(Literal["true", "false", "unknown"], mapping[label])
-    known = value != "unknown"
+    relation = mapping[label]
     if row.record.language == "de":
-        prompt = f"Belegen die bereitgestellten Nachweise diese Behauptung: {claim}"
+        prompt = "Bestimme die sprachliche Beziehung der Hypothese zur Prämisse."
         criteria = [
-            "Wahr erfordert eine Bestätigung, falsch einen Widerspruch, und unbekannt bedeutet, "
-            "dass keines von beiden belegt ist."
+            "Vergleiche die Bedeutung beider Texte; beurteile weder ihre Wahrheit in der Welt "
+            "noch lediglich, ob die Hypothese belegt ist.",
+            "Bewahre die Satzart: Fragen bleiben Fragen. Vergleiche den ausgedrückten oder "
+            "erfragten Inhalt; erfinde keine Antwort und forme Fragen nicht in Tatsachen um.",
+            "Neutral ist eine beantwortbare Textbeziehung, keine Behauptung fehlender Fakten "
+            "und kein unbekannter Prädikatswert. Erfinde keine fehlenden Fakten.",
         ]
-        summaries = {
-            "true": "Die Nachweise bestätigen die angegebene Behauptung.",
-            "false": "Die Nachweise widersprechen der angegebenen Behauptung.",
-            "unknown": "Die Nachweise bestätigen oder widerlegen die Behauptung nicht.",
+        descriptions = {
+            "entailment": "Die Hypothese folgt aus der Bedeutung der Prämisse, einschließlich "
+            "sinngleicher Formulierungen und ohne zusätzliche Annahmen.",
+            "contradiction": "Die Hypothese und die Prämisse drücken unvereinbare Inhalte aus. "
+            "Fehlende Bestätigung allein ist kein Widerspruch.",
+            "neutral": "Die Hypothese folgt weder aus der Prämisse noch steht sie in Widerspruch "
+            "zu ihr; die beiden Texte lassen beide Beziehungen unbelegt.",
         }
-        missing_fact = "Nachweise, welche die Behauptung bestätigen oder widerlegen."
+        summary = {
+            "entailment": "Die Bedeutung der Hypothese folgt aus der Prämisse.",
+            "contradiction": "Die Texte drücken unvereinbare Inhalte aus.",
+            "neutral": "Die Hypothese folgt weder aus der Prämisse noch widerspricht sie ihr.",
+        }[relation]
     else:
-        prompt = f"Does the supplied evidence establish this claim: {claim}"
+        prompt = "Classify the linguistic relation of the hypothesis to the premise."
         criteria = [
-            "True requires support, false requires contradiction, and unknown means neither is "
-            "established."
+            "Compare the meaning of both texts; do not judge their real-world truth or merely "
+            "whether the hypothesis is supported.",
+            "Preserve sentence form: questions remain questions. Compare the expressed or "
+            "requested content; do not invent an answer or convert questions into facts.",
+            "Neutral is an answerable text relation, not a missing-fact annotation or an "
+            "unknown predicate value. Do not invent missing facts.",
         ]
-        summaries = {
-            "true": "The evidence supports the stated claim.",
-            "false": "The evidence contradicts the stated claim.",
-            "unknown": "The evidence neither establishes nor contradicts the claim.",
+        descriptions = {
+            "entailment": "The hypothesis follows from the meaning of the premise, including "
+            "equivalent wording, without additional assumptions.",
+            "contradiction": "The hypothesis and premise express incompatible content. Lack "
+            "of support alone is not contradiction.",
+            "neutral": "The hypothesis neither follows from nor contradicts the premise; the "
+            "two texts establish neither of those relations.",
         }
-        missing_fact = "Evidence that establishes or contradicts the claim."
+        summary = {
+            "entailment": "The hypothesis follows from the meaning of the premise.",
+            "contradiction": "The texts express incompatible content.",
+            "neutral": "The hypothesis neither follows from nor contradicts the premise.",
+        }[relation]
     task = DecisionInput(
         state=DecisionState(
-            sources=[DecisionSource(id="evidence", kind="document", text=evidence)]
+            sources=[
+                DecisionSource(id="premise", kind="document", text=evidence),
+                DecisionSource(id="hypothesis", kind="document", text=claim),
+            ]
         ),
         questions=[
-            PredicateQuestion(
-                id="claim",
-                type="predicate",
+            ChoiceQuestion(
+                id="relation",
+                type="choice",
                 prompt=prompt,
                 criteria=criteria,
-                allowedSourceIds=["evidence"],
+                allowedSourceIds=["premise", "hypothesis"],
+                options=[
+                    DecisionOption(id=key, description=description)
+                    for key, description in descriptions.items()
+                ],
             )
         ],
     )
     result = DecisionOutput(
         results=[
-            PredicateResult(
-                questionId="claim",
-                type="predicate",
-                answerability=_answerability(
-                    "answerable" if known else "not_answerable",
-                    *(() if known else ("missing_information",)),
-                ),
-                answer=PredicateAnswer(value=value),
+            ChoiceResult(
+                questionId="relation",
+                type="choice",
+                answerability=_answerability("answerable"),
+                answer=ChoiceAnswer(optionId=relation),
                 explanation=_explanation(
-                    summaries[value],
-                    evidence=[_citation("evidence", evidence)] if known else [],
-                    missing=[] if known else [missing_fact],
+                    summary,
+                    evidence=[_citation("premise", evidence), _citation("hypothesis", claim)],
                 ),
             )
         ]
     )
-    return _projected_seed(row, task, result)
+    return _projected_seed(
+        row,
+        task,
+        result,
+        projection_tags=[f"source-label:{label}", f"source-nli-relation:{relation}"],
+    )
 
 
 def _projected_seed(
-    row: ImportedRecord, task: DecisionInput, oracle: DecisionOutput
+    row: ImportedRecord,
+    task: DecisionInput,
+    oracle: DecisionOutput,
+    *,
+    projection_tags: list[str] | None = None,
 ) -> DecisionSeed:
     source_id = f"native-{row.record.sourceId}"
     if row.record.familyId is None:
         raise ValueError("projected native decision source requires a frozen family")
     family_id = row.record.familyId
-    record_id = f"{source_id}.record.{canonical_digest(row.record.id)[:32]}"
+    projection_digest = canonical_digest(
+        {
+            "sourceRecordId": row.record.id,
+            "task": task.model_dump(mode="json"),
+            "oracle": oracle.model_dump(mode="json"),
+            "projectionTags": projection_tags or [],
+        }
+    )
+    record_id = f"{source_id}.record.{projection_digest[:32]}"
     parent = _record(
         record_id=record_id,
         source_id=source_id,
@@ -1344,6 +1424,7 @@ def _projected_seed(
             "native-decision",
             f"projection:{row.record.sourceId}",
             f"original-source-record:{row.record.id}",
+            *(projection_tags or []),
             *(f"question-type:{question.type}" for question in task.questions),
             *(f"answerability:{item.answerability.status}" for item in oracle.results),
         ],
@@ -1389,6 +1470,7 @@ def decision_seed_recipe_digest() -> str:
                 )
     return canonical_digest(
         {
+            "sourceProjections": _source_projection_recipe_payload(),
             "authoredCasesPerScenario": AUTHORED_CASES_PER_SCENARIO,
             "authoredCases": authored_cases,
             "counterfactualGroups": _COUNTERFACTUAL_GROUP,
@@ -1401,3 +1483,55 @@ def decision_seed_recipe_digest() -> str:
             "templateVariants": list(_TEMPLATE_VARIANTS),
         }
     )
+
+
+def _source_projection_recipe_payload() -> list[dict[str, object]]:
+    """Bind projection prompts, labels and complete catalogs to the run recipe."""
+
+    payloads: list[dict[str, object]] = []
+    for language in _LANGUAGE_INSTRUCTIONS:
+        for source_id, source, source_annotations in (
+            (
+                "banking77",
+                {"labels": list(banking77_source_labels()), "request": "<request>"},
+                [{"intent": banking77_source_labels()[0]}],
+            ),
+            (
+                "wanli",
+                {"claim": "<hypothesis>", "evidence": "<premise>"},
+                [{"label": label} for label in ("supported", "contradicted", "insufficient")],
+            ),
+        ):
+            for annotation in source_annotations:
+                row = ImportedRecord(
+                    record=DataRecord(
+                        schemaVersion=1,
+                        id=f"{source_id}.recipe",
+                        sourceId=source_id,
+                        language=language,
+                        groupKeys=[f"{source_id}:recipe"],
+                        messages=[
+                            ChatMessage(role="user", content=json.dumps(source)),
+                            ChatMessage(role="assistant", content=json.dumps(annotation)),
+                        ],
+                        tags=[],
+                        origin="synthetic",
+                        reviewed=False,
+                        familyId=f"{source_id}.recipe",
+                    ),
+                    originalSplit="train",
+                    originalId="recipe",
+                    task="classification" if source_id == "banking77" else "entailment",
+                )
+                projected = project_source(row)
+                if projected is None:
+                    raise ValueError("source projection recipe fixture must project")
+                payloads.append(
+                    {
+                        "language": language,
+                        "task": projected.input.model_dump(mode="json"),
+                        "oracle": projected.oracle.model_dump(mode="json"),
+                        "tags": projected.parent.tags,
+                    }
+                )
+    return payloads

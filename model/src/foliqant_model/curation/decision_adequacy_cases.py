@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from .decision_contracts import (
+from foliqant_decisions import (
     Answerability,
     Citation,
     DecisionInput,

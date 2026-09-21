@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .decision_contracts import (
+from foliqant_decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,

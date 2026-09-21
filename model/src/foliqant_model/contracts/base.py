@@ -9,11 +9,21 @@ import re
 from datetime import datetime
 from typing import Annotated, Literal
 
+from foliqant_decisions import (
+    ContractModel as ContractModel,
+)
+from foliqant_decisions import (
+    Id as Id,
+)
+from foliqant_decisions import (
+    NonEmptyStr as NonEmptyStr,
+)
+from foliqant_decisions import (
+    SchemaVersion as SchemaVersion,
+)
 from pydantic import (
     AfterValidator,
-    BaseModel,
     BeforeValidator,
-    ConfigDict,
     Field,
     StrictBool,
     StrictFloat,
@@ -22,18 +32,6 @@ from pydantic import (
     model_validator,
 )
 from pydantic.json_schema import SkipJsonSchema
-
-
-class ContractModel(BaseModel):
-    """Base for every closed strict contract object."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        strict=True,
-        validate_default=True,
-        populate_by_name=False,
-        serialize_by_alias=True,
-    )
 
 
 def canonical_digest(value: object) -> str:
@@ -47,12 +45,6 @@ def canonical_digest(value: object) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
-
-def _non_empty(value: str) -> str:
-    if not value:
-        raise ValueError("must be nonempty")
-    return value
 
 
 def _finite(value: float) -> float:
@@ -110,12 +102,6 @@ def _strict_true(value: object) -> object:
     return value
 
 
-def _strict_one(value: object) -> object:
-    if type(value) is not int or value != 1:
-        raise ValueError("must be the integer 1")
-    return value
-
-
 def _strict_false(value: object) -> object:
     if type(value) is not bool or value is not False:
         raise ValueError("must be the boolean false")
@@ -136,18 +122,6 @@ def _reject_explicit_null(value: object, *field_names: str) -> object:
     return value
 
 
-NonEmptyStr = Annotated[
-    str, StringConstraints(strict=True, min_length=1), AfterValidator(_non_empty)
-]
-Id = Annotated[
-    str,
-    StringConstraints(
-        strict=True,
-        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
-        min_length=1,
-        max_length=128,
-    ),
-]
 RunId = Annotated[
     str,
     StringConstraints(
@@ -187,8 +161,7 @@ UnitFloat = Annotated[FiniteFloat, Field(ge=0, le=1)]
 PositiveUnitFloat = Annotated[FiniteFloat, Field(gt=0, le=1)]
 StrictTrue = Annotated[Literal[True], BeforeValidator(_strict_true)]
 StrictFalse = Annotated[Literal[False], BeforeValidator(_strict_false)]
-SchemaVersion = Annotated[Literal[1], BeforeValidator(_strict_one)]
-StrictOne = Annotated[Literal[1], BeforeValidator(_strict_one)]
+StrictOne = SchemaVersion
 StrictZero = Annotated[Literal[0], BeforeValidator(_strict_zero)]
 
 type JsonValue = (
@@ -203,6 +176,8 @@ type Command = Literal[
     "fetch",
     "prepare",
     "prepare-source-projections",
+    "migrate-decisions",
+    "rerun-migrated-decisions",
     "curate",
     "quantize",
     "train",

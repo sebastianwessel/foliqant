@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import pytest
-from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
-from pydantic import ValidationError
-
-from foliqant_model.curation import CategoryCatalog, normalize_category_key
-from foliqant_model.curation.decision_contracts import (
+from foliqant_decisions import (
+    CategoryCatalog,
     ChoiceQuestion,
     DecisionInput,
     DecisionOutput,
     DecisionSource,
     DecisionState,
+    normalize_category_key,
     validate_decision_output,
 )
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
+from pydantic import ValidationError
 
 
 def _catalog() -> CategoryCatalog:

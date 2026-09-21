@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+runtime_python="$repo_root/.venv/bin/python"
+
+if [[ ! -x "$runtime_python" ]]; then
+  echo "The Foliqant environment is missing; run ./scripts/setup-model first" >&2
+  exit 3
+fi
+
+for argument in "$@"; do
+  if [[ "$argument" == "--help" || "$argument" == "-h" ]]; then
+    echo "Usage: ./scripts/migrate-data --from-run RUN [--output DIR]"
+    echo "Publish a deterministic migration from a completed native run without model calls."
+    exit 0
+  fi
+done
+
+exec "$runtime_python" -m foliqant_model migrate-decisions "$@"

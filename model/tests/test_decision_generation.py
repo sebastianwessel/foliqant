@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from foliqant_decisions import DecisionInput, DecisionOutput, DecisionSource
 
 from foliqant_model.contracts.base import canonical_digest
 from foliqant_model.contracts.inputs import ChatMessage, DataRecord, GenerationProvenance
@@ -15,7 +16,6 @@ from foliqant_model.curation.contracts import (
     CurationConfig,
     GenerationSettings,
 )
-from foliqant_model.curation.decision_contracts import DecisionInput, DecisionOutput, DecisionSource
 from foliqant_model.curation.decision_generation import (
     canonical_decision_output,
     generate_decision_candidate,
@@ -177,6 +177,8 @@ def test_annotate_blind_solves_without_exposing_oracle_and_keeps_exact_parent(
         messages = kwargs["messages"]
         assert isinstance(messages, list)
         observed.append(messages)
+        assert kwargs["schema"] == decision_generation._decision_output_schema(seed.input)
+        assert kwargs["schema"] != decision_generation._decision_output_schema()
         return "d" * 64, _response(generated.model_dump(mode="json"), marker="solve")
 
     monkeypatch.setattr(decision_generation, "_cached_generation", fake_cached)
@@ -612,12 +614,13 @@ def test_annotate_acceptance_returns_exact_parent_without_generation_provenance(
 def test_german_rewrite_publishes_german_reference_prose_with_english_enums(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from foliqant_model.curation.decision_contracts import (
+    from foliqant_decisions import (
         Citation,
-        DecisionDataSettings,
         RequestUnitsResult,
         validate_decision_output,
     )
+
+    from foliqant_model.curation.decision_contracts import DecisionDataSettings
     from foliqant_model.curation.decision_seeds import build_authored_seeds
 
     seed = next(
@@ -800,3 +803,524 @@ def test_solver_prompt_requests_a_grounded_concise_summary_without_truncation() 
     assert "second sentence only for a decisive limitation" in prompt
     assert "400-character schema limit" in prompt
     assert "truncate mid-thought" in prompt
+
+
+@pytest.mark.parametrize(
+    ("original", "rewritten"),
+    [
+        ("Payment is due at year-end 2025.", "Payment falls due at the end of 2025."),
+        ("By the end of the year 2030, pay EUR 40.", "Pay EUR 40 by year-end 2030."),
+        ("Zahlung zum Jahresende 2025.", "Die Zahlung erfolgt Ende 2025."),
+        ("Zahlung Ende des Jahres 2030.", "Die Zahlung erfolgt zum Jahresende 2030."),
+        ("At year-end 2025, the term is 5 years.", "At the end of 2025, the term is 5 years."),
+        ("Zum Jahresende 2025 läuft die Frist 5 Jahre.", "Ende 2025 läuft die Frist 5 Jahre."),
+    ],
+)
+def test_calendar_year_end_paraphrases_preserve_units(original: str, rewritten: str) -> None:
+    assert decision_generation._source_text_problem(original, rewritten) is None
+    assert decision_generation._source_text_problem(rewritten, original) is None
+
+
+@pytest.mark.parametrize(
+    ("original", "rewritten"),
+    [
+        ("Payment at year-end 2025.", "Payment in 2025."),
+        ("Zahlung zum Jahresende 2025.", "Zahlung im Jahr 2025."),
+        ("The term is 5 years.", "The term is 5."),
+        ("Die Frist beträgt 5 Jahre.", "Die Frist beträgt 5."),
+        ("At year-end 2025, the term is 5 years.", "At the end of 2025, the term is 5 months."),
+        ("Ende 2025 läuft die Frist 5 Jahre.", "Zum Jahresende 2025 läuft die Frist 5 Monate."),
+        ("At year-end 2025, pay EUR 40 per year.", "At the end of 2025, pay EUR 40 per month."),
+        ("Zum Jahresende 2025 sind 5 Prozent fällig.", "Ende 2025 sind 5 Basispunkte fällig."),
+        ("At year-end 2025, pay 5 percent.", "At year-end 2026, pay 5 percent."),
+    ],
+)
+def test_calendar_alias_does_not_weaken_boundaries_or_units(original: str, rewritten: str) -> None:
+    assert decision_generation._source_text_problem(original, rewritten) is not None
+
+
+def _rewritten_payload() -> dict[str, object]:
+    return {
+        "sources": [
+            {
+                "id": "message-1",
+                "kind": "message",
+                "text": 'EUR 40 is the transfer amount. "Please send a receipt."',
+            }
+        ]
+    }
+
+
+def _invalid_solver_payload() -> dict[str, object]:
+    payload = _output().model_dump(mode="json")
+    payload["results"][0]["answer"]["value"] = "unknown"
+    payload["results"][0]["explanation"]["evidence"][0]["quote"] = "invented quote"
+    return payload
+
+
+def _cached_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+    outputs: list[dict[str, object] | ModelError],
+) -> list[dict[str, object]]:
+    """Exercise the real immutable cache with deterministic offline endpoint responses."""
+    requests: list[dict[str, object]] = []
+
+    def generate(endpoint, **kwargs):  # type: ignore[no-untyped-def]
+        requests.append(kwargs)
+        output = outputs.pop(0)
+        if isinstance(output, ModelError):
+            raise output
+        request_digest = generation._generation_request_sha256(
+            endpoint,
+            model_id=kwargs["model_id"],
+            messages=kwargs["messages"],
+            schema=kwargs["schema"],
+            seed=kwargs["seed"],
+        )
+        return GenerationResponse(
+            model=kwargs["observed_identity"],
+            output=output,
+            finishReason="stop",
+            requestSha256=request_digest,
+            schemaSha256=canonical_digest(kwargs["schema"]),
+            rawResponseSha256=canonical_digest(output),
+            finalAssistantResponse=_json(output),
+            elapsedSeconds=0.1,
+        )
+
+    monkeypatch.setattr(generation, "generate_json", generate)
+    return requests
+
+
+def test_solver_retry_keeps_rewrite_and_repairs_actual_solver_response(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed = _seed(mode="rewrite")
+    requests = _cached_endpoint(
+        monkeypatch,
+        [_rewritten_payload(), _invalid_solver_payload(), _output().model_dump(mode="json")],
+    )
+    outcome = generate_decision_candidate(
+        _config(attempts=2), identity=_identity(), seed=seed, job=_job(seed), cache_dir=tmp_path
+    )
+    assert outcome.status == "accepted"
+    assert [[call.phase for call in trace.calls] for trace in outcome.attemptTrace] == [
+        ["rewrite", "solver"],
+        ["solver"],
+    ]
+    assert len(requests) == 3
+    messages = requests[-1]["messages"]
+    assert isinstance(messages, list)
+    assert json.loads(messages[-2].content) == _invalid_solver_payload()
+    feedback = json.loads(messages[-1].content)
+    assert feedback["phase"] == "solver"
+    assert {item["code"] for item in feedback["validationProblems"]} == {
+        "question:receipt-requested:unknown-on-answerable",
+        "question:receipt-requested:explanation:citation:0:quote-not-found",
+    }
+    assert "not_answerable" in _json(feedback)
+    assert all("PRIVATE ORACLE" not in message.content for message in messages)
+    assert json.loads(messages[-3].content)["state"] == _rewritten_payload()
+    assert outcome.record is not None
+    assert json.loads(outcome.record.messages[-2].content)["state"] == _rewritten_payload()
+
+
+def test_rewrite_defect_repairs_rewrite_before_any_solver_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed = _seed(mode="rewrite")
+    original = _task().state.model_dump(mode="json")
+    requests = _cached_endpoint(
+        monkeypatch, [original, _rewritten_payload(), _output().model_dump(mode="json")]
+    )
+    outcome = generate_decision_candidate(
+        _config(attempts=2), identity=_identity(), seed=seed, job=_job(seed), cache_dir=tmp_path
+    )
+    assert outcome.status == "accepted"
+    assert [[call.phase for call in trace.calls] for trace in outcome.attemptTrace] == [
+        ["rewrite"],
+        ["rewrite", "solver"],
+    ]
+    messages = requests[1]["messages"]
+    assert isinstance(messages, list)
+    assert json.loads(messages[-2].content) == original
+    assert json.loads(messages[-1].content)["phase"] == "rewrite"
+    solver_messages = requests[2]["messages"]
+    assert isinstance(solver_messages, list)
+    assert all("rejectionReason" not in message.content for message in solver_messages)
+
+
+def test_solver_interruption_resumes_cached_rewrite_and_rejection_deterministically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed = _seed(mode="rewrite")
+    requests = _cached_endpoint(
+        monkeypatch,
+        [
+            _rewritten_payload(),
+            _invalid_solver_payload(),
+            ModelError("TIMEOUT", "interrupted"),
+            _output().model_dump(mode="json"),
+        ],
+    )
+    kwargs = dict(identity=_identity(), seed=seed, job=_job(seed), cache_dir=tmp_path)
+    with pytest.raises(ModelError, match="interrupted"):
+        generate_decision_candidate(_config(attempts=2), **kwargs)
+    outcome = generate_decision_candidate(_config(attempts=2), **kwargs)
+    assert outcome.status == "accepted"
+    assert len(requests) == 4
+    assert requests[-2] == requests[-1]
+    assert generate_decision_candidate(_config(attempts=2), **kwargs) == outcome
+    assert len(requests) == 4
+    assert len(list((tmp_path / "calls").glob("*.json"))) == 3
+
+
+def test_external_solver_repair_recovers_last_valid_state_and_retains_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed = _seed(mode="rewrite")
+    requests = _cached_endpoint(
+        monkeypatch,
+        [
+            _rewritten_payload(),
+            _invalid_solver_payload(),
+            _invalid_solver_payload(),
+            _output().model_dump(mode="json"),
+        ],
+    )
+    config = _config(attempts=2)
+    parent = tmp_path / "parent"
+    prior = generate_decision_candidate(
+        config, identity=_identity(), seed=seed, job=_job(seed), cache_dir=parent
+    )
+    assert prior.status == "quarantined" and prior.attempts == 2
+    assert [call.phase for call in prior.attemptTrace[-1].calls] == ["solver"]
+    before = {path.name: path.read_bytes() for path in (parent / "calls").glob("*.json")}
+    child = tmp_path / "child"
+    job = _job(seed).model_copy(update={"jobId": "e" * 64})
+    kwargs = dict(
+        identity=_identity(),
+        seed=seed,
+        job=job,
+        cache_dir=child,
+        prior_rejection=prior,
+        prior_cache_dir=parent,
+        prior_response=_json(_invalid_solver_payload()),
+        request_namespace="repair-test",
+    )
+    repaired = generate_decision_candidate(config, **kwargs)
+    assert repaired.status == "accepted" and repaired.attempts == 1
+    assert len(requests) == 4
+    assert repaired.attemptTrace[0].calls[0] == prior.attemptTrace[0].calls[0]
+    assert repaired.record is not None
+    assert json.loads(repaired.record.messages[-2].content)["state"] == _rewritten_payload()
+    assert generate_decision_candidate(config, **kwargs) == repaired
+    assert len(requests) == 4
+    assert before == {path.name: path.read_bytes() for path in (parent / "calls").glob("*.json")}
+    assert (child / "calls" / (prior.attemptTrace[0].calls[0].callId + ".json")).exists()
+
+
+def test_semantic_mismatch_never_requests_another_label_inline_or_external(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed = _seed(mode="rewrite")
+    requests = _cached_endpoint(
+        monkeypatch, [_rewritten_payload(), _output(value="false").model_dump(mode="json")]
+    )
+    parent = tmp_path / "parent"
+    prior = generate_decision_candidate(
+        _config(attempts=3), identity=_identity(), seed=seed, job=_job(seed), cache_dir=parent
+    )
+    assert prior.reason == "solver-semantic-mismatch" and prior.attempts == 1
+    assert len(requests) == 2
+    job = _job(seed).model_copy(update={"jobId": "e" * 64})
+    repaired = generate_decision_candidate(
+        _config(attempts=3),
+        identity=_identity(),
+        seed=seed,
+        job=job,
+        cache_dir=tmp_path / "child",
+        prior_rejection=prior,
+        prior_cache_dir=parent,
+        request_namespace="repair-test",
+    )
+    assert repaired == prior.model_copy(update={"jobId": job.jobId})
+    assert len(requests) == 2
+
+
+def test_external_canonical_support_failure_repairs_rewrite_with_rewrite_response(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from foliqant_decisions import Citation
+
+    seed = _seed(mode="rewrite")
+    oracle = seed.oracle.model_copy(deep=True)
+    oracle.results[0].explanation.evidence = [
+        Citation(sourceId="message-1", quote=_task().state.sources[0].text)
+    ]
+    seed = seed.model_copy(
+        update={
+            "parent": seed.parent.model_copy(
+                update={
+                    "messages": [
+                        *seed.parent.messages[:-1],
+                        ChatMessage(
+                            role="assistant", content=_json(oracle.model_dump(mode="json"))
+                        ),
+                    ]
+                }
+            )
+        }
+    )
+    long_rewrite = _rewritten_payload()
+    long_rewrite["sources"][0]["text"] += " " + "word " * 1000
+    requests = _cached_endpoint(
+        monkeypatch,
+        [
+            long_rewrite,
+            _output().model_dump(mode="json"),
+            _rewritten_payload(),
+            _output().model_dump(mode="json"),
+        ],
+    )
+    parent = tmp_path / "parent"
+    prior = generate_decision_candidate(
+        _config(), identity=_identity(), seed=seed, job=_job(seed), cache_dir=parent
+    )
+    assert prior.reason == "rewrite-canonical-support-unmappable"
+    repaired = generate_decision_candidate(
+        _config(),
+        identity=_identity(),
+        seed=seed,
+        job=_job(seed).model_copy(update={"jobId": "e" * 64}),
+        cache_dir=tmp_path / "child",
+        prior_rejection=prior,
+        prior_cache_dir=parent,
+        request_namespace="repair-test",
+    )
+    assert repaired.status == "accepted"
+    assert len(requests) == 4
+    messages = requests[2]["messages"]
+    assert isinstance(messages, list)
+    assert json.loads(messages[-2].content) == long_rewrite
+    assert json.loads(messages[-1].content)["phase"] == "rewrite"
+
+
+def test_external_solver_repair_refuses_corrupted_retained_rewrite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed = _seed(mode="rewrite")
+    requests = _cached_endpoint(monkeypatch, [_rewritten_payload(), _invalid_solver_payload()])
+    parent = tmp_path / "parent"
+    prior = generate_decision_candidate(
+        _config(), identity=_identity(), seed=seed, job=_job(seed), cache_dir=parent
+    )
+    call = prior.attemptTrace[0].calls[0]
+    cache = parent / "calls" / (call.callId + ".json")
+    payload = json.loads(cache.read_text())
+    payload["payload"]["response"]["requestSha256"] = "f" * 64
+    payload["sha256"] = canonical_digest(payload["payload"])
+    cache.write_text(_json(payload))
+    with pytest.raises(ModelError, match="response identity changed"):
+        generate_decision_candidate(
+            _config(),
+            identity=_identity(),
+            seed=seed,
+            job=_job(seed).model_copy(update={"jobId": "e" * 64}),
+            cache_dir=tmp_path / "child",
+            prior_rejection=prior,
+            prior_cache_dir=parent,
+            request_namespace="repair-test",
+        )
+    assert len(requests) == 2
+
+
+def test_structured_repair_feedback_is_bounded_and_contains_no_validation_input() -> None:
+    invalid = _invalid_solver_payload()
+    # Untrusted invalid question IDs may be arbitrary; do not reproduce unlimited
+    # locations, raw exception context, expected targets, or arbitrary input values.
+    invalid["results"] = [
+        {**invalid["results"][0], "questionId": f"{index}-" + "x" * 500} for index in range(40)
+    ]
+    messages = decision_generation._decision_repair_messages(
+        [],
+        task=_task(),
+        phase="solver",
+        previous_response=_json(invalid),
+        reason="solver-output-invalid-" + "x" * 1000,
+    )
+    feedback = json.loads(messages[-1].content)
+    assert len(feedback["rejectionReason"]) == 256
+    assert len(feedback["validationProblems"]) == 16
+    assert feedback["problemsTruncated"] is True
+    assert all(len(problem["code"]) <= 256 for problem in feedback["validationProblems"])
+    assert "PRIVATE ORACLE" not in messages[-1].content
+    assert "input" not in feedback and "ctx" not in feedback
+    assert len(messages[-2].content) <= 32_768
+
+
+@pytest.mark.parametrize("field", ["requestSha256", "schemaSha256", "modelId", "metadataSha256"])
+def test_external_recovery_binds_response_to_original_call_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    seed = _seed(mode="rewrite")
+    requests = _cached_endpoint(monkeypatch, [_rewritten_payload(), _invalid_solver_payload()])
+    parent = tmp_path / "parent"
+    prior = generate_decision_candidate(
+        _config(), identity=_identity(), seed=seed, job=_job(seed), cache_dir=parent
+    )
+    call = prior.attemptTrace[0].calls[0]
+    cache = parent / "calls" / (call.callId + ".json")
+    envelope = json.loads(cache.read_text())
+    response = envelope["payload"]["response"]
+    if field in {"modelId", "metadataSha256"}:
+        response["model"][field] = "f" * 64
+    else:
+        response[field] = "f" * 64
+    if field == "requestSha256":
+        # Even a coherently altered trace must remain bound to the request ID
+        # inside the original immutable call identity, not merely to itself.
+        prior = prior.model_copy(deep=True)
+        prior.attemptTrace[0].calls[0] = call.model_copy(update={"requestSha256": "f" * 64})
+    envelope["sha256"] = canonical_digest(envelope["payload"])
+    cache.write_text(_json(envelope))
+    with pytest.raises(ModelError, match="Retained decision response identity changed"):
+        generate_decision_candidate(
+            _config(),
+            identity=_identity(),
+            seed=seed,
+            job=_job(seed).model_copy(update={"jobId": "e" * 64}),
+            cache_dir=tmp_path / "child",
+            prior_rejection=prior,
+            prior_cache_dir=parent,
+            request_namespace="repair-test",
+        )
+    assert len(requests) == 2
+
+
+def _solver_sse(content: str, *, model: str | None = None) -> bytes:
+    chunks = []
+    for delta, finish in [
+        ({"role": "assistant"}, None),
+        ({"reasoning_content": "PRIVATE REASONING NEVER PERSIST"}, None),
+        ({"content": content}, None),
+        ({}, "stop"),
+    ]:
+        chunks.append(
+            b"data: "
+            + _json(
+                {
+                    "id": "test-completion",
+                    "object": "chat.completion.chunk",
+                    "model": model or _identity().modelId,
+                    "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+                }
+            ).encode()
+            + b"\n\n"
+        )
+    return b"".join(chunks) + b"data: [DONE]\n\n"
+
+
+def _in_memory_sse_endpoint(
+    monkeypatch: pytest.MonkeyPatch, bodies: list[bytes]
+) -> list[dict[str, object]]:
+    """Exercise actual SSE validation/cache logic with no worker or network sockets."""
+    import io
+
+    from foliqant_model.curation import endpoint
+
+    requests: list[dict[str, object]] = []
+
+    class Response(io.BytesIO):
+        headers = {"Content-Type": "text/event-stream"}
+
+        def __init__(self, body: bytes, url: str):
+            super().__init__(body)
+            self.url = url
+
+        def geturl(self) -> str:
+            return self.url
+
+    class Opener:
+        def open(self, request, **kwargs):  # type: ignore[no-untyped-def]
+            requests.append(json.loads(request.data))
+            assert bodies, "Unexpected automatic endpoint retry"
+            return Response(bodies.pop(0), request.full_url)
+
+    def direct(config, **kwargs):  # type: ignore[no-untyped-def]
+        request = endpoint._GenerationRequest(
+            config=config,
+            modelId=kwargs["model_id"],
+            expectedModel=kwargs["observed_identity"],
+            messages=kwargs["messages"],
+            schema=kwargs["schema"],
+            seed=kwargs["seed"],
+        )
+        return endpoint._generate_json_direct(request)
+
+    monkeypatch.setattr(endpoint, "_opener", Opener)
+    monkeypatch.setattr(generation, "generate_json", direct)
+    return requests
+
+
+@pytest.mark.parametrize(
+    ("body", "code"),
+    [
+        (b"data: {malformed\n\n", "BACKEND_FAILED"),
+        (
+            _solver_sse(_json(_output().model_dump(mode="json")), model="changed-model"),
+            "INTEGRITY_FAILED",
+        ),
+    ],
+)
+def test_fatal_sse_failure_stops_generation_without_retry_or_quarantine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: bytes, code: str
+) -> None:
+    seed = _seed()
+    requests = _in_memory_sse_endpoint(monkeypatch, [body])
+    with pytest.raises(ModelError) as raised:
+        generate_decision_candidate(
+            _config(attempts=3), identity=_identity(), seed=seed, job=_job(seed), cache_dir=tmp_path
+        )
+    assert raised.value.code == code
+    assert len(requests) == 1
+    assert not list((tmp_path / "calls").glob("*.json"))
+
+
+def test_sse_whitespace_rejection_is_cached_and_repairs_only_solver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from foliqant_model.curation.storage import load_object
+
+    seed = _seed(mode="rewrite")
+    partial = '{"schemaVersion":1,"results":' + " " * 1024
+    requests = _in_memory_sse_endpoint(
+        monkeypatch,
+        [
+            _solver_sse(_json(_rewritten_payload())),
+            _solver_sse(partial),
+            _solver_sse(_json(_output().model_dump(mode="json"))),
+        ],
+    )
+    kwargs = dict(identity=_identity(), seed=seed, job=_job(seed), cache_dir=tmp_path)
+    outcome = generate_decision_candidate(_config(attempts=3), **kwargs)
+    assert outcome.status == "accepted" and outcome.attempts == 2
+    assert [[call.phase for call in trace.calls] for trace in outcome.attemptTrace] == [
+        ["rewrite", "solver"],
+        ["solver"],
+    ]
+    assert len(requests) == 3
+    messages = requests[-1]["messages"]
+    assert isinstance(messages, list)
+    assert messages[-2]["content"] == partial
+    assert json.loads(messages[-3]["content"])["state"] == _rewritten_payload()
+    rejected = outcome.attemptTrace[0].calls[-1]
+    payload = load_object(tmp_path / "calls" / (rejected.callId + ".json"))
+    assert isinstance(payload, dict)
+    retention = payload["rejection"]
+    assert retention["finalAssistantResponse"] == partial
+    assert retention["contentDiagnostic"] == "long-json-whitespace-run"
+    assert "finishReason" not in retention and "tokenUsage" not in retention
+    assert "PRIVATE REASONING" not in _json(payload)
+    assert generate_decision_candidate(_config(attempts=3), **kwargs) == outcome
+    assert len(requests) == 3

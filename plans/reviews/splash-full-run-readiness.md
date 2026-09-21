@@ -1,5 +1,11 @@
 # Splash generation defaults and bilingual readiness
 
+Historical evidence for the original recipe. The full continuation has since
+completed, and recovery/source mappings have changed. The current bounded pilot
+is incomplete because of a repeated solver timeout. Use
+[the current verification report](curation-recovery-source-quality.md) for
+present status; the start/resume guidance below is not current run advice.
+
 Date: 2026-09-20. Status: implemented; final live bilingual pilot, publication,
 and immutable resume verified for the original request format. The subsequent
 full-run timeout and corrected schema-order format are covered in the

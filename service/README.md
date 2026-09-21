@@ -1,16 +1,92 @@
 # Workflow service
 
-Proposed stack: Go with a standard-library core and separately wired adapters, including OpenTelemetry. No executable service or dependencies are present yet; see the [architecture](../specs/research/workflow-service-proposal.md) before choosing the implementation stack.
+This is the independent Python package for Foliqant workflow execution. Its
+implementation contract is [specification 11](../specs/11-workflow-service.md).
+PydanticAI owns model/tool conversations; the service owns deterministic routing,
+identity, authorization, admission, persistence and transports.
 
-`src/core/` owns graph execution, result validation, and deterministic routing. `src/ports/` owns extension interfaces. `src/adapters/` owns model endpoint, transport, and persistence implementations. Adapter imports must not flow back into core. Application startup will assemble an explicit registry of trusted adapters.
+Implementation is in progress. Available foundations are strict envelopes,
+protected metadata validation, immutable core values, safe errors and bounded
+async admission, bounded blocking-I/O execution, safe JSON logging, an offline
+workflow compiler and shared native decision validation. The executable CLI, model/MCP integration,
+durable transports and full application example are not yet complete. See the
+[implementation status](../plans/workflow-service-status.md) for verified scope.
 
-The first slice is one validated workflow, a fake model adapter, a real endpoint adapter, and synchronous local HTTP. Redis Streams requires the durable execution and delivery contract first. Keep dependency locks and runtime images separate from model tooling.
+## Development environment
 
-## Public-surface inventory
+Run from this directory:
 
-The [business-process design](../specs/10-business-decisions-and-processes.md)
-includes one parent case with multiple bounded child tasks, per-request evidence,
-explicit joins and recovery. This is future scope; the current illustrative
-single-route workflow is not a fan-out implementation.
+```sh
+uv sync --locked --all-extras --group dev
+uv run --no-sync python -m pytest tests
+uv run --no-sync mypy src
+uv run --no-sync ruff check src tests scripts
+uv run --no-sync ruff format --check src tests scripts
+uv run --no-sync python scripts/generate_schemas.py --check
+```
 
-There are no implemented public endpoints, adapter interfaces, step handlers, CLI commands, or durable manifests yet. The workflow and service YAML files are proposed examples. Replace this inventory with concrete signatures and execution semantics as each feature is implemented.
+The local shared decision-contract package is resolved through `tool.uv.sources`.
+Keep its source directory alongside this project when building from the repository.
+Production dependency installation uses `uv sync --locked --no-dev` with only
+the selected adapter extras, for example `--extra openai --extra http`. This is
+dependency separation, not a claim that the current foundations constitute a
+deployable service. The root model-tooling environment is separate.
+
+## Boundaries
+
+`core/` uses standard-library immutable values and async admission. `contracts/`
+validates external representations with Pydantic. Provider, transport, database,
+MCP and telemetry SDK imports belong under `adapters/`; bootstrap owns lifecycle.
+The runtime never imports model training or curation libraries.
+
+Input adapters must authenticate before binding `tenant_id` and `principal_id`.
+These protected metadata fields are independently optional; copying a body field
+into a trusted identity is not authentication. Use `decode_envelope` for untrusted
+JSON and `accept_envelope` to check claims against verified identity. Pydantic
+exceptions may contain input values and must not reach clients or telemetry.
+
+Capacity limits are local to each resource and replica. They prevent an unbounded
+in-process queue; they do not promise distributed provider-wide rate limiting.
+Cancellation releases local capacity but cannot prove a remote mutation stopped.
+
+## Offline compilation
+
+`foliqant.compiler.compile_workflow` reads one workflow directory and explicit
+model/tool/handler registries. It never discovers endpoints or invokes a model.
+Its frozen plan includes exact source revisions, schema resources, bindings and
+validated routes. The shared native decision adapter checks output structure,
+catalog membership and evidence against the actual input before producing route
+facts. Uncertainty remains explicit; it does not become a successful route.
+
+Authoring accepts safe YAML and Markdown frontmatter. Duplicate keys, custom
+tags and YAML aliases are rejected. Workflow schemas support confined local files
+and fragments; declared tool schemas use internal fragments only. Schema `$id`
+is unsupported, with depth and node limits enforced. JSON data inside schema
+`const`, `default` and examples is not interpreted as schema instructions.
+Generate/check the four public schemas using the development commands above.
+
+## Async execution rules
+
+Use native async clients for HTTP, databases, Redis and MCP. Do not call a
+synchronous SDK directly from an async handler. For a blocking-only integration,
+`adapters.execution.blocking.BlockingExecutor` owns a bounded worker pool, copies
+task-local context and rejects excess work before creating an internal task.
+Configure the SDK's own network timeout as well as the caller's deadline.
+
+Cancelling or timing out a queued operation prevents it from starting. A started
+blocking operation keeps its capacity until the worker actually finishes, even
+after its caller stops waiting. This prevents abandoned requests from exceeding
+the configured limit. It does not prove whether a remote side effect happened;
+mutation recovery must reconcile that outcome before retrying.
+
+At shutdown, stop intake and call `await executor.aclose(timeout=...)`. A false
+result means a worker remains active. Python cannot forcibly stop that thread,
+and it may delay interpreter exit. Native async adapters still need bounded
+cancellation and their own client cleanup.
+
+Safe logging queues only sanitized JSON strings, with bounded capacity. Slow
+stderr does not block the event loop; overflow is counted in `dropped_records`.
+The bootstrap owns the returned logging runtime and drains it outside the event
+loop using `await asyncio.to_thread(runtime.close, timeout=...)`, checking the
+boolean outcome. These are tested primitives; full transport/provider scaling
+and durability acceptance remain part of the ongoing implementation.

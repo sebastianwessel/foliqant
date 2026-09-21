@@ -36,7 +36,7 @@ an installed selected model when a request arrives, according to its own loading
 
 The wrapper reads the ignored root `.env` and applies the checked allowlist in
 [`.env.example`](../../.env.example). This is the usual place to choose your
-loaded model, endpoint limits and output transport mode. The YAML recipe remains
+loaded model, endpoint limits and structured-output mode. The YAML recipe remains
 the versioned baseline; `.env` remains local to your machine.
 
 ## Prepare the public sources first
@@ -106,6 +106,14 @@ Generation requires a final response with `finish_reason: stop` and content that
 matches the requested JSON Schema. Some runtime and model combinations respond
 without usable final structured content; those attempts are rejected or
 quarantined instead of being treated as records.
+
+The endpoint must support standard OpenAI chat-completion SSE and streamed
+usage requests. Streaming is internal: the CLI still returns one final JSON
+result. Reasoning text is never retained. A run of 1,024 JSON whitespace
+characters outside strings is stopped as `long-json-whitespace-run`; its exact
+partial final answer is retained for the normal bounded phase repair. No partial
+answer is accepted, and no whitespace or malformed quotation is silently fixed.
+Transport errors and timeouts still stop the run without an automatic retry.
 
 Each private `outcomes/<jobId>.json` records the status and safe reason for every
 attempt. Its call trace contains request/response digests, a stable `callId`, and

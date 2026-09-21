@@ -3,6 +3,7 @@
 ## Contents
 
 - [Native decision data](#native-decision-data)
+  - [Explicit completed-run migration](#explicit-completed-run-migration)
 - [Existing setup and auxiliary curation](#existing-setup-and-auxiliary-curation)
 
 ## Native decision data
@@ -27,15 +28,36 @@ change configuration/request/cache identity; resume only unchanged settings.
 
 Preserve declared schema order through worker IPC, prompt-mode text and HTTP
 requests. Do not reuse sorted artifact serialization for model prompts. Request
-format `declared-schema-order-v2` hashes exact HTTP bytes, binds that hash into
+format `declared-schema-order-sse-v3` hashes exact HTTP bytes, binds that hash into
 call identity, and versions both generation recipes. It creates new runs;
 earlier caches and outcomes remain untouched and must not be copied into a new
 run as if generated with its prompts.
 
+Generation uses standard OpenAI SSE internally, with streamed usage requested;
+there is no transport toggle or silent nonstreaming fallback. Discard reasoning
+text and retain only final content plus safe metadata. After 1,024 consecutive
+unquoted JSON whitespace characters, close the response and retain exact partial
+final content as `long-json-whitespace-run` for bounded phase-specific repair.
+This operational limit is not JSON syntax validation; never apply it inside
+strings, delete whitespace, fix quotes or invent a finish reason/usage. Incomplete
+streams, malformed events and timeouts remain transport failures, not accepted
+answers or automatic retry opportunities.
+
+Solver requests omit unused result types and unreachable schema definitions
+according to the task. Preserve declaration order and full V1 validation; do
+not loosen constraints, expose reference answers or specialize to expected
+values. Schema projection has its own recipe version and affects request/cache
+identity. A smaller schema is not, by itself, evidence of better model quality.
+
 ### Scoped offline source projections
 
-Default native generation continues to project only the legacy compatible
-sources. typed-decisions, MultiDoGO and TAT-QA native mappings require an
+Default native generation projects BANKING77 as intent choices with complete
+versioned editorial category definitions and WANLI as text-relation choices
+(`entailment`, `contradiction`, `neutral`). Neutral is an answerable relation
+category, not a native truth predicate or a fabricated missing-fact annotation.
+Both source texts and original annotations remain available. Category definitions
+do not make source labels authoritative, and ambiguous source disagreements
+remain quarantined. typed-decisions, MultiDoGO and TAT-QA native mappings require an
 explicit immutable plan:
 
 ```sh
@@ -106,6 +128,57 @@ annotations in `source-corpus`; derived native tasks remain English, inherit the
 frozen family/split, and create no translations. These projections remain
 unreviewed research data.
 
+### Explicit completed-run migration
+
+Use migration only for a completed native run that should be republished with
+the current deterministic migration recipe:
+
+```sh
+./scripts/migrate-data --from-run /absolute/path/to/completed-run \
+  --output /absolute/path/to/new-migration
+```
+
+`foliqant-model migrate-decisions` accepts the same options. This operation is
+offline: no source download, model discovery, or inference. It validates the
+parent's immutable inputs and publishes a separate plan and dataset. Do not edit
+or advance the parent.
+
+Migration and continuation solve different problems. `--continue-from` retains
+one compatible recipe and finishes work that was never attempted. Migration
+applies versioned deterministic source projections and question transforms to a
+completed snapshot, with new identities and explicit ancestry. Never copy old
+outcomes into changed tasks or describe migration as continuation.
+
+For every annotation-complete answerable multiselect selected by the migration,
+derive two single-question records over the identical state and original
+applicability policy: the isolated multiselect and a cardinality-one choice. A
+single selected label remains the choice answer. Multiple selected labels make
+the choice `not_answerable` with `multiple_valid_options` and a null answer.
+Preserve exact citations, family, split, source rights, English/German prose and
+English contract enums. Do not invent a primary label, unsupported negative
+label, priority, or closed-world predicate.
+
+Each row records its original dataset record, immutable snapshot, rights source,
+parents, rule and evidence status. Source annotations and deterministic
+computations are references, not model checks. Reserve `model-verified` for a
+fresh pending-task rerun that passes the normal semantic and evidence validation.
+Keep exclusions and disputes in review rather than relabeling them.
+
+The migration freezes eligible unfinished train tasks in `pending`. Rerun all or
+an explicit bounded subset in a separate immutable child:
+
+```sh
+./scripts/rerun-migrated-data --from-migration /absolute/path/to/migration \
+  --limit 8 --job-id native-record-id --progress always
+```
+
+Repeat `--job-id` to select several pending record IDs. Without IDs, selection
+uses the sorted pending queue; `--limit` bounds it. This command performs local
+inference with the saved model identity, without discovery or model
+substitution. It must reject review items and non-training families. Repeat the
+exact command to resume immutable outcomes after interruption. Do not call the
+offline migration itself model-validated because a later pending subset ran.
+
 For an interrupted native run after a generator update, use explicit
 `./scripts/generate-data --continue-from /absolute/path/to/old-run --progress always`.
 It carries completed accepted AND quarantined outcomes unchanged into a child,
@@ -159,6 +232,9 @@ the hard contract maximum is 400 characters. Never truncate a summary; invalid
 oversized output stays in the ordinary rejection and repair flow. Citation
 quotes, `missingFacts`, and the complete explanation object do not inherit the
 summary bound.
+Paraphrase summaries and keep verbatim quotations in citation fields. JSON-escape
+quotes, backslashes and control characters while preserving exact decoded quote
+text. Never repair malformed output by silently editing quotes or source evidence.
 
 Coverage gates count accepted candidate jobs, not published rows or attempts.
 An accepted projection verifies and publishes the exact parent once, without
@@ -175,13 +251,34 @@ identity and never mutate or relabel old caches.
 For a separate correction pass, use `./scripts/generate-data --repair-from RUN`
 (or `./scripts/curate-data --repair-from RUN` for generic curation), retaining
 the parent's pilot/custom recipe, workspace and effective environment settings.
-Only quarantined jobs are called again; accepted rows are carried unchanged into
-an immutable child. The same command resumes that child, and using the child as
+Only recoverable quarantined native jobs are called again; accepted rows are
+carried unchanged into an immutable child. Schema-valid semantic disagreements
+remain quarantined for source/task review without label-chasing requests.
+Generic curation retains its separate rejection-only repair behavior. A valid
+rewritten state is retained when its solver response fails; feedback belongs to
+the failing phase and must not contain the expected reference answer. The same
+command resumes that child, and using the child as
 `RUN` starts another pass. The parent must have finished all jobs; a coverage
 failure is allowed, a paused/incomplete run is not. Config, recipe, model and
 frozen plans must match. Do not alter old cached responses or imply that missing
 historical response text can be recovered. Publication still requires ordinary
 validation and coverage, and generated rows remain unreviewed.
+When every remaining native quarantine is a semantic disagreement, repair stops
+before discovery or child creation and requires reference review.
+
+Inspect failure categories and representative retained responses before proposing
+repair. Source labels can be noisy and categories can be underspecified; reference
+agreement is not correctness. New prompt, validator or projection behavior creates
+a fresh recipe/run and cannot silently repair an old incompatible parent. Reuse
+verified source downloads, keep old artifacts readable, and run a bounded
+sequential pilot plus source controls before a new full run. Do not discard old
+data or transfer old outcomes into changed tasks. The default 16-job pilot covers
+authored cases, not source-mapping qualification.
+
+For truncations, inspect final content and optional bounded finish-reason/token
+usage diagnostics. Missing or malformed provider usage is unavailable, not zero;
+no internal reasoning text is stored. Do not automatically increase token limits
+or disable reasoning when malformed generation is the observed problem.
 
 Projection plans are bound to one exact parent. After repairing a run, prepare
 fresh pilot/full plans from the completed repair child; do not apply an earlier
@@ -260,7 +357,7 @@ production qualification remain separate activities. See
 
 ## Category catalogs
 
-Use `CategoryCatalog` from `foliqant_model.curation.category_catalog` to author
+Use `CategoryCatalog` from `foliqant_decisions.category_catalog` to author
 new categories with `id` and nonblank `description`, then `decision_options()`
 to build existing choice/multiselect/request-unit questions. Explain category
 inclusion, exclusion and neighboring boundaries in descriptions; do not rely on

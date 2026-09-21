@@ -189,7 +189,7 @@ def test_prepare_publishes_projected_source_with_sorted_combined_families(
         attribution="test banking source",
         restrictions=["Inherited banking test restriction"],
     )
-    labels = ["cash_withdrawal", "card_payment"]
+    labels = ["cash_withdrawal_charge", "card_payment_fee_charged"]
     rows: list[ImportedRecord] = []
     source_splits = ("train", "train", "validation", "calibration", "test")
     for index, split in enumerate(source_splits):
@@ -207,7 +207,7 @@ def test_prepare_publishes_projected_source_with_sorted_combined_families(
                     content=json.dumps(
                         {
                             "labels": labels,
-                            "request": f"Cash withdrawal request example {index}",
+                            "request": f"Cash withdrawal fee request example {index}",
                         },
                         sort_keys=True,
                         separators=(",", ":"),
@@ -216,7 +216,7 @@ def test_prepare_publishes_projected_source_with_sorted_combined_families(
                 ChatMessage(
                     role="assistant",
                     content=json.dumps(
-                        {"intent": "cash_withdrawal"},
+                        {"intent": "cash_withdrawal_charge"},
                         sort_keys=True,
                         separators=(",", ":"),
                     ),
@@ -388,7 +388,7 @@ def test_bilingual_pilot_covers_both_languages_without_splitting_translations() 
 
 
 def test_eight_job_english_pilot_covers_answer_types_and_failure_modes() -> None:
-    from foliqant_model.curation.decision_contracts import DecisionInput
+    from foliqant_decisions import DecisionInput
 
     seeds = build_authored_seeds(DecisionDataSettings(), seed=42, languages=["en"])
     families = {
@@ -595,8 +595,9 @@ def test_equivalent_native_task_cannot_cross_frozen_families() -> None:
 
 
 def test_answer_bearing_identity_keeps_every_allowed_source() -> None:
+    from foliqant_decisions import DecisionSource
+
     from foliqant_model.contracts.inputs import ChatMessage
-    from foliqant_model.curation.decision_contracts import DecisionSource
     from foliqant_model.curation.decision_runner import _task_identities
 
     seed = build_authored_seeds(DecisionDataSettings(), seed=42, languages=["en"])[0]
@@ -633,6 +634,8 @@ def test_projected_duplicates_are_excluded_before_the_source_cap(
 ) -> None:
     import json
 
+    from foliqant_decisions import DecisionSource
+
     from foliqant_model.contracts.inputs import (
         ChatMessage,
         DataRecord,
@@ -640,9 +643,8 @@ def test_projected_duplicates_are_excluded_before_the_source_cap(
     )
     from foliqant_model.curation import decision_runner as runner
     from foliqant_model.curation.contracts import CurationPlan, ImportedRecord
-    from foliqant_model.curation.decision_contracts import DecisionSource
 
-    labels = ["cash_withdrawal", "card_payment"]
+    labels = ["cash_withdrawal_charge", "card_payment_fee_charged"]
     requests = {
         "exact-a": "Repeated cash request.",
         "exact-b": "Repeated cash request.",
@@ -671,7 +673,7 @@ def test_projected_duplicates_are_excluded_before_the_source_cap(
                         {"labels": labels, "request": request}, separators=(",", ":")
                     ),
                 ),
-                ChatMessage(role="assistant", content='{"intent":"cash_withdrawal"}'),
+                ChatMessage(role="assistant", content='{"intent":"cash_withdrawal_charge"}'),
             ],
         )
         rows.append(
@@ -870,8 +872,9 @@ def test_cached_reference_prose_cannot_be_replaced_by_matching_label() -> None:
 
 
 def test_cached_rewrite_cannot_change_uncited_metadata() -> None:
+    from foliqant_decisions import DecisionSource
+
     from foliqant_model.contracts.inputs import ChatMessage
-    from foliqant_model.curation.decision_contracts import DecisionSource
     from foliqant_model.curation.decision_runner import _validate_record
     from foliqant_model.errors import ModelError
 
@@ -981,11 +984,13 @@ def test_native_repair_run_retries_only_rejects_and_preserves_parent(
         cache_dir,
         prior_rejection,
         prior_response,
+        prior_cache_dir,
         request_namespace,
     ):  # type: ignore[no-untyped-def]
         assert prior_rejection.jobId == rejected_job.jobId
         assert prior_rejection.status == "quarantined"
         assert prior_response is None
+        assert prior_cache_dir == parent / "requests"
         assert request_namespace.startswith("repair-")
         repair_calls.append(job)
         return accepted_generator(
@@ -1101,7 +1106,7 @@ def test_continue_partial_native_run_after_recipe_change_preserves_work(
     }
 
     def repair(config, **kwargs):  # type: ignore[no-untyped-def]
-        for key in ("prior_rejection", "prior_response", "request_namespace"):
+        for key in ("prior_rejection", "prior_response", "prior_cache_dir", "request_namespace"):
             kwargs.pop(key)
         return generate(config, **kwargs)
 
@@ -1121,3 +1126,58 @@ def test_continue_partial_native_run_after_recipe_change_preserves_work(
     with pytest.raises(ModelError):
         runner.run_decision_curation(config, tmp_path, continue_from=parent)
     assert len(calls) == 3
+
+
+def test_native_semantic_only_repair_requires_review_before_discovery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from foliqant_model.curation import decision_runner as runner
+    from foliqant_model.curation.contracts import CandidateOutcome
+    from foliqant_model.errors import ModelError
+
+    _install_test_pipeline(monkeypatch)
+    config = CurationConfig.model_validate(
+        {
+            "sources": [{"id": "banking77", "maxRecords": 10}],
+            "decisionData": {
+                "examplesPerScenario": 4,
+                "sourceExamplesPerSource": 0,
+                "minimumAcceptedPerCell": 0,
+            },
+            "generation": {"maxCandidates": 1, "maxAttempts": 1},
+        }
+    )
+
+    def semantic_rejection(config, **kwargs):  # type: ignore[no-untyped-def]
+        return CandidateOutcome(
+            jobId=kwargs["job"].jobId,
+            status="quarantined",
+            reason="solver-semantic-mismatch",
+            attempts=1,
+            requestSha256="a" * 64,
+            responseSha256="b" * 64,
+            record=None,
+        )
+
+    monkeypatch.setattr(runner, "generate_decision_candidate", semantic_rejection)
+    with pytest.raises(ModelError, match="coverage gate"):
+        runner.run_decision_curation(config, tmp_path)
+    parent = next((tmp_path / "curation").iterdir())
+    before = {
+        str(path.relative_to(parent)): path.read_bytes()
+        for path in parent.rglob("*")
+        if path.is_file()
+    }
+
+    def no_discovery(*args):  # type: ignore[no-untyped-def]
+        pytest.fail("Terminal semantic quarantine must not discover or call a model")
+
+    monkeypatch.setattr(runner, "discover_models", no_discovery)
+    with pytest.raises(ModelError, match="reference review or adjudication"):
+        runner.run_decision_curation(config, tmp_path, repair_from=parent)
+    assert len(list((tmp_path / "curation").iterdir())) == 1
+    assert before == {
+        str(path.relative_to(parent)): path.read_bytes()
+        for path in parent.rglob("*")
+        if path.is_file()
+    }

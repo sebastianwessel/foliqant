@@ -1,5 +1,33 @@
 traceability_version: 1
 requirements:
+  - requirement_id: REQ-SERVICE-CONTRACTS
+    capability_ids: [CAP-SERVICE-CONTRACTS]
+    path_ids: [PATH-SERVICE-CONTRACTS-SUCCESS, PATH-SERVICE-CONTRACTS-FAILURE]
+    acceptance_ids: [ACCEPT-SERVICE-CONTRACTS]
+  - requirement_id: REQ-SERVICE-COMPILER
+    capability_ids: [CAP-SERVICE-COMPILER]
+    path_ids: [PATH-SERVICE-COMPILER-SUCCESS, PATH-SERVICE-COMPILER-FAILURE]
+    acceptance_ids: [ACCEPT-SERVICE-COMPILER]
+  - requirement_id: REQ-SERVICE-RUNTIME
+    capability_ids: [CAP-SERVICE-RUNTIME]
+    path_ids: [PATH-SERVICE-RUNTIME-SUCCESS, PATH-SERVICE-RUNTIME-FAILURE]
+    acceptance_ids: [ACCEPT-SERVICE-RUNTIME]
+  - requirement_id: REQ-SERVICE-MCP
+    capability_ids: [CAP-SERVICE-MCP]
+    path_ids: [PATH-SERVICE-MCP-SUCCESS, PATH-SERVICE-MCP-FAILURE]
+    acceptance_ids: [ACCEPT-SERVICE-MCP]
+  - requirement_id: REQ-SERVICE-DURABILITY
+    capability_ids: [CAP-SERVICE-DURABILITY]
+    path_ids: [PATH-SERVICE-DURABILITY-SUCCESS, PATH-SERVICE-DURABILITY-FAILURE]
+    acceptance_ids: [ACCEPT-SERVICE-DURABILITY]
+  - requirement_id: REQ-SERVICE-PRIVACY
+    capability_ids: [CAP-SERVICE-PRIVACY]
+    path_ids: [PATH-SERVICE-PRIVACY-SUCCESS, PATH-SERVICE-PRIVACY-FAILURE]
+    acceptance_ids: [ACCEPT-SERVICE-PRIVACY]
+  - requirement_id: REQ-SERVICE-DX
+    capability_ids: [CAP-SERVICE-DX]
+    path_ids: [PATH-SERVICE-DX-SUCCESS, PATH-SERVICE-DX-FAILURE]
+    acceptance_ids: [ACCEPT-SERVICE-DX]
   - requirement_id: REQ-BUSINESS-DECISIONS
     capability_ids: [CAP-BUSINESS-DECISIONS]
     path_ids: [PATH-BUSINESS-DECISIONS-SUCCESS, PATH-BUSINESS-DECISIONS-FAILURE]
@@ -109,6 +137,27 @@ requirements:
     acceptance_ids:
       - ACCEPT-NATIVE-DATA
 capabilities:
+  - capability_id: CAP-SERVICE-CONTRACTS
+    requirement_ids: [REQ-SERVICE-CONTRACTS]
+    path_ids: [PATH-SERVICE-CONTRACTS-SUCCESS, PATH-SERVICE-CONTRACTS-FAILURE]
+  - capability_id: CAP-SERVICE-COMPILER
+    requirement_ids: [REQ-SERVICE-COMPILER]
+    path_ids: [PATH-SERVICE-COMPILER-SUCCESS, PATH-SERVICE-COMPILER-FAILURE]
+  - capability_id: CAP-SERVICE-RUNTIME
+    requirement_ids: [REQ-SERVICE-RUNTIME]
+    path_ids: [PATH-SERVICE-RUNTIME-SUCCESS, PATH-SERVICE-RUNTIME-FAILURE]
+  - capability_id: CAP-SERVICE-MCP
+    requirement_ids: [REQ-SERVICE-MCP]
+    path_ids: [PATH-SERVICE-MCP-SUCCESS, PATH-SERVICE-MCP-FAILURE]
+  - capability_id: CAP-SERVICE-DURABILITY
+    requirement_ids: [REQ-SERVICE-DURABILITY]
+    path_ids: [PATH-SERVICE-DURABILITY-SUCCESS, PATH-SERVICE-DURABILITY-FAILURE]
+  - capability_id: CAP-SERVICE-PRIVACY
+    requirement_ids: [REQ-SERVICE-PRIVACY]
+    path_ids: [PATH-SERVICE-PRIVACY-SUCCESS, PATH-SERVICE-PRIVACY-FAILURE]
+  - capability_id: CAP-SERVICE-DX
+    requirement_ids: [REQ-SERVICE-DX]
+    path_ids: [PATH-SERVICE-DX-SUCCESS, PATH-SERVICE-DX-FAILURE]
   - capability_id: CAP-BUSINESS-DECISIONS
     requirement_ids: [REQ-BUSINESS-DECISIONS]
     path_ids: [PATH-BUSINESS-DECISIONS-SUCCESS, PATH-BUSINESS-DECISIONS-FAILURE]
@@ -187,6 +236,90 @@ capabilities:
       - REQ-NATIVE-DATA
     path_ids: *native_paths
 paths:
+  - path_id: PATH-SERVICE-CONTRACTS-SUCCESS
+    capability_ids: [CAP-SERVICE-CONTRACTS]
+    requirement_ids: [REQ-SERVICE-CONTRACTS]
+    kind: success
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-CONTRACTS]
+  - path_id: PATH-SERVICE-CONTRACTS-FAILURE
+    capability_ids: [CAP-SERVICE-CONTRACTS]
+    requirement_ids: [REQ-SERVICE-CONTRACTS]
+    kind: failure
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-CONTRACTS]
+  - path_id: PATH-SERVICE-COMPILER-SUCCESS
+    capability_ids: [CAP-SERVICE-COMPILER]
+    requirement_ids: [REQ-SERVICE-COMPILER]
+    kind: success
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-COMPILER]
+  - path_id: PATH-SERVICE-COMPILER-FAILURE
+    capability_ids: [CAP-SERVICE-COMPILER]
+    requirement_ids: [REQ-SERVICE-COMPILER]
+    kind: failure
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-COMPILER]
+  - path_id: PATH-SERVICE-RUNTIME-SUCCESS
+    capability_ids: [CAP-SERVICE-RUNTIME]
+    requirement_ids: [REQ-SERVICE-RUNTIME]
+    kind: success
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-RUNTIME]
+  - path_id: PATH-SERVICE-RUNTIME-FAILURE
+    capability_ids: [CAP-SERVICE-RUNTIME]
+    requirement_ids: [REQ-SERVICE-RUNTIME]
+    kind: failure
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-RUNTIME]
+  - path_id: PATH-SERVICE-MCP-SUCCESS
+    capability_ids: [CAP-SERVICE-MCP]
+    requirement_ids: [REQ-SERVICE-MCP]
+    kind: success
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-MCP]
+  - path_id: PATH-SERVICE-MCP-FAILURE
+    capability_ids: [CAP-SERVICE-MCP]
+    requirement_ids: [REQ-SERVICE-MCP]
+    kind: failure
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-MCP]
+  - path_id: PATH-SERVICE-DURABILITY-SUCCESS
+    capability_ids: [CAP-SERVICE-DURABILITY]
+    requirement_ids: [REQ-SERVICE-DURABILITY]
+    kind: success
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-DURABILITY]
+  - path_id: PATH-SERVICE-DURABILITY-FAILURE
+    capability_ids: [CAP-SERVICE-DURABILITY]
+    requirement_ids: [REQ-SERVICE-DURABILITY]
+    kind: failure
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-DURABILITY]
+  - path_id: PATH-SERVICE-PRIVACY-SUCCESS
+    capability_ids: [CAP-SERVICE-PRIVACY]
+    requirement_ids: [REQ-SERVICE-PRIVACY]
+    kind: success
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-PRIVACY]
+  - path_id: PATH-SERVICE-PRIVACY-FAILURE
+    capability_ids: [CAP-SERVICE-PRIVACY]
+    requirement_ids: [REQ-SERVICE-PRIVACY]
+    kind: failure
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-PRIVACY]
+  - path_id: PATH-SERVICE-DX-SUCCESS
+    capability_ids: [CAP-SERVICE-DX]
+    requirement_ids: [REQ-SERVICE-DX]
+    kind: success
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-DX]
+  - path_id: PATH-SERVICE-DX-FAILURE
+    capability_ids: [CAP-SERVICE-DX]
+    requirement_ids: [REQ-SERVICE-DX]
+    kind: failure
+    contract_refs: [CONTRACT-SERVICE-V1]
+    acceptance_ids: [ACCEPT-SERVICE-DX]
   - path_id: PATH-BUSINESS-DECISIONS-SUCCESS
     capability_ids: [CAP-BUSINESS-DECISIONS]
     requirement_ids: [REQ-BUSINESS-DECISIONS]
@@ -470,6 +603,34 @@ paths:
     acceptance_ids:
       - ACCEPT-NATIVE-DATA
 acceptance:
+  - acceptance_id: ACCEPT-SERVICE-CONTRACTS
+    requirement_ids: [REQ-SERVICE-CONTRACTS]
+    path_ids: [PATH-SERVICE-CONTRACTS-SUCCESS, PATH-SERVICE-CONTRACTS-FAILURE]
+    verification_refs: [11-workflow-service.md#developer-experience-artifacts-and-acceptance]
+  - acceptance_id: ACCEPT-SERVICE-COMPILER
+    requirement_ids: [REQ-SERVICE-COMPILER]
+    path_ids: [PATH-SERVICE-COMPILER-SUCCESS, PATH-SERVICE-COMPILER-FAILURE]
+    verification_refs: [11-workflow-service.md#developer-experience-artifacts-and-acceptance]
+  - acceptance_id: ACCEPT-SERVICE-RUNTIME
+    requirement_ids: [REQ-SERVICE-RUNTIME]
+    path_ids: [PATH-SERVICE-RUNTIME-SUCCESS, PATH-SERVICE-RUNTIME-FAILURE]
+    verification_refs: [11-workflow-service.md#developer-experience-artifacts-and-acceptance]
+  - acceptance_id: ACCEPT-SERVICE-MCP
+    requirement_ids: [REQ-SERVICE-MCP]
+    path_ids: [PATH-SERVICE-MCP-SUCCESS, PATH-SERVICE-MCP-FAILURE]
+    verification_refs: [11-workflow-service.md#developer-experience-artifacts-and-acceptance]
+  - acceptance_id: ACCEPT-SERVICE-DURABILITY
+    requirement_ids: [REQ-SERVICE-DURABILITY]
+    path_ids: [PATH-SERVICE-DURABILITY-SUCCESS, PATH-SERVICE-DURABILITY-FAILURE]
+    verification_refs: [11-workflow-service.md#developer-experience-artifacts-and-acceptance]
+  - acceptance_id: ACCEPT-SERVICE-PRIVACY
+    requirement_ids: [REQ-SERVICE-PRIVACY]
+    path_ids: [PATH-SERVICE-PRIVACY-SUCCESS, PATH-SERVICE-PRIVACY-FAILURE]
+    verification_refs: [11-workflow-service.md#developer-experience-artifacts-and-acceptance]
+  - acceptance_id: ACCEPT-SERVICE-DX
+    requirement_ids: [REQ-SERVICE-DX]
+    path_ids: [PATH-SERVICE-DX-SUCCESS, PATH-SERVICE-DX-FAILURE]
+    verification_refs: [11-workflow-service.md#developer-experience-artifacts-and-acceptance]
   - acceptance_id: ACCEPT-BUSINESS-DECISIONS
     requirement_ids: [REQ-BUSINESS-DECISIONS]
     path_ids: [PATH-BUSINESS-DECISIONS-SUCCESS, PATH-BUSINESS-DECISIONS-FAILURE]
@@ -619,6 +780,8 @@ acceptance:
       - ../model/tests/test_curation_generation.py
       - ../model/tests/test_curation_runner.py
       - ../plans/reviews/curation-execution.md
+      - ../plans/reviews/curation-recovery-source-quality.md
+      - ../plans/reviews/splash-timeout-protocol-review.md
   - acceptance_id: ACCEPT-NATIVE-DATA
     requirement_ids:
       - REQ-NATIVE-DATA
@@ -630,3 +793,11 @@ acceptance:
       - ../model/tests/test_decision_generation.py
       - ../model/tests/test_decision_runner.py
       - ../plans/reviews/native-decision-data-review.md
+      - ../plans/reviews/curation-recovery-source-quality.md
+      - ../model/tests/test_source_category_catalogs.py
+      - ../model/tests/test_curation_migration_transform.py
+      - ../model/tests/test_migration.py
+      - ../model/tests/test_question_variants.py
+      - ../model/tests/test_migration_rerun.py
+      - ../model/tests/test_migration_cli.py
+      - ../plans/reviews/deterministic-migration.md

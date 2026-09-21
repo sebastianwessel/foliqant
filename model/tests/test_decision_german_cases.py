@@ -4,16 +4,16 @@ import copy
 import json
 
 import pytest
-
-from foliqant_model.contracts import ChatMessage, DataRecord
-from foliqant_model.curation.contracts import ImportedRecord
-from foliqant_model.curation.decision_contracts import (
-    DecisionDataSettings,
+from foliqant_decisions import (
     DecisionOutput,
     RequestUnitsResult,
     semantic_signature,
     validate_decision_output,
 )
+
+from foliqant_model.contracts import ChatMessage, DataRecord
+from foliqant_model.curation.contracts import ImportedRecord
+from foliqant_model.curation.decision_contracts import DecisionDataSettings
 from foliqant_model.curation.decision_german_cases import GERMAN_TRANSLATIONS
 from foliqant_model.curation.decision_seeds import (
     _authored_case,
@@ -200,8 +200,8 @@ def _source_row(
 
 
 def test_german_banking_projection_preserves_imported_request_and_labels() -> None:
-    request = "Bitte erstatten Sie die doppelt berechnete Gebühr."
-    labels = ["Gebühr erstatten", "Kontoauszug senden"]
+    request = "Wie kann ich eine Erstattung beantragen?"
+    labels = ["request_refund", "Refund_not_showing_up"]
     seed = project_source(
         _source_row(
             "banking77",
@@ -215,7 +215,13 @@ def test_german_banking_projection_preserves_imported_request_and_labels() -> No
     assert seed.input.state.sources[0].text == request
     question = seed.input.questions[0]
     assert question.type == "choice"
-    assert [option.description for option in question.options] == labels
+    assert [option.id for option in question.options] == ["request_refund", "refund_not_showing_up"]
+    assert "Eine Erstattung beantragen" in question.options[0].description
+    assert "erwartete oder ausgestellte Erstattung" in question.options[1].description
+    assert "source-label:request_refund" in seed.parent.tags
+    result = seed.oracle.results[0]
+    assert result.type == "choice" and result.answer is not None
+    assert result.answer.optionId == "request_refund"
     assert "passende Kategorie" in question.prompt
     assert seed.oracle.results[0].explanation.evidence[0].quote == request
     assert "response prose in German" in seed.parent.messages[0].content
@@ -236,13 +242,26 @@ def test_german_wanli_projection_preserves_imported_claim_and_evidence() -> None
 
     assert seed is not None
     assert seed.input.state.sources[0].text == evidence
-    assert claim in seed.input.questions[0].prompt
+    assert seed.input.state.sources[1].text == claim
+    assert [source.id for source in seed.input.state.sources] == ["premise", "hypothesis"]
+    question = seed.input.questions[0]
+    assert question.type == "choice"
+    assert "sprachliche Beziehung" in question.prompt
+    assert [option.id for option in question.options] == ["entailment", "contradiction", "neutral"]
+    assert "folgt weder" in question.options[2].description
     result = seed.oracle.results[0]
+    assert result.type == "choice" and result.answer is not None
+    assert result.answer.optionId == "neutral"
+    assert result.answerability.status == "answerable"
+    assert result.answerability.issues == []
     assert result.explanation.summary == (
-        "Die Nachweise bestätigen oder widerlegen die Behauptung nicht."
+        "Die Hypothese folgt weder aus der Prämisse noch widerspricht sie ihr."
     )
-    assert result.explanation.missingFacts == [
-        "Nachweise, welche die Behauptung bestätigen oder widerlegen."
+    assert result.explanation.missingFacts == []
+    assert [(citation.sourceId, citation.quote) for citation in result.explanation.evidence] == [
+        ("premise", evidence),
+        ("hypothesis", claim),
     ]
+    assert "source-label:insufficient" in seed.parent.tags
     assert "response prose in German" in seed.parent.messages[0].content
     assert validate_decision_output(seed.input, seed.oracle) == []

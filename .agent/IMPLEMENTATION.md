@@ -2,8 +2,10 @@
 
 The local model lifecycle is implemented in `model/src/foliqant_model`. Its
 canonical requirements are in `specs/`; end-user guides are in `docs/`. The
-configurable workflow service remains a separate proposal. Do not implement it
-or add PURISTA, Harness or Voyage dependencies as part of model-tooling work.
+workflow service is a separate Python/uv project governed by specification 11.
+Do not add service dependencies to the model environment or add PURISTA, Harness
+or Voyage dependencies. Reuse native contracts through the dedicated lightweight
+contract package; retain existing wire schemas and artifact identities.
 
 ## Code and contracts
 
@@ -75,3 +77,31 @@ observed evidence in `plans/reviews/`, not in end-user setup instructions.
 Update contracts, schemas, runnable recipes, guides and skills together. Do not
 document a command until its implementation exists. No compatibility or model
 quality claim is valid without corresponding recorded execution evidence.
+
+## Workflow service async boundaries
+
+Run service checks inside its separate uv project:
+
+```sh
+uv run --project service --no-sync python -m pytest service/tests
+uv run --project service --no-sync mypy --config-file service/pyproject.toml service/src
+uv run --project service --no-sync ruff check service/src service/tests service/scripts
+uv run --project service --no-sync python service/scripts/generate_schemas.py --check
+```
+
+Live model tests are excluded by default and need explicit
+authorization; deterministic adapter tests must not discover or call endpoints.
+
+Prefer native async I/O. Blocking-only SDK operations use the owned bounded
+`BlockingExecutor`; never free their capacity merely because a caller cancelled
+or timed out. The SDK must have its own network timeout. Reject excess work before
+creating internal tasks. No request-scoped mutable identity/authentication state
+belongs on a shared adapter. Verify context isolation and cancellation at actual
+integration boundaries, not only with primitive semaphore tests.
+
+Use fixed safe logging events. Only sanitized JSON strings enter the bounded log
+queue, never raw records or exceptions. Keep shutdown joins off the event loop
+and check incomplete-drain results. Compilation is startup work; execution uses
+frozen plans and immutable accepted input. No database transaction may stay open
+while awaiting an external model/tool call. Record uncertain mutations instead
+of assuming cancellation makes retry safe.

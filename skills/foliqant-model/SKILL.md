@@ -15,7 +15,7 @@ For training, evaluation, risk policy, merging and export, read
 [references/model-lifecycle.md](references/model-lifecycle.md).
 
 For new classification catalogs, use `CategoryCatalog` from
-`foliqant_model.curation.category_catalog`: detailed descriptions, deterministic
+`foliqant_decisions.category_catalog`: detailed descriptions, deterministic
 lowercase snake_case IDs, and collision rejection. Keep immutable V1 data and
 generation identities unchanged. See the category guidance in
 [setup and data](references/setup-and-data.md#category-catalogs).
@@ -58,6 +58,15 @@ repair. Read the scoped projection section in
 Use preparer `--pilot` for the exact 32-task projection pilot. Prepare a full
 plan separately from the same parent and never promise reuse of pilot model
 calls. Do not describe either mode as model-validated without recorded evidence.
+
+For a completed native run that needs the current deterministic projection and
+question-variant recipe, use the explicit `migrate-decisions`/`migrate-data`
+path. Migration is offline and publishes a new immutable dataset with per-record
+source and rights provenance; it is distinct from ordinary continuation. Use
+`rerun-migrated-decisions` only for the migration's frozen pending training
+queue. A deterministic source reference or derived answer is not model
+verification. Read the migration section in
+[setup and data](references/setup-and-data.md) before operating either command.
 
 Use `--progress auto|always|never` for the stderr operator display without
 changing run identity or stdout JSON. On the first Ctrl+C, allow the current
@@ -102,3 +111,13 @@ Treat completed artifacts as immutable. Inspect locks and failed run workspaces;
 never automatically delete a stale lock, overwrite an artifact or kill a process
 based solely on the recorded PID. Report typed errors without echoing source
 messages or credentials.
+
+Before native repair, distinguish recoverable output errors from valid answers
+that disagree with source references. Semantic disagreements require review,
+not repeated calls until agreement. Use phase-specific recovery and preserve
+validated rewrites. Internal SSE retains partial final content on the bounded
+unquoted-whitespace guard; never treat that partial response as accepted output
+or confuse it with a fatal transport timeout. Changed prompts, request formats
+or source mappings require a new recipe;
+never transplant old outcomes. See the recovery guidance in
+[setup and data](references/setup-and-data.md).

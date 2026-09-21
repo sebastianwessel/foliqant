@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import pytest
-
-from foliqant_model.curation.decision_contracts import (
+from foliqant_decisions import (
     DecisionInput,
     DecisionOutput,
     DecisionSource,
     validate_decision_output,
 )
+
 from foliqant_model.curation.decision_generation import (
     _source_text_problem,
     validate_decision_rewrite,

@@ -4,15 +4,15 @@ import json
 import re
 
 import pytest
+from foliqant_decisions import (
+    semantic_signature,
+    validate_decision_output,
+)
 
 import foliqant_model.curation.decision_seeds as decision_seeds_module
 from foliqant_model.contracts import ChatMessage, DataRecord
 from foliqant_model.curation.contracts import ImportedRecord
-from foliqant_model.curation.decision_contracts import (
-    DecisionDataSettings,
-    semantic_signature,
-    validate_decision_output,
-)
+from foliqant_model.curation.decision_contracts import DecisionDataSettings
 from foliqant_model.curation.decision_seeds import (
     AUTHORED_CASES_PER_SCENARIO,
     DecisionSeed,
@@ -359,8 +359,11 @@ def test_withdrawing_one_request_preserves_an_unrelated_active_request() -> None
 def test_banking77_projection_preserves_frozen_family_and_hard_label() -> None:
     row = _source_row(
         "banking77",
-        {"labels": ["cash_withdrawal", "cash_deposit"], "request": "I need to withdraw cash."},
-        {"intent": "cash_withdrawal"},
+        {
+            "labels": ["cash_withdrawal_charge", "top_up_by_cash_or_cheque"],
+            "request": "Why was a fee charged for withdrawing cash?",
+        },
+        {"intent": "cash_withdrawal_charge"},
     )
     seed = project_source(row)
     assert seed is not None
@@ -371,48 +374,109 @@ def test_banking77_projection_preserves_frozen_family_and_hard_label() -> None:
     assert seed.rewriteSourceIds == []
     assert f"original-source-record:{row.record.id}" in seed.parent.tags
     assert validate_decision_output(seed.input, seed.oracle) == []
-    assert semantic_signature(seed.oracle)["results"][0]["answer"] == {"optionId": "label-000"}
+    assert semantic_signature(seed.oracle)["results"][0]["answer"] == {
+        "optionId": "cash_withdrawal_charge"
+    }
 
 
-def test_banking77_projection_assigns_valid_ids_to_punctuated_labels() -> None:
+def test_banking77_projection_assigns_valid_ids_to_exact_punctuated_labels() -> None:
     row = _source_row(
         "banking77",
-        {"labels": ["cash withdrawal", "cash/deposit?"], "request": "I need to deposit cash."},
-        {"intent": "cash/deposit?"},
+        {
+            "labels": ["Refund_not_showing_up", "reverted_card_payment?"],
+            "request": "My card payment was reversed.",
+        },
+        {"intent": "reverted_card_payment?"},
     )
+    before = row.model_dump(mode="json")
     seed = project_source(row)
     assert seed is not None
     question = seed.input.questions[0]
     assert question.type == "choice"
-    assert [(option.id, option.description) for option in question.options] == [
-        ("label-000", "cash withdrawal"),
-        ("label-001", "cash/deposit?"),
+    assert [option.id for option in question.options] == [
+        "refund_not_showing_up",
+        "reverted_card_payment",
     ]
-    assert semantic_signature(seed.oracle)["results"][0]["answer"] == {"optionId": "label-001"}
+    assert all(len(option.description.split()) > 10 for option in question.options)
+    assert semantic_signature(seed.oracle)["results"][0]["answer"] == {
+        "optionId": "reverted_card_payment"
+    }
+    assert "source-label:reverted_card_payment?" in seed.parent.tags
     assert seed.parent.origin == "synthetic"
+    assert row.model_dump(mode="json") == before
 
 
-def test_wanli_projection_maps_neutral_to_unknown_without_probability() -> None:
+@pytest.mark.parametrize("language", ["en", "de"])
+@pytest.mark.parametrize(
+    ("label", "relation"),
+    [("supported", "entailment"), ("contradicted", "contradiction"), ("insufficient", "neutral")],
+)
+def test_wanli_projects_text_relations_without_inventing_missing_facts(
+    language: str, label: str, relation: str
+) -> None:
     row = _source_row(
         "wanli",
-        {
-            "claim": "The transfer settled Tuesday.",
-            "evidence": "The transfer was submitted.",
-            "options": [],
-        },
-        {"label": "insufficient"},
+        {"claim": "The transfer settled Tuesday.", "evidence": "The transfer was submitted."},
+        {"label": label},
     )
+    row.record.language = language
+    before = row.model_dump(mode="json")
     seed = project_source(row)
     assert seed is not None
     assert seed.parent.sourceId == "native-wanli"
-    signature = semantic_signature(seed.oracle)
-    assert signature["results"][0]["answer"] == {"value": "unknown"}
-    assert signature["results"][0]["answerability"] == {
-        "issues": ["missing_information"],
-        "status": "not_answerable",
+    assert seed.input.questions[0].type == "choice"
+    assert {option.id for option in seed.input.questions[0].options} == {
+        "entailment",
+        "contradiction",
+        "neutral",
     }
-    assert "probability" not in seed.parent.messages[-1].content.casefold()
+    signature = semantic_signature(seed.oracle)
+    assert signature["results"][0]["answer"] == {"optionId": relation}
+    assert signature["results"][0]["answerability"] == {"issues": [], "status": "answerable"}
+    assert seed.oracle.results[0].explanation.missingFacts == []
+    assert {cite.sourceId for cite in seed.oracle.results[0].explanation.evidence} == {
+        "premise",
+        "hypothesis",
+    }
+    assert f"source-label:{label}" in seed.parent.tags
+    assert f"source-nli-relation:{relation}" in seed.parent.tags
+    assert seed.parent.familyId == row.record.familyId
+    assert seed.parent.groupKeys == row.record.groupKeys
+    assert row.model_dump(mode="json") == before
     assert validate_decision_output(seed.input, seed.oracle) == []
+
+
+def test_wanli_preserves_interrogative_text_and_keeps_target_out_of_solver_input() -> None:
+    tasks = []
+    ids = []
+    for label in ("supported", "contradicted", "insufficient"):
+        row = _source_row(
+            "wanli",
+            {
+                "claim": "When did the transfer arrive?",
+                "evidence": "The transfer arrived on Tuesday.",
+            },
+            {"label": label},
+        )
+        seed = project_source(row)
+        assert seed is not None
+        assert seed.input.state.sources[1].text == "When did the transfer arrive?"
+        assert "questions remain questions" in " ".join(seed.input.questions[0].criteria)
+        assert seed.rewriteSourceIds == []
+        tasks.append(seed.parent.messages[:-1])
+        ids.append(seed.parent.id)
+    assert tasks[0] == tasks[1] == tasks[2]
+    assert len(set(ids)) == 3
+
+
+@pytest.mark.parametrize("bad_label", ["cash withdrawal", "cash/deposit?", "unknown"])
+def test_banking77_unknown_taxonomy_labels_fail_closed(bad_label: str) -> None:
+    row = _source_row(
+        "banking77",
+        {"labels": ["card_arrival", bad_label], "request": "Please explain my request."},
+        {"intent": "card_arrival"},
+    )
+    assert project_source(row) is None
 
 
 def test_incompatible_sources_are_explicitly_not_projected() -> None:
@@ -423,7 +487,7 @@ def test_incompatible_sources_are_explicitly_not_projected() -> None:
 
 def test_recipe_digest_is_stable_and_shaped_like_sha256() -> None:
     first = decision_seed_recipe_digest()
-    assert decision_seeds_module._RECIPE_VERSION == "native-decisions-v11"
+    assert decision_seeds_module._RECIPE_VERSION == "native-decisions-v12"
     assert first == decision_seed_recipe_digest()
     assert len(first) == 64
     int(first, 16)

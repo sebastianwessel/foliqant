@@ -18,7 +18,7 @@ with an ASCII letter or digit and then contain only letters, digits, `.`, `_` or
 New category catalogs normalize IDs to unique lowercase snake_case keys matching
 `[a-z][a-z0-9]*(?:_[a-z0-9]+)*` and require nonblank descriptions. Normalization
 collisions are rejected. Use `CategoryCatalog`
-from `foliqant_model.curation.category_catalog`; see
+from `foliqant_decisions.category_catalog`; see
 [category definitions](../guides/native-decision-data.md#define-categories-with-clear-boundaries).
 This does not change historical V1 identifiers or rewrite stored artifacts.
 
@@ -167,6 +167,14 @@ the result may be below the requested cap.
 The endpoint is not contacted with `--prepare-only`. On a full run, discovered
 model metadata is stored before generation. A resume must present the same model
 identity.
+
+Generation uses standard OpenAI SSE with `stream_options.include_usage: true`;
+there is no separate transport setting or nonstreaming fallback.
+`maxResponseBytes` covers the entire stream, including framing and discarded
+reasoning. The adapter retains final-answer content only. It stops and retains
+degenerate output after 1,024 consecutive JSON whitespace characters outside
+quoted strings; this does not change the timeout or token budget. A transport
+failure remains a fatal execution error, not a quality rejection.
 
 The native full and pilot YAML recipes override the generic endpoint defaults:
 standalone Splash at `http://127.0.0.1:8000/v1`, model

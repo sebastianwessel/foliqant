@@ -13,7 +13,8 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, field
 from types import FrameType
 from typing import Annotated, Any, Literal, cast
 from urllib.parse import SplitResult, urlsplit, urlunsplit
@@ -57,9 +58,18 @@ from ..execution import _terminate_process_group, _worker_environment
 _MAX_REQUEST_BYTES = 8 * 1024 * 1024
 _MAX_EXCHANGE_BYTES = 128 * 1024 * 1024
 _MAX_DISCOVERED_MODELS = 1024
+_MAX_PROVIDER_TOKEN_COUNT = 1_000_000_000
 _READ_CHUNK_BYTES = 64 * 1024
+_REPEATED_CHARACTER_DIAGNOSTIC_THRESHOLD = 1024
+_JSON_WHITESPACE_STALL_THRESHOLD = 1024
 _JSON_CONTENT_TYPES = {"application/json", "application/problem+json"}
+_SSE_CONTENT_TYPE = "text/event-stream"
 type _SignalHandler = Callable[[int, FrameType | None], object] | int | None
+type ProviderFinishReason = Literal[
+    "stop", "length", "tool_calls", "content_filter", "function_call", "unknown"
+]
+type ContentDiagnostic = Literal["long-repeated-character-run", "long-json-whitespace-run"]
+type ProviderTokenCount = Annotated[StrictInt, Field(ge=0, le=_MAX_PROVIDER_TOKEN_COUNT)]
 
 
 class LocalEndpointConfig(ContractModel):
@@ -112,6 +122,23 @@ class EndpointModelIdentity(ContractModel):
     structuredOutput: Literal["unknown", "verified-for-request"] = "unknown"
 
 
+class GenerationTokenUsage(ContractModel):
+    """Optional bounded token counters reported by the local provider."""
+
+    promptTokens: Omitted[ProviderTokenCount] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    completionTokens: Omitted[ProviderTokenCount] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    totalTokens: Omitted[ProviderTokenCount] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    reasoningTokens: Omitted[ProviderTokenCount] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+
 class GenerationResponse(ContractModel):
     """Locally validated structured output with bounded endpoint provenance."""
 
@@ -123,6 +150,12 @@ class GenerationResponse(ContractModel):
     rawResponseSha256: Digest
     elapsedSeconds: NonNegativeFloat
     finalAssistantResponse: str | None = None
+    tokenUsage: Omitted[GenerationTokenUsage] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    contentDiagnostic: Omitted[ContentDiagnostic] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class GenerationRejection(ContractModel):
@@ -132,6 +165,15 @@ class GenerationRejection(ContractModel):
     requestSha256: Digest
     rawResponseSha256: Digest
     finalAssistantResponse: str | None
+    finishReason: Omitted[ProviderFinishReason] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    tokenUsage: Omitted[GenerationTokenUsage] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    contentDiagnostic: Omitted[ContentDiagnostic] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class GenerationRejected(ModelError):
@@ -185,7 +227,7 @@ def discover_models(config: LocalEndpointConfig) -> list[EndpointModelIdentity]:
     return sorted(identities, key=lambda identity: identity.modelId)
 
 
-GENERATION_REQUEST_FORMAT = "declared-schema-order-v2"
+GENERATION_REQUEST_FORMAT = "declared-schema-order-sse-v3"
 
 
 def generate_json(
@@ -311,23 +353,21 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
         raise ModelError("ARGUMENT_INVALID", "Local generation request exceeds the size limit")
 
     deadline = started + request.config.timeoutSeconds
-    raw = _request_bytes(
+    request_sha256 = hashlib.sha256(body).hexdigest()
+    completion = _request_completion_stream(
         _endpoint_url(request.config.baseUrl, "/v1/chat/completions"),
-        method="POST",
         body=body,
         max_bytes=request.config.maxResponseBytes,
         deadline=deadline,
+        expected_model=request.modelId,
+        request_sha256=request_sha256,
     )
-    envelope = _strict_json(raw, label="Local endpoint response")
-    content, finish_reason = _assistant_content_and_finish(envelope, expected_model=request.modelId)
-    request_sha256 = _generation_request_sha256(
-        request.config,
-        model_id=request.modelId,
-        messages=request.messages,
-        schema=schema,
-        seed=request.seed,
-    )
-    raw_response_sha256 = hashlib.sha256(raw).hexdigest()
+    content = completion.content
+    finish_reason = completion.finish_reason
+    finish_diagnostic = _provider_finish_reason(finish_reason)
+    token_usage = completion.token_usage
+    content_diagnostic = _content_diagnostic(content)
+    raw_response_sha256 = completion.raw_response_sha256
     if finish_reason == "length":
         raise GenerationRejected(
             GenerationRejection(
@@ -335,6 +375,9 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
                 requestSha256=request_sha256,
                 rawResponseSha256=raw_response_sha256,
                 finalAssistantResponse=content,
+                finishReason=finish_diagnostic,
+                tokenUsage=token_usage,
+                contentDiagnostic=content_diagnostic,
             )
         )
     if finish_reason != "stop":
@@ -344,10 +387,23 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
                 requestSha256=request_sha256,
                 rawResponseSha256=raw_response_sha256,
                 finalAssistantResponse=content,
+                finishReason=finish_diagnostic,
+                tokenUsage=token_usage,
+                contentDiagnostic=content_diagnostic,
             )
         )
-    if content is None:
-        raise ModelError("OUTPUT_INVALID", "Local endpoint returned no structured output")
+    if content is None or not content:
+        raise GenerationRejected(
+            GenerationRejection(
+                message="Local endpoint returned no structured output",
+                requestSha256=request_sha256,
+                rawResponseSha256=raw_response_sha256,
+                finalAssistantResponse=content,
+                finishReason=finish_diagnostic,
+                tokenUsage=token_usage,
+                contentDiagnostic=None,
+            )
+        )
     try:
         generated = _strict_json(content.encode("utf-8"), label="Generated structured output")
     except ModelError as error:
@@ -357,6 +413,9 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
                 requestSha256=request_sha256,
                 rawResponseSha256=raw_response_sha256,
                 finalAssistantResponse=content,
+                finishReason=finish_diagnostic,
+                tokenUsage=token_usage,
+                contentDiagnostic=content_diagnostic,
             )
         ) from error
     if not isinstance(generated, dict):
@@ -366,6 +425,9 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
                 requestSha256=request_sha256,
                 rawResponseSha256=raw_response_sha256,
                 finalAssistantResponse=content,
+                finishReason=finish_diagnostic,
+                tokenUsage=token_usage,
+                contentDiagnostic=content_diagnostic,
             )
         )
     try:
@@ -377,6 +439,9 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
                 requestSha256=request_sha256,
                 rawResponseSha256=raw_response_sha256,
                 finalAssistantResponse=content,
+                finishReason=finish_diagnostic,
+                tokenUsage=token_usage,
+                contentDiagnostic=content_diagnostic,
             )
         ) from error
 
@@ -392,6 +457,8 @@ def _generate_json_direct(request: _GenerationRequest) -> GenerationResponse:
         rawResponseSha256=raw_response_sha256,
         elapsedSeconds=time.monotonic() - started,
         finalAssistantResponse=content,
+        tokenUsage=token_usage,
+        contentDiagnostic=content_diagnostic,
     )
 
 
@@ -410,7 +477,8 @@ def _generation_payload(
         "seed": seed,
         "temperature": config.temperature,
         "max_tokens": config.maxTokens,
-        "stream": False,
+        "stream": True,
+        "stream_options": {"include_usage": True},
     }
     if config.reasoningEffort is not None:
         payload["reasoning_effort"] = config.reasoningEffort
@@ -644,6 +712,314 @@ def _request_bytes(
         raise ModelError("NETWORK_FAILED", "Cannot reach the local endpoint") from error
 
 
+@dataclass(frozen=True, slots=True)
+class _StreamCompletion:
+    content: str | None
+    finish_reason: object
+    token_usage: GenerationTokenUsage | None
+    raw_response_sha256: str
+
+
+@dataclass(slots=True)
+class _StreamState:
+    stream_id: str | None = None
+    role_seen: bool = False
+    content_seen: bool = False
+    content_parts: list[str] = field(default_factory=list)
+    finished: bool = False
+    finish_reason: object = None
+    usage_seen: bool = False
+    token_usage: GenerationTokenUsage | None = None
+    in_string: bool = False
+    escaped: bool = False
+    unquoted_whitespace_run: int = 0
+    whitespace_stalled: bool = False
+
+    @property
+    def content(self) -> str | None:
+        return "".join(self.content_parts) if self.content_seen else None
+
+    def append_content(self, content: str) -> None:
+        self.content_seen = True
+        self.content_parts.append(content)
+        for character in content:
+            if self.in_string:
+                self.unquoted_whitespace_run = 0
+                if self.escaped:
+                    self.escaped = False
+                elif character == "\\":
+                    self.escaped = True
+                elif character == '"':
+                    self.in_string = False
+                continue
+            if character == '"':
+                self.in_string = True
+                self.unquoted_whitespace_run = 0
+            elif character in " \t\r\n":
+                self.unquoted_whitespace_run += 1
+                if self.unquoted_whitespace_run >= _JSON_WHITESPACE_STALL_THRESHOLD:
+                    self.whitespace_stalled = True
+                    return
+            else:
+                self.unquoted_whitespace_run = 0
+
+
+def _request_completion_stream(
+    url: str,
+    *,
+    body: bytes,
+    max_bytes: int,
+    deadline: float,
+    expected_model: str,
+    request_sha256: str,
+) -> _StreamCompletion:
+    """Consume one bounded OpenAI-compatible SSE completion response."""
+
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ModelError("TIMEOUT", "Local endpoint request exceeded its deadline")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Accept": _SSE_CONTENT_TYPE,
+            "Accept-Encoding": "identity",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    state = _StreamState()
+    raw_hash = hashlib.sha256()
+    data_lines: list[bytes] = []
+    try:
+        with _opener().open(request, timeout=remaining) as response:
+            if response.geturl() != url:
+                raise ModelError("NETWORK_FAILED", "Local endpoint redirect rejected")
+            encoding = response.headers.get("Content-Encoding", "identity").strip().lower()
+            if encoding not in {"", "identity"}:
+                raise ModelError("BACKEND_FAILED", "Local endpoint used unsupported encoding")
+            content_type = response.headers.get("Content-Type", "").split(";", 1)[0]
+            if content_type.strip().lower() != _SSE_CONTENT_TYPE:
+                raise ModelError("BACKEND_FAILED", "Local endpoint response is not an SSE stream")
+            declared = response.headers.get("Content-Length")
+            if declared is not None:
+                try:
+                    declared_size = int(declared)
+                except ValueError as error:
+                    raise ModelError(
+                        "BACKEND_FAILED", "Local endpoint response size is invalid"
+                    ) from error
+                if declared_size < 0 or declared_size > max_bytes:
+                    raise ModelError(
+                        "BACKEND_FAILED", "Local endpoint response exceeds the size limit"
+                    )
+            first_line = True
+            for line in _bounded_sse_lines(
+                response,
+                max_bytes=max_bytes,
+                deadline=deadline,
+                raw_hash=raw_hash,
+            ):
+                if first_line:
+                    first_line = False
+                    if line.startswith(b"\xef\xbb\xbf"):
+                        line = line[3:]
+                if not line:
+                    if not data_lines:
+                        continue
+                    done = _consume_stream_event(
+                        data_lines,
+                        state=state,
+                        expected_model=expected_model,
+                    )
+                    data_lines.clear()
+                    if done:
+                        return _completed_stream(state, raw_response_sha256=raw_hash.hexdigest())
+                    if state.whitespace_stalled:
+                        raise GenerationRejected(
+                            GenerationRejection(
+                                message=(
+                                    "Generated structured output stalled in unquoted whitespace"
+                                ),
+                                requestSha256=request_sha256,
+                                rawResponseSha256=raw_hash.hexdigest(),
+                                finalAssistantResponse=state.content,
+                                contentDiagnostic="long-json-whitespace-run",
+                            )
+                        )
+                    continue
+                if line.startswith(b":"):
+                    continue
+                field_name, separator, field_value = line.partition(b":")
+                if separator and field_value.startswith(b" "):
+                    field_value = field_value[1:]
+                if field_name == b"data":
+                    data_lines.append(field_value if separator else b"")
+            if data_lines:
+                done = _consume_stream_event(
+                    data_lines,
+                    state=state,
+                    expected_model=expected_model,
+                )
+                if done:
+                    return _completed_stream(state, raw_response_sha256=raw_hash.hexdigest())
+                if state.whitespace_stalled:
+                    raise GenerationRejected(
+                        GenerationRejection(
+                            message="Generated structured output stalled in unquoted whitespace",
+                            requestSha256=request_sha256,
+                            rawResponseSha256=raw_hash.hexdigest(),
+                            finalAssistantResponse=state.content,
+                            contentDiagnostic="long-json-whitespace-run",
+                        )
+                    )
+            raise ModelError("BACKEND_FAILED", "Local endpoint SSE stream ended before [DONE]")
+    except ModelError:
+        raise
+    except urllib.error.HTTPError as error:
+        raise ModelError("NETWORK_FAILED", "Local endpoint returned an HTTP error") from error
+    except TimeoutError as error:
+        raise ModelError("TIMEOUT", "Local endpoint request timed out") from error
+    except urllib.error.URLError as error:
+        if isinstance(error.reason, (TimeoutError, socket.timeout)):
+            raise ModelError("TIMEOUT", "Local endpoint request timed out") from error
+        raise ModelError("NETWORK_FAILED", "Cannot reach the local endpoint") from error
+    except (ConnectionError, OSError) as error:
+        raise ModelError("NETWORK_FAILED", "Cannot reach the local endpoint") from error
+
+
+def _bounded_sse_lines(
+    response: Any,
+    *,
+    max_bytes: int,
+    deadline: float,
+    raw_hash: Any,
+) -> Iterator[bytes]:
+    """Yield bounded SSE lines while hashing every byte returned by the transport."""
+
+    received = 0
+    line = bytearray()
+    pending_cr = False
+    while True:
+        if time.monotonic() >= deadline:
+            raise ModelError("TIMEOUT", "Local endpoint request exceeded its deadline")
+        chunk = response.read1(min(_READ_CHUNK_BYTES, max_bytes - received + 1))
+        if not chunk:
+            break
+        received += len(chunk)
+        if received > max_bytes:
+            raise ModelError("BACKEND_FAILED", "Local endpoint response exceeds the size limit")
+        raw_hash.update(chunk)
+        for byte in chunk:
+            if pending_cr:
+                if byte == 0x0A:
+                    yield bytes(line)
+                    line.clear()
+                    pending_cr = False
+                    continue
+                yield bytes(line)
+                line.clear()
+                pending_cr = False
+            if byte == 0x0D:
+                pending_cr = True
+            elif byte == 0x0A:
+                yield bytes(line)
+                line.clear()
+            else:
+                line.append(byte)
+    if pending_cr or line:
+        yield bytes(line)
+
+
+def _consume_stream_event(
+    data_lines: list[bytes], *, state: _StreamState, expected_model: str
+) -> bool:
+    event_data = b"\n".join(data_lines)
+    if event_data == b"[DONE]":
+        if not state.finished or not state.role_seen:
+            raise ModelError("BACKEND_FAILED", "Local endpoint SSE completion is incomplete")
+        return True
+    try:
+        event = _strict_json(event_data, label="Local endpoint SSE event")
+    except ModelError as error:
+        raise ModelError("BACKEND_FAILED", "Local endpoint SSE event is invalid") from error
+    if not isinstance(event, dict):
+        raise ModelError("BACKEND_FAILED", "Local endpoint SSE event is invalid")
+    if "error" in event:
+        raise ModelError("BACKEND_FAILED", "Local endpoint reported a generation error")
+    if event.get("object") != "chat.completion.chunk":
+        raise ModelError("BACKEND_FAILED", "Local endpoint SSE event is invalid")
+    stream_id = event.get("id")
+    if not isinstance(stream_id, str) or not stream_id:
+        raise ModelError("BACKEND_FAILED", "Local endpoint SSE event has no completion identity")
+    if state.stream_id is None:
+        state.stream_id = stream_id
+    elif state.stream_id != stream_id:
+        raise ModelError("INTEGRITY_FAILED", "Local endpoint SSE completion identity changed")
+    if event.get("model") != expected_model:
+        raise ModelError("INTEGRITY_FAILED", "Local endpoint returned a different model identity")
+    choices = event.get("choices")
+    if not isinstance(choices, list):
+        raise ModelError("BACKEND_FAILED", "Local endpoint SSE choices are invalid")
+    if not choices:
+        if not state.finished or "usage" not in event or state.usage_seen:
+            raise ModelError("BACKEND_FAILED", "Local endpoint SSE usage event is invalid")
+        state.usage_seen = True
+        state.token_usage = _provider_token_usage(event)
+        return False
+    if len(choices) != 1 or state.finished or not isinstance(choices[0], dict):
+        raise ModelError("BACKEND_FAILED", "Local endpoint SSE choices are invalid")
+    choice = choices[0]
+    if type(choice.get("index")) is not int or choice["index"] != 0:
+        raise ModelError("BACKEND_FAILED", "Local endpoint SSE choice index is invalid")
+    delta = choice.get("delta")
+    if not isinstance(delta, dict):
+        raise ModelError("BACKEND_FAILED", "Local endpoint SSE delta is invalid")
+    role = delta.get("role")
+    if role is not None:
+        if role != "assistant":
+            raise ModelError("BACKEND_FAILED", "Local endpoint SSE role is invalid")
+        state.role_seen = True
+    elif not state.role_seen:
+        raise ModelError("BACKEND_FAILED", "Local endpoint SSE role is missing")
+    refusal = delta.get("refusal")
+    if refusal is not None and refusal != "":
+        raise ModelError("BACKEND_FAILED", "Local endpoint refused structured generation")
+    tool_calls = delta.get("tool_calls")
+    if tool_calls is not None and tool_calls != () and tool_calls != []:
+        raise ModelError("BACKEND_FAILED", "Local endpoint returned unsupported tool calls")
+    function_call = delta.get("function_call")
+    if function_call is not None and function_call != "" and function_call != {}:
+        raise ModelError("BACKEND_FAILED", "Local endpoint returned an unsupported function call")
+    content = delta.get("content")
+    if content is not None:
+        if not isinstance(content, str):
+            raise ModelError("BACKEND_FAILED", "Local endpoint SSE content is invalid")
+        state.append_content(content)
+    finish_reason = choice.get("finish_reason")
+    if finish_reason is not None:
+        if not isinstance(finish_reason, str) or not finish_reason:
+            raise ModelError("BACKEND_FAILED", "Local endpoint SSE finish reason is invalid")
+        state.finished = True
+        state.finish_reason = finish_reason
+    usage = event.get("usage")
+    if usage is not None:
+        if not state.finished or state.usage_seen:
+            raise ModelError("BACKEND_FAILED", "Local endpoint SSE usage event is invalid")
+        state.usage_seen = True
+        state.token_usage = _provider_token_usage(event)
+    return False
+
+
+def _completed_stream(state: _StreamState, *, raw_response_sha256: str) -> _StreamCompletion:
+    return _StreamCompletion(
+        content=state.content,
+        finish_reason=state.finish_reason,
+        token_usage=state.token_usage,
+        raw_response_sha256=raw_response_sha256,
+    )
+
+
 def _compatibility_entries(value: object) -> list[Mapping[str, object]]:
     if not isinstance(value, dict) or not isinstance(value.get("data"), list):
         raise ModelError("OUTPUT_INVALID", "Local model discovery response is invalid")
@@ -693,6 +1069,57 @@ def _optional_text(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _provider_finish_reason(value: object) -> ProviderFinishReason:
+    if isinstance(value, str) and value in {
+        "stop",
+        "length",
+        "tool_calls",
+        "content_filter",
+        "function_call",
+    }:
+        return cast(ProviderFinishReason, value)
+    return "unknown"
+
+
+def _provider_token_usage(value: object) -> GenerationTokenUsage | None:
+    if not isinstance(value, dict) or not isinstance(value.get("usage"), dict):
+        return None
+    usage = value["usage"]
+    fields: dict[str, int] = {}
+    for provider_name, contract_name in (
+        ("prompt_tokens", "promptTokens"),
+        ("completion_tokens", "completionTokens"),
+        ("total_tokens", "totalTokens"),
+    ):
+        count = usage.get(provider_name)
+        if type(count) is int and 0 <= count <= _MAX_PROVIDER_TOKEN_COUNT:
+            fields[contract_name] = count
+    details = usage.get("completion_tokens_details")
+    if isinstance(details, dict):
+        reasoning_tokens = details.get("reasoning_tokens")
+        if type(reasoning_tokens) is int and 0 <= reasoning_tokens <= _MAX_PROVIDER_TOKEN_COUNT:
+            fields["reasoningTokens"] = reasoning_tokens
+    if not fields:
+        return None
+    return GenerationTokenUsage.model_validate(fields, strict=True)
+
+
+def _content_diagnostic(content: str | None) -> ContentDiagnostic | None:
+    if content is None or len(content) < _REPEATED_CHARACTER_DIAGNOSTIC_THRESHOLD:
+        return None
+    previous = content[0]
+    repeated = 1
+    for character in content[1:]:
+        if character == previous:
+            repeated += 1
+            if repeated >= _REPEATED_CHARACTER_DIAGNOSTIC_THRESHOLD:
+                return "long-repeated-character-run"
+        else:
+            previous = character
+            repeated = 1
+    return None
+
+
 def _assistant_content_and_finish(
     value: object, *, expected_model: str
 ) -> tuple[str | None, object]:
@@ -713,7 +1140,9 @@ def _assistant_content_and_finish(
     if tool_calls is not None and tool_calls != []:
         raise ModelError("OUTPUT_INVALID", "Local endpoint returned unsupported tool calls")
     content = message.get("content")
-    if finish_reason != "stop" and (content is None or isinstance(content, str)):
+    if content is None:
+        return None, finish_reason
+    if finish_reason != "stop" and isinstance(content, str):
         return content, finish_reason
     if not isinstance(content, str) or not content:
         raise ModelError("OUTPUT_INVALID", "Local endpoint returned no structured output")

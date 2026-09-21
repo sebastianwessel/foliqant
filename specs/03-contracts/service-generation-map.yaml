@@ -1,0 +1,36 @@
+generation_map_version: 1
+contract_ref: CONTRACT-SERVICE-V1
+authority: ../11-workflow-service.md
+entries:
+  - id: GEN-SERVICE-ENVELOPE
+    canonical_source: ../../service/src/foliqant/contracts/envelope.py
+    generated_outputs: [../../contracts/service/envelope.schema.json]
+    command: uv run --project service python service/scripts/generate_schemas.py
+    drift_check: uv run --project service python service/scripts/generate_schemas.py --check
+    handwritten_remainder:
+      - raw JSON decoder rejects duplicate keys and enforces byte/depth limits
+      - trusted identity binding and immutable core mapping
+    verification: [../../service/tests/test_envelope.py, ../../service/tests/test_decoding.py]
+  - id: GEN-NATIVE-DECISION-REUSE
+    canonical_source: ../../packages/decision-contracts/src/foliqant_decisions/contracts.py
+    generated_outputs:
+      - ../../contracts/model/decision-input.schema.json
+      - ../../contracts/model/decision-output.schema.json
+      - ../../contracts/model/category-catalog.schema.json
+    command: uv run python scripts/generate_model_schemas.py --maintenance-output contracts/model
+    drift_check: uv run python scripts/generate_model_schemas.py --check contracts/model
+    handwritten_remainder:
+      - native cross-field semantic validation and category normalization remain shared code
+    verification: [../../model/tests/test_decision_contracts.py, ../../model/tests/test_category_catalog.py]
+  - id: GEN-SERVICE-AUTHORING
+    canonical_source: ../../service/src/foliqant/contracts/workflow.py
+    generated_outputs:
+      - ../../contracts/service/workflow.schema.json
+      - ../../contracts/service/step.schema.json
+      - ../../contracts/service/tool-catalog.schema.json
+    command: uv run --project service python service/scripts/generate_schemas.py
+    drift_check: uv run --project service python service/scripts/generate_schemas.py --check
+    handwritten_remainder:
+      - graph dominance, local file confinement, category normalization and semantic checks
+      - cross-field invariants remain strict Pydantic runtime validators
+    verification: [../../service/tests/test_compiler.py, ../../service/tests/test_bindings.py]

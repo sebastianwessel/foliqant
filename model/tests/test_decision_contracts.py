@@ -2,19 +2,21 @@ from __future__ import annotations
 
 import json
 
+import foliqant_decisions as shared_decisions
 import pytest
-from pydantic import ValidationError
-
-from foliqant_model.curation.decision_contracts import (
+from foliqant_decisions import (
     Answerability,
     Citation,
-    DecisionDataSettings,
     DecisionInput,
     DecisionOutput,
     Explanation,
     semantic_signature,
     validate_decision_output,
 )
+from pydantic import ValidationError
+
+from foliqant_model.contracts import base as model_base
+from foliqant_model.curation.decision_contracts import DecisionDataSettings
 
 
 def _task() -> DecisionInput:
@@ -63,6 +65,14 @@ def _output(*, quote: str = "Send my statement.") -> DecisionOutput:
         },
         strict=True,
     )
+
+
+def test_model_reexports_shared_primitives_without_a_second_contract_copy() -> None:
+    assert model_base.ContractModel is shared_decisions.ContractModel
+    assert model_base.Id is shared_decisions.Id
+    assert model_base.NonEmptyStr is shared_decisions.NonEmptyStr
+    assert model_base.SchemaVersion is shared_decisions.SchemaVersion
+    assert not hasattr(shared_decisions, "DecisionDataSettings")
 
 
 def test_settings_are_strict_and_bounded() -> None:

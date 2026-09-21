@@ -85,13 +85,37 @@ completed work is saved, the deadline is per request, and resumption requires
 unchanged settings after checking that the server has finished the previous
 request. Existing request and run identities remain unchanged by this diagnostic.
 
-Generation request format `declared-schema-order-v2` preserves JSON Schema key
+Generation request format `declared-schema-order-sse-v3` preserves JSON Schema key
 order through worker IPC, prompt-mode schema text and HTTP serialization. Model
 servers may embed schemas in prompts, so alphabetic canonicalization is only
 for artifact integrity, not model input. Hash the exact HTTP request bytes and
 bind that hash into call identity; bind the request-format version into generic
 and native generation recipes. The changed format creates new runs and never
 relabels or overwrites earlier results.
+
+Generation consumes standard OpenAI chat-completion SSE internally, sending
+`stream: true` and `stream_options.include_usage: true`; the public
+`generate_json` return contract remains unchanged. There is no transport toggle
+or nonstreaming fallback. Hash exact incoming stream bytes incrementally and
+apply the response-byte bound to the entire stream, including reasoning and
+framing. Discard reasoning text immediately; accumulate only final content.
+Accept only coherent single-choice chunks for the expected stable model, a
+terminal finish reason and `[DONE]`. A standard empty-choice usage chunk is
+allowed; optional usage remains provider-reported, bounded and never inferred.
+Malformed events, premature EOF, provider errors, changed model and network
+timeouts remain explicit failures without automatic transport retry.
+
+Enforce a deterministic final-output progress limit: 1,024 consecutive JSON
+whitespace characters (space, tab, CR, LF) outside quoted strings trigger
+`long-json-whitespace-run`. Track JSON string/escape state across deltas; do
+not apply this limit to reasoning or quoted source text. This is an operational
+degenerate-output limit, not a claim that whitespace is invalid JSON. Close the
+response and retain the exact partial final content and received-byte digest
+as `GenerationRejected`, without inventing a provider finish reason or usage.
+Use the existing bounded phase-specific repair path. Do not remove whitespace,
+complete missing JSON, edit quotes, expose reference answers or accept partial
+output. Bind this transport/guard behavior into the request-format recipe so
+old outcomes retain their original identities.
 
 Progress is an operator display on stderr; stdout remains reserved for the one
 final JSON result. `--progress auto` is the default and displays progress only on
@@ -138,7 +162,11 @@ non-symlink run in the selected workspace.
 Require the same effective configuration, generation recipe, observed model,
 source snapshots and frozen logical job plan. Verify private envelopes before
 inference. Carry accepted outcome content and its available call cache unchanged;
-remap only quarantined jobs into fresh job/seed/request identities. Provide only
+remap only retryable quarantined jobs into fresh job/seed/request identities.
+For native decisions, a valid response disagreeing with its reference is a
+review-required quarantine, preserved unchanged without new model calls;
+specification 09 defines the phase-specific recovery policy. Generic curation
+retains its existing rejection-only repair policy. Provide only
 phase-matching prior final content and safe rejection feedback, bounded for the
 prompt. Repeat all ordinary checks, duplicate detection and coverage gates.
 Preserve full final content in the bounded private call cache; outcome previews
@@ -148,6 +176,14 @@ Persist the parent link and recipe in `repair.json`. Rerunning the same repair
 command resumes its child; selecting that child starts a later pass. Parent
 outcomes and published artifacts are never overwritten. Old responses that were
 not retained cannot be reconstructed or described as original model responses.
+
+Endpoint response caches may include bounded provider token usage and a safe
+finish reason for diagnostics, including rejected output. Metadata is optional:
+absent or malformed usage must not invalidate otherwise valid content, count as
+zero usage or be inferred from text length. Preserve final rejected content;
+do not store private reasoning text, silently repair malformed JSON, disable
+reasoning or increase token limits to conceal degenerate output. Diagnostics
+must survive worker IPC and cache reload without changing old artifact bytes.
 
 ## Local inference adapter
 
@@ -173,7 +209,8 @@ Adapter functions: discover_models(config), and generate_json(config, model_id,
 messages, schema, seed, observed_identity). Standalone callers may omit the
 observed identity and perform one standard discovery; curation always supplies
 the run identity. Return typed parsed JSON plus safe response metadata.
-JSON Schema constrains output, and local strict parsing validates it again.
+The json-schema mode requests server-side constraints; both modes enforce
+strict JSON parsing and schema validation locally on completed final content.
 Refusal, truncation, nonfinite/duplicate-key JSON, wrong schema, oversized body,
 HTTP error or changed model are explicit failures. Runner owns bounded retries;
 the adapter never silently retries or changes models. A live acceptance run must

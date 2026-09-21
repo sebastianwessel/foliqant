@@ -12,7 +12,7 @@ is specified, not yet implemented in the workflow service.
 **Available now:** local setup, pinned public-source curation, data preparation,
 LoRA/QLoRA training, customer customization, evaluation, threshold selection,
 independent audit, and model export. The configurable workflow service remains
-a separate proposal.
+under implementation as a separate Python package.
 
 ```sh
 ./scripts/setup-model
@@ -41,7 +41,7 @@ final structured content matching the requested JSON Schema.
 - [Automated public-source curation](docs/guides/automated-curation.md)
 - [Generate native decision data](docs/guides/native-decision-data.md)
 
-- [Architecture and language recommendation](specs/research/workflow-service-proposal.md)
+- [Python workflow service specification](specs/11-workflow-service.md)
 - [Apple Silicon training and model lineage](specs/research/apple-silicon.md)
 - [Model research, datasets, calibration, and hosting](specs/research/model-research.md)
 - [Illustrative workflow](workflows/financial-triage/workflow.yaml)
@@ -58,9 +58,9 @@ model/
   export/           Merge, quantize, package, and verify serving artifacts
 inference/          Standard model-server deployment profiles
 service/
-  src/core/         Transport-independent workflow execution
-  src/ports/        Typed extension contracts
-  src/adapters/     Model endpoints, inputs, outputs, persistence
+  src/foliqant/core/ Transport-independent workflow execution
+  src/foliqant/ports/ Typed extension contracts
+  src/foliqant/adapters/ Model endpoints, inputs, outputs, persistence
 contracts/          Language-neutral data schemas
 workflows/          Versioned processes, prompts, and workflow examples
 config/             Deployment-specific bindings and secret references
@@ -91,6 +91,6 @@ uses a loopback endpoint by default or an explicitly allowed trusted private-net
 endpoint; training remains a later explicit command.
 The small setup model exercises the lifecycle locally. Selecting and qualifying
 a production financial model is separate from verifying the tooling. The
-configurable workflow service remains a separate proposal.
+configurable workflow service remains under implementation as a separate Python package.
 
 Foliqant is a working name derived from folio and quant; no trademark or domain availability is claimed. A distribution license has not yet been selected.

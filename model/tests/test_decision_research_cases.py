@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import pytest
-
-from foliqant_model.contracts.base import canonical_digest
-from foliqant_model.curation.decision_contracts import (
+from foliqant_decisions import (
     PredicateResult,
     semantic_signature,
     validate_decision_output,
 )
+
+from foliqant_model.contracts.base import canonical_digest
 from foliqant_model.curation.decision_research_cases import build_research_case
 
 _SCENARIOS = (

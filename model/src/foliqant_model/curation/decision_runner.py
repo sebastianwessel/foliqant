@@ -7,6 +7,12 @@ from itertools import zip_longest
 from pathlib import Path
 from typing import cast
 
+from foliqant_decisions import (
+    DecisionInput,
+    DecisionOutput,
+    semantic_signature,
+    validate_decision_output,
+)
 from pydantic import ValidationError
 
 from ..artifacts import write_private_json
@@ -29,12 +35,6 @@ from .contracts import (
     CurationPlan,
     ImportedRecord,
     SourceBatch,
-)
-from .decision_contracts import (
-    DecisionInput,
-    DecisionOutput,
-    semantic_signature,
-    validate_decision_output,
 )
 from .decision_generation import (
     canonical_decision_output,
@@ -450,6 +450,15 @@ def _run_decision_curation(
             recipe_sha256=decision_generation_recipe_digest(),
             native=True,
         )
+        if all(
+            outcome.status == "accepted" or outcome.reason == "solver-semantic-mismatch"
+            for outcome in repair.outcomes.values()
+        ):
+            raise ModelError(
+                "ARGUMENT_INVALID",
+                "No automatically repairable native rejections; semantic disagreements require "
+                "reference review or adjudication before a new recipe",
+            )
     run = (
         root
         / "curation"
@@ -719,6 +728,8 @@ def _run_decision_curation(
                     else:
                         from .repair import prior_response
 
+                        if prior_rejections[job.jobId].reason == "solver-semantic-mismatch":
+                            reused += 1
                         outcome = generate_decision_candidate(
                             config,
                             identity=identity,
@@ -729,8 +740,11 @@ def _run_decision_curation(
                             prior_response=prior_response(
                                 repair,
                                 prior_rejections[job.jobId],
-                                phase="rewrite" if seed.mode == "rewrite" else "solver",
+                                phase="rewrite"
+                                if prior_rejections[job.jobId].reason.startswith("rewrite-")
+                                else "solver",
                             ),
+                            prior_cache_dir=repair.parent / "requests",
                             request_namespace=repair.namespace,
                         )
                 if outcome.record is not None and seed.mode == "rewrite":

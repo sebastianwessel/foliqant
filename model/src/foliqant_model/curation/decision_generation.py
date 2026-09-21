@@ -10,6 +10,14 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
+from foliqant_decisions import (
+    Citation,
+    DecisionInput,
+    DecisionOutput,
+    RequestUnitsResult,
+    semantic_signature,
+    validate_decision_output,
+)
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..contracts.base import canonical_digest
@@ -23,19 +31,12 @@ from .contracts import (
     CandidateOutcome,
     CurationConfig,
 )
-from .decision_contracts import (
-    Citation,
-    DecisionInput,
-    DecisionOutput,
-    RequestUnitsResult,
-    semantic_signature,
-    validate_decision_output,
-)
 from .decision_seeds import DecisionSeed, decision_seed_recipe_digest
 from .endpoint import (
     GENERATION_REQUEST_FORMAT,
     EndpointModelIdentity,
     GenerationRejected,
+    GenerationRejection,
     GenerationResponse,
 )
 from .generation import (
@@ -49,9 +50,11 @@ from .generation import (
     _retained_response,
     _retry_feedback_recipe,
 )
+from .storage import load_object, store_object
 
-_REWRITE_PROMPT_VERSION = "native-decision-state-rewrite-v5"
-_SOLVER_PROMPT_VERSION = "native-decision-blind-solve-v7"
+_REWRITE_PROMPT_VERSION = "native-decision-state-rewrite-v6"
+_SOLVER_PROMPT_VERSION = "native-decision-blind-solve-v9"
+_SOLVER_SCHEMA_PROJECTION_VERSION = "task-result-types-reachable-definitions-v1"
 _MAX_CANONICAL_CITATION_CHARACTERS = 4096
 _REWRITE_SYSTEM = (
     "For the explicitly selected state sources, rewrite only their text into natural wording in "
@@ -73,12 +76,21 @@ _REWRITE_SYSTEM = (
 _SOLVER_GROUNDING_SYSTEM = (
     "Write each explanation summary as one grounded, concise reason, aiming for 160 characters or "
     "fewer. Use a second sentence only for a decisive limitation. Never exceed the summary's "
-    "400-character schema limit or truncate mid-thought; revise it to fit. Apply the question's "
-    "stated criteria and cite exact text only from allowed sources. List contrary evidence and "
+    "400-character schema limit or truncate mid-thought; revise it to fit. Use a concise "
+    "paraphrase for explanation.summary; reserve verbatim quotations for citation quote fields "
+    "in explanation.evidence, explanation.contraryEvidence, and request-unit evidence. "
+    "JSON-escape quotation marks, backslashes, and control characters inside every string. "
+    "After JSON decoding, each citation's quote must still match the source text exactly. "
+    "Apply the question's stated criteria and cite exact text only from allowed sources. "
+    "List contrary evidence and "
     "missing facts, and do not introduce requirements that the task does not state. An unreported "
     "fact is "
     "unknown, not false; an explicit statement that an item is absent can resolve a question about "
-    "presence. Before returning, check each result independently: use the actual source IDs, "
+    "presence. For a predicate, true or false requires answerability.status=answerable; "
+    "unknown requires not_answerable or undetermined and every applicable issue. Never pair "
+    "unknown with answerable or use partially_answerable for a predicate. Establish support, "
+    "contradiction, or insufficient evidence before choosing the value and status together. "
+    "Before returning, check each result independently: use the actual source IDs, "
     "copy exact quotes, include a non-null subject in that same request unit's evidence, and "
     "report every applicable issue code once. A collection with supported items and additional "
     "missing material is partial, not complete. When checking a proposed answer, verify each "
@@ -144,6 +156,55 @@ _UNIT_PATTERNS = {
     "month": re.compile(r"\bmonths?\b|\bmonat(?:e|en|s)?\b", re.IGNORECASE),
     "year": re.compile(r"\b(?:years?|jahr(?:e|en|es)?)\b", re.IGNORECASE),
 }
+_CALENDAR_YEAR_END = re.compile(
+    r"\b(?:year[- ]end|end\s+of(?:\s+the\s+year)?|Jahresende|Ende(?:\s+des\s+Jahres)?)"
+    r"\s+(?P<year>[12]\d{3})\b",
+    re.IGNORECASE,
+)
+_REPAIR_GUIDANCE = {
+    "unknown-on-answerable": (
+        "Set predicate value and status together: unknown requires not_answerable or "
+        "undetermined with applicable issues; true/false requires answerable. Resolve "
+        "from evidence only."
+    ),
+    "substantive-on-unanswerable": (
+        "Resolve the predicate value and status together from evidence: true/false "
+        "requires answerable; unknown requires not_answerable or undetermined with "
+        "applicable issues."
+    ),
+    "quote-not-found": (
+        "Copy an exact contiguous quote from an allowed source, retaining its source ID."
+    ),
+    "subject-not-in-evidence": (
+        "A non-null request subject must occur literally in that unit's evidence; "
+        "choose the supported distinguishing span or null when absent."
+    ),
+    "null-category-without-no-match-issue": (
+        "Every null category requires no_matching_option among that result's issues."
+    ),
+    "relation-exclusive-dependency": (
+        "Remove unsupported dependencies: mutually exclusive requests cannot require "
+        "one another, including indirectly."
+    ),
+    "issues-required": "Include all applicable input issues when the result is not answerable.",
+    "partial-not-supported": "Only multiselect and request_units permit partially_answerable.",
+    "evidence-required": (
+        "An answerable result needs exact supporting evidence from allowed sources."
+    ),
+    "rewrite-no-wording-change": (
+        "Change sentence structure or wording in a selected source while preserving all "
+        "facts and frozen sources."
+    ),
+    "rewrite-units-changed": (
+        "Preserve durations, rates, numeric units and calendar boundaries; do not "
+        "substitute a different unit."
+    ),
+    "rewrite-canonical-support-unmappable": (
+        "Preserve exact quoted anchors and request subjects and keep selected sources "
+        "concise enough to cite, without removing any facts."
+    ),
+}
+
 _NEGATION = re.compile(
     r"\b(?:cannot|(?:is|are|was|were|do|does|did|has|have|had|ca|could|wo|would|"
     r"sha|should|must|need|dare)n['’]t|not|no|never|without|missing|unavailable|unable|nicht|niemals|ohne|"
@@ -215,9 +276,52 @@ def _canonical_text(value: object) -> str:
     )
 
 
-def _decision_output_schema() -> dict[str, object]:
+def _decision_output_schema(task: DecisionInput | None = None) -> dict[str, object]:
+    """Keep only task-used result types in the model request schema.
+
+    The no-argument form retains the full public V1 schema. Task specialization
+    removes unused union branches and unreachable definitions only; it preserves
+    declaration order, value domains and all remaining constraints. Full V1 and
+    task-semantic validation still run on every response.
+    """
+
     schema = DecisionOutput.model_json_schema()
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    if task is None:
+        return schema
+    types = {question.type for question in task.questions}
+    definitions = schema["$defs"]
+    result_union = definitions["DecisionResult"]
+    discriminator = result_union["discriminator"]
+    discriminator["mapping"] = {
+        key: value for key, value in discriminator["mapping"].items() if key in types
+    }
+    selected_refs = set(discriminator["mapping"].values())
+    result_union["oneOf"] = [
+        branch for branch in result_union["oneOf"] if branch["$ref"] in selected_refs
+    ]
+    reachable: set[str] = set()
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            reference = value.get("$ref")
+            if isinstance(reference, str) and reference.startswith("#/$defs/"):
+                name = reference.removeprefix("#/$defs/")
+                if name not in reachable:
+                    reachable.add(name)
+                    visit(definitions[name])
+            for nested in value.values():
+                visit(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                visit(nested)
+
+    # Do not remove/reinsert $defs: its root declaration position is significant
+    # to the exact HTTP request identity and must remain unchanged.
+    visit({key: value for key, value in schema.items() if key != "$defs"})
+    schema["$defs"] = {
+        name: definition for name, definition in definitions.items() if name in reachable
+    }
     return schema
 
 
@@ -259,7 +363,7 @@ def decision_generation_recipe_digest() -> str:
                 "schemaShape": "bounded-source-array-v2",
                 "guards": (
                     "typed-dates-lexical-money-units-relations-identifiers-"
-                    "metadata-quotes-frozen-sources-wording-negations-percent-inclusive-v10"
+                    "metadata-quotes-frozen-sources-wording-negations-calendar-end-v11"
                 ),
             },
             "solver": {
@@ -267,12 +371,20 @@ def decision_generation_recipe_digest() -> str:
                 "system": "exact-parent-native-system",
                 "groundingSystem": _SOLVER_GROUNDING_SYSTEM,
                 "schema": _decision_output_schema(),
+                "schemaProjection": _SOLVER_SCHEMA_PROJECTION_VERSION,
                 "validation": "decision-output-semantic-signature-canonical-support-partial-v3",
                 "canonicalCitationMaximumCharacters": _MAX_CANONICAL_CITATION_CHARACTERS,
             },
             "seeds": decision_seed_recipe_digest(),
             "requestFormat": GENERATION_REQUEST_FORMAT,
             "retryFeedback": _retry_feedback_recipe(),
+            "decisionRecovery": {
+                "version": "phase-specific-retained-candidate-terminal-semantic-v2",
+                "maximumProblems": 16,
+                "maximumProblemCharacters": 256,
+                "guidance": _REPAIR_GUIDANCE,
+                "calendarEndPattern": _CALENDAR_YEAR_END.pattern,
+            },
         }
     )
 
@@ -546,8 +658,13 @@ def _source_text_problem(original: str, rewritten: str) -> str | None:
 def _unit_facts(text: str) -> Counter[str]:
     masked = list(text)
     units: Counter[str] = Counter()
+    # Calendar boundaries are dates, not duration/rate units. Match both forms
+    # and retain the specific year so dropping or moving the boundary still fails.
+    for match in _CALENDAR_YEAR_END.finditer(text):
+        units["calendar-year-end:" + match.group("year")] += 1
+        _mask(masked, match.start(), match.end())
     rate_pattern = _UNIT_PATTERNS["month-rate"]
-    for match in rate_pattern.finditer(text):
+    for match in rate_pattern.finditer("".join(masked)):
         units["month-rate"] += 1
         _mask(masked, match.start(), match.end())
     remaining = "".join(masked)
@@ -629,6 +746,142 @@ def _quarantined(
     )
 
 
+def _decision_repair_messages(
+    messages: list[ChatMessage],
+    *,
+    task: DecisionInput,
+    phase: Literal["rewrite", "solver"],
+    previous_response: str | None,
+    reason: str,
+) -> list[ChatMessage]:
+    """Report bounded structural defects computed without consulting the oracle."""
+
+    repaired = _repair_messages(messages, previous_response=previous_response, reason=reason[:256])
+    problems = [reason]
+    if phase == "solver" and previous_response is not None:
+        parsed = parse_strict_json(previous_response)
+        if parsed.valid:
+            try:
+                output = DecisionOutput.model_validate(parsed.value, strict=True)
+            except ValidationError as error:
+                problems = [
+                    "schema:"
+                    + ".".join(str(part)[:64] for part in item["loc"][:8])
+                    + ":"
+                    + item["type"]
+                    for item in error.errors(include_input=False)
+                ]
+            else:
+                problems = validate_decision_output(task, output) or [reason]
+    defects = []
+    for problem in sorted(set(problems))[:16]:
+        code = problem.rsplit(":", 1)[-1]
+        defects.append(
+            {
+                "code": problem[:256],
+                "guidance": _REPAIR_GUIDANCE.get(
+                    code,
+                    "Check the requested schema and the indicated contract rule against the "
+                    "original task and evidence; do not invent facts or infer a hidden target.",
+                ),
+            }
+        )
+    payload = json.loads(repaired[-1].content)
+    payload.update(
+        {
+            "phase": phase,
+            "validationProblems": defects,
+            "problemsTruncated": len(set(problems)) > 16,
+        }
+    )
+    repaired[-1] = ChatMessage(role="user", content=_canonical_text(payload))
+    return repaired
+
+
+def _recover_call(
+    prior_cache_dir: Path, cache_dir: Path, call: CandidateCallTrace
+) -> GenerationResponse | GenerationRejection:
+    """Verify a retained immutable call before copying it into child provenance."""
+
+    payload = load_object(prior_cache_dir / "calls" / f"{call.callId}.json")
+    if (
+        not isinstance(payload, dict)
+        or set(payload) not in ({"callIdentity", "response"}, {"callIdentity", "rejection"})
+        or not isinstance(payload["callIdentity"], dict)
+        or canonical_digest(payload["callIdentity"]) != call.callId
+    ):
+        raise ModelError("INTEGRITY_FAILED", "Retained decision call identity changed")
+    try:
+        response = (
+            GenerationResponse.model_validate(payload["response"], strict=True)
+            if "response" in payload
+            else GenerationRejection.model_validate(payload["rejection"], strict=True)
+        )
+    except ValidationError as error:
+        raise ModelError("INTEGRITY_FAILED", "Retained decision response is invalid") from error
+    identity = payload["callIdentity"]
+    if (
+        response.requestSha256 != call.requestSha256
+        or response.requestSha256 != identity.get("requestSha256")
+        or response.rawResponseSha256 != call.responseSha256
+    ):
+        raise ModelError("INTEGRITY_FAILED", "Retained decision response identity changed")
+    if isinstance(response, GenerationResponse):
+        try:
+            model = EndpointModelIdentity.model_validate(identity.get("model"), strict=True)
+        except ValidationError as error:
+            raise ModelError(
+                "INTEGRITY_FAILED", "Retained decision call model is invalid"
+            ) from error
+        schema = identity.get("schema")
+        if (
+            not isinstance(schema, dict)
+            or response.schemaSha256 != canonical_digest(schema)
+            or response.model.modelId != model.modelId
+            or response.model.metadataSha256 != model.metadataSha256
+        ):
+            raise ModelError("INTEGRITY_FAILED", "Retained decision response identity changed")
+    store_object(cache_dir / "calls" / f"{call.callId}.json", payload)
+    return response
+
+
+def _recover_rewrite(
+    task: DecisionInput,
+    seed: DecisionSeed,
+    config: CurationConfig,
+    outcome: CandidateOutcome,
+    prior_cache_dir: Path | None,
+    cache_dir: Path,
+) -> tuple[DecisionInput, GenerationResponse | None, CandidateCallTrace | None]:
+    if outcome.reason.startswith("rewrite-"):
+        return task, None, None
+    for attempt in reversed(outcome.attemptTrace):
+        for call in reversed(attempt.calls):
+            if call.phase != "rewrite":
+                continue
+            if call.status != "accepted":
+                raise ModelError("INTEGRITY_FAILED", "Solver repair has no validated candidate")
+            if prior_cache_dir is None:
+                raise ModelError(
+                    "ARGUMENT_INVALID", "Solver repair requires the retained rewrite cache"
+                )
+            response = _recover_call(prior_cache_dir, cache_dir, call)
+            if not isinstance(response, GenerationResponse):
+                raise ModelError("INTEGRITY_FAILED", "Retained rewrite was not accepted")
+            candidate, problem = _apply_rewrite(
+                task,
+                response.output,
+                rewrite_source_ids=seed.rewriteSourceIds,
+                max_characters=config.generation.maxInputCharacters,
+            )
+            if problem is not None or candidate is None:
+                raise ModelError("INTEGRITY_FAILED", "Retained rewrite no longer passes validation")
+            return candidate, response, call
+    # Legacy/non-call quarantines such as an input budget rejection have no
+    # validated rewrite to retain and begin with the rewrite phase.
+    return task, None, None
+
+
 def generate_decision_candidate(
     config: CurationConfig,
     *,
@@ -638,6 +891,7 @@ def generate_decision_candidate(
     cache_dir: Path,
     prior_rejection: CandidateOutcome | None = None,
     prior_response: str | None = None,
+    prior_cache_dir: Path | None = None,
     request_namespace: str | None = None,
 ) -> CandidateOutcome:
     """Generate one checked decision record using a hidden code-authored oracle."""
@@ -649,7 +903,9 @@ def generate_decision_candidate(
         job,
         retained_response=prior_response,
         allow_remapped_job=request_namespace is not None,
-        preferred_phase="rewrite" if seed.mode == "rewrite" else "solver",
+        preferred_phase="rewrite"
+        if prior_rejection and prior_rejection.reason.startswith("rewrite-")
+        else "solver",
     )
     if len(_canonical_text(task.model_dump(mode="json"))) > config.generation.maxInputCharacters:
         return _quarantined(
@@ -668,7 +924,27 @@ def generate_decision_candidate(
             ],
         )
 
-    output_schema = _decision_output_schema()
+    candidate_task = task
+    rewrite_response: GenerationResponse | None = None
+    recovered_call: CandidateCallTrace | None = None
+    if prior_rejection is not None and prior_rejection.reason == "solver-semantic-mismatch":
+        if prior_cache_dir is None and any(
+            attempt.calls for attempt in prior_rejection.attemptTrace
+        ):
+            raise ModelError(
+                "ARGUMENT_INVALID", "Retained quarantine requires its verified call cache"
+            )
+        for trace in prior_rejection.attemptTrace:
+            for call in trace.calls:
+                if call.responseSource != "absent":
+                    assert prior_cache_dir is not None
+                    _recover_call(prior_cache_dir, cache_dir, call)
+        return prior_rejection.model_copy(update={"jobId": job.jobId})
+    if seed.mode == "rewrite" and prior_rejection is not None:
+        candidate_task, rewrite_response, recovered_call = _recover_rewrite(
+            task, seed, config, prior_rejection, prior_cache_dir, cache_dir
+        )
+    output_schema = _decision_output_schema(task)
     request_digests: list[str] = []
     response_digests: list[str] = []
     last_reason = "solver-output-invalid"
@@ -680,15 +956,22 @@ def generate_decision_candidate(
     for attempt in range(1, config.generation.maxAttempts + 1):
         completed_attempts = attempt
         attempt_seed = (seed_base + attempt - 1) % 4_294_967_296
-        candidate_task = task
-        accepted_responses: list[GenerationResponse] = []
+        accepted_responses = [rewrite_response] if rewrite_response is not None else []
+        rewrite_feedback_response = (
+            _retained_response(rewrite_response)[0] if rewrite_response is not None else None
+        )
         calls: list[CandidateCallTrace] = []
-        rewrite_feedback_response: str | None = None
-        if seed.mode == "rewrite":
+        if recovered_call is not None and attempt == 1:
+            calls.append(recovered_call)
+            request_digests.append(recovered_call.callId)
+            response_digests.append(recovered_call.responseSha256)
+        if seed.mode == "rewrite" and rewrite_response is None:
             rewrite_messages = _rewrite_messages(task, job.language, seed.rewriteSourceIds)
             if feedback is not None:
-                rewrite_messages = _repair_messages(
+                rewrite_messages = _decision_repair_messages(
                     rewrite_messages,
+                    task=task,
+                    phase="rewrite",
                     previous_response=feedback[0],
                     reason=feedback[1],
                 )
@@ -815,6 +1098,7 @@ def generate_decision_candidate(
                 feedback = (retained, last_reason)
                 continue
             candidate_task = rewritten_task
+            rewrite_response = response
             accepted_responses.append(response)
             rewrite_feedback_response, rewrite_source = _retained_response(response)
             calls.append(
@@ -831,9 +1115,11 @@ def generate_decision_candidate(
             )
 
         solver_messages = _solver_messages(candidate_task, seed.parent)
-        if seed.mode != "rewrite" and feedback is not None:
-            solver_messages = _repair_messages(
+        if feedback is not None and not feedback[1].startswith("rewrite-"):
+            solver_messages = _decision_repair_messages(
                 solver_messages,
+                task=candidate_task,
+                phase="solver",
                 previous_response=feedback[0],
                 reason=feedback[1],
             )
@@ -886,12 +1172,7 @@ def generate_decision_candidate(
                     calls=calls,
                 )
             )
-            feedback = (
-                rewrite_feedback_response
-                if seed.mode == "rewrite"
-                else error.rejection.finalAssistantResponse,
-                last_reason,
-            )
+            feedback = (error.rejection.finalAssistantResponse, last_reason)
             continue
         except ModelError as error:
             if error.code != "OUTPUT_INVALID":
@@ -927,7 +1208,7 @@ def generate_decision_candidate(
                     calls=calls,
                 )
             )
-            feedback = (rewrite_feedback_response, last_reason)
+            feedback = (None, last_reason)
             continue
         request_digests.append(call_id)
         response_digests.append(response.rawResponseSha256)
@@ -957,10 +1238,7 @@ def generate_decision_candidate(
                     calls=calls,
                 )
             )
-            feedback = (
-                rewrite_feedback_response if seed.mode == "rewrite" else solver_retained,
-                last_reason,
-            )
+            feedback = (solver_retained, last_reason)
             continue
         problems = validate_decision_output(candidate_task, candidate_output)
         if problems:
@@ -975,7 +1253,7 @@ def generate_decision_candidate(
             except ModelError as error:
                 if error.code != "OUTPUT_INVALID":
                     raise
-                last_reason = "solver-canonical-support-unmappable"
+                last_reason = "rewrite-canonical-support-unmappable"
         solver_retained, solver_source = _retained_response(response)
         if last_reason != "automated-checks-passed":
             calls.append(
@@ -998,10 +1276,13 @@ def generate_decision_candidate(
                     calls=calls,
                 )
             )
-            feedback = (
-                rewrite_feedback_response if seed.mode == "rewrite" else solver_retained,
-                last_reason,
-            )
+            feedback = (solver_retained, last_reason)
+            if last_reason == "solver-semantic-mismatch":
+                break
+            if last_reason == "rewrite-canonical-support-unmappable":
+                rewrite_response = None
+                candidate_task = task
+                feedback = (rewrite_feedback_response, "rewrite-canonical-support-unmappable")
             continue
         accepted_reason = "blind-verification-passed" if seed.mode == "annotate" else last_reason
         calls.append(

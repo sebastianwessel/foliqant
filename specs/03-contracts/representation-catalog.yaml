@@ -14,9 +14,27 @@ applicability:
     - CAP-CURATE
     - CAP-NATIVE-DATA
 shapes:
+  - shape_id: service.envelope
+    representation_class: boundary
+    canonical_source: ../service/src/foliqant/contracts/envelope.py
+    owner: service-contracts
+    stability: versioned
+    open_policy: open_json_leaf
+    allowed_consumers: [service-input-adapters, embedded-callers]
+    source_contract_refs: [CONTRACT-SERVICE-V1]
+    mapping_refs: [MAP-SERVICE-ACCEPT-ENVELOPE]
+  - shape_id: service.accepted-envelope
+    representation_class: domain
+    canonical_source: ../service/src/foliqant/core/envelope.py
+    owner: service-core
+    stability: internal
+    open_policy: open_json_leaf
+    allowed_consumers: [service-engine, service-output-adapters]
+    source_contract_refs: [CONTRACT-SERVICE-V1]
+    mapping_refs: [MAP-SERVICE-ACCEPT-ENVELOPE]
   - shape_id: model.category-catalog
     representation_class: command
-    canonical_source: ../model/src/foliqant_model/curation/category_catalog.py
+    canonical_source: ../packages/decision-contracts/src/foliqant_decisions/category_catalog.py
     owner: curation-module
     stability: experimental
     open_policy: closed
@@ -478,6 +496,19 @@ shapes:
     mapping_refs:
       - MAP-SCOPED-SOURCE-PROJECTION
 mappings:
+  - mapping_id: MAP-SERVICE-ACCEPT-ENVELOPE
+    from_shape: service.envelope
+    to_shape: service.accepted-envelope
+    direction: boundary_to_domain
+    allowed_differences: [populate_missing_verified_identity, recursively_freeze_json]
+    redaction_or_loss_policy: No business fields are omitted or coerced; mismatched
+      protected claims reject; absent verified identity stays absent.
+    field_operations:
+      - payload:copy:immutable_json
+      - metadata:copy:immutable_json
+      - metadata.tenant_id:validate_against_trusted_context_and_populate_if_absent
+      - metadata.principal_id:validate_against_trusted_context_and_populate_if_absent
+    verification: [../service/tests/test_envelope.py, ../service/tests/test_decoding.py]
   - mapping_id: MAP-CATEGORY-OPTIONS
     from_shape: model.category-catalog
     to_shape: model.decision-input

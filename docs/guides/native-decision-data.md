@@ -35,6 +35,10 @@ runs on this machine. Other compatible servers can be configured explicitly;
 they must support the selected reasoning setting. Foliqant does not silently
 remove the setting or switch models if a request fails.
 
+Each solver request includes only the output types its questions need. Unused
+schema branches are omitted to reduce request complexity; the public result
+format and full response validation stay unchanged.
+
 Start the full bounded recipe from the repository root:
 
 ```sh
@@ -108,8 +112,16 @@ unless you deliberately need an override. Configuration changes create new runs.
 
 ### Add the scoped source projections
 
-The ordinary full and pilot recipes keep their existing BANKING77 and WANLI
-projection behavior. They do not automatically project typed-decisions,
+The ordinary full and pilot recipes prepare BANKING77 intent choices with
+versioned category definitions and WANLI three-way text-relation choices:
+`entailment`, `contradiction` and `neutral`. A neutral relation is a valid category,
+not a claim that the relation question lacks an answer. BANKING77 definitions
+are editorial task guidance; they do not make the original labels human-verified
+for this native task. Ambiguous categories and questionable labels can still
+lead to quarantine. Acceptance means automated checks and reference agreement,
+not proof that a source annotation is correct.
+
+These recipes do not automatically project typed-decisions,
 MultiDoGO, or TAT-QA into native tasks. To opt into the bounded mappings, first
 prepare a plan from a run whose source snapshots and splits are already frozen:
 
@@ -198,6 +210,68 @@ labels and accepted rows remain unreviewed research data.
 The offline implementation is complete. The 32-task live projection pilot has
 not run, and model validation and quality acceptance remain deferred.
 
+### Migrate a completed decision run
+
+Use an explicit migration when a completed native run must be republished under
+the current deterministic projection and question-variant recipe:
+
+```sh
+./scripts/migrate-data \
+  --from-run /absolute/path/to/completed-run \
+  --output /absolute/path/to/new-migration
+```
+
+The equivalent package command is `foliqant-model migrate-decisions`. Omit
+`--output` only when the reported default external-workspace location is
+acceptable. Migration is offline: it performs no download, endpoint discovery,
+or model request. It verifies and reuses the completed run's immutable sources,
+rights, families, and splits, then publishes a separate migration plan and
+dataset without changing the parent.
+
+This differs from `--continue-from`. Continuation preserves a compatible run's
+existing recipe and finishes missing jobs. Migration applies the named current
+deterministic rules and records new ancestry instead of treating changed tasks
+as a continuation of old model calls.
+
+The migration can project eligible typed-decisions, MultiDoGO, and TAT-QA rows
+from their frozen source annotations. It also creates paired tasks from an
+annotation-complete, answerable multiselect: one isolated multiselect and one
+single-choice question over the identical state and applicability policy. One
+supported label produces that choice; several supported labels produce a null
+choice with `not_answerable` and `multiple_valid_options`. The transform does
+not choose a priority, infer an absent label, or create a predicate from silence.
+English and German prose stay in their record language; machine enums remain
+English.
+
+Every migrated row has explicit per-record migration provenance and source
+references, while source rights and the frozen family/split remain attached.
+`source-annotation`, `deterministic-computation`, `derived-reference`, and
+`historical-accepted` describe how a target was obtained. They do not mean a
+model verified the new task. Only a successfully rerun and validated pending
+task receives `model-verified` evidence status.
+
+Migration leaves unsupported or disputed rows in its reported review list and
+keeps eligible unfinished training tasks in a frozen pending queue. Run all or a
+bounded selection of that queue separately:
+
+```sh
+./scripts/rerun-migrated-data \
+  --from-migration /absolute/path/to/migration \
+  --limit 8 \
+  --job-id native-record-id \
+  --progress always
+```
+
+The equivalent package command is `foliqant-model rerun-migrated-decisions`.
+`--job-id` may be repeated and names a pending record ID. Without `--job-id`,
+the command uses the sorted pending queue; `--limit` bounds that selection.
+Unlike migration, rerunning performs local model inference. It uses the frozen
+model identity without discovery or substitution, stores resumable outcomes in
+a separate immutable child, and never submits held-out or review-only rows.
+Rerun the exact command after interruption. The final JSON reports the migration,
+dataset, artifact and report paths plus record, pending-task and review-item
+counts; progress stays on stderr.
+
 ## Outputs and resume
 
 The final JSON reports `runPath`, artifact paths, accepted/quarantined counts and
@@ -265,6 +339,16 @@ the schema in the prompt, so changing its order can change generation. Request
 hashes identify the exact bytes sent; artifact files use canonical hashes for
 integrity separately.
 
+The adapter reads standard OpenAI streaming responses internally. Your command
+still prints progress on stderr and one final JSON result on stdout. Reasoning
+text is discarded; only final-answer text and safe provider metadata are retained.
+If the model emits 1,024 consecutive JSON whitespace characters outside a
+quoted string, the adapter closes that response and records
+`long-json-whitespace-run` with the exact partial final answer. This is a
+degenerate-output limit, not a syntax rule. The normal bounded repair path can
+then correct that phase without accepting or silently rewriting the partial JSON.
+Whitespace inside quoted source text does not trigger this limit.
+
 A `TIMEOUT` stops generation when one local request exceeds its deadline. The
 300-second default is a per-request limit, not a limit for the whole run. The
 progress field `elapsed` measures time on the current candidate, which may need
@@ -323,8 +407,11 @@ the accepted-job count, not a generated-row count. Increasing a budget or changi
 creates a new run; the tool does not retry indefinitely or silently lower the
 coverage gate. An all-rejected pilot also fails.
 
-After a completed attempt, including one that failed only its coverage gate,
-retry quarantined jobs in a separate model turn:
+Inspect saved failures before retrying them. A valid response that disagrees
+with its reference receives `solver-semantic-mismatch` and needs source/task
+review; it is not automatically retried until it guesses the expected label.
+For recoverable output errors after a completed attempt, including one that
+failed only its coverage gate, use a separate repair run:
 
 ```sh
 ./scripts/generate-data --repair-from /absolute/path/to/curation/parent-run
@@ -333,10 +420,27 @@ retry quarantined jobs in a separate model turn:
 Use the same pilot or custom recipe and workspace settings as the parent. The
 child run verifies the parent configuration, recipe, source and native plans,
 model metadata, jobs and outcomes before inference. Accepted outcomes remain
-byte-for-byte unchanged. Only quarantined jobs receive fresh job, seed and
+byte-for-byte unchanged. Recoverable quarantined jobs receive fresh job, seed and
 request-cache identities plus bounded prior rejection feedback; oracle answers
-and hidden scenario labels are never feedback. Repeating the command resumes
+and hidden scenario labels are never feedback. Reference disagreements retain
+their quarantine and evidence without another generation call. A valid rewrite
+is reused when only its solver response needs correction; a rewrite defect is
+corrected in the rewrite phase. Repeating the command resumes
 the child. Use the child path as the next `--repair-from` value for a later pass.
+If only reference disagreements remain, repair stops before model discovery and
+asks for reference review; it does not create another retry-only child.
+
+Changed prompts, source mappings or validation rules require a new recipe run,
+not repair of an incompatible parent. Start with `./scripts/generate-data --pilot`
+and review a bounded source check before a full run. Existing artifacts remain
+available at their original paths, and verified source downloads can be reused.
+Do not copy old outcomes into changed tasks or delete the old run. The standard
+16-job pilot covers authored cases; it does not qualify all imported mappings.
+
+For truncated responses, inspect the retained final content, finish reason and
+optional provider token usage before changing token limits. Missing usage means
+unavailable, not zero. Repeated control-character output is not evidence that a
+larger output allowance will fix the problem.
 
 If you repair before extending source projections, prepare a new projection
 plan with `--from-run` pointing to the completed repair child. A plan is bound
@@ -372,8 +476,8 @@ For new catalogs, validate your configuration with `CategoryCatalog` before
 building a question:
 
 ```python
-from foliqant_model.curation.category_catalog import CategoryCatalog
-from foliqant_model.curation.decision_contracts import ChoiceQuestion
+from foliqant_decisions.category_catalog import CategoryCatalog
+from foliqant_decisions.contracts import ChoiceQuestion
 
 catalog = CategoryCatalog.model_validate({
     "categories": [
@@ -486,11 +590,16 @@ limitation. Oversized summaries are rejected rather than truncated. This limit
 does not apply to citation quotes, `missingFacts` text, or the complete
 explanation object.
 
+Use a concise paraphrase for the summary and put verbatim quotations in citation
+fields. Escape quotation marks, backslashes and control characters when writing
+JSON strings. After JSON decoding, each citation must match the source exactly;
+the generator does not silently repair malformed JSON or change quoted evidence.
+
 Validate JSON with [the output schema](../../contracts/model/decision-output.schema.json)
 and then validate its question IDs, allowed answers and citations against
 [the input contract](../../contracts/model/decision-input.schema.json). Python
 callers can use `DecisionInput`, `DecisionOutput`, and
-`validate_decision_output` from `foliqant_model.curation.decision_contracts`.
+`validate_decision_output` from `foliqant_decisions.contracts`.
 The validator checks structure and declared references, not semantic truth.
 Partial collections must contain at least one supported item and an explanation
 evidence citation. A missing part of a requested collection prevents a complete
