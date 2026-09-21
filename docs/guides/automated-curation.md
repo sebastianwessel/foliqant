@@ -70,7 +70,7 @@ The command writes one JSON result. Save its `runPath`, `reportPath`, and datase
 To verify the resulting dataset, pass the `source-corpus` path printed by the command:
 
 ```sh
-uv run --no-sync foliqant-model verify /absolute/path/to/source-corpus
+uv run --project model --no-sync foliqant-model verify /absolute/path/to/source-corpus
 ```
 
 Preparation and verification establish byte integrity, declared lineage and partition rules. They do not establish label correctness, financial fitness, or permission for an intended product.

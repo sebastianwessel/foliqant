@@ -18,7 +18,7 @@ with an ASCII letter or digit and then contain only letters, digits, `.`, `_` or
 New category catalogs normalize IDs to unique lowercase snake_case keys matching
 `[a-z][a-z0-9]*(?:_[a-z0-9]+)*` and require nonblank descriptions. Normalization
 collisions are rejected. Use `CategoryCatalog`
-from `foliqant_decisions.category_catalog`; see
+from `foliqant.decisions.category_catalog`; see
 [category definitions](../guides/native-decision-data.md#define-categories-with-clear-boundaries).
 This does not change historical V1 identifiers or rewrite stored artifacts.
 

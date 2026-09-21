@@ -7,13 +7,14 @@ from itertools import zip_longest
 from pathlib import Path
 from typing import cast
 
-from foliqant_decisions import (
+from pydantic import ValidationError
+
+from foliqant.decisions import (
     DecisionInput,
     DecisionOutput,
     semantic_signature,
     validate_decision_output,
 )
-from pydantic import ValidationError
 
 from ..artifacts import write_private_json
 from ..contracts.base import canonical_digest

@@ -6,14 +6,14 @@ import re
 from collections import Counter
 
 import pytest
-from foliqant_decisions import (
+
+from foliqant.decisions import (
     DecisionInput,
     DecisionOutput,
     RequestUnitsResult,
     semantic_signature,
     validate_decision_output,
 )
-
 from foliqant_model.curation.decision_adequacy_cases import build_adequacy_case
 from foliqant_model.curation.decision_german_research import (
     ADEQUACY_TRANSLATIONS,

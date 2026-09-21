@@ -7,8 +7,9 @@ import os
 import stat
 from pathlib import Path
 
-from foliqant_decisions import CategoryCatalog, DecisionInput, DecisionOutput
 from pydantic import BaseModel
+
+from foliqant.decisions import CategoryCatalog, DecisionInput, DecisionOutput
 
 from .contracts import (
     ArtifactManifest,

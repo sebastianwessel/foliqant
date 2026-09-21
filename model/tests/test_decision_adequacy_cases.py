@@ -1,7 +1,6 @@
 """Adequacy supervision must assess an explicit task, including required unknowns."""
 
-from foliqant_decisions import validate_decision_output
-
+from foliqant.decisions import validate_decision_output
 from foliqant_model.curation.decision_adequacy_cases import build_adequacy_case
 
 

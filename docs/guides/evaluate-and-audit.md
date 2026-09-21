@@ -46,7 +46,7 @@ valid JSON required.
 Use the adapter with the exact model parent it was trained for:
 
 ```sh
-uv run --no-sync foliqant-model evaluate \
+uv run --project model --no-sync foliqant-model evaluate \
   --config /absolute/path/to/evaluation.yaml \
   --model /absolute/path/to/model \
   --adapter /absolute/path/to/adapter \
@@ -72,7 +72,7 @@ First produce a calibration evaluation with the same model, optional adapter,
 dataset and evaluation configuration intended for the later test:
 
 ```sh
-uv run --no-sync foliqant-model evaluate \
+uv run --project model --no-sync foliqant-model evaluate \
   --config /absolute/path/to/evaluation.yaml \
   --model /absolute/path/to/model \
   --adapter /absolute/path/to/adapter \
@@ -85,7 +85,7 @@ Then select a threshold. This example allows at most a 10% empirical error rate
 and requires at least 20 accepted component representatives:
 
 ```sh
-uv run --no-sync foliqant-model calibrate \
+uv run --project model --no-sync foliqant-model calibrate \
   --evaluation /absolute/path/to/calibration-evaluation \
   --max-error 0.1 \
   --min-accepted 20 \
@@ -102,7 +102,7 @@ result is an abstain-all policy with a null threshold.
 Create a test evaluation without changing the deployment profile:
 
 ```sh
-uv run --no-sync foliqant-model evaluate \
+uv run --project model --no-sync foliqant-model evaluate \
   --config /absolute/path/to/evaluation.yaml \
   --model /absolute/path/to/model \
   --adapter /absolute/path/to/adapter \
@@ -110,7 +110,7 @@ uv run --no-sync foliqant-model evaluate \
   --split test \
   --output /absolute/path/to/test-evaluation
 
-uv run --no-sync foliqant-model audit \
+uv run --project model --no-sync foliqant-model audit \
   --evaluation /absolute/path/to/test-evaluation \
   --policy /absolute/path/to/policy \
   --output /absolute/path/to/audit

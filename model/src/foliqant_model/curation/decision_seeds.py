@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from typing import Literal, TypedDict
 
-from foliqant_decisions import (
+from pydantic import model_validator
+
+from foliqant.decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,
@@ -37,7 +39,6 @@ from foliqant_decisions import (
     RequestUnitsResult,
     RequiresRelation,
 )
-from pydantic import model_validator
 
 from ..contracts.base import ContractModel, NonEmptyStr, canonical_digest
 from ..contracts.inputs import ChatMessage, DataRecord

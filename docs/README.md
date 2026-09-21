@@ -1,35 +1,37 @@
-# Foliqant model tools
+# Foliqant documentation
 
-Prepare local training data and model artifacts with reproducible inputs and
-recorded provenance. Commands run on your computer. Setup and automated curation
-download pinned files; preparation and verification run locally without
-contacting a model provider.
+Foliqant has two deliberately separate parts:
 
-Start with the small exercise, then follow the lifecycle you need:
+| Part | Use it for | Execution model |
+| --- | --- | --- |
+| `foliqant` Python package | Compile and run workflows around model, MCP, and Python steps | In process; each call returns its result |
+| `model/` tool project | Curate data, train adapters, evaluate, calibrate, and export models | Explicit local commands that produce versioned artifacts |
 
-1. [Understand the model lifecycle](getting-started/concepts.md)
-2. [Set up your local workspace](getting-started/setup.md)
-3. [Train and export your first adapter](getting-started/first-model.md)
-4. [Check the machine or fetch another model](guides/check-and-fetch.md)
-5. [Build a public research corpus automatically](guides/automated-curation.md)
-6. [Prepare your own dataset](guides/prepare-data.md)
-7. [Record licenses and permissions](guides/data-licenses.md)
-8. [Train and customize adapters](guides/train-and-customize.md)
-9. [Evaluate and audit a model](guides/evaluate-and-audit.md)
-10. [Export and run a merged model](guides/export-and-run.md)
-11. [Review every configuration field](reference/configuration.md)
-12. [Verify and recover artifacts](operations/artifacts.md)
+If you want to add Foliqant to an application, start with
+[install and run](getting-started/runtime.md), then read
+[workflow authoring](guides/build-workflows.md) and
+[testing and evaluation](guides/testing-and-evaluation.md). Runtime settings and
+CLI commands are listed in [runtime configuration](reference/runtime-configuration.md).
 
-Agents operating this repository can use the
-[Foliqant model operating skill](skills/foliqant-model.md).
+The runnable business examples are:
 
-For the native state-and-questions format with answerability and explanations,
-follow [Generate typed decision research data](guides/native-decision-data.md).
+- [support triage](../examples/support_triage/README.md), including a local Qwen
+  workflow and an in-code golden evaluation suite;
+- [public-request lookup](../examples/public_request_mcp/README.md), using a
+  read-only local MCP tool;
+- [HTTP wrapper](../examples/http-workflow/README.md), showing only the inbound
+  transport boundary.
 
-The small exercise checks the tooling. Its model and data do not establish
-accuracy for financial decisions, regulatory interpretation or legal advice.
+For model development, continue with:
 
-For the separate workflow service, see its [guide](../service/README.md),
-[offline embedded example](../examples/embedded-workflow/README.md) and
-[operating skill](../skills/foliqant-service/SKILL.md). The embedded runtime is
-available; the complete model-enabled, durable service remains under implementation.
+1. [Set up the model project](getting-started/setup.md).
+2. [Run the first local lifecycle](getting-started/first-model.md).
+3. [Prepare data](guides/prepare-data.md) or [curate public sources](guides/automated-curation.md).
+4. [Train and customize](guides/train-and-customize.md).
+5. [Evaluate and audit](guides/evaluate-and-audit.md).
+6. [Export and verify](guides/export-and-run.md).
+
+The [runtime and model-development boundary](concepts/runtime-and-model-development.md)
+explains which project owns each job. [Artifact operations](operations/artifacts.md)
+and the [model configuration reference](reference/configuration.md) cover the
+model lifecycle in more detail.

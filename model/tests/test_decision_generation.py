@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
-from foliqant_decisions import DecisionInput, DecisionOutput, DecisionSource
 
+from foliqant.decisions import DecisionInput, DecisionOutput, DecisionSource
 from foliqant_model.contracts.base import canonical_digest
 from foliqant_model.contracts.inputs import ChatMessage, DataRecord, GenerationProvenance
 from foliqant_model.curation import decision_generation, generation
@@ -614,12 +614,11 @@ def test_annotate_acceptance_returns_exact_parent_without_generation_provenance(
 def test_german_rewrite_publishes_german_reference_prose_with_english_enums(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from foliqant_decisions import (
+    from foliqant.decisions import (
         Citation,
         RequestUnitsResult,
         validate_decision_output,
     )
-
     from foliqant_model.curation.decision_contracts import DecisionDataSettings
     from foliqant_model.curation.decision_seeds import build_authored_seeds
 
@@ -1051,7 +1050,7 @@ def test_semantic_mismatch_never_requests_another_label_inline_or_external(
 def test_external_canonical_support_failure_repairs_rewrite_with_rewrite_response(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from foliqant_decisions import Citation
+    from foliqant.decisions import Citation
 
     seed = _seed(mode="rewrite")
     oracle = seed.oracle.model_copy(deep=True)

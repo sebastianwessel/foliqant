@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from foliqant_decisions import DecisionInput, DecisionOutput
 
+from foliqant.decisions import DecisionInput, DecisionOutput
 from foliqant_model.contracts.base import canonical_digest
 from foliqant_model.contracts.inputs import (
     ChatMessage,

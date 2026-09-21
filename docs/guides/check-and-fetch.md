@@ -7,7 +7,7 @@ To use another checkpoint, check its license, architecture and memory needs firs
 ## Check local capabilities
 
 ```sh
-uv run --no-sync foliqant-model doctor
+uv run --project model --no-sync foliqant-model doctor
 ```
 
 The result reports your Python and backend versions, free disk space, and whether
@@ -34,7 +34,7 @@ exist. This example downloads the same small checkpoint used by setup:
 
 ```sh
 mkdir -p "$HOME/.local/share/foliqant/models"
-uv run --no-sync foliqant-model fetch \
+uv run --project model --no-sync foliqant-model fetch \
   --repo HuggingFaceTB/SmolLM2-135M-Instruct \
   --revision 12fd25f77366fa6b3b4b768ec3050bf629380bac \
   --license Apache-2.0 \
@@ -58,8 +58,8 @@ distributing a derived model.
 Use the generated schemas in your editor or configuration tooling:
 
 ```sh
-uv run --no-sync foliqant-model schema --output /absolute/path/to/new-schema-directory
-uv run --no-sync foliqant-model schema --check /absolute/path/to/new-schema-directory
+uv run --project model --no-sync foliqant-model schema --output /absolute/path/to/new-schema-directory
+uv run --project model --no-sync foliqant-model schema --check /absolute/path/to/new-schema-directory
 ```
 
 Export requires a new or empty directory. The check command only reads files and

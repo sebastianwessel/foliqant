@@ -1,14 +1,12 @@
-# Shared contracts
+# Generated JSON schemas
 
-Language-neutral JSON Schema contracts belong here. The root `triage-*.schema.json`
-files are illustrative draft contracts used by the financial-triage proposal;
-they do not define an implemented service API.
+`foliqant/` describes the installable Python library. Its canonical Pydantic
+models live in `src/foliqant/contracts/`; use `scripts/generate_schemas.py` to
+regenerate and check them. Native decision definitions live in
+`src/foliqant/decisions/` and are reused by the model tooling.
 
-`model/` contains generated schemas for the implemented Python model tooling.
-Its canonical definitions are the Pydantic classes registered in
-`model/src/foliqant_model/schemas.py`. The category-catalog authoring schema
-describes accepted raw configuration; Python normalization and semantic checks
-produce unique canonical keys. JSON Schema validation alone does not transform
-IDs or detect collisions between differently formatted keys.
+`model/` describes training and curation artifacts. Its canonical schema registry
+is `model/src/foliqant_model/schemas.py`; use `scripts/generate_model_schemas.py`.
 
-The input/result fixtures are synthetic. Schema validation does not verify evidence truth, calibration, identity, or legal applicability. The future runtime must perform semantic checks separately. A complete workflow-bundle and service-configuration schema will be added before a loader is implemented.
+Schemas do not replace semantic validation, evidence checks or category-key
+normalization. Do not edit generated files or commit actual datasets here.

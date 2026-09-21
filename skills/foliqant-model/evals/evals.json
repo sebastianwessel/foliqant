@@ -27,8 +27,8 @@
     },
     {
       "id": 5,
-      "prompt": "Build the configurable Foliqant workflow service that acts on these decisions.",
-      "expected_output": "Treats this as a near miss and routes away from the model-tooling skill because the workflow service is a separate proposal; it does not invent workflow actions or production authorization.",
+      "prompt": "Build the configurable Foliqant Python pipeline that acts on these decisions.",
+      "expected_output": "Treats this as a near miss and routes away from the model-tooling skill because the runtime library belongs to the foliqant skill; it does not invent workflow actions or production authorization.",
       "files": []
     }
   ]

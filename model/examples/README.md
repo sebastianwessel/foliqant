@@ -81,7 +81,7 @@ prepared datasets produced by `./scripts/setup-model`. Use the paths printed by
 setup and choose a new output directory whose parent already exists.
 
 ```sh
-uv run --no-sync foliqant-model train \
+uv run --project model --no-sync foliqant-model train \
   --config model/examples/train.yaml \
   --model /path/from/modelPath \
   --dataset /path/from/sharedDatasetPath \

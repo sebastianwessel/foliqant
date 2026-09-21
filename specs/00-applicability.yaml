@@ -2,14 +2,14 @@ applicability_version: 1
 concerns:
   - concern_id: service_runtime_security_and_operations
     status: applicable
-    scope_refs: [CAP-SERVICE-CONTRACTS, CAP-SERVICE-COMPILER, CAP-SERVICE-RUNTIME,
-      CAP-SERVICE-MCP, CAP-SERVICE-PRIVACY, CAP-SERVICE-DX]
+    scope_refs: [CAP-PACKAGE-CONTRACTS, CAP-PACKAGE-COMPILER, CAP-PACKAGE-RUNTIME,
+      CAP-PACKAGE-MCP, CAP-PACKAGE-PRIVACY, CAP-PACKAGE-DX]
     rationale: Specification 11 covers strict contracts, deterministic compilation,
       bounded in-memory execution, MCP OAuth/tool authorization, privacy, telemetry,
       packaging and foreground operator commands.
   - concern_id: service_ui_cloud_deployment_and_model_training
     status: not_applicable
-    scope_refs: [CAP-SERVICE-RUNTIME, CAP-SERVICE-DX]
+    scope_refs: [CAP-PACKAGE-RUNTIME, CAP-PACKAGE-DX]
     rationale: Service implementation creates no hosted UI, cloud infrastructure,
       training run, application authentication, persistent state, queue worker or
       packaged HTTP/Redis transport. A small HTTP example only adapts a request to

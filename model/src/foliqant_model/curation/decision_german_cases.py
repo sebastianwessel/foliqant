@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from foliqant_decisions import DecisionInput, DecisionOutput
+from foliqant.decisions import DecisionInput, DecisionOutput
 
 from .decision_localization import localize_case
 

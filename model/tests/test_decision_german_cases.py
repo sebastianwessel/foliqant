@@ -4,13 +4,13 @@ import copy
 import json
 
 import pytest
-from foliqant_decisions import (
+
+from foliqant.decisions import (
     DecisionOutput,
     RequestUnitsResult,
     semantic_signature,
     validate_decision_output,
 )
-
 from foliqant_model.contracts import ChatMessage, DataRecord
 from foliqant_model.curation.contracts import ImportedRecord
 from foliqant_model.curation.decision_contracts import DecisionDataSettings

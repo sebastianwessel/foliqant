@@ -5,7 +5,7 @@ in that manifest. Its identity binds the metadata and file checksums. Do not edi
 completed artifacts; produce a new output directory for a new run.
 
 ```sh
-uv run --no-sync foliqant-model verify /absolute/path/to/artifact
+uv run --project model --no-sync foliqant-model verify /absolute/path/to/artifact
 ```
 
 A successful result includes `valid: true`. Verification checks recorded

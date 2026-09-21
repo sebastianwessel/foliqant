@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from foliqant_decisions import semantic_signature
 from pydantic import ValidationError
+
+from foliqant.decisions import semantic_signature
 
 from ..artifacts import require_disjoint_output, sha256_file
 from ..contracts.base import canonical_digest

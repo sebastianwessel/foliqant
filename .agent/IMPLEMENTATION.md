@@ -2,10 +2,9 @@
 
 The local model lifecycle is implemented in `model/src/foliqant_model`. Its
 canonical requirements are in `specs/`; end-user guides are in `docs/`. The
-workflow service is a separate Python/uv project governed by specification 11.
-Do not add service dependencies to the model environment or add PURISTA, Harness
-or Voyage dependencies. Reuse native contracts through the dedicated lightweight
-contract package; retain existing wire schemas and artifact identities.
+root Python/uv project is the reusable `foliqant` library governed by specification 11.
+Model tooling has its own uv project under `model/`; the library never imports it.
+Do not add PURISTA, Harness or Voyage dependencies. Reuse `foliqant.decisions`; retain existing wire schemas and artifact identities.
 
 ## Code and contracts
 
@@ -50,12 +49,12 @@ The tiny setup model tests the toolchain; it is not a financial quality benchmar
 ## Verification
 
 ```sh
-.venv/bin/python -m pytest model/tests
-.venv/bin/mypy model/src
-.venv/bin/ruff check model/src model/tests scripts
-.venv/bin/python scripts/generate_model_schemas.py --check contracts/model
-.venv/bin/python scripts/check_docs.py
-.venv/bin/python scripts/check_tracked_data.py
+uv run --project model --no-sync python -m pytest -c model/pyproject.toml model/tests
+uv run --project model --no-sync mypy --config-file model/pyproject.toml model/src
+uv run --project model --no-sync ruff check model/src model/tests scripts
+uv run --project model --no-sync python scripts/generate_model_schemas.py --check contracts/model
+uv run --project model --no-sync python scripts/check_docs.py
+uv run --project model --no-sync python scripts/check_tracked_data.py
 git diff --check
 ```
 
@@ -65,7 +64,7 @@ permitted native Metal environment with an approved local model:
 ```sh
 FOLIQANT_TEST_SETUP=/absolute/path/to/completed/setup \
 FOLIQANT_TEST_MODEL=/absolute/path/to/completed/setup/downloads/model \
-  .venv/bin/python -m pytest model/tests -m integration
+  uv run --project model --no-sync python -m pytest -c model/pyproject.toml model/tests -m integration
 ```
 
 Real lifecycle acceptance must additionally cover the published CLI, shared and
@@ -78,15 +77,15 @@ Update contracts, schemas, runnable recipes, guides and skills together. Do not
 document a command until its implementation exists. No compatibility or model
 quality claim is valid without corresponding recorded execution evidence.
 
-## Workflow service async boundaries
+## Python package async boundaries
 
-Run service checks inside its separate uv project:
+Run package checks from the repository root:
 
 ```sh
-uv run --project service --no-sync python -m pytest service/tests
-uv run --project service --no-sync mypy --config-file service/pyproject.toml service/src
-uv run --project service --no-sync ruff check service/src service/tests service/scripts
-uv run --project service --no-sync python service/scripts/generate_schemas.py --check
+uv run --no-sync python -m pytest tests
+uv run --no-sync mypy --config-file pyproject.toml src
+uv run --no-sync ruff check src tests scripts
+uv run --no-sync python scripts/generate_schemas.py --check
 ```
 
 Live model tests are excluded by default and need explicit
@@ -102,8 +101,10 @@ integration boundaries, not only with primitive semaphore tests.
 Use fixed safe logging events. Only sanitized JSON strings enter the bounded log
 queue, never raw records or exceptions. Keep shutdown joins off the event loop
 and check incomplete-drain results. Compilation is startup work; execution uses
-frozen plans and immutable accepted input. The service pipeline is in-memory only: do not add persistence, job queues,
+frozen plans and immutable accepted input. The library pipeline is in-memory only: do not add persistence, job queues,
 background workers, application authentication or HTTP/Redis ingress. Transport
 wrappers belong to examples or the embedding application. MCP OAuth is outbound
 tool support, not application authentication. Do not assume cancellation makes
 remote mutations safe to retry.
+
+Evaluation lives in `foliqant.evaluation`, separate from model lifecycle calibration. Reuse `run_step` for isolated step checks; never duplicate executors or bypass native output validators. Track failed and skipped expectations explicitly. A prompt selected on development cases must be rechecked against untouched holdout cases. Reports never silently retain raw inputs/results, and evaluator failures must not become successful checks.

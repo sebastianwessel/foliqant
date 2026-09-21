@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "requested_action": {"type": "string", "minLength": 1},
+    "deadline": {"type": ["string", "null"]},
+    "account_reference": {
+      "description": "An identifier explicitly linked to the sender's customer account. Invoice, order, case, and claim references are not account references.",
+      "type": ["string", "null"]
+    }
+  },
+  "required": ["requested_action", "deadline", "account_reference"],
+  "additionalProperties": false
+}

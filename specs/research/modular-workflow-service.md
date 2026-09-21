@@ -1,7 +1,7 @@
 # Modular workflow service proposal
 
 Date: 2026-09-21. Status: design rationale, superseded for implementation by
-[specification 11](../11-workflow-service.md). The owner selected Python and
+[specification 11](../11-python-package.md). The owner selected Python and
 PydanticAI; this document is not a competing runtime contract. This replaces the earlier service
 language and authoring recommendation in [the architecture proposal](workflow-service-proposal.md).
 No model-generation code, environment, active run, provider configuration or
@@ -59,7 +59,7 @@ its validators and I/O implementations are injected.
 Proposed module layout, not new executable packages:
 
 ```text
-service/src/foliqant/
+src/foliqant/
   core/             execution, routing, bounded fan-out, lifecycle
   contracts/        envelopes, plans, results, errors, protocol types
   compiler/         frontmatter/YAML loading, schemas, graph validation

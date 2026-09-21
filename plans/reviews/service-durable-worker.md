@@ -1,4 +1,4 @@
-> **SUPERSEDED / OUT OF SCOPE (2026-09-21):** Historical evidence only. The current workflow-service contract is the foreground in-memory pipeline in `specs/11-workflow-service.md`. This review creates no active requirement.
+> **SUPERSEDED / OUT OF SCOPE (2026-09-21):** Historical evidence only. The current workflow-service contract is the foreground in-memory pipeline in `specs/11-python-package.md`. This review creates no active requirement.
 
 # Durable worker review
 

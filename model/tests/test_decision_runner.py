@@ -388,7 +388,7 @@ def test_bilingual_pilot_covers_both_languages_without_splitting_translations() 
 
 
 def test_eight_job_english_pilot_covers_answer_types_and_failure_modes() -> None:
-    from foliqant_decisions import DecisionInput
+    from foliqant.decisions import DecisionInput
 
     seeds = build_authored_seeds(DecisionDataSettings(), seed=42, languages=["en"])
     families = {
@@ -595,8 +595,7 @@ def test_equivalent_native_task_cannot_cross_frozen_families() -> None:
 
 
 def test_answer_bearing_identity_keeps_every_allowed_source() -> None:
-    from foliqant_decisions import DecisionSource
-
+    from foliqant.decisions import DecisionSource
     from foliqant_model.contracts.inputs import ChatMessage
     from foliqant_model.curation.decision_runner import _task_identities
 
@@ -634,8 +633,7 @@ def test_projected_duplicates_are_excluded_before_the_source_cap(
 ) -> None:
     import json
 
-    from foliqant_decisions import DecisionSource
-
+    from foliqant.decisions import DecisionSource
     from foliqant_model.contracts.inputs import (
         ChatMessage,
         DataRecord,
@@ -872,8 +870,7 @@ def test_cached_reference_prose_cannot_be_replaced_by_matching_label() -> None:
 
 
 def test_cached_rewrite_cannot_change_uncited_metadata() -> None:
-    from foliqant_decisions import DecisionSource
-
+    from foliqant.decisions import DecisionSource
     from foliqant_model.contracts.inputs import ChatMessage
     from foliqant_model.curation.decision_runner import _validate_record
     from foliqant_model.errors import ModelError

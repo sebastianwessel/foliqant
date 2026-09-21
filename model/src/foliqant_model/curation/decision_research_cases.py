@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from foliqant_decisions import (
+from foliqant.decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,

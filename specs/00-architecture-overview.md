@@ -1,4 +1,9 @@
-# Model tool architecture
+# Package and model-development architecture
+
+The implemented [Python package](11-python-package.md) owns in-memory pipelines,
+step/pipeline evaluations and model/MCP adapters. Reusable code lives in
+`src/foliqant`; workflow bundles and optional HTTP hosting live in examples.
+Model lifecycle tooling below stays in its separate `model/` project.
 
 The future [business-process extension](10-business-decisions-and-processes.md)
 keeps model interpretation separate from deterministic process execution.
@@ -28,7 +33,7 @@ flowchart LR
 
 The parent process validates configuration and lineage, reserves the output and supervises the child. The child handles real model operations using verified local files and returns a typed private result. Finalization validates actual files and publishes a manifest atomically; failures retain only a private incomplete workspace. Every derived artifact records immutable parent identities, rights and exact leakage indexes. No mutable model alias is a parent identity.
 
-The lifecycle has two independent branches after shared model release: customer adapters derive from the exact shared checkpoint, while inference deployments use exported artifacts. An adapter never becomes compatible with a different parent by renaming. The model CLI does not host inference endpoints or import the separate in-memory workflow service.
+The lifecycle has two independent branches after shared model release: customer adapters derive from the exact shared checkpoint, while inference deployments use exported artifacts. An adapter never becomes compatible with a different parent by renaming. The model CLI does not host inference endpoints. It reuses `foliqant.decisions` from the root package without importing its workflow runtime.
 
 Native decision-data generation is a mode of the curation boundary, not a new
 training or inference service. It reuses source acquisition, immutable endpoint

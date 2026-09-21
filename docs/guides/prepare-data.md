@@ -82,7 +82,7 @@ See [licenses and permissions](data-licenses.md).
 ## Prepare and inspect
 
 ```sh
-uv run --no-sync foliqant-model prepare \
+uv run --project model --no-sync foliqant-model prepare \
   --config /absolute/path/to/dataset.yaml \
   --output /absolute/path/to/new-prepared-dataset
 ```
@@ -108,7 +108,7 @@ preserved. Empty lines, duplicate record IDs and duplicate conversations fail.
 Verify the completed artifact before sharing it with another local process:
 
 ```sh
-uv run --no-sync foliqant-model verify /absolute/path/to/new-prepared-dataset
+uv run --project model --no-sync foliqant-model verify /absolute/path/to/new-prepared-dataset
 ```
 
 Next: [verify and recover artifacts](../operations/artifacts.md).

@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 
 import pytest
-from foliqant_decisions import (
+
+import foliqant_model.curation.projection_preparation as preparation
+from foliqant.decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,
@@ -20,8 +22,6 @@ from foliqant_decisions import (
     MultiselectQuestion,
     MultiselectResult,
 )
-
-import foliqant_model.curation.projection_preparation as preparation
 from foliqant_model.contracts import ChatMessage, DataRecord
 from foliqant_model.contracts.base import canonical_digest
 from foliqant_model.curation.contracts import (

@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from foliqant_decisions import (
+from pydantic import ValidationError
+
+from foliqant.decisions import (
     ChoiceResult,
     DecisionInput,
     DecisionOutput,
@@ -13,7 +15,6 @@ from foliqant_decisions import (
     semantic_signature,
     validate_decision_output,
 )
-from pydantic import ValidationError
 
 from ..contracts.inputs import DataRecord
 from ..errors import ModelError

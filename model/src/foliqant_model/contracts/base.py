@@ -9,18 +9,6 @@ import re
 from datetime import datetime
 from typing import Annotated, Literal
 
-from foliqant_decisions import (
-    ContractModel as ContractModel,
-)
-from foliqant_decisions import (
-    Id as Id,
-)
-from foliqant_decisions import (
-    NonEmptyStr as NonEmptyStr,
-)
-from foliqant_decisions import (
-    SchemaVersion as SchemaVersion,
-)
 from pydantic import (
     AfterValidator,
     BeforeValidator,
@@ -32,6 +20,19 @@ from pydantic import (
     model_validator,
 )
 from pydantic.json_schema import SkipJsonSchema
+
+from foliqant.decisions import (
+    ContractModel as ContractModel,
+)
+from foliqant.decisions import (
+    Id as Id,
+)
+from foliqant.decisions import (
+    NonEmptyStr as NonEmptyStr,
+)
+from foliqant.decisions import (
+    SchemaVersion as SchemaVersion,
+)
 
 
 def canonical_digest(value: object) -> str:

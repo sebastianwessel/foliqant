@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from foliqant_decisions import (
+from foliqant.decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,
@@ -18,7 +18,6 @@ from foliqant_decisions import (
     PredicateQuestion,
     PredicateResult,
 )
-
 from foliqant_model.contracts import ChatMessage, DataRecord, GenerationProvenance
 from foliqant_model.curation.contracts import ImportedRecord
 from foliqant_model.curation.decision_contracts import DecisionDataSettings

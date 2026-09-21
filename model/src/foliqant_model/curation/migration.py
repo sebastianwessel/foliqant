@@ -6,8 +6,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Literal, cast
 
-from foliqant_decisions import DecisionInput, DecisionOutput, validate_decision_output
 from pydantic import ValidationError
+
+from foliqant.decisions import DecisionInput, DecisionOutput, validate_decision_output
 
 from ..artifacts import load_verified_artifact, require_disjoint_output, sha256_file
 from ..contracts.base import canonical_digest

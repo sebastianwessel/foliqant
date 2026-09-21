@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:694db7b828e64b2f162f4e61da9fbda1b7dc9f19e164e8b05c48fc9f566c366c
-  source_revision: working-tree-0201b89-in-memory-cleanup
-  generated_at: 2026-09-21T14:10:02.056Z
+  content_digest: sha256:76f99c1e65c28e1a8008cc3cf957a450d11ebd79801af6297746e79e475ea2f4
+  source_revision: working-tree-2a9539a-python-package-evaluation
+  generated_at: 2026-09-21T15:10:19.495Z

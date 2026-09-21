@@ -66,8 +66,8 @@ fit a 24 GB inference target or work with the same runtime. Test the exported
 artifact on the intended MLX, LM Studio, Ollama, vLLM or other supported host
 before recording compatibility evidence.
 
-The configurable workflow service is a separate proposal. Model training does
-not define email connectors, catalogs, routing rules or business actions, and
+The workflow runtime is the separate root Python package. Model training does
+not define inbound connectors, catalogs, routing rules, or business actions;
 those workflow changes should not require model retraining by default.
 
 Next: [set up the local workspace](setup.md), then

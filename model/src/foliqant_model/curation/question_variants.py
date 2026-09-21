@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from foliqant_decisions import (
+from pydantic import ValidationError
+
+from foliqant.decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,
@@ -17,7 +19,6 @@ from foliqant_decisions import (
     MultiselectResult,
     validate_decision_output,
 )
-from pydantic import ValidationError
 
 from ..contracts.base import canonical_digest
 from ..contracts.inputs import ChatMessage, DataRecord

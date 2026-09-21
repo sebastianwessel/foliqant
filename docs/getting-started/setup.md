@@ -7,7 +7,7 @@ Setup does not train a model or start a server.
 ## Before you start
 
 Use native Apple Silicon macOS for local MLX training. Setup uses Python 3.12 in
-the repository's `.venv`; it does not replace your system Python. Install
+the model project's `model/.venv`; it does not replace your system Python. Install
 [uv](https://docs.astral.sh/uv/getting-started/installation/) and open a terminal
 in the Foliqant checkout. The first run needs internet access for Python packages
 and about 274 MB of model/data downloads. Allow additional disk space for the
@@ -80,7 +80,7 @@ An altered cached file is also an error; setup does not silently replace it.
 To verify a checkpoint or dataset independently, use its path from setup:
 
 ```sh
-uv run --no-sync foliqant-model verify /absolute/path/from/modelPath
+uv run --project model --no-sync foliqant-model verify /absolute/path/from/modelPath
 ```
 
 Next: [train and export your first adapter](first-model.md).

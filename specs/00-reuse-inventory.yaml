@@ -1,131 +1,146 @@
 reuse_inventory_version: 1
-discovery_revision: working-tree-in-memory-service-scope
+discovery_revision: 2a9539a-package-refactor
 assets:
-  - asset_id: service.runner
-    kind: module
-    path: ../service/src/foliqant/core/runner.py
-    public_export: WorkflowRunner
-    owner: workflow-service
-    stability: experimental
-    consumers: [embedded-application, foreground-cli, http-example]
-    extension_policy: One in-memory deterministic runner; no persistence, queues, background ownership or transport policy.
-  - asset_id: service.execution-values
-    kind: module
-    path: ../service/src/foliqant/core/execution.py
-    public_export: RunResult, StepRecord, Usage, TokenUsage
-    owner: workflow-service
-    stability: experimental
-    consumers: [in-memory-runner, result-adapters]
-    extension_policy: Reuse immutable values and public boundary serializers; unknown usage stays unknown.
-  - asset_id: service.envelope
-    kind: schema
-    path: ../service/src/foliqant/contracts/envelope.py
-    public_export: Envelope, Metadata, TraceCarrier, accept_envelope
-    owner: workflow-service
-    stability: experimental
-    consumers: [embedded-callers, http-example]
-    extension_policy: Optional identity is validated caller context, not package authentication; keep W3C trace semantics aligned with specification 11.
-  - asset_id: service.admission
-    kind: module
-    path: ../service/src/foliqant/core/admission.py
-    public_export: CapacityLimiter
-    owner: workflow-service
-    stability: experimental
-    consumers: [service-engine, model-adapters, tool-adapters]
-    extension_policy: Local bounded resource admission only; never imply distributed queueing or provider-wide rate control.
-  - asset_id: model.category-catalog
-    kind: schema
-    path: ../packages/decision-contracts/src/foliqant_decisions/category_catalog.py
-    public_export: CategoryCatalog, CategoryDefinition, normalize_category_key
-    owner: native-decision-data
-    stability: experimental
-    consumers: [caller-question-authoring, service-compiler]
-    extension_policy: Reuse DecisionOption; normalize new keys and check collisions;
-      preserve V1 record readers and generation recipe identity.
-  - asset_id: model.native-decision-contract
-    kind: schema
-    path: ../packages/decision-contracts/src/foliqant_decisions/contracts.py
-    public_export: DecisionInput, DecisionOutput, Citation, RequestUnit, validate_decision_output
-    owner: native-decision-data
-    stability: versioned
-    consumers: [curation, service-native-validation]
-    extension_policy: Preserve V1 and existing jobs; specify a new version before adding
-      per-label evidence, trusted thread metadata or extract. Do not duplicate task enums.
-  - asset_id: concept.workflow-service
-    kind: research
-    path: research/modular-workflow-service.md
-    public_export: none; proposed typed workflow core, Markdown/YAML authoring and adapter boundaries
-    owner: workflow-proposal
-    stability: experimental
-    consumers: [future-process-branching]
-    extension_policy: Extend one parent with bounded configured children; no model-generated
-      graph or shared runtime dependency on Python training code.
-  - asset_id: model.data-record-contract
-    kind: schema
-    path: ../model/src/foliqant_model/contracts/inputs.py
-    public_export: DataRecord, FrozenFamilyAssignment, GenerationProvenance
-    owner: model-contracts
-    stability: versioned
-    consumers:
-      - data
-      - curation
-      - native-decision-data
-    extension_policy: reuse unchanged as the published record/family/lineage boundary
-  - asset_id: model.curation-source-acquisition
-    kind: module
-    path: ../model/src/foliqant_model/curation/sources.py
-    public_export: acquire_source, source_catalog_digest
-    owner: curation
-    stability: versioned
-    consumers:
-      - curation-runner
-      - native-decision-data
-    extension_policy: project through explicit native mappings; retain raw auxiliary corpus and exclusion counts
-  - asset_id: model.curation-endpoint
-    kind: module
-    path: ../model/src/foliqant_model/curation/endpoint.py
-    public_export: discover_models, generate_json, EndpointModelIdentity
-    owner: curation
-    stability: versioned
-    consumers:
-      - curation-generation
-      - native-decision-data
-    extension_policy: reuse serial bounded validated JSON calls; no second provider client
-  - asset_id: model.curation-storage
-    kind: module
-    path: ../model/src/foliqant_model/curation/storage.py
-    public_export: immutable object cache and run lock functions
-    owner: curation
-    stability: internal
-    consumers:
-      - curation-runner
-      - native-decision-data
-    extension_policy: reuse immutable private cache, integrity checks and locking
-  - asset_id: model.dataset-publication
-    kind: module
-    path: ../model/src/foliqant_model/data.py
-    public_export: prepare_dataset
-    owner: data
-    stability: versioned
-    consumers:
-      - curation-runner
-      - native-decision-data
-    extension_policy: publish through existing frozen-family dataset artifact; no parallel dataset format
-  - asset_id: research.model
-    kind: research
-    path: research/model-research.md
-    public_export: none
-    owner: model
-    stability: research
-    consumers:
-      - model-author
-    extension_policy: background only; requirements live in normative specs
-  - asset_id: example.triage
-    kind: schema
-    path: ../contracts/triage-answer.schema.json
-    public_export: illustrative financial-triage answer
-    owner: workflow proposal
-    stability: experimental
-    consumers:
-      - evaluation example
-    extension_policy: do not make it the universal training record contract
+- asset_id: package.runner
+  kind: module
+  path: ../src/foliqant/core/runner.py
+  public_export: WorkflowRunner
+  owner: python-package
+  stability: experimental
+  consumers:
+  - embedded-application
+  - foreground-cli
+  - http-example
+  extension_policy: One in-memory deterministic runner; no persistence, queues, background
+    ownership or transport policy.
+- asset_id: service.execution-values
+  kind: module
+  path: ../src/foliqant/core/execution.py
+  public_export: RunResult, StepRecord, Usage, TokenUsage
+  owner: python-package
+  stability: experimental
+  consumers:
+  - in-memory-runner
+  - result-adapters
+  extension_policy: Reuse immutable values and public boundary serializers; unknown
+    usage stays unknown.
+- asset_id: package.envelope
+  kind: schema
+  path: ../src/foliqant/contracts/envelope.py
+  public_export: Envelope, Metadata, TraceCarrier, accept_envelope
+  owner: python-package
+  stability: experimental
+  consumers:
+  - embedded-callers
+  - http-example
+  extension_policy: Optional identity is validated caller context, not package authentication;
+    keep W3C trace semantics aligned with specification 11.
+- asset_id: service.admission
+  kind: module
+  path: ../src/foliqant/core/admission.py
+  public_export: CapacityLimiter
+  owner: python-package
+  stability: experimental
+  consumers:
+  - service-engine
+  - model-adapters
+  - tool-adapters
+  extension_policy: Local bounded resource admission only; never imply distributed
+    queueing or provider-wide rate control.
+- asset_id: model.category-catalog
+  kind: schema
+  path: ../src/foliqant/decisions/category_catalog.py
+  public_export: CategoryCatalog, CategoryDefinition, normalize_category_key
+  owner: native-decision-data
+  stability: experimental
+  consumers:
+  - caller-question-authoring
+  - package-compiler
+  extension_policy: Reuse DecisionOption; normalize new keys and check collisions;
+    preserve V1 record readers and generation recipe identity.
+- asset_id: model.native-decision-contract
+  kind: schema
+  path: ../src/foliqant/decisions/contracts.py
+  public_export: DecisionInput, DecisionOutput, Citation, RequestUnit, validate_decision_output
+  owner: native-decision-data
+  stability: versioned
+  consumers:
+  - curation
+  - service-native-validation
+  extension_policy: Preserve V1 and existing jobs; specify a new version before adding
+    per-label evidence, trusted thread metadata or extract. Do not duplicate task
+    enums.
+- asset_id: concept.python-package
+  kind: research
+  path: research/modular-python-package.md
+  public_export: none; proposed typed workflow core, Markdown/YAML authoring and adapter
+    boundaries
+  owner: workflow-proposal
+  stability: experimental
+  consumers:
+  - future-process-branching
+  extension_policy: Extend one parent with bounded configured children; no model-generated
+    graph or shared runtime dependency on Python training code.
+- asset_id: model.data-record-contract
+  kind: schema
+  path: ../model/src/foliqant_model/contracts/inputs.py
+  public_export: DataRecord, FrozenFamilyAssignment, GenerationProvenance
+  owner: model-contracts
+  stability: versioned
+  consumers:
+  - data
+  - curation
+  - native-decision-data
+  extension_policy: reuse unchanged as the published record/family/lineage boundary
+- asset_id: model.curation-source-acquisition
+  kind: module
+  path: ../model/src/foliqant_model/curation/sources.py
+  public_export: acquire_source, source_catalog_digest
+  owner: curation
+  stability: versioned
+  consumers:
+  - curation-runner
+  - native-decision-data
+  extension_policy: project through explicit native mappings; retain raw auxiliary
+    corpus and exclusion counts
+- asset_id: model.curation-endpoint
+  kind: module
+  path: ../model/src/foliqant_model/curation/endpoint.py
+  public_export: discover_models, generate_json, EndpointModelIdentity
+  owner: curation
+  stability: versioned
+  consumers:
+  - curation-generation
+  - native-decision-data
+  extension_policy: reuse serial bounded validated JSON calls; no second provider
+    client
+- asset_id: model.curation-storage
+  kind: module
+  path: ../model/src/foliqant_model/curation/storage.py
+  public_export: immutable object cache and run lock functions
+  owner: curation
+  stability: internal
+  consumers:
+  - curation-runner
+  - native-decision-data
+  extension_policy: reuse immutable private cache, integrity checks and locking
+- asset_id: model.dataset-publication
+  kind: module
+  path: ../model/src/foliqant_model/data.py
+  public_export: prepare_dataset
+  owner: data
+  stability: versioned
+  consumers:
+  - curation-runner
+  - native-decision-data
+  extension_policy: publish through existing frozen-family dataset artifact; no parallel
+    dataset format
+- asset_id: research.model
+  kind: research
+  path: research/model-research.md
+  public_export: none
+  owner: model
+  stability: research
+  consumers:
+  - model-author
+  extension_policy: background only; requirements live in normative specs

@@ -7,7 +7,7 @@ rights, split and artifact boundaries.
 
 Use it for local setup, public-source or native decision-data curation, dataset
 preparation, training, customization, evaluation, calibration, audit, export and
-artifact verification. It does not cover the proposed workflow service or grant
+artifact verification. It does not cover the Python workflow runtime or grant
 permission to upload private data, accept gated terms, use paid compute, or treat
 unreviewed generated data as qualified evidence.
 

@@ -1,39 +1,35 @@
 policy_profile_version: 1
 allowed_default_refs:
-  - POL-WORKFLOW-SERVICE
-  - POL-LOCAL-REVERSIBLE
-  - POL-NATIVE-DATA-LOCAL
+- POL-PYTHON-PACKAGE
+- POL-LOCAL-REVERSIBLE
+- POL-NATIVE-DATA-LOCAL
 profiles:
-  - id: POL-WORKFLOW-SERVICE
-    source: project-owner 2026-09-21 narrowed implementation mandate; Python,
-      PydanticAI, uv, maintained MCP/OAuth, optional identity/W3C context and
-      telemetry, examples/docs/skills
-    defaults: isolated in-memory service environment; offline tests and local
-      protocol conformance; no persistence, queue worker, application authentication,
-      packaged transport, paid inference or external deployment inferred
-    status: implementation authorized; readiness and production evidence tracked separately
-  - id: POL-MODULAR-SERVICE-PROPOSAL
-    source: project-owner request to refine modular transport-independent workflow
-      usage, named steps, provider and MCP adapters, telemetry and developer experience
-    defaults: research and proposal authoring only; no executable service, dependency
-      installation, generation mutation, provider calls or deployment
-    status: proposed design; implementation schemas and production readiness require review
-  - id: POL-BUSINESS-CONCEPT-RESEARCH
-    source: project-owner request to record broader business decisions and one-process
-      multi-task branching, and research domain datasets using agents
-    defaults: specification and primary-source research only; no downloads, inference,
-      active-run mutation, new executable source manifests or production claims
-    status: authoring mandate; implementation details and dataset adoption require review
-  - id: POL-LOCAL-REVERSIBLE
-    source: 'user goal: implement model building/fine-tuning, specs first, autonomous
-      agents, review and cleanup'
-    defaults: private reversible implementation details only; no paid compute/upload/customer-data
-      use inferred
-    status: delegated execution mandate; concrete contracts pending readiness
-  - id: POL-NATIVE-DATA-LOCAL
-    source: project-owner mandate for a fully automatic local native decision-data
-      pipeline based on the answerability research
-    defaults: external private workspace; serial local endpoint requests; bounded
-      jobs and retries; no manual labeling, training, cloud fallback, generated
-      numeric confidence, human-gold claim or production qualification
-    status: local pipeline implemented; bounded generated-data quality repair independently reviewed and accepted; no full-recipe coverage, training-readiness, native-training, model-quality or production claim
+- id: POL-PYTHON-PACKAGE
+  source: project-owner 2026-09-21 explicit package and evaluation implementation
+    mandate; Python, PydanticAI, uv, maintained MCP/OAuth, optional identity/W3C context
+    and telemetry, examples/docs/skills
+  defaults: root installable in-memory library; separate model tooling environment;
+    offline tests and local protocol conformance; no persistence, queue worker, application
+    authentication, packaged transport, paid inference or external deployment inferred
+  status: implementation authorized; readiness and production evidence tracked separately
+- id: POL-BUSINESS-CONCEPT-RESEARCH
+  source: project-owner request to record broader business decisions and one-process
+    multi-task branching, and research domain datasets using agents
+  defaults: specification and primary-source research only; no downloads, inference,
+    active-run mutation, new executable source manifests or production claims
+  status: authoring mandate; implementation details and dataset adoption require review
+- id: POL-LOCAL-REVERSIBLE
+  source: 'user goal: implement model building/fine-tuning, specs first, autonomous
+    agents, review and cleanup'
+  defaults: private reversible implementation details only; no paid compute/upload/customer-data
+    use inferred
+  status: delegated execution mandate; concrete contracts pending readiness
+- id: POL-NATIVE-DATA-LOCAL
+  source: project-owner mandate for a fully automatic local native decision-data pipeline
+    based on the answerability research
+  defaults: external private workspace; serial local endpoint requests; bounded jobs
+    and retries; no manual labeling, training, cloud fallback, generated numeric confidence,
+    human-gold claim or production qualification
+  status: local pipeline implemented; bounded generated-data quality repair independently
+    reviewed and accepted; no full-recipe coverage, training-readiness, native-training,
+    model-quality or production claim

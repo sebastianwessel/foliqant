@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 
-import foliqant_decisions as shared_decisions
 import pytest
-from foliqant_decisions import (
+from pydantic import ValidationError
+
+import foliqant.decisions as shared_decisions
+from foliqant.decisions import (
     Answerability,
     Citation,
     DecisionInput,
@@ -13,8 +15,6 @@ from foliqant_decisions import (
     semantic_signature,
     validate_decision_output,
 )
-from pydantic import ValidationError
-
 from foliqant_model.contracts import base as model_base
 from foliqant_model.curation.decision_contracts import DecisionDataSettings
 

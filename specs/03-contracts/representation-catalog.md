@@ -158,7 +158,7 @@ independent wire roots unless listed above.
 - Prediction/profile mappings: `CAP-EVAL`.
 - Representative policy/audit mappings: `CAP-RISK`.
 - CLI and run-state mappings: every model lifecycle capability.
-- Frontend, webhook, hosted API, workflow-service and cross-language service DTOs
+- Frontend, webhook, hosted API, python-package and cross-language service DTOs
   are N/A to this model-tooling contract and remain outside this catalog.
 
 Any new wire shape, arbitrary JSON location, or adapter metadata record requires

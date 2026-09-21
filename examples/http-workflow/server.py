@@ -1,32 +1,33 @@
-"""Example-only HTTP wrapper around the in-memory pipeline; no authentication."""
+"""Thin HTTP wrapper around the support-triage business workflow."""
 
+import argparse
 import asyncio
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-from pathlib import Path
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import cast
 
+from examples.support_triage.run import open_configured
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from foliqant.bootstrap import WorkflowApplication, open_application, prepare_application
 from foliqant.contracts.decoding import MAX_ENVELOPE_BYTES, decode_envelope
+from foliqant.contracts.execution import ExecutionResult
 from foliqant.core.errors import ErrorCode, ServiceError
-from foliqant.core.identity import Identity
+from foliqant.core.json import JsonValue
 
-_CONFIG = Path(__file__).with_name("foliqant.yaml")
+type SupportRun = Callable[[dict[str, JsonValue]], Awaitable[ExecutionResult]]
+type RunContext = Callable[[], AbstractAsyncContextManager[SupportRun]]
 
 
-def create_app() -> Starlette:
-    """Construct a small local demonstration, not a production ingress platform."""
-    prepared = prepare_application(_CONFIG)
+def create_app(run_context: RunContext = open_configured) -> Starlette:
+    """Wrap an injected support runner; the default uses explicit local Qwen settings."""
 
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
-        async with open_application(prepared, environment={}) as pipeline:
-            app.state.pipeline = pipeline
+        async with run_context() as run_support:
+            app.state.run_support = run_support
             yield
 
     async def run(request: Request) -> JSONResponse:
@@ -40,10 +41,15 @@ def create_app() -> Starlette:
                         return JSONResponse({"error": "Request too large"}, status_code=413)
                     body.extend(chunk)
             envelope = decode_envelope(bytes(body))
-            pipeline = cast(WorkflowApplication, request.app.state.pipeline)
-            # This unauthenticated demo establishes no tenant or principal.
-            # A real host supplies its own caller context outside the pipeline.
-            result = await pipeline.run("hello", envelope, identity=Identity())
+            if (
+                envelope.metadata.tenant_id is not None
+                or envelope.metadata.principal_id is not None
+            ):
+                raise ServiceError(ErrorCode.FORBIDDEN)
+            if not isinstance(envelope.payload, dict):
+                raise ServiceError(ErrorCode.INVALID_INPUT)
+            run_support = cast(SupportRun, request.app.state.run_support)
+            result = await run_support(envelope.payload)
             return JSONResponse(result.model_dump(mode="json"))
         except ServiceError as error:
             status = 400 if error.code in {ErrorCode.INVALID_INPUT, ErrorCode.FORBIDDEN} else 503
@@ -56,24 +62,30 @@ def create_app() -> Starlette:
     return Starlette(routes=[Route("/run", run, methods=["POST"])], lifespan=lifespan)
 
 
-def main() -> None:
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="call the exact local model configured in the repository .env",
+    )
+    arguments = parser.parse_args()
+    if not arguments.live:
+        parser.print_help()
+        return 0
+
     import uvicorn
 
-    from foliqant.adapters.telemetry.logging import configure_logging
-
-    logs = configure_logging()
-    try:
-        uvicorn.run(
-            create_app(),
-            host="127.0.0.1",
-            port=8765,
-            access_log=False,
-            log_config=None,
-            proxy_headers=False,
-        )
-    finally:
-        logs.close()
+    uvicorn.run(
+        create_app(),
+        host="127.0.0.1",
+        port=8765,
+        access_log=False,
+        log_config=None,
+        proxy_headers=False,
+    )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

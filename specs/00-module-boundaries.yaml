@@ -1,401 +1,531 @@
 module_boundary_version: 1
 modules:
-  - module_id: service-core
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/core/__init__.py
-    public_symbols: [Identity, CapacityLimiter, ServiceError, freeze_json, thaw_json]
-    owned_concepts: [immutable-execution-values, in-memory-budgets, bounded-admission, deterministic-runner, safe-error-codes]
-    allowed_dependencies: [standard-library, service-ports]
-    forbidden_dependencies: [pydantic, model-training-runtime, provider-sdk, transport-client, persistence-client]
-    architecture_check: service/tests/test_architecture.py
-  - module_id: service-contracts
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/contracts/envelope.py
-    public_symbols: [Envelope, Metadata, TraceCarrier, accept_envelope]
-    owned_concepts: [strict-envelope, optional-protected-context, boundary-to-core-mapping, public-result]
-    allowed_dependencies: [pydantic, service-core, shared-decision-contracts]
-    forbidden_dependencies: [model-training-runtime, provider-sdk, transport-client, persistence-client]
-  - module_id: service-compiler
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/compiler/__init__.py
-    public_symbols: [compile_workflow, CompilationError]
-    owned_concepts: [safe-authoring, confined-schemas, deterministic-plan]
-    allowed_dependencies: [standard-library, pydantic, service-core, service-contracts, shared-decision-contracts]
-    forbidden_dependencies: [provider-sdk, transport-client, persistence-client]
-    architecture_check: service/tests/test_architecture.py
-  - module_id: service-model-adapters
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/adapters/models/__init__.py
-    public_symbols: [ModelBinding, ModelExecutor, open_model_bindings, request_token_usage]
-    owned_concepts: [provider-bindings, structured-output, measured-usage]
-    allowed_dependencies: [service-core, service-ports, service-contracts, pydantic-ai, provider-sdk]
-    forbidden_dependencies: [model-training-runtime, transport-client, persistence-client]
-  - module_id: service-mcp-adapters
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/adapters/mcp/__init__.py
-    public_symbols: [McpRuntime, McpExecutor, McpClientSessionFactory, SdkOAuthCredentialProvider, ToolAuthorizer]
-    owned_concepts: [declared-tool-catalog, mcp-session-lifecycle, oauth-credential-hook, tool-authorization]
-    allowed_dependencies: [service-core, service-ports, service-contracts, mcp-sdk]
-    forbidden_dependencies: [model-training-runtime, application-authentication, persistence-client]
-  - module_id: service-bootstrap
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/bootstrap.py
-    public_symbols: [PreparedApplication, RuntimePlugins, WorkflowApplication, open_application]
-    owned_concepts: [adapter-composition, environment-resolution, application-lifecycle]
-    allowed_dependencies: [service-core, service-ports, service-contracts, service-compiler, service-adapters]
-    forbidden_dependencies: [model-training-runtime, application-authentication, packaged-transport, persistence-client]
-  - module_id: service-blocking-execution
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/adapters/execution/blocking.py
-    public_symbols: [BlockingExecutor]
-    owned_concepts: [bounded-sdk-workers, worker-lifecycle, cancellation-capacity]
-    allowed_dependencies: [standard-library, service-core]
-    forbidden_dependencies: [model-training-runtime, transport-client, persistence-client]
-  - module_id: service-safe-logging
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/adapters/telemetry/logging.py
-    public_symbols: [LogEvent, LogLabels, SafeJsonFormatter, emit_event, configure_logging]
-    owned_concepts: [allowlisted-log-events, bounded-sanitized-log-queue]
-    allowed_dependencies: [standard-library, service-core]
-    forbidden_dependencies: [model-training-runtime, transport-client, persistence-client]
-  - module_id: acquisition
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/acquisition.py
-    owned_concepts:
-      - acquisition
-    allowed_dependencies:
-      - artifacts
-      - contracts
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: artifacts
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/artifacts.py
-    owned_concepts:
-      - artifacts
-    allowed_dependencies:
-      - contracts
-      - dataset-integrity
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: backend
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/backend.py
-    owned_concepts:
-      - backend
-    allowed_dependencies:
-      - contracts
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: bootstrap-data
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/bootstrap_data.py
-    owned_concepts:
-      - bootstrap-data
-    allowed_dependencies:
-      - configuration
-      - contracts
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: cli
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/cli.py
-    owned_concepts:
-      - cli
-    allowed_dependencies:
-      - artifacts
-      - calibration
-      - contracts
-      - data
-      - doctor
-      - errors
-      - evaluation
-      - export
-      - fetch
-      - lineage
-      - schemas
-      - setup
-      - training
-      - curation
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: configuration
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/configuration.py
-    owned_concepts:
-      - configuration
-    allowed_dependencies:
-      - contracts
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: contracts
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/contracts/__init__.py
-    owned_concepts:
-      - contracts
-    allowed_dependencies: []
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: data
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/data.py
-    owned_concepts:
-      - data
-    allowed_dependencies:
-      - artifacts
-      - configuration
-      - contracts
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: dataset-integrity
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/dataset_integrity.py
-    owned_concepts:
-      - dataset-integrity
-    allowed_dependencies:
-      - contracts
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-      - artifacts
-      - data
-  - module_id: doctor
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/doctor.py
-    owned_concepts:
-      - doctor
-    allowed_dependencies:
-      - contracts
-      - errors
-      - execution
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: errors
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/errors.py
-    owned_concepts:
-      - errors
-    allowed_dependencies:
-      - contracts
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: evaluation
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/evaluation.py
-    owned_concepts:
-      - evaluation
-    allowed_dependencies:
-      - artifacts
-      - configuration
-      - contracts
-      - errors
-      - execution
-      - lineage
-      - scoring
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: execution
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/execution.py
-    owned_concepts:
-      - execution
-    allowed_dependencies:
-      - contracts
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: fetch
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/fetch.py
-    owned_concepts:
-      - fetch
-    allowed_dependencies:
-      - artifacts
-      - contracts
-      - errors
-      - snapshots
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: lineage
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/lineage.py
-    owned_concepts:
-      - lineage
-    allowed_dependencies:
-      - artifacts
-      - contracts
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: calibration
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/risk.py
-    owned_concepts:
-      - calibration
-    allowed_dependencies:
-      - artifacts
-      - contracts
-      - errors
-      - evaluation
-      - lineage
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: schemas
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/schemas.py
-    owned_concepts:
-      - schemas
-    allowed_dependencies:
-      - artifacts
-      - contracts
-      - errors
-      - curation
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: scoring
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/scoring.py
-    owned_concepts:
-      - scoring
-    allowed_dependencies:
-      - contracts
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: setup
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/setup.py
-    owned_concepts:
-      - setup
-    allowed_dependencies:
-      - acquisition
-      - artifacts
-      - bootstrap-data
-      - configuration
-      - contracts
-      - data
-      - errors
-      - snapshots
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: snapshots
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/snapshots.py
-    owned_concepts:
-      - snapshots
-    allowed_dependencies:
-      - artifacts
-      - configuration
-      - contracts
-      - errors
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: training
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/training.py
-    owned_concepts:
-      - training
-    allowed_dependencies:
-      - artifacts
-      - configuration
-      - contracts
-      - errors
-      - execution
-      - lineage
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: export
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/transformations.py
-    owned_concepts:
-      - export
-    allowed_dependencies:
-      - artifacts
-      - configuration
-      - contracts
-      - errors
-      - execution
-      - lineage
-      - snapshots
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
-  - module_id: curation
-    owner: model-tooling
-    public_entrypoint: model/src/foliqant_model/curation/runner.py
-    public_symbols:
-      - run_curation
-      - run_decision_curation
-      - build_decision_jobs
-    owned_concepts:
-      - pinned-source-conversion
-      - local-generation
-      - frozen-family-planning
-      - resumable-curation
-      - native-decision-oracles
-      - native-decision-adequacy-case-catalog
-      - native-decision-research-case-catalog
-      - native-source-projection
-      - native-coverage-accounting
-    allowed_dependencies:
-      - acquisition
-      - artifacts
-      - configuration
-      - contracts
-      - data
-      - errors
-      - execution
-      - scoring
-      - setup
-    forbidden_dependencies:
-      - service
-      - purista
-      - voyage
+- module_id: package-evaluation
+  owner: python-package
+  public_entrypoint: src/foliqant/evaluation/__init__.py
+  owned_concepts:
+  - golden-cases
+  - deterministic-scoring
+  - variant-comparison
+  - measured-coverage-and-usage
+  allowed_dependencies:
+  - standard-library
+  - pydantic
+  - package-contracts
+  forbidden_dependencies:
+  - model-training-runtime
+  - persistence-client
+  - automatic-llm-judge
+  architecture_check: tests/test_evaluation.py
+- module_id: package-core
+  owner: python-package
+  public_entrypoint: src/foliqant/core/__init__.py
+  public_symbols:
+  - Identity
+  - CapacityLimiter
+  - ServiceError
+  - freeze_json
+  - thaw_json
+  owned_concepts:
+  - immutable-execution-values
+  - in-memory-budgets
+  - bounded-admission
+  - deterministic-runner
+  - safe-error-codes
+  allowed_dependencies:
+  - standard-library
+  - package-ports
+  forbidden_dependencies:
+  - pydantic
+  - model-training-runtime
+  - provider-sdk
+  - transport-client
+  - persistence-client
+  architecture_check: tests/test_architecture.py
+- module_id: package-contracts
+  owner: python-package
+  public_entrypoint: src/foliqant/contracts/envelope.py
+  public_symbols:
+  - Envelope
+  - Metadata
+  - TraceCarrier
+  - accept_envelope
+  owned_concepts:
+  - strict-envelope
+  - optional-protected-context
+  - boundary-to-core-mapping
+  - public-result
+  allowed_dependencies:
+  - pydantic
+  - package-core
+  - shared-decision-contracts
+  forbidden_dependencies:
+  - model-training-runtime
+  - provider-sdk
+  - transport-client
+  - persistence-client
+- module_id: package-compiler
+  owner: python-package
+  public_entrypoint: src/foliqant/compiler/__init__.py
+  public_symbols:
+  - compile_workflow
+  - CompilationError
+  owned_concepts:
+  - safe-authoring
+  - confined-schemas
+  - deterministic-plan
+  allowed_dependencies:
+  - standard-library
+  - pydantic
+  - package-core
+  - package-contracts
+  - shared-decision-contracts
+  forbidden_dependencies:
+  - provider-sdk
+  - transport-client
+  - persistence-client
+  architecture_check: tests/test_architecture.py
+- module_id: package-model-adapters
+  owner: python-package
+  public_entrypoint: src/foliqant/adapters/models/__init__.py
+  public_symbols:
+  - ModelBinding
+  - ModelExecutor
+  - open_model_bindings
+  - request_token_usage
+  owned_concepts:
+  - provider-bindings
+  - structured-output
+  - measured-usage
+  allowed_dependencies:
+  - package-core
+  - package-ports
+  - package-contracts
+  - pydantic-ai
+  - provider-sdk
+  forbidden_dependencies:
+  - model-training-runtime
+  - transport-client
+  - persistence-client
+- module_id: package-mcp-adapters
+  owner: python-package
+  public_entrypoint: src/foliqant/adapters/mcp/__init__.py
+  public_symbols:
+  - McpRuntime
+  - McpExecutor
+  - McpClientSessionFactory
+  - SdkOAuthCredentialProvider
+  - ToolAuthorizer
+  owned_concepts:
+  - declared-tool-catalog
+  - mcp-session-lifecycle
+  - oauth-credential-hook
+  - tool-authorization
+  allowed_dependencies:
+  - package-core
+  - package-ports
+  - package-contracts
+  - mcp-sdk
+  forbidden_dependencies:
+  - model-training-runtime
+  - application-authentication
+  - persistence-client
+- module_id: package-bootstrap
+  owner: python-package
+  public_entrypoint: src/foliqant/bootstrap.py
+  public_symbols:
+  - PreparedApplication
+  - RuntimePlugins
+  - WorkflowApplication
+  - open_application
+  owned_concepts:
+  - adapter-composition
+  - environment-resolution
+  - application-lifecycle
+  allowed_dependencies:
+  - package-core
+  - package-ports
+  - package-contracts
+  - package-compiler
+  - package-adapters
+  forbidden_dependencies:
+  - model-training-runtime
+  - application-authentication
+  - packaged-transport
+  - persistence-client
+- module_id: package-blocking-execution
+  owner: python-package
+  public_entrypoint: src/foliqant/adapters/execution/blocking.py
+  public_symbols:
+  - BlockingExecutor
+  owned_concepts:
+  - bounded-sdk-workers
+  - worker-lifecycle
+  - cancellation-capacity
+  allowed_dependencies:
+  - standard-library
+  - package-core
+  forbidden_dependencies:
+  - model-training-runtime
+  - transport-client
+  - persistence-client
+- module_id: package-safe-logging
+  owner: python-package
+  public_entrypoint: src/foliqant/adapters/telemetry/logging.py
+  public_symbols:
+  - LogEvent
+  - LogLabels
+  - SafeJsonFormatter
+  - emit_event
+  - configure_logging
+  owned_concepts:
+  - allowlisted-log-events
+  - bounded-sanitized-log-queue
+  allowed_dependencies:
+  - standard-library
+  - package-core
+  forbidden_dependencies:
+  - model-training-runtime
+  - transport-client
+  - persistence-client
+- module_id: acquisition
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/acquisition.py
+  owned_concepts:
+  - acquisition
+  allowed_dependencies:
+  - artifacts
+  - contracts
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: artifacts
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/artifacts.py
+  owned_concepts:
+  - artifacts
+  allowed_dependencies:
+  - contracts
+  - dataset-integrity
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: backend
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/backend.py
+  owned_concepts:
+  - backend
+  allowed_dependencies:
+  - contracts
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: bootstrap-data
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/bootstrap_data.py
+  owned_concepts:
+  - bootstrap-data
+  allowed_dependencies:
+  - configuration
+  - contracts
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: cli
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/cli.py
+  owned_concepts:
+  - cli
+  allowed_dependencies:
+  - artifacts
+  - calibration
+  - contracts
+  - data
+  - doctor
+  - errors
+  - evaluation
+  - export
+  - fetch
+  - lineage
+  - schemas
+  - setup
+  - training
+  - curation
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: configuration
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/configuration.py
+  owned_concepts:
+  - configuration
+  allowed_dependencies:
+  - contracts
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: contracts
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/contracts/__init__.py
+  owned_concepts:
+  - contracts
+  allowed_dependencies: []
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: data
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/data.py
+  owned_concepts:
+  - data
+  allowed_dependencies:
+  - artifacts
+  - configuration
+  - contracts
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: dataset-integrity
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/dataset_integrity.py
+  owned_concepts:
+  - dataset-integrity
+  allowed_dependencies:
+  - contracts
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+  - artifacts
+  - data
+- module_id: doctor
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/doctor.py
+  owned_concepts:
+  - doctor
+  allowed_dependencies:
+  - contracts
+  - errors
+  - execution
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: errors
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/errors.py
+  owned_concepts:
+  - errors
+  allowed_dependencies:
+  - contracts
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: evaluation
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/evaluation.py
+  owned_concepts:
+  - evaluation
+  allowed_dependencies:
+  - artifacts
+  - configuration
+  - contracts
+  - errors
+  - execution
+  - lineage
+  - scoring
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: execution
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/execution.py
+  owned_concepts:
+  - execution
+  allowed_dependencies:
+  - contracts
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: fetch
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/fetch.py
+  owned_concepts:
+  - fetch
+  allowed_dependencies:
+  - artifacts
+  - contracts
+  - errors
+  - snapshots
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: lineage
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/lineage.py
+  owned_concepts:
+  - lineage
+  allowed_dependencies:
+  - artifacts
+  - contracts
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: calibration
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/risk.py
+  owned_concepts:
+  - calibration
+  allowed_dependencies:
+  - artifacts
+  - contracts
+  - errors
+  - evaluation
+  - lineage
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: schemas
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/schemas.py
+  owned_concepts:
+  - schemas
+  allowed_dependencies:
+  - artifacts
+  - contracts
+  - errors
+  - curation
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: scoring
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/scoring.py
+  owned_concepts:
+  - scoring
+  allowed_dependencies:
+  - contracts
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: setup
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/setup.py
+  owned_concepts:
+  - setup
+  allowed_dependencies:
+  - acquisition
+  - artifacts
+  - bootstrap-data
+  - configuration
+  - contracts
+  - data
+  - errors
+  - snapshots
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: snapshots
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/snapshots.py
+  owned_concepts:
+  - snapshots
+  allowed_dependencies:
+  - artifacts
+  - configuration
+  - contracts
+  - errors
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: training
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/training.py
+  owned_concepts:
+  - training
+  allowed_dependencies:
+  - artifacts
+  - configuration
+  - contracts
+  - errors
+  - execution
+  - lineage
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: export
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/transformations.py
+  owned_concepts:
+  - export
+  allowed_dependencies:
+  - artifacts
+  - configuration
+  - contracts
+  - errors
+  - execution
+  - lineage
+  - snapshots
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage
+- module_id: curation
+  owner: model-tooling
+  public_entrypoint: model/src/foliqant_model/curation/runner.py
+  public_symbols:
+  - run_curation
+  - run_decision_curation
+  - build_decision_jobs
+  owned_concepts:
+  - pinned-source-conversion
+  - local-generation
+  - frozen-family-planning
+  - resumable-curation
+  - native-decision-oracles
+  - native-decision-adequacy-case-catalog
+  - native-decision-research-case-catalog
+  - native-source-projection
+  - native-coverage-accounting
+  allowed_dependencies:
+  - acquisition
+  - artifacts
+  - configuration
+  - contracts
+  - data
+  - errors
+  - execution
+  - scoring
+  - setup
+  forbidden_dependencies:
+  - service
+  - purista
+  - voyage

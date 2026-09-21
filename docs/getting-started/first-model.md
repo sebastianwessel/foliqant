@@ -18,8 +18,8 @@ The following commands read those paths from a verified offline rerun, so you
 do not need to type the versioned setup directory yourself:
 
 ```sh
-setup_result=$(uv run --no-sync foliqant-model setup --offline)
-EXERCISE=$(printf '%s' "$setup_result" | .venv/bin/python -c \
+setup_result=$(uv run --project model --no-sync foliqant-model setup --offline)
+EXERCISE=$(printf '%s' "$setup_result" | uv run --project model --no-sync python -c \
   'import json, sys; from pathlib import Path; print(Path(json.load(sys.stdin)["result"]["receiptPath"]).parent)')
 OUTPUT="$HOME/.local/share/foliqant/exercises/first-model"
 mkdir -p "$OUTPUT"
@@ -32,7 +32,7 @@ overwritten.
 ## Train a shared adapter
 
 ```sh
-uv run --no-sync foliqant-model train \
+uv run --project model --no-sync foliqant-model train \
   --config model/examples/train.yaml \
   --model "$EXERCISE/artifacts/upstream" \
   --dataset "$EXERCISE/artifacts/shared" \
@@ -46,7 +46,7 @@ the exact parent, data and permissions used to create it.
 ## Measure held-out responses
 
 ```sh
-uv run --no-sync foliqant-model evaluate \
+uv run --project model --no-sync foliqant-model evaluate \
   --config model/examples/evaluation.yaml \
   --model "$EXERCISE/artifacts/upstream" \
   --adapter "$OUTPUT/shared-adapter" \
@@ -65,17 +65,17 @@ evaluation ran, not that the model is ready for use.
 Merge the adapter with the exact checkpoint used for training:
 
 ```sh
-uv run --no-sync foliqant-model merge \
+uv run --project model --no-sync foliqant-model merge \
   --model "$EXERCISE/artifacts/upstream" \
   --adapter "$OUTPUT/shared-adapter" \
   --output "$OUTPUT/shared-merged"
 
-uv run --no-sync foliqant-model export \
+uv run --project model --no-sync foliqant-model export \
   --model "$OUTPUT/shared-merged" \
   --format checkpoint \
   --output "$OUTPUT/checkpoint"
 
-uv run --no-sync foliqant-model verify "$OUTPUT/checkpoint"
+uv run --project model --no-sync foliqant-model verify "$OUTPUT/checkpoint"
 ```
 
 The checkpoint contains ordinary Safetensors weights, tokenizer files and

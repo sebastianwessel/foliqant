@@ -1,42 +1,42 @@
 spec_manifest_version: 1
-content_digest: sha256:694db7b828e64b2f162f4e61da9fbda1b7dc9f19e164e8b05c48fc9f566c366c
+content_digest: sha256:76f99c1e65c28e1a8008cc3cf957a450d11ebd79801af6297746e79e475ea2f4
 artifacts:
   - path: 00-applicability.yaml
-    sha256: sha256:8bcefa1ba13486c734e74007210dc8233bec22176d866471f14ed60461bdf64d
+    sha256: sha256:23d5f09cb551391a65dd09766bd6bb5766720147fc57f7e1281c3c7a269f0429
   - path: 00-architecture-overview.md
-    sha256: sha256:25125c7073575a4b0649f6e7bfe9599086a4c43af5999d5ad887f4011e8edd03
+    sha256: sha256:94d7ae144f83f4388183a4d4eb8c1c94265f05fb67068846d796628459ddd67c
   - path: 00-conventions.md
     sha256: sha256:f855741d5819c045a1b7ba12171da6d5e219483f97d71d834ba3c7d69985b444
   - path: 00-decision-authority.yaml
-    sha256: sha256:af94be0b9dd171a2d49f2e5f57352b5bbb5559d439cced6f7d6863d5e2fec807
+    sha256: sha256:29b2e1a435f13539679ee90eeef8a884f1d6d9da651fb95a6bf41e308b6c247e
   - path: 00-file-structure.md
-    sha256: sha256:96e729e3ab432a2f10515670a04b3e9c061019646519ea959a81e4cb8626de30
+    sha256: sha256:ecc4a9821a4a34b83cfd525067d6aebbb3393d5c16bf1c1fd33e3abecf4be101
   - path: 00-module-boundaries.yaml
-    sha256: sha256:1d1654365a781e3fb1c20e3a9a1746483c0322fe75a0274e3a9db341d39fdf47
+    sha256: sha256:3cd2d1253a63755484afa9c20f8c6742a2aa9ed6855a1e41b70d326ce6235b92
   - path: 00-policy-profile.yaml
-    sha256: sha256:470c208431f31ec3e15dd395fe1e3854db9f270d1f21bf6bcf80e50950660b99
+    sha256: sha256:a601dcd5920654d68d5ae1d3bec9c294d6d49dfeff9802f6ab58af1e599c12c3
   - path: 00-reuse-inventory.yaml
-    sha256: sha256:fa6b0bfcfedfc767b2300c96f74e6c7446c74b51ab16af40643c4e0218107b90
+    sha256: sha256:2807014438f7e80fd346a9afcec04d5cd55f9acbb4f04fbafe20d49aa3d48f8c
   - path: 00-stack.md
-    sha256: sha256:757e4cab48de02c0da4883dfecf6907fc56d06ca41a58a144221f5644f764eeb
+    sha256: sha256:b23fe7ea7364460d655088d59dc1dd3d1bbdc4eaceab774878285e7e67df9319
   - path: 00-traceability.yaml
-    sha256: sha256:4e7224550a1f6c308c30fd5aa0776cfa328067267044ded2ec93f2fa1a0c72bc
+    sha256: sha256:82a3e3cc0b0ef1be50103cfb15a3759480ddbaed8f1840d7b207a58f6ce89893
   - path: 00-vision.md
-    sha256: sha256:f48883441cd3120064cc0e7f2a257c2555413270f9c42de55ce1d7baafaf7d80
+    sha256: sha256:ce1e7aaa35f02142e9efd059e7728ad55c32e14c5bd54f17964f0d5d7ba210e2
   - path: 01-model-lifecycle.md
     sha256: sha256:70c7b929e097afd6038c4f24bc3379faad59d45807e28a5f21167451cd53e635
   - path: 02-capabilities/capability-inventory.md
-    sha256: sha256:1d261d94a03b37a4960eb26470ea0442ebef95b66cd5a410f5c5e18dec1593a3
+    sha256: sha256:a66aec53fd287424bf06120987528e8a4237d88104bc821a92566a15273db303
   - path: 03-contracts/fixtures/semantic-vectors.json
     sha256: sha256:fe5bf8f1825ace004e0588848dcfc66acab00a0ddc8834915b833b66e1e9aae4
   - path: 03-contracts/model-contracts.md
     sha256: sha256:6c11052e520b8d6e89ece4a5e3031ecb01a033683ab57764b57cfaf6ad2b876b
+  - path: 03-contracts/package-generation-map.yaml
+    sha256: sha256:3ee246029fee3ef7adb82f62582792e1ecb9f64291d9f91cfed129a846d388c8
   - path: 03-contracts/representation-catalog.md
-    sha256: sha256:a5d235dbcd83cee9efd1b770a88199da59797a4c4f8c428178c9a1247eae2744
+    sha256: sha256:5f37f36381896b19683129160abc5518fb77e47bacf4183904608ef50563e769
   - path: 03-contracts/representation-catalog.yaml
-    sha256: sha256:7e09df1b33a1f688b50f3547768169b2aab99a5461b15c89b24893b5c2143d56
-  - path: 03-contracts/service-generation-map.yaml
-    sha256: sha256:e94f00fdd429c7d660bc153c8b645d2f6e6e3309065623f773d9bd20176bc598
+    sha256: sha256:3618c5e8341ac2e8da0b4b7ae5b9ac999e064fbd14af9377aeb3650a4f593601
   - path: 03-flows/e2e-coverage.md
     sha256: sha256:1ee8fa604489b1a729218059cc8d6eee26728b4c5f2884c5123f705124d330f7
   - path: 04-operations/security-release.md
@@ -44,7 +44,7 @@ artifacts:
   - path: 05-documentation-and-skills.md
     sha256: sha256:c64f49bdecbc258bd91c89cf44c6d6a75aae555e1a8b20dc611afea4897ac3b2
   - path: 06-backend-and-dependencies.md
-    sha256: sha256:adb0992d3292d2a6bd81f84ad04771fdff903c2be9277eaca27fa453b0f27198
+    sha256: sha256:f033cd4b49ea3b0c8dae0298e5085a57eca656c792c212ab0bc7997fa007339c
   - path: 07-local-setup.md
     sha256: sha256:5249d9197ba4b07c1601f31c5650aacc06950f777e883ec11888b37c58c99656
   - path: 08-automated-data-curation.md
@@ -52,19 +52,13 @@ artifacts:
   - path: 09-native-decision-data.md
     sha256: sha256:bdefaa49a2a09d78fbf4ab204ddef65686dd472408812bc2242c59e111b5717c
   - path: 10-business-decisions-and-processes.md
-    sha256: sha256:4c787f27dfd46cc4216cd955a50677985a8c4ab559f6503e9b02454c2929e4ce
-  - path: 11-workflow-service.md
-    sha256: sha256:dadb637484589af2a5a9829a4b0f07f531312497d5310787c1cd2524e2cb6e10
-  - path: 12-durable-execution.md
-    sha256: sha256:416be8321d98f734d372b3bbf40b5225447a6d566b9b919c5d88498c2fcadbb2
-  - path: 13-durable-worker.md
-    sha256: sha256:478bb9c03fbae804e1f3143ea28ae6cbf4c39e37f12c8e0e92812220ce71843d
-  - path: 14-durable-deployment.md
-    sha256: sha256:5b536a805774f544dfa0b63e68ff6a135af10674eddcf2c4c493b2fd17f1d8ab
+    sha256: sha256:47615425731448c353fd8b78d01766f59114a612adfe63e490c4f95f49a6e86b
+  - path: 11-python-package.md
+    sha256: sha256:ea30a4150dfd4337bef67e7b7ac90eee7377b8b5367087f177521524f95f863a
   - path: README.md
-    sha256: sha256:d6200c2edede214b1bcb15315042d9fcef204ebea81846f1569ae866dadc5b2f
+    sha256: sha256:6ca5c2def583400ef62408c6c1b24f116a0a61dac1d9cb236eccc326b82d3078
   - path: _registry.yaml
-    sha256: sha256:b9af5ac85d6adf01f0154e1adebe4df7cf2e1ab3d8ac809562e40ed4ac40dbd6
+    sha256: sha256:f494c4737a14ea669b60e02db691d29e71285b070d3a3649cc74d0b5f94c6cd2
   - path: glossary.md
     sha256: sha256:ff1d495624a89cacf0da0af2c44d06c9cb95efd5113bf4cfd2b715cafe27ba5f
   - path: research/apple-silicon.md
@@ -90,12 +84,12 @@ artifacts:
   - path: research/model-research.md
     sha256: sha256:d3c5eef87c7db271e90e7d08ce624b3cfdacea6973b3588351c3e10f7c89bbb0
   - path: research/modular-workflow-service.md
-    sha256: sha256:599bf3b81766fdf61287cda65cbfbaeddcc87445366d37ee82848176a32e4da9
+    sha256: sha256:f27d2cf703f4b4689d04a3dc7eb70561929aef9628ca250dbe6260d2cbc0bb16
   - path: research/workflow-service-dependencies.md
-    sha256: sha256:3f28d675b119c93088da65e5f613182b88f65ec591ea337bda6571c9025e99f1
+    sha256: sha256:d3d6772ff207248765b216f3b2f22f34807a70ca09ad55ce77a508e0861afdb4
   - path: research/workflow-service-proposal.md
-    sha256: sha256:c822ff78eaa2a9ae2c64105b781e02a45c485fa333a48a4098232fe5fa14a2ac
+    sha256: sha256:83426ee2f792ce765cf99a5f47e18de5fa950f0ff7425d89d2c073ac2b83a643
 provenance:
-  source_revision: working-tree-0201b89-in-memory-cleanup
-  generated_at: 2026-09-21T14:10:02.056Z
+  source_revision: working-tree-2a9539a-python-package-evaluation
+  generated_at: 2026-09-21T15:10:19.495Z
   generator: spec-manifest/v1

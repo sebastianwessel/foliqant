@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from typing import Literal, cast
 
 import pytest
-from foliqant_decisions import (
+from pydantic import ValidationError
+
+from foliqant.decisions import (
     Answerability,
     ChoiceAnswer,
     ChoiceQuestion,
@@ -19,8 +21,6 @@ from foliqant_decisions import (
     DecisionState,
     Explanation,
 )
-from pydantic import ValidationError
-
 from foliqant_model.artifacts import load_verified_artifact
 from foliqant_model.contracts import ChatMessage, DataRecord, GenerationProvenance
 from foliqant_model.contracts.inputs import FrozenFamilyAssignment, ResolvedSourceDeclaration

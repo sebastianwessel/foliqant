@@ -135,7 +135,7 @@ prepare a plan from a run whose source snapshots and splits are already frozen:
 The equivalent package command is:
 
 ```sh
-uv run --no-sync foliqant-model prepare-source-projections \
+uv run --project model --no-sync foliqant-model prepare-source-projections \
   --from-run /absolute/path/to/run \
   --pilot \
   --output /absolute/path/to/new-projection-plan
@@ -459,7 +459,7 @@ to this mutability policy creates a fresh run identity.
 Verify a published dataset using its printed path:
 
 ```sh
-uv run --no-sync foliqant-model verify /absolute/path/to/native-decisions
+uv run --project model --no-sync foliqant-model verify /absolute/path/to/native-decisions
 ```
 
 After inspecting data quality and coverage, use that artifact with the existing
@@ -476,8 +476,8 @@ For new catalogs, validate your configuration with `CategoryCatalog` before
 building a question:
 
 ```python
-from foliqant_decisions.category_catalog import CategoryCatalog
-from foliqant_decisions.contracts import ChoiceQuestion
+from foliqant.decisions.category_catalog import CategoryCatalog
+from foliqant.decisions.contracts import ChoiceQuestion
 
 catalog = CategoryCatalog.model_validate({
     "categories": [
@@ -552,7 +552,7 @@ Catalog validation is an authoring boundary. Existing V1 artifacts keep their
 original identifier rules, schemas and recipe identity so completed data can be
 verified, repaired and extended without renaming stored answers. Importing an
 external taxonomy into a new catalog requires an explicit collision-checked
-mapping; this helper does not migrate datasets or create a workflow service.
+mapping; this helper does not migrate datasets or configure the workflow runtime.
 
 ## Handle unreliable input in application code
 
@@ -599,7 +599,7 @@ Validate JSON with [the output schema](../../contracts/model/decision-output.sch
 and then validate its question IDs, allowed answers and citations against
 [the input contract](../../contracts/model/decision-input.schema.json). Python
 callers can use `DecisionInput`, `DecisionOutput`, and
-`validate_decision_output` from `foliqant_decisions.contracts`.
+`validate_decision_output` from `foliqant.decisions.contracts`.
 The validator checks structure and declared references, not semantic truth.
 Partial collections must contain at least one supported item and an explanation
 evidence citation. A missing part of a requested collection prevents a complete

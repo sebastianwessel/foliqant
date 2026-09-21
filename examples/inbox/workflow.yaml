@@ -1,6 +1,0 @@
-version: 1
-name: inbox_triage
-start: triage
-defaults:
-  model: local
-input_schema: schemas/input.json

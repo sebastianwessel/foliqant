@@ -312,9 +312,9 @@ The broader authoring mandate covers this spec/concept and research. The owner
 also authorized the additive category catalog, key normalizer, generated schema
 and their tests/guides. No new endpoint, loader, workflow node, decision schema
 version or data download is implemented.
-Runtime implementation now follows [specification 11](11-workflow-service.md).
+Runtime implementation now follows [specification 11](11-python-package.md).
 New training-contract/evidence/confidence extensions remain separately scoped.
-`service/src/foliqant/core` owns execution; adapters own transports,
+`src/foliqant/core` owns execution; adapters own transports,
 document parsing, persistence and delivery. The core must not import model-training
 libraries or provider/transport clients. Reuse language-neutral generated schemas
 at the model/service boundary and reuse the extracted lightweight Python decision-contract package in the

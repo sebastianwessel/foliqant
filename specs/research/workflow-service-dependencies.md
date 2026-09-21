@@ -1,7 +1,7 @@
 # Workflow service dependency and API research
 
 Date: 2026-09-21. Status: dependency research for
-[specification 11](../11-workflow-service.md), not an implementation contract or
+[specification 11](../11-python-package.md), not an implementation contract or
 provider-conformance claim. The service lock and specification remain authoritative.
 No endpoint was contacted while preparing this note.
 
@@ -17,8 +17,8 @@ and have no runtime extras. Azure OpenAI uses the OpenAI provider extra.
 The historical SDK investigation below records alternatives and observations;
 it is not an instruction to implement them. In particular, references to durable
 ledgers, leases, write replay or additional providers are not active requirements.
-For actual configuration use [the service guide](../../service/README.md),
-[specification 11](../11-workflow-service.md), `service/pyproject.toml` and its lock.
+For actual configuration use [the service guide](../../docs/README.md),
+[specification 11](../11-python-package.md), `pyproject.toml` and its lock.
 
 ## Original research recommendation
 

@@ -2,16 +2,17 @@
 
 ## Workflow service implementation
 
-Specification [11](../11-workflow-service.md) owns the in-memory service scope,
+Specification [11](../11-python-package.md) owns the in-memory service scope,
 entrypoints, contracts and acceptance families. Persistence, queue workers,
 application authentication and packaged transports are explicitly not capabilities.
 
-- `CAP-SERVICE-CONTRACTS` → `ACCEPT-SERVICE-CONTRACTS`.
-- `CAP-SERVICE-COMPILER` → `ACCEPT-SERVICE-COMPILER`.
-- `CAP-SERVICE-RUNTIME` → `ACCEPT-SERVICE-RUNTIME`.
-- `CAP-SERVICE-MCP` → `ACCEPT-SERVICE-MCP`.
-- `CAP-SERVICE-PRIVACY` → `ACCEPT-SERVICE-PRIVACY`.
-- `CAP-SERVICE-DX` → `ACCEPT-SERVICE-DX`.
+- `CAP-PACKAGE-CONTRACTS` → `ACCEPT-PACKAGE-CONTRACTS`.
+- `CAP-PACKAGE-COMPILER` → `ACCEPT-PACKAGE-COMPILER`.
+- `CAP-PACKAGE-RUNTIME` → `ACCEPT-PACKAGE-RUNTIME`.
+- `CAP-PACKAGE-MCP` → `ACCEPT-PACKAGE-MCP`.
+- `CAP-PACKAGE-PRIVACY` → `ACCEPT-PACKAGE-PRIVACY`.
+- `CAP-PACKAGE-DX` → `ACCEPT-PACKAGE-DX`.
+- `CAP-PACKAGE-EVALUATION` → `ACCEPT-PACKAGE-EVALUATION`: isolated steps and full pipelines, explicit golden expectations, measured latency/usage and honest coverage/failure denominators.
 
 ## Proposed business-process extension
 

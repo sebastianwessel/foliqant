@@ -1,3 +1,15 @@
+# Product scopes
+
+The reusable `foliqant` package compiles and executes deterministic in-memory
+pipelines around model/tool calls. It includes native decision contracts and
+explicit ground-truth evaluation for steps and full pipelines. Business examples
+use the configured local Qwen endpoint; the library does not host inference or
+own incoming HTTP, authentication, persistence or background jobs.
+[Specification 11](11-python-package.md) owns this implemented package scope.
+
+The following requirements describe the separate model-development toolchain.
+They do not make training dependencies part of the runtime installation.
+
 # Scope and authority
 
 ## Requested outcome
@@ -13,7 +25,7 @@ The user explicitly requested implementation, delegated agent/model selection, a
 - A shared Foliqant model is an adaptation of pinned upstream instruction-capable weights, not pretraining from random initialization. Customer adapters start from an exact merged shared release.
 - Production functions never substitute mocks, synthetic weights, copied expected answers, or fabricated evaluation metrics for real training/generation. Small generated diagnostic samples and small real models are valid integration inputs, but datasets and model weights are never stored in Git. Generate or download them into the local setup workspace. Only recipe/configuration/preparation code belongs in the repository.
 - Standard local inference is an acceptance boundary: export a normal checkpoint and prove loading/generation outside MLX LM. GGUF is a separate supported-architecture export, never a fake file or automatic fallback.
-- The HTTP/Redis workflow service, UI, foundation pretraining, distributed training, cloud provisioning, and production financial-model quality certification are not this implementation scope. Their earlier sketches are retained as research. Nothing may claim those capabilities are implemented.
+- Packaged HTTP/Redis transports, UI, foundation pretraining, distributed training, cloud provisioning, and production financial-model quality certification are not this implementation scope. Their earlier sketches are retained as research. Nothing may claim those capabilities are implemented.
 
 ## Completion definition
 

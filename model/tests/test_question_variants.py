@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import json
 
-from foliqant_decisions import (
+from foliqant.decisions import (
     ChoiceResult,
     DecisionInput,
     DecisionOutput,
     MultiselectResult,
     validate_decision_output,
 )
-
 from foliqant_model.contracts.inputs import DataRecord, GenerationProvenance
 from foliqant_model.curation.question_variants import (
     QUESTION_VARIANT_RECIPE_VERSION,

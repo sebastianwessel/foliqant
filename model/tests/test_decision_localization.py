@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from foliqant_decisions import (
+
+from foliqant.decisions import (
     DecisionInput,
     DecisionOutput,
     RequestUnitsResult,
     validate_decision_output,
 )
-
 from foliqant_model.curation.decision_localization import localize_case
 
 

@@ -7,7 +7,7 @@ labels remain ambiguous, and blind disagreement still quarantines a record.
 
 from __future__ import annotations
 
-from foliqant_decisions import CategoryCatalog, CategoryDefinition
+from foliqant.decisions import CategoryCatalog, CategoryDefinition
 
 BANKING77_CATALOG_VERSION = "banking77-editorial-v1"
 

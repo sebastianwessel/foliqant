@@ -1,57 +1,59 @@
 registry_version: 1
 contracts:
-  - id: CONTRACT-SERVICE-V1
-    path: 11-workflow-service.md
-  - id: CONTRACT-BUSINESS-PROCESS-TARGET
-    path: 10-business-decisions-and-processes.md
-  - id: CONTRACT-MODEL-V1
-    path: 03-contracts/model-contracts.md
-  - id: CONTRACT-SETUP-V1
-    path: 07-local-setup.md
-  - id: CONTRACT-CURATION-V1
-    path: 08-automated-data-curation.md
-  - id: CONTRACT-NATIVE-DECISION-V1
-    path: 09-native-decision-data.md
+- id: CONTRACT-PACKAGE-V1
+  path: 11-python-package.md
+- id: CONTRACT-BUSINESS-PROCESS-TARGET
+  path: 10-business-decisions-and-processes.md
+- id: CONTRACT-MODEL-V1
+  path: 03-contracts/model-contracts.md
+- id: CONTRACT-SETUP-V1
+  path: 07-local-setup.md
+- id: CONTRACT-CURATION-V1
+  path: 08-automated-data-curation.md
+- id: CONTRACT-NATIVE-DECISION-V1
+  path: 09-native-decision-data.md
 capabilities:
-  - id: CAP-SERVICE-CONTRACTS
-    path: 11-workflow-service.md
-  - id: CAP-SERVICE-COMPILER
-    path: 11-workflow-service.md
-  - id: CAP-SERVICE-RUNTIME
-    path: 11-workflow-service.md
-  - id: CAP-SERVICE-MCP
-    path: 11-workflow-service.md
-  - id: CAP-SERVICE-PRIVACY
-    path: 11-workflow-service.md
-  - id: CAP-SERVICE-DX
-    path: 11-workflow-service.md
-  - id: CAP-BUSINESS-DECISIONS
-    path: 10-business-decisions-and-processes.md
-  - id: CAP-PROCESS-BRANCHING
-    path: 10-business-decisions-and-processes.md
-  - id: CAP-DOMAIN-DATA
-    path: 10-business-decisions-and-processes.md
-  - id: CAP-ENV
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-DATA
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-MODEL
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-TRAIN
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-EVAL
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-RISK
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-EXPORT
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-VERIFY
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-GUIDES
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-SETUP
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-CURATE
-    path: 02-capabilities/capability-inventory.md
-  - id: CAP-NATIVE-DATA
-    path: 02-capabilities/capability-inventory.md
+- id: CAP-PACKAGE-EVALUATION
+  path: 11-python-package.md
+- id: CAP-PACKAGE-CONTRACTS
+  path: 11-python-package.md
+- id: CAP-PACKAGE-COMPILER
+  path: 11-python-package.md
+- id: CAP-PACKAGE-RUNTIME
+  path: 11-python-package.md
+- id: CAP-PACKAGE-MCP
+  path: 11-python-package.md
+- id: CAP-PACKAGE-PRIVACY
+  path: 11-python-package.md
+- id: CAP-PACKAGE-DX
+  path: 11-python-package.md
+- id: CAP-BUSINESS-DECISIONS
+  path: 10-business-decisions-and-processes.md
+- id: CAP-PROCESS-BRANCHING
+  path: 10-business-decisions-and-processes.md
+- id: CAP-DOMAIN-DATA
+  path: 10-business-decisions-and-processes.md
+- id: CAP-ENV
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-DATA
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-MODEL
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-TRAIN
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-EVAL
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-RISK
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-EXPORT
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-VERIFY
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-GUIDES
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-SETUP
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-CURATE
+  path: 02-capabilities/capability-inventory.md
+- id: CAP-NATIVE-DATA
+  path: 02-capabilities/capability-inventory.md

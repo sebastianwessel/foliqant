@@ -4,12 +4,12 @@ import json
 import re
 
 import pytest
-from foliqant_decisions import (
+
+import foliqant_model.curation.decision_seeds as decision_seeds_module
+from foliqant.decisions import (
     semantic_signature,
     validate_decision_output,
 )
-
-import foliqant_model.curation.decision_seeds as decision_seeds_module
 from foliqant_model.contracts import ChatMessage, DataRecord
 from foliqant_model.curation.contracts import ImportedRecord
 from foliqant_model.curation.decision_contracts import DecisionDataSettings

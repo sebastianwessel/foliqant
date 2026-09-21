@@ -1,12 +1,15 @@
-# Model lifecycle specifications
+# Foliqant specifications
 
-Active service implementation: [Python workflow service](11-workflow-service.md)
-selects PydanticAI, current MCP/OAuth, optional identity/trace context,
-in-memory execution and safe OpenTelemetry. The package owns no persistence,
-queue worker, application authentication or HTTP/Redis transport. The
-[design rationale](research/modular-workflow-service.md)
-is historical where specification 11 supersedes it. Implementation acceptance is
-separate from design approval; current model lifecycle artifacts remain unchanged.
+Start with [the Python package](11-python-package.md) for reusable in-memory
+pipelines, contracts, model/MCP adapters, step isolation and ground-truth
+evaluation. [Repository structure](00-file-structure.md) defines the library,
+model-development and example boundaries. Runtime code is `src/foliqant`, not a
+service deployment. HTTP is an example host only; persistence, queues and
+application authentication are outside scope.
+
+The separate `model/` project owns training and curation. End-user instructions
+live in `docs/`; these files record implementation requirements. Research and
+historical review records are evidence, not additional implementation mandates.
 
 Status: the complete local lifecycle is implemented and has native execution evidence, including shared/customer training, QLoRA, held-out evaluation, policy/audit and independent exported-model inference. Final review repairs and packaging checks are recorded in `plans/`; no formal human digest approval or financial production qualification is asserted. This directory owns implementation intent. `research/` records background, not additional requirements. User documentation belongs in `docs/` and explains the working product without implementation history.
 
@@ -33,9 +36,6 @@ changing the V1 generation contract. Candidate
 [domain datasets](research/business-process-datasets.md) remain research until
 their rights, mappings and acquisition profiles are separately reviewed.
 
-The [Python workflow service](11-workflow-service.md) implements the service side
-separately from model tooling as a foreground in-memory input-to-result pipeline.
-[Specifications 12](12-durable-execution.md),
-[13](13-durable-worker.md) and [14](14-durable-deployment.md) are superseded
-historical markers with no active authority. [Implementation status](../plans/workflow-service-status.md)
-tracks the bounded current implementation and acceptance evidence.
+
+[Current package implementation status](../plans/python-package-status.md) tracks
+verification. Removed durability proposals are available in Git history only.

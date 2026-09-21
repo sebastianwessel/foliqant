@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 
 import pytest
-from foliqant_decisions import (
+
+from foliqant.decisions import (
     DecisionInput,
     DecisionOutput,
     validate_decision_output,
 )
-
 from foliqant_model.contracts import ChatMessage, DataRecord
 from foliqant_model.curation import source_category_catalogs
 from foliqant_model.curation.contracts import ImportedRecord

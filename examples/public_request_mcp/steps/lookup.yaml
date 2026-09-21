@@ -1,0 +1,6 @@
+type: mcp
+server: records_office
+tool: lookup_request
+arguments:
+  reference: {pointer: /payload/reference}
+next: done

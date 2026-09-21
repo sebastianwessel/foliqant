@@ -1,6 +1,6 @@
 # Earlier architecture proposal
 
-Superseded for workflow-service language, envelopes, authoring and provider/MCP
+Superseded for python-package language, envelopes, authoring and provider/MCP
 integration by the [2026-09-21 modular service proposal](modular-workflow-service.md).
 This file retains the earlier rationale and example history; its Go and YAML
 recommendations are not the current proposed implementation direction. The model
@@ -10,7 +10,7 @@ Date: 2026-09-19. Status: proposed implementation design. The user's approved di
 
 ## 1. Four independent concerns
 
-1. **Shared model development:** select an upstream checkpoint, perform shared financial-domain/task adaptation where justified, evaluate, and publish a versioned Foliqant model. This is what `model/base/` means; it is not foundation-model pretraining from scratch.
+1. **Shared model development:** select an upstream checkpoint, perform shared financial-domain/task adaptation where justified, evaluate, and publish a versioned Foliqant model. This is the shared-adaptation stage in the model-development guide; it is not foundation-model pretraining from scratch.
 2. **Customization:** adapt a particular released Foliqant model for an organization/domain using separately authorized data. Record the parent model and evaluate shared capability retention. Configuration and retrieval should be tried before training.
 3. **Inference:** load a released model in an ordinary supported server. Expose its standard HTTP API. No custom inference engine, heads, or runtime forks.
 4. **Workflow service:** load a validated process definition, ask the model bounded questions, validate answers and evidence, apply deterministic decisions, and deliver outcomes through adapters. The service must not import the training environment or load model weights.

@@ -1,11 +1,11 @@
 ---
 name: foliqant-model
-description: "Operates Foliqant setup, data curation, training, evaluation, policy audit, export, and artifact verification. Use when working with the local Foliqant model CLI or datasets; do not use for the separate workflow service."
+description: "Operates Foliqant setup, data curation, training, evaluation, policy audit, export, and artifact verification. Use when working with the local Foliqant model CLI or datasets; do not use for the runtime Python package."
 ---
 
 # Foliqant model tooling
 
-Use the installed `foliqant-model --help` or `uv run --no-sync foliqant-model --help`
+Use the installed `foliqant-model --help` or `uv run --project model --no-sync foliqant-model --help`
 in a checkout as the command authority. Do not invent missing commands, silently
 train a replacement model, or substitute expected answers for model output.
 
@@ -15,7 +15,7 @@ For training, evaluation, risk policy, merging and export, read
 [references/model-lifecycle.md](references/model-lifecycle.md).
 
 For new classification catalogs, use `CategoryCatalog` from
-`foliqant_decisions.category_catalog`: detailed descriptions, deterministic
+`foliqant.decisions.category_catalog`: detailed descriptions, deterministic
 lowercase snake_case IDs, and collision rejection. Keep immutable V1 data and
 generation identities unchanged. See the category guidance in
 [setup and data](references/setup-and-data.md#category-catalogs).

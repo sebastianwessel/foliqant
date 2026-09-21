@@ -4,7 +4,7 @@ Research date: 2026-09-19. This file is normative for the initial implementation
 
 ## Environment and packages
 
-Use CPython 3.12 (requires-python `>=3.12,<3.13`) in a repository-local uv environment. Offline data/artifact/schema commands must work without GPU libraries. MLX operations require native arm64 macOS and a working Metal device; doctor reports unavailable capabilities rather than importing MLX at CLI startup. M1/M5 64 GB are user target machines, not measured capacity guarantees. No mutation of global Python packages.
+Use CPython 3.12 (requires-python `>=3.12,<3.13`) in the model project's own uv environment. Offline data/artifact/schema commands must work without GPU libraries. MLX operations require native arm64 macOS and a working Metal device; doctor reports unavailable capabilities rather than importing MLX at CLI startup. M1/M5 64 GB are user target machines, not measured capacity guarantees. No mutation of global Python packages.
 
 | Dependency group | Exact direct pins |
 |---|---|
@@ -66,7 +66,7 @@ Use reviewed synthetic text chat fixtures with enough separate components for fo
 
 Model source: https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct/tree/12fd25f77366fa6b3b4b768ec3050bf629380bac.
 
-Dependency resolution evidence: uv 0.7.13 resolved all listed groups (101 packages) using CPython 3.12.11 on 2026-09-19. The candidate lock is retained in research/dependencies/uv.lock and its matching pyproject.toml. These establish resolution only; actual install/import and training checks remain implementation acceptance. The final root lock must match the selected package graph and be checked again after packaging metadata is added.
+Dependency resolution evidence: uv 0.7.13 resolved all listed groups (101 packages) using CPython 3.12.11 on 2026-09-19. The candidate lock is retained in research/dependencies/uv.lock and its matching pyproject.toml. These establish resolution only; actual install/import and training checks remain implementation acceptance. The model/uv.lock must match the selected package graph and be checked again after packaging metadata is added.
 
 Independent GGUF verifier executable observed on this host: llama.cpp 10180 / commit 11b068d06605288ce7917534b46d52b47823dc13; executable SHA-256 c47c683d54c76cefde5d62bbdf352025f66fd7156ea88ffc0f6becc47084238c. Record this exact verifier separately from model hashes.
 

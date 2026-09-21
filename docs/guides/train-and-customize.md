@@ -45,7 +45,7 @@ Use an upstream checkpoint, a shared merged model, or an eligible quantized form
 of either model.
 
 ```sh
-uv run --no-sync foliqant-model train \
+uv run --project model --no-sync foliqant-model train \
   --config /absolute/path/to/train.yaml \
   --model /absolute/path/to/upstream-model \
   --dataset /absolute/path/to/shared-dataset \
@@ -69,7 +69,7 @@ model parent as described in [export and run](export-and-run.md), then use a
 separate prepared customer dataset:
 
 ```sh
-uv run --no-sync foliqant-model customize \
+uv run --project model --no-sync foliqant-model customize \
   --config /absolute/path/to/train.yaml \
   --model /absolute/path/to/shared-merged-model \
   --dataset /absolute/path/to/customer-dataset \
@@ -88,7 +88,7 @@ Use `--warm-start` to load a completed compatible adapter and run additional
 steps in a new immutable artifact:
 
 ```sh
-uv run --no-sync foliqant-model train \
+uv run --project model --no-sync foliqant-model train \
   --config /absolute/path/to/next-train.yaml \
   --model /absolute/path/to/the-same-model-parent \
   --dataset /absolute/path/to/next-shared-dataset \
@@ -104,7 +104,7 @@ it does not restore optimizer state or promise a bit-for-bit continuation.
 Verify any completed adapter before the next operation:
 
 ```sh
-uv run --no-sync foliqant-model verify /absolute/path/to/new-adapter
+uv run --project model --no-sync foliqant-model verify /absolute/path/to/new-adapter
 ```
 
 Next: [evaluate and audit](evaluate-and-audit.md).

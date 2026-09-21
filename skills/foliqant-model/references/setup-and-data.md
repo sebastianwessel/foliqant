@@ -357,7 +357,7 @@ production qualification remain separate activities. See
 
 ## Category catalogs
 
-Use `CategoryCatalog` from `foliqant_decisions.category_catalog` to author
+Use `CategoryCatalog` from `foliqant.decisions.category_catalog` to author
 new categories with `id` and nonblank `description`, then `decision_options()`
 to build existing choice/multiselect/request-unit questions. Explain category
 inclusion, exclusion and neighboring boundaries in descriptions; do not rely on
@@ -471,8 +471,8 @@ unlabeled test serialization are outside the current catalog.
 For custom local data:
 
 ```sh
-uv run --no-sync foliqant-model prepare --config /absolute/dataset.yaml --output /absolute/new-dataset
-uv run --no-sync foliqant-model verify /absolute/new-dataset
+uv run --project model --no-sync foliqant-model prepare --config /absolute/dataset.yaml --output /absolute/new-dataset
+uv run --project model --no-sync foliqant-model verify /absolute/new-dataset
 ```
 
 Dataset configuration is strict UTF-8 YAML/JSON with schemaVersion 1 and name.

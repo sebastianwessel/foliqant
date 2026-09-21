@@ -1,6 +1,6 @@
 """Automated local dataset curation."""
 
-from foliqant_decisions import (
+from foliqant.decisions import (
     CategoryCatalog,
     CategoryDefinition,
     CategoryKey,

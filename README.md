@@ -1,102 +1,89 @@
 # Foliqant
 
-Financial understanding. Decisions supported by evidence.
+Foliqant is a reusable Python package for evidence-backed model decisions and
+deterministic workflows. It compiles versioned workflow bundles, validates
+inputs and structured outputs, calls explicitly configured model or MCP
+adapters, and returns one in-memory execution result to the caller.
 
-Foliqant combines a reusable financial decision model with a configurable service for interpreting correspondence and documents. The model produces structured answers and evidence; deterministic workflow rules decide how those answers are used.
+The package does not provide an HTTP server, authentication, persistence,
+background jobs, or restart recovery. Applications add those boundaries around
+the Python API when they need them.
 
-The target scope includes banking and fund operations, insurance and public-sector
-processes. Multiple confirmed requests can lead to several configured tasks
-inside one process. This expanded [decision and process concept](specs/10-business-decisions-and-processes.md)
-is specified, not yet implemented in the workflow service.
+## Install and run
 
-**Available now:** local setup, pinned public-source curation, data preparation,
-LoRA/QLoRA training, customer customization, evaluation, threshold selection,
-independent audit, and model export. The Python workflow package runs configured pipelines in memory and returns
-results; authentication, persistence, queues and inbound transports are outside
-its scope.
+Foliqant requires CPython 3.12 and [uv](https://docs.astral.sh/uv/). From this
+checkout:
 
 ```sh
-./scripts/setup-model
-./scripts/generate-data --pilot
+uv sync --locked --all-extras --group dev
+uv run --no-sync foliqant init /tmp/foliqant-demo
+uv run --no-sync foliqant run \
+  --config /tmp/foliqant-demo/foliqant.yaml \
+  --workflow demo \
+  --input /tmp/foliqant-demo/envelope.json
 ```
 
-Use `./scripts/generate-data` for the full bounded native decision-data recipe,
-or add `--prepare-only` to prepare sources and tasks without inference. See
-[native decision data](docs/guides/native-decision-data.md) for setup, resume,
-visible progress, safe Ctrl+C pauses, coverage gates, and machine-readable
-answerability results. The authored recipe includes English and German; German
-examples retain German response prose with unchanged English enum values.
-Generation publishes only accepted training lineage and does not start training.
-Bounded pilot checks demonstrate pipeline behavior, not population accuracy,
-full-recipe coverage, training readiness or financial production qualification.
+The generated workflow is model-free. It is the fastest way to verify the
+compiler, CLI, and execution result locally.
 
-The native recipes use standalone Splash with low reasoning and temperature
-`0.1`; configure the exact endpoint in root `.env`. Other local OpenAI-compatible
-servers can be selected explicitly. Runtime and model combinations must return
-final structured content matching the requested JSON Schema.
+To embed a configured workflow:
 
-## Start here
+```python
+import asyncio
+from pathlib import Path
 
-- [Model lifecycle specifications](specs/README.md)
-- [User guides](docs/README.md)
-- [Automated public-source curation](docs/guides/automated-curation.md)
-- [Generate native decision data](docs/guides/native-decision-data.md)
+from foliqant import open_application, prepare_application
+from foliqant.contracts.envelope import Envelope
 
-- [Workflow service setup and CLI](service/README.md)
-- [Python workflow service specification](specs/11-workflow-service.md)
-- [Small HTTP wrapper example](examples/http-workflow/README.md)
-- [Embedded workflow example](examples/embedded-workflow/README.md)
-- [Model-enabled inbox example](examples/inbox/README.md)
-- [Local MCP workflow example](examples/mcp-tools/README.md)
-- [Workflow service agent skill](skills/foliqant-service/SKILL.md)
-- [Apple Silicon training and model lineage](specs/research/apple-silicon.md)
-- [Model research, datasets, calibration, and hosting](specs/research/model-research.md)
-- [Contributor instructions](AGENTS.md)
 
-## Repository layout
+async def main() -> None:
+    prepared = prepare_application(Path("foliqant.yaml"))
+    async with open_application(prepared, environment={}) as application:
+        result = await application.run("demo", Envelope(payload={"message": "hello"}))
+        print(result.execution.status)
 
-```text
-model/
-  base/             Shared Foliqant model, adapted from an upstream checkpoint
-  customization/    Customer/domain adaptations of a released Foliqant model
-  evaluation/       Baselines, held-out evaluation, calibration, regression
-  export/           Merge, quantize, package, and verify serving artifacts
-inference/          Standard model-server deployment profiles
-service/
-  src/foliqant/core/ Transport-independent workflow execution
-  src/foliqant/ports/ Typed extension contracts
-  src/foliqant/adapters/ Model/MCP clients, validation and telemetry
-contracts/          Language-neutral data schemas
-workflows/          Versioned processes, prompts, and workflow examples
-config/             Deployment-specific bindings and secret references
-docs/               End-user guides
-specs/              Implementation contracts and research
+
+asyncio.run(main())
 ```
 
-The in-memory workflow package calls a separately hosted model endpoint. Training libraries and GPU dependencies do not belong in the service image. Model weights, real customer data, credentials, and generated artifacts do not belong in Git.
+## Examples
 
-## Agreed constraints
+- [Support triage with local Qwen](examples/support_triage/README.md) classifies
+  a synthetic email and extracts its deadline and account reference. Live calls
+  require an explicit flag and the exact model settings in root `.env`.
+- [Public-request lookup over MCP](examples/public_request_mcp/README.md) runs a
+  useful read-only workflow against a bundled local stdio server without a model.
+- [Thin HTTP wrapper](examples/http-workflow/README.md) shows how an application
+  can expose the in-memory API. It is example transport code.
 
-- Local model development first: M1-family and M5-family Macs with 64 GB are available; retain the earlier 24 GB GPU inference target as a separate deployment profile.
-- Use standard vLLM, LM Studio, Ollama, or comparable supported runtimes.
-- Adapt existing open weights rather than pretraining from scratch.
-- English first, German second, preserving a multilingual foundation.
-- Cover correspondence, funds, disclosures, regulations, contracts, and reports.
-- Retrieve versioned rules and product facts; do not trust model memory for current obligations.
-- Validate evidence and abstention, and measure calibration independently.
-- Keep model customization separate from workflow configuration. Most new prompts, catalogs, questions, and routes should not require fine-tuning.
-- Keep this repository independent of PURISTA, Harness, and Voyage.
+## Runtime and model development
 
-## Current implementation scope
+The root uv project builds the `foliqant` runtime package. The separate
+`model/` uv project contains data curation, training, evaluation, calibration,
+and export tools for developing a model. Runtime applications do not need the
+training stack, and training does not deploy the workflow runtime.
 
-The Python tools cover automated public-source curation, preparation, shared
-adaptation, customer customization, evaluation and export for standard inference.
-Curation preparation downloads and converts pinned assets; optional augmentation
-uses a loopback endpoint by default or an explicitly allowed trusted private-network
-endpoint; training remains a later explicit command.
-The small setup model exercises the lifecycle locally. Selecting and qualifying
-a production financial model is separate from verifying the tooling. The
-workflow package provides an in-memory pipeline; see its guide for the supported
-model/MCP steps and caller-owned transport boundary.
+Start with the [user documentation](docs/README.md). Model developers can go
+directly to [model setup](docs/getting-started/setup.md) and the
+[model lifecycle guides](docs/guides/train-and-customize.md).
 
-Foliqant is a working name derived from folio and quant; no trademark or domain availability is claimed. A distribution license has not yet been selected.
+## Development
+
+```sh
+uv run --no-sync pytest
+uv run --no-sync mypy src
+uv run --no-sync ruff check src tests examples
+uv run --no-sync python scripts/generate_schemas.py --check
+uv build
+```
+
+Model-tooling checks run in their own project:
+
+```sh
+uv run --project model --no-sync pytest -c model/pyproject.toml model/tests
+uv run --project model --no-sync mypy --config-file model/pyproject.toml model/src
+uv run --project model --no-sync ruff check --config model/pyproject.toml model/src model/tests
+```
+
+Model weights, customer data, credentials, generated datasets, checkpoints, and
+evaluation holdouts do not belong in Git.

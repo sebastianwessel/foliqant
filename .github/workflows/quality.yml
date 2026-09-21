@@ -26,14 +26,14 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --locked --group dev
-      - run: uv run --no-sync python -m pytest model/tests -q
-      - run: uv run --no-sync mypy model/src
-      - run: uv run --no-sync ruff format --check model/src model/tests scripts
-      - run: uv run --no-sync ruff check model/src model/tests scripts
-      - run: uv run --no-sync python scripts/generate_model_schemas.py --check contracts/model
-      - run: uv run --no-sync python scripts/check_docs.py
-      - run: uv run --no-sync python scripts/check_tracked_data.py --git git
+      - run: uv sync --project model --locked --group dev
+      - run: uv run --project model --no-sync python -m pytest -c model/pyproject.toml model/tests -q
+      - run: uv run --project model --no-sync mypy --config-file model/pyproject.toml model/src
+      - run: uv run --project model --no-sync ruff format --check --config model/pyproject.toml model/src model/tests
+      - run: uv run --project model --no-sync ruff check --config model/pyproject.toml model/src model/tests
+      - run: uv run --project model --no-sync python scripts/generate_model_schemas.py --check contracts/model
+      - run: uv run --project model --no-sync python scripts/check_docs.py
+      - run: uv run --project model --no-sync python scripts/check_tracked_data.py --git git
       - run: git diff --check
 
   service:
@@ -48,15 +48,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --project service --locked --all-extras --group dev
-      - run: uv run --project service --no-sync python -m pytest service/tests -q
+      - run: uv sync --locked --all-extras --group dev
+      - run: uv run --no-sync python -m pytest tests -q
         env:
           UV_OFFLINE: '1'
-      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml service/src examples/embedded-workflow
-      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/inbox/run.py
-      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/mcp-tools
-      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/http-workflow/server.py
-      - run: uv run --project service --no-sync ruff check --config service/pyproject.toml service/src service/tests service/scripts examples
-      - run: uv run --project service --no-sync ruff format --check --config service/pyproject.toml service/src service/tests service/scripts examples
-      - run: uv run --project service --no-sync python service/scripts/generate_schemas.py --check
+      - run: uv run --no-sync mypy src examples
+      - run: uv run --no-sync ruff check src tests scripts examples
+      - run: uv run --no-sync ruff format --check src tests scripts examples
+      - run: uv run --no-sync python scripts/generate_schemas.py --check
       - run: git diff --check

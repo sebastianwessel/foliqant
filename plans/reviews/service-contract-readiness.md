@@ -5,7 +5,7 @@
 # Service contract and extraction readiness review
 
 Date: 2026-09-21. Scope: the shared native-contract extraction and first service
-contract slice in [specification 11](../../specs/11-workflow-service.md), reviewed
+contract slice in [specification 11](../../specs/11-python-package.md), reviewed
 using `spec-readiness-review`. This is a bounded design review, not implementation
 acceptance, full-service approval, or human approval of a manifest digest.
 The owner has delegated implementation and routine decisions; this review does

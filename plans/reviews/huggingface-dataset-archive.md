@@ -3,7 +3,7 @@
 Date: 2026-09-21. User-authorized private archival upload; no inference,
 training, public release or source-repository push.
 
-- Repository: [sebastianwessel/foliqant-decisions](https://huggingface.co/datasets/sebastianwessel/foliqant-decisions).
+- Repository: [sebastianwessel/foliqant](https://huggingface.co/datasets/sebastianwessel/foliqant).
 - Verified private before upload and after download.
 - Commit: `75c7f2872977e6b9ed7e45474da98199705541ff`.
 - Dataset configuration: `historical_native_v1`.

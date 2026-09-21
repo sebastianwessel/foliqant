@@ -47,11 +47,11 @@ while (( $# )); do
   shift
 done
 cd -- "$repo_root"
-sync_args=(sync --locked --extra mlx --group dev)
+sync_args=(sync --project "$repo_root/model" --locked --extra mlx --group dev)
 for argument in "${forwarded[@]+"${forwarded[@]}"}"; do
   if [[ "$argument" == "--offline" ]]; then
     sync_args+=(--offline)
   fi
 done
 uv "${sync_args[@]}"
-exec uv run --no-sync --locked foliqant-model setup "${forwarded[@]+"${forwarded[@]}"}"
+exec uv run --project "$repo_root/model" --no-sync --locked foliqant-model setup "${forwarded[@]+"${forwarded[@]}"}"

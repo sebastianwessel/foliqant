@@ -13,7 +13,7 @@ Quantization can reduce memory for QLoRA training. It accepts an upstream
 checkpoint or a merged model and preserves its shared or customer scope:
 
 ```sh
-uv run --no-sync foliqant-model quantize \
+uv run --project model --no-sync foliqant-model quantize \
   --model /absolute/path/to/checkpoint-or-merged-model \
   --bits 4 \
   --group-size 64 \
@@ -33,7 +33,7 @@ discarded by quantization.
 The adapter must name the supplied model as its exact training parent:
 
 ```sh
-uv run --no-sync foliqant-model merge \
+uv run --project model --no-sync foliqant-model merge \
   --model /absolute/path/to/exact-model-parent \
   --adapter /absolute/path/to/adapter \
   --output /absolute/path/to/new-merged-model
@@ -53,7 +53,7 @@ A checkpoint export copies a verified merged Safetensors model and its tokenizer
 configuration and chat template into a new immutable artifact:
 
 ```sh
-uv run --no-sync foliqant-model export \
+uv run --project model --no-sync foliqant-model export \
   --model /absolute/path/to/merged-model \
   --format checkpoint \
   --output /absolute/path/to/checkpoint-export
@@ -70,7 +70,7 @@ GGUF export currently supports merged `llama`, `mistral` and `mixtral`
 architectures. It emits F16 weights:
 
 ```sh
-uv run --no-sync foliqant-model export \
+uv run --project model --no-sync foliqant-model export \
   --model /absolute/path/to/merged-model \
   --format gguf \
   --output /absolute/path/to/gguf-export
@@ -85,7 +85,7 @@ other engine can run it.
 Verify the artifact first:
 
 ```sh
-uv run --no-sync foliqant-model verify /absolute/path/to/export
+uv run --project model --no-sync foliqant-model verify /absolute/path/to/export
 ```
 
 Foliqant does not start a serving engine. Run a small deterministic generation in
@@ -99,8 +99,8 @@ not download model weights. Do not synchronize dependencies during a running
 training job. The output path must not exist:
 
 ```sh
-uv sync --locked --extra mlx --extra validation --group dev
-PYTHONPATH=model/src .venv/bin/python scripts/verify_checkpoint_runtime.py \
+uv sync --project model --locked --extra mlx --extra validation --group dev
+uv run --project model --no-sync python scripts/verify_checkpoint_runtime.py \
   --artifact /absolute/path/to/checkpoint-export \
   --output /absolute/private/release-evidence/checkpoint-smoke.json \
   --timeout-seconds 300
@@ -110,7 +110,7 @@ Smoke-test a GGUF export with a local llama.cpp executable. Omit
 `--llama-executable` when `llama-cli` is already on `PATH`:
 
 ```sh
-PYTHONPATH=model/src .venv/bin/python scripts/verify_gguf_runtime.py \
+uv run --project model --no-sync python scripts/verify_gguf_runtime.py \
   --artifact /absolute/path/to/gguf-export \
   --output /absolute/private/release-evidence/gguf-smoke.json \
   --llama-executable /absolute/path/to/llama-cli \

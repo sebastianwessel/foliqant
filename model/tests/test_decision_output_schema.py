@@ -7,15 +7,15 @@ import json
 from collections.abc import Iterator
 
 import pytest
-from foliqant_decisions import (
+from jsonschema import Draft202012Validator, ValidationError
+
+from foliqant.decisions import (
     DecisionInput,
     DecisionOutput,
     DecisionSource,
     DecisionState,
     validate_decision_output,
 )
-from jsonschema import Draft202012Validator, ValidationError
-
 from foliqant_model.contracts.inputs import ChatMessage
 from foliqant_model.curation import decision_generation
 from foliqant_model.curation.decision_generation import _decision_output_schema

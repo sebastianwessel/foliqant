@@ -10,7 +10,9 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
-from foliqant_decisions import (
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from foliqant.decisions import (
     Citation,
     DecisionInput,
     DecisionOutput,
@@ -18,7 +20,6 @@ from foliqant_decisions import (
     semantic_signature,
     validate_decision_output,
 )
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..contracts.base import canonical_digest
 from ..contracts.inputs import ChatMessage, DataRecord, GenerationProvenance

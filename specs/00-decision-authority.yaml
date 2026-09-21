@@ -3,14 +3,14 @@ default_allowed_classes:
   - D0
   - D1
 decisions:
-  - decision_id: DEC-WORKFLOW-SERVICE
+  - decision_id: DEC-PYTHON-PACKAGE
     class: D2
     authority: explicit project-owner instruction to keep the Python/PydanticAI
-      service as a simple in-memory input-to-result pipeline, with persistence,
+      library as a simple in-memory input-to-result pipeline, with persistence,
       queue workers, application authentication and packaged transports out of scope
-    scope_refs: [CAP-SERVICE-CONTRACTS, CAP-SERVICE-COMPILER, CAP-SERVICE-RUNTIME,
-      CAP-SERVICE-MCP, CAP-SERVICE-PRIVACY, CAP-SERVICE-DX]
-    source_refs: [11-workflow-service.md]
+    scope_refs: [CAP-PACKAGE-EVALUATION, CAP-PACKAGE-CONTRACTS, CAP-PACKAGE-COMPILER, CAP-PACKAGE-RUNTIME,
+      CAP-PACKAGE-MCP, CAP-PACKAGE-PRIVACY, CAP-PACKAGE-DX]
+    source_refs: [11-python-package.md]
     status: implementation mandate; no fabricated digest-bound human or production approval
   - decision_id: DEC-CATEGORY-CATALOG-AUTHORING
     class: D2
