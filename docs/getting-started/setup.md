@@ -54,15 +54,9 @@ These are diagnostic partitions, not the official Banking77 benchmark. The tiny
 model is useful for checking a complete local process; it is not a recommended
 production financial model.
 
-```mermaid
-flowchart LR
-  A[Pinned model and data] --> B[Verified local downloads]
-  B --> C[Upstream checkpoint]
-  B --> D[Shared data pool]
-  B --> E[Customer data pool]
-  D --> F[Four separate partitions]
-  E --> G[Four separate partitions]
-```
+Setup verifies the pinned downloads, creates an upstream checkpoint artifact,
+and prepares separate shared and customer data pools. Each pool has independent
+training, validation, calibration, and test partitions.
 
 ## Run setup again
 

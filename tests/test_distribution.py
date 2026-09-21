@@ -180,7 +180,10 @@ def test_wheel_contains_and_runs_the_public_package(tmp_path):
             "-I",
             "-c",
             "import foliqant.decisions, foliqant.evaluation; "
-            "from foliqant import Envelope, open_application",
+            "from foliqant import Envelope, load_environment, open_application; "
+            "from pathlib import Path; "
+            "assert load_environment(Path('foliqant.yaml'), {'EXAMPLE': 'value'}) "
+            "== {'EXAMPLE': 'value'}",
         ],
         cwd=outside,
         env=environment,

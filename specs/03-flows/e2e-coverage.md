@@ -1,12 +1,25 @@
 # End-to-end acceptance paths
 
-Future paths in [specification 10](../10-business-decisions-and-processes.md)
-are requirements, not observed tests: snapshot -> typed observations -> validated
-per-item evidence -> configured task plan -> persisted child set -> dispatch ->
-join. Failures include ambiguous request identity, stale spans, unauthorized
-children and an incomplete/failed join. Recovery preserves completed child work
-across redelivery and later correspondence. Dataset discovery ends at a reviewed
-candidate inventory and cannot acquire sources or invoke a model.
+## In-memory package
+
+Prepare deployment and compile bundles offline -> open owned adapters -> validate
+and accept input -> bounded configured execution -> validated terminal result ->
+drain and close. The HTTP example uses this same foreground call. No durable
+acceptance, child job, persisted state or recovery resource exists.
+
+`run_step` executes one configured step with explicit resolved payload keys and
+no upstream execution or routing. Evaluation snapshots explicit golden cases,
+invokes that step or a pipeline, and reports pass/fail/missing/skipped/error
+outcomes, review/failure rates and measured usage. Variants use the same suite;
+caller-owned holdouts remain separate. Failures and cancellation cannot become
+successful checks or fabricated token/latency measurements.
+
+Evidence: `tests/test_bootstrap.py`, `tests/test_runner.py`,
+`tests/test_step_execution.py`, `tests/test_evaluation.py`, adapter/protocol tests
+and schema/architecture checks. Archived business-process paths in document 10
+are not package acceptance requirements.
+
+## Model lifecycle
 
 Each CAP has a success path and rejected/interrupted path in the traceability register. Common state flow is validated input -> reserved staging/workspace -> backend/processing -> verified output -> atomic completed artifact; failure produces no completed artifact and records diagnostic evidence where a backend had started.
 
@@ -47,7 +60,7 @@ The [semantic vectors](../03-contracts/fixtures/semantic-vectors.json) are langu
 
 | Area | Required negative or boundary proof |
 |---|---|
-| Curation | Pinned imports, original holdouts, connected-family deduplication, conservative rights, loopback-only schema validation, automatic quarantine, immutable request cache, interruption/resume, and separate diagnostic regression publication. |
+| Curation | Pinned imports, original holdouts, connected-family deduplication, conservative rights, loopback/default and explicit private-network endpoint validation, automatic quarantine, immutable request cache, interruption/resume, and separate diagnostic regression publication. |
 | Native decision data | Every typed question/result variant; explicit absence versus unknown; exhaustive issue codes; explicit adequacy contracts; exact authored subject anchors; withdrawal and relation graph invariants; canonical reference-derived explanations; semantic date/value preservation; content-family isolation across values/paraphrases/translations; meaningful diversity counts; source projection verification with unreviewed status retained; accepted-parent-only train publication; no target leakage or held-out generation context; parent lineage; prepare/offline/resume; zero-acceptance and coverage-shortage OUTPUT_INVALID behavior with diagnostic state retained. |
 | Setup | Exact hashes/sizes, HTTPS-only redirects, offline hit/miss, corrupt-cache refusal, relative workspace paths, Git-ignore preflight, private outputs, unchanged rerun receipt and no implicit training. |
 | Explicit native migration | Offline reprojection from frozen annotations; unchanged authored/generated rows; complete source annotations and per-record rights links; same-state question variants retain scope, language and frozen family; source references never become model verification; pending-only generation, retained failed responses, immutable parents and cached resume. |

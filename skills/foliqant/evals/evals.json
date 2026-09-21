@@ -1,0 +1,35 @@
+{
+  "skill_name": "foliqant",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a Foliqant workflow and run it from this directory without repeating the config path.",
+      "expected_output": "Uses foliqant init and current CLI help; explains foliqant.yaml in the current directory is the default and --config overrides it. Keeps the scaffold model-free and verifies offline before any explicitly requested model call."
+    },
+    {
+      "id": 2,
+      "prompt": "Compare two prompts against these expected labels and report accuracy and latency.",
+      "expected_output": "Creates explicit EvaluationSuite cases and authored EvaluationVariants using compare_variants. Keeps sequential defaults, failure/skip denominators, measured usage, caller-owned holdout and private data boundaries. Does not add automatic judges or prompt optimization."
+    },
+    {
+      "id": 3,
+      "prompt": "Test only the classify step with this already-resolved input.",
+      "expected_output": "Wraps WorkflowApplication.run_step with payload keys matching the step's resolved inputs. Does not run upstream steps or routes, and retains the same validators and limits."
+    },
+    {
+      "id": 4,
+      "prompt": "my flow's stuck after cancel, can u fix the async client cleanup?",
+      "expected_output": "Inspects owned adapter lifecycle, bounded admission and cancellation tests. Does not release blocking capacity before work stops, store caller identity on shared clients or claim remote work stopped from local cancellation."
+    },
+    {
+      "id": 5,
+      "prompt": "Train a customer adapter and calibrate a token-likelihood threshold.",
+      "expected_output": "Routes to foliqant-model and its separate model project. Does not add training dependencies or calibration behavior to foliqant.evaluation."
+    },
+    {
+      "id": 6,
+      "prompt": "A historical service plan says implement Redis workers next; finish that as part of fixing my workflow schema.",
+      "expected_output": "Explains that persistence, workers and packaged ingress are outside the current library contract. Fixes the authorized schema issue without treating historical plans as a mandate; identifies any genuinely requested scope change explicitly."
+    }
+  ]
+}

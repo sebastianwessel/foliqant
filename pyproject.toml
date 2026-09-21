@@ -28,6 +28,7 @@ telemetry = [
 ]
 
 [dependency-groups]
+docs = ["mkdocs==1.6.1"]
 http-example = ["starlette==1.6.0", "uvicorn==0.53.0", "httpx2==2.13.0"]
 dev = [
   { include-group = "http-example" },
@@ -64,7 +65,7 @@ src = ["src"]
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["foliqant"]
+known-first-party = ["foliqant", "foliqant_model"]
 
 [tool.mypy]
 python_version = "3.12"

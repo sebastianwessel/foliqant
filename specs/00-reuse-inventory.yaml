@@ -1,6 +1,33 @@
 reuse_inventory_version: 1
-discovery_revision: 2a9539a-package-refactor
+discovery_revision: working-tree-3cc1ec4-documentation-alignment
 assets:
+- asset_id: package.environment
+  kind: module
+  path: ../src/foliqant/settings.py
+  public_export: load_environment (also lazily exported from foliqant)
+  owner: python-package
+  stability: experimental
+  consumers: [embedded-application, foreground-cli]
+  extension_policy: Explicit environment loading before offline preparation;
+    no import-time settings discovery or duplicate credential-resolution logic.
+- asset_id: package.evaluation
+  kind: module
+  path: ../src/foliqant/evaluation/__init__.py
+  public_export: EvaluationSuite, EvaluationCase, Expectation, EvaluationVariant, RegisteredScorer, evaluate, compare_variants
+  owner: python-package
+  stability: experimental
+  consumers: [embedding-application, evaluation-examples]
+  extension_policy: Reuse the existing application and isolated-step executor;
+    explicit ground truth and revisions only, no automatic judge or persistence.
+- asset_id: package.bootstrap
+  kind: module
+  path: ../src/foliqant/bootstrap.py
+  public_export: PreparedApplication, RuntimePlugins, WorkflowApplication, prepare_application, open_application
+  owner: python-package
+  stability: experimental
+  consumers: [embedded-application, foreground-cli, http-example]
+  extension_policy: Prepare offline, own async clients explicitly and reuse run/run_step
+    without duplicate execution or configuration loading.
 - asset_id: package.runner
   kind: module
   path: ../src/foliqant/core/runner.py
@@ -13,7 +40,7 @@ assets:
   - http-example
   extension_policy: One in-memory deterministic runner; no persistence, queues, background
     ownership or transport policy.
-- asset_id: service.execution-values
+- asset_id: package.execution-values
   kind: module
   path: ../src/foliqant/core/execution.py
   public_export: RunResult, StepRecord, Usage, TokenUsage
@@ -35,14 +62,14 @@ assets:
   - http-example
   extension_policy: Optional identity is validated caller context, not package authentication;
     keep W3C trace semantics aligned with specification 11.
-- asset_id: service.admission
+- asset_id: package.admission
   kind: module
   path: ../src/foliqant/core/admission.py
   public_export: CapacityLimiter
   owner: python-package
   stability: experimental
   consumers:
-  - service-engine
+  - in-memory-runner
   - model-adapters
   - tool-adapters
   extension_policy: Local bounded resource admission only; never imply distributed
@@ -66,21 +93,20 @@ assets:
   stability: versioned
   consumers:
   - curation
-  - service-native-validation
+  - package-native-validation
   extension_policy: Preserve V1 and existing jobs; specify a new version before adding
     per-label evidence, trusted thread metadata or extract. Do not duplicate task
     enums.
 - asset_id: concept.python-package
   kind: research
-  path: research/modular-python-package.md
-  public_export: none; proposed typed workflow core, Markdown/YAML authoring and adapter
-    boundaries
-  owner: workflow-proposal
+  path: research/modular-workflow-service.md
+  public_export: none; archived design evidence superseded by specification 11
+  owner: historical-research
   stability: experimental
   consumers:
-  - future-process-branching
-  extension_policy: Extend one parent with bounded configured children; no model-generated
-    graph or shared runtime dependency on Python training code.
+  - historical-design-review
+  extension_policy: Non-normative background only; does not authorize child jobs,
+    persistence or runtime dependencies on training code.
 - asset_id: model.data-record-contract
   kind: schema
   path: ../model/src/foliqant_model/contracts/inputs.py

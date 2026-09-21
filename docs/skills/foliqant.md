@@ -1,7 +1,7 @@
 # Foliqant runtime skill
 
 The repository skill at
-[`skills/foliqant`](../../skills/foliqant/SKILL.md) helps an agent build and
+[`skills/foliqant`](https://github.com/sebastianwessel/foliqant/blob/main/skills/foliqant/SKILL.md) helps an agent build and
 review applications that use the installable `foliqant` package.
 
 Use it for versioned workflow bundles, in-memory execution, model and MCP

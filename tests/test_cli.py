@@ -3,8 +3,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 
-def _cli(*arguments: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+
+def _cli(
+    *arguments: str, stdin: str | None = None, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
     """Exercise the real module entry point without changing process environment."""
     return subprocess.run(
         [sys.executable, "-m", "foliqant", *arguments],
@@ -13,6 +17,7 @@ def _cli(*arguments: str, stdin: str | None = None) -> subprocess.CompletedProce
         text=True,
         check=False,
         timeout=10,
+        cwd=cwd,
     )
 
 
@@ -41,6 +46,30 @@ def test_invalid_arguments_are_redacted_json() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ("validate",),
+        ("doctor",),
+        ("explain",),
+        ("run", "--workflow", "demo", "--input", "envelope.json"),
+    ],
+)
+def test_config_defaults_to_current_directory_without_parent_discovery(
+    tmp_path: Path, arguments: tuple[str, ...]
+) -> None:
+    destination = tmp_path / "project"
+    assert _cli("init", str(destination)).returncode == 0
+    process = _cli(*arguments, cwd=destination)
+    assert process.returncode == 0, process.stderr
+    assert process.stderr == ""
+    nested = destination / "nested"
+    nested.mkdir()
+    missing = _cli(*arguments, cwd=nested)
+    assert missing.returncode == 2
+    assert json.loads(missing.stderr)["error"]["code"] == "invalid_configuration"
+
+
 def test_init_is_atomic_non_overwriting_and_scaffolds_model_free_workflow(tmp_path: Path) -> None:
     destination = tmp_path / "project"
     created = _cli("init", str(destination))
@@ -48,7 +77,7 @@ def test_init_is_atomic_non_overwriting_and_scaffolds_model_free_workflow(tmp_pa
     assert created.stderr == ""
     assert json.loads(created.stdout) == {"command": "init", "status": "created"}
     assert (destination / "foliqant.yaml").read_text(encoding="utf-8") == (
-        "version: 1\nworkflows:\n  demo: workflows/demo\nmodels: {}\nmcp: {}\n"
+        "version: 1\nworkflows:\n  demo: workflows/demo\n"
     )
     assert (destination / "workflows/demo/workflow.yaml").read_text(encoding="utf-8") == (
         "version: 1\nname: demo\nstart: done\n"

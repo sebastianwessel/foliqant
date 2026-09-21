@@ -1,11 +1,11 @@
 ---
 name: foliqant
-description: "Build, test and evaluate Foliqant in-memory Python pipelines. Use when working on the reusable package, workflow bundles, model/MCP adapters, golden evaluations or runnable examples; not model training or data curation."
+description: "Builds, tests and evaluates Foliqant in-memory Python pipelines. Use when working on the reusable package, workflow bundles, model/MCP adapters, golden evaluations or runnable examples; not model training or data curation."
 ---
 
 # Foliqant Python package
 
-Use the [package guide](../../docs/README.md) and
+Use the [package guide](../../docs/index.md) and
 [runnable examples](../../examples/README.md) as public usage authority. The root
 uv project installs `foliqant`; model development has its own project in `model/`.
 
@@ -104,3 +104,8 @@ Default tests use synthetic inputs and offline adapters. Live examples require
 explicit invocation and the configured local model; never run them alongside
 active data generation. Keep schemas, docs, examples and this skill aligned with
 actual callable behavior. Do not invent commands or production guarantees.
+
+If a required API, configuration value or authorization boundary is undefined,
+report the concrete gap and continue independent work; do not invent a fallback.
+Existing user authorization remains valid within its scope. Model lifecycle work
+belongs to `foliqant-model`, not this skill.

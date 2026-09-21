@@ -5,11 +5,27 @@ step/pipeline evaluations and model/MCP adapters. Reusable code lives in
 `src/foliqant`; workflow bundles and optional HTTP hosting live in examples.
 Model lifecycle tooling below stays in its separate `model/` project.
 
-The future [business-process extension](10-business-decisions-and-processes.md)
-keeps model interpretation separate from deterministic process execution.
-Per-answer evidence and snapshot-bound observations feed one parent process
-with bounded, configured child tasks and an explicit join. It does not change
-this implemented CLI architecture or introduce a workflow runtime here.
+The [archived business-process concept](10-business-decisions-and-processes.md)
+is background only. Durable parent/child jobs are not part of this library.
+
+```mermaid
+flowchart LR
+  Config[Local configuration and workflow bundle] --> Prepare[Offline preparation]
+  Prepare --> App[Owned application lifecycle]
+  Input[Validated envelope] --> Run[In-memory step execution]
+  App --> Run
+  Run --> Adapters[Model / read-only MCP / host handler]
+  Run --> Result[ExecutionResult]
+  Gold[Explicit golden cases] --> Eval[Pipeline or isolated-step evaluation]
+  Eval --> Run
+  Result --> Eval
+  Eval --> Report[Private measured report]
+```
+
+The caller owns persistence and any incoming transport. Compilation reads local
+files; execution uses frozen plans and caller context. Evaluation never discovers
+endpoints or creates a judge. Native decision contracts are shared with model
+tooling, but training dependencies do not enter the root runtime environment.
 
 The scoped source-projection extension has two explicit boundaries. Offline
 preparation reads verified immutable source snapshots and produces a typed,

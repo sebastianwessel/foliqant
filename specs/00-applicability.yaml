@@ -1,30 +1,30 @@
 applicability_version: 1
 concerns:
-  - concern_id: service_runtime_security_and_operations
+  - concern_id: package_runtime_security_and_operations
     status: applicable
     scope_refs: [CAP-PACKAGE-CONTRACTS, CAP-PACKAGE-COMPILER, CAP-PACKAGE-RUNTIME,
       CAP-PACKAGE-MCP, CAP-PACKAGE-PRIVACY, CAP-PACKAGE-DX]
     rationale: Specification 11 covers strict contracts, deterministic compilation,
       bounded in-memory execution, MCP OAuth/tool authorization, privacy, telemetry,
       packaging and foreground operator commands.
-  - concern_id: service_ui_cloud_deployment_and_model_training
+  - concern_id: package_ui_cloud_deployment_and_model_training
     status: not_applicable
     scope_refs: [CAP-PACKAGE-RUNTIME, CAP-PACKAGE-DX]
-    rationale: Service implementation creates no hosted UI, cloud infrastructure,
+    rationale: The library creates no hosted UI, cloud infrastructure,
       training run, application authentication, persistent state, queue worker or
       packaged HTTP/Redis transport. A small HTTP example only adapts a request to
       the same foreground in-memory call.
   - concern_id: business_process_target_design
     status: applicable
     scope_refs: [CAP-BUSINESS-DECISIONS, CAP-PROCESS-BRANCHING, CAP-DOMAIN-DATA]
-    rationale: Specification 10 defines future evidence/thread/extraction, task fan-out,
+    rationale: Archived specification 10 records historical evidence/thread/extraction, task fan-out,
       join/recovery, privacy and dataset rights; this is authoring, not runtime implementation.
   - concern_id: business_concept_deployment
     status: not_applicable
     scope_refs: [CAP-BUSINESS-DECISIONS, CAP-PROCESS-BRANCHING, CAP-DOMAIN-DATA]
     rationale: No UI, hosted endpoint, webhook, broker, cloud provisioning or training
-      is implemented in this authoring slice. Runtime trust and durability remain
-      explicit readiness items in specification 10, not permanent exemptions.
+      is implemented in this authoring slice. Those concepts are not active package requirements; specification 11 owns
+      current scope.
   - concern_id: contracts
     status: applicable
     scope_refs:

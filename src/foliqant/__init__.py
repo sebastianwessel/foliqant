@@ -7,6 +7,7 @@ if TYPE_CHECKING:
         PreparedApplication,
         RuntimePlugins,
         WorkflowApplication,
+        load_environment,
         open_application,
         prepare_application,
     )
@@ -21,6 +22,7 @@ __all__ = [
     "PreparedApplication",
     "RuntimePlugins",
     "WorkflowApplication",
+    "load_environment",
     "open_application",
     "prepare_application",
 ]
@@ -33,6 +35,7 @@ def __getattr__(name: str) -> object:
         "PreparedApplication",
         "RuntimePlugins",
         "WorkflowApplication",
+        "load_environment",
         "open_application",
         "prepare_application",
     }:

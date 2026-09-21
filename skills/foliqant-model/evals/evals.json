@@ -26,6 +26,18 @@
       "files": []
     },
     {
+      "id": 6,
+      "prompt": "gen got ctrl-c'd, can u just resume it pls? don't touch my server settings",
+      "expected_output": "Inspects the existing run and resumes only through the identical supported command, recipe, effective environment, workspace and model identity. Does not invent --resume, change limits, delete locks or infer remote cancellation from local interruption.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Prepare extra source projections while the native generator is running, then start them immediately.",
+      "expected_output": "Prepares only from already frozen verified inputs, with zero downloads, model discovery or inference. Explains extension execution requires the completed parent and both --extend-projections-from and --projection-plan; does not alter the active run.",
+      "files": []
+    },
+    {
       "id": 5,
       "prompt": "Build the configurable Foliqant Python pipeline that acts on these decisions.",
       "expected_output": "Treats this as a near miss and routes away from the model-tooling skill because the runtime library belongs to the foliqant skill; it does not invent workflow actions or production authorization.",

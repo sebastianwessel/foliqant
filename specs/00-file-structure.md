@@ -12,7 +12,7 @@
 | `examples/` | Runnable business workflows, local Qwen configuration, MCP and thin HTTP host examples |
 | `schemas/foliqant/runtime/`, `schemas/foliqant/decisions/` | Generated library schemas; their canonical Pydantic types live in the runtime and decision packages |
 | `model/schemas/` | Generated model-tooling schemas; canonical types live under `model/src/foliqant_model/` |
-| `docs/` | End-user package and model-development guides |
+| `docs/`, `mkdocs.yml` | Published end-user guides; `docs/index.md` homepage, strict MkDocs build and GitHub Pages publishing |
 | `skills/foliqant/`, `skills/foliqant-model/` | Maintained agent guidance for their separate scopes |
 | `scripts/` | Thin command wrappers and schema/docs/data checks |
 | `specs/`, `plans/` | Internal requirements and research; implementation/review evidence respectively |

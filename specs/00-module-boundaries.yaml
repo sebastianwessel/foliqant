@@ -3,6 +3,14 @@ modules:
 - module_id: package-evaluation
   owner: python-package
   public_entrypoint: src/foliqant/evaluation/__init__.py
+  public_symbols:
+  - EvaluationSuite
+  - EvaluationCase
+  - Expectation
+  - EvaluationVariant
+  - RegisteredScorer
+  - evaluate
+  - compare_variants
   owned_concepts:
   - golden-cases
   - deterministic-scoring
@@ -137,6 +145,7 @@ modules:
   - PreparedApplication
   - RuntimePlugins
   - WorkflowApplication
+  - prepare_application
   - open_application
   owned_concepts:
   - adapter-composition

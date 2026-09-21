@@ -1,8 +1,8 @@
 # Capability inventory
 
-## Workflow service implementation
+## Python package implementation
 
-Specification [11](../11-python-package.md) owns the in-memory service scope,
+Specification [11](../11-python-package.md) owns the in-memory library scope,
 entrypoints, contracts and acceptance families. Persistence, queue workers,
 application authentication and packaged transports are explicitly not capabilities.
 
@@ -14,10 +14,11 @@ application authentication and packaged transports are explicitly not capabiliti
 - `CAP-PACKAGE-DX` → `ACCEPT-PACKAGE-DX`.
 - `CAP-PACKAGE-EVALUATION` → `ACCEPT-PACKAGE-EVALUATION`: isolated steps and full pipelines, explicit golden expectations, measured latency/usage and honest coverage/failure denominators.
 
-## Proposed business-process extension
+## Archived business-process concepts
 
-These are unimplemented target capabilities owned by
-[specification 10](../10-business-decisions-and-processes.md), not new CLI/API promises.
+These historical target IDs are retained for cross-reference integrity. They are
+inactive concepts in [document 10](../10-business-decisions-and-processes.md),
+not requirements for the package or new CLI/API promises.
 
 | ID | Target | Planned verification |
 | --- | --- | --- |
@@ -27,7 +28,7 @@ These are unimplemented target capabilities owned by
 
 ## Implemented model lifecycle scope
 
-The actor for every command is the local authorized operator or an agent acting for that operator. The entrypoint is the installed `foliqant-model` console script. Local filesystem access and explicit config are prerequisites; remote access is permitted only for explicit fetch, setup and curate acquisition; curate generation is loopback-only. The lifecycle and operations specs define common validation, logging, permissions, failure codes and atomic finalization.
+The actor for every command is the local authorized operator or an agent acting for that operator. The entrypoint is the installed `foliqant-model` console script. Local filesystem access and explicit config are prerequisites; remote access is permitted only for explicit fetch, setup and curate acquisition; curate generation defaults to loopback, with explicit private-network opt-in as defined in specification 08. The lifecycle and operations specs define common validation, logging, permissions, failure codes and atomic finalization.
 
 | ID | Capability | Entrypoint | Success | Failure/recovery | Verification |
 |---|---|---|---|---|---|

@@ -5,17 +5,13 @@ It does not pretrain a new foundation model or define a new architecture. The
 shared Foliqant model is a derivative release with an exact upstream parent and
 inherited license, attribution and data restrictions.
 
-```mermaid
-flowchart LR
-  U[Upstream checkpoint] --> S[Shared adapter]
-  U --> M[Shared merged model]
-  S --> M
-  M --> C[Customer adapter]
-  M --> E[Inference export]
-  M --> CM[Customer merged model]
-  C --> CM[Customer merged model]
-  CM --> CE[Customer inference export]
-```
+| Parent | Operation | Result |
+| --- | --- | --- |
+| Upstream checkpoint | Shared training | Shared adapter |
+| Upstream checkpoint + shared adapter | Merge | Shared merged model |
+| Shared merged model | Customer training | Customer adapter |
+| Shared merged model + customer adapter | Merge | Customer merged model |
+| Either merged model | Export | Inference artifact with the same scope |
 
 ## The artifacts
 

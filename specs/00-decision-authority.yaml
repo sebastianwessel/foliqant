@@ -25,7 +25,7 @@ decisions:
       and dataset research; exact implementation contracts require later review
     scope_refs: [CAP-BUSINESS-DECISIONS, CAP-PROCESS-BRANCHING, CAP-DOMAIN-DATA]
     source_refs: [10-business-decisions-and-processes.md, research/business-process-datasets.md]
-    status: direction accepted; target specification proposed; no implementation or formal readiness approval
+    status: archived concept; not active package requirements
   - decision_id: DEC-MODEL-LIFECYCLE
     class: D2
     authority: project-owner implementation mandate; architecture author proposes,
@@ -43,7 +43,7 @@ decisions:
     source_refs:
       - 00-vision.md
       - 01-model-lifecycle.md
-    status: proposed
+    status: implemented; historical execution evidence in plans/reviews
   - decision_id: DEC-NATIVE-DECISION-DATA
     class: D2
     authority: project-owner implementation mandate; specification author records

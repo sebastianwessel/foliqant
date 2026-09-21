@@ -10,7 +10,7 @@ does not test your inbound authentication or persistence layer.
 Inject a PydanticAI `FunctionModel` or a small `StepExecutor` into the runtime.
 Return contract-shaped results and assert routing, output validation, review
 behavior, and safe failures. The support example's
-[`test_support_triage_example.py`](../../tests/test_support_triage_example.py)
+[`test_support_triage_example.py`](https://github.com/sebastianwessel/foliqant/blob/main/tests/test_support_triage_example.py)
 runs a native decision and a schema-output step without network access.
 
 Run the repository checks from the root project:

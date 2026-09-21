@@ -6,7 +6,7 @@ The existing ordinary causal-model requirement remains unchanged.
 
 Read with [model research](../../specs/research/model-research.md),
 [answerability and reliability](../../specs/research/input-answerability-and-reliability.md),
-and the [prior decision-scoring review](../reviews/decision-scoring-and-explanations-2026-09-20.md).
+and the [prior decision-scoring review](../../plans/reviews/decision-scoring-and-explanations-2026-09-20.md).
 These define the desired semantics; this note compares alternative implementations.
 Primary sources were checked on the date above; vLLM references are pinned to 0.29.0
 where possible. No model execution, training, weight download, or paid call was run.

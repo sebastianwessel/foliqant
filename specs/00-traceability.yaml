@@ -1,3 +1,5 @@
+# BUSINESS-DECISIONS, PROCESS-BRANCHING and DOMAIN-DATA IDs below retain archived
+# concept traceability only; they are not active package requirements.
 traceability_version: 1
 requirements:
 - requirement_id: REQ-PACKAGE-EVALUATION
@@ -757,6 +759,9 @@ acceptance:
   path_ids: *id001
   verification_refs:
   - 11-python-package.md#evaluation-and-step-isolation
+  - ../tests/test_evaluation.py
+  - ../tests/test_step_execution.py
+  - ../plans/reviews/python-package-evaluation.md
 - acceptance_id: ACCEPT-PACKAGE-CONTRACTS
   requirement_ids:
   - REQ-PACKAGE-CONTRACTS
@@ -764,7 +769,7 @@ acceptance:
   - PATH-PACKAGE-CONTRACTS-SUCCESS
   - PATH-PACKAGE-CONTRACTS-FAILURE
   verification_refs:
-  - 11-python-package.md#developer-experience-artifacts-and-acceptance
+  - 11-python-package.md#entry-points-example-and-acceptance
 - acceptance_id: ACCEPT-PACKAGE-COMPILER
   requirement_ids:
   - REQ-PACKAGE-COMPILER
@@ -772,7 +777,7 @@ acceptance:
   - PATH-PACKAGE-COMPILER-SUCCESS
   - PATH-PACKAGE-COMPILER-FAILURE
   verification_refs:
-  - 11-python-package.md#developer-experience-artifacts-and-acceptance
+  - 11-python-package.md#entry-points-example-and-acceptance
 - acceptance_id: ACCEPT-PACKAGE-RUNTIME
   requirement_ids:
   - REQ-PACKAGE-RUNTIME
@@ -780,7 +785,7 @@ acceptance:
   - PATH-PACKAGE-RUNTIME-SUCCESS
   - PATH-PACKAGE-RUNTIME-FAILURE
   verification_refs:
-  - 11-python-package.md#developer-experience-artifacts-and-acceptance
+  - 11-python-package.md#entry-points-example-and-acceptance
 - acceptance_id: ACCEPT-PACKAGE-MCP
   requirement_ids:
   - REQ-PACKAGE-MCP
@@ -788,7 +793,7 @@ acceptance:
   - PATH-PACKAGE-MCP-SUCCESS
   - PATH-PACKAGE-MCP-FAILURE
   verification_refs:
-  - 11-python-package.md#developer-experience-artifacts-and-acceptance
+  - 11-python-package.md#entry-points-example-and-acceptance
 - acceptance_id: ACCEPT-PACKAGE-PRIVACY
   requirement_ids:
   - REQ-PACKAGE-PRIVACY
@@ -796,7 +801,7 @@ acceptance:
   - PATH-PACKAGE-PRIVACY-SUCCESS
   - PATH-PACKAGE-PRIVACY-FAILURE
   verification_refs:
-  - 11-python-package.md#developer-experience-artifacts-and-acceptance
+  - 11-python-package.md#entry-points-example-and-acceptance
 - acceptance_id: ACCEPT-PACKAGE-DX
   requirement_ids:
   - REQ-PACKAGE-DX
@@ -804,7 +809,7 @@ acceptance:
   - PATH-PACKAGE-DX-SUCCESS
   - PATH-PACKAGE-DX-FAILURE
   verification_refs:
-  - 11-python-package.md#developer-experience-artifacts-and-acceptance
+  - 11-python-package.md#entry-points-example-and-acceptance
 - acceptance_id: ACCEPT-BUSINESS-DECISIONS
   requirement_ids:
   - REQ-BUSINESS-DECISIONS
@@ -950,7 +955,7 @@ acceptance:
   - 03-flows/e2e-coverage.md
   - ../plans/reviews/final-verification.md
   - ../scripts/check_docs.py
-  - ../docs/README.md
+  - ../docs/index.md
   - ../skills/foliqant-model/SKILL.md
 - acceptance_id: ACCEPT-CURATE
   requirement_ids:

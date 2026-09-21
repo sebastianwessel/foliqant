@@ -17,8 +17,6 @@ The generated deployment is:
 version: 1
 workflows:
   demo: workflows/demo
-models: {}
-mcp: {}
 ```
 
 Paths are relative to the deployment configuration. Absolute paths, `..`,
@@ -56,9 +54,9 @@ Bindings use RFC 6901 JSON pointers. `/payload/message` reads the input;
 it is explicitly optional with a default. JSON `null` is a present value, not a
 missing value.
 
-The [support triage bundle](../../examples/support_triage/workflow.yaml) shows a
+The [support triage bundle](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/workflow.yaml) shows a
 decision followed by schema extraction. The
-[public-request bundle](../../examples/public_request_mcp/workflow.yaml) shows a
+[public-request bundle](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/workflow.yaml) shows a
 declared MCP call.
 
 ## Compile before running
@@ -82,6 +80,7 @@ authorize resources. Prompts and tool catalogs are configuration, not an
 authorization boundary.
 
 Write steps so missing or conflicting evidence reaches `needs_review`. Validate
-all external input and output with bounded schemas, keep credentials in the
-environment, and avoid write tools unless the application has a separate
-reconciliation design.
+all external input and output with bounded schemas and keep credentials in the
+environment. The current runtime rejects write-effect MCP tools; implement
+mutating actions outside the core runtime with the application's own
+authorization and reconciliation controls.

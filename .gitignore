@@ -12,6 +12,7 @@ __pycache__/
 .cache/
 node_modules/
 dist/
+/site/
 coverage/
 /data/
 /artifacts/

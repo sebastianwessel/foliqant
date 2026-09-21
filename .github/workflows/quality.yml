@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,8 +37,8 @@ jobs:
       - run: uv run --project model --no-sync python scripts/check_tracked_data.py --git git
       - run: git diff --check
 
-  service:
-    name: Workflow service quality gate
+  runtime:
+    name: Runtime package quality gate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -57,3 +58,38 @@ jobs:
       - run: uv run --no-sync ruff format --check src tests scripts examples
       - run: uv run --no-sync python scripts/generate_schemas.py --check
       - run: git diff --check
+
+  documentation:
+    name: Documentation build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked --only-group docs
+      - run: uv run --no-sync mkdocs build --strict
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy-docs:
+    name: Publish documentation
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [quality, runtime, documentation]
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -54,7 +54,7 @@ entries:
     handwritten_remainder:
       - core-to-boundary mapping preserves omitted fields versus explicit null
       - canonical error messages and token subset validation use shared core rules
-    verification: [../../tests/test_execution_contracts.py, ../../tests/test_embedded_example.py]
+    verification: [../../tests/test_execution_contracts.py, ../../tests/test_bootstrap.py, ../../tests/test_step_execution.py]
   - id: GEN-NATIVE-DECISION-REUSE
     canonical_source: ../../src/foliqant/decisions/contracts.py
     generated_outputs:

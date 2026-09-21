@@ -17,7 +17,7 @@ and have no runtime extras. Azure OpenAI uses the OpenAI provider extra.
 The historical SDK investigation below records alternatives and observations;
 it is not an instruction to implement them. In particular, references to durable
 ledgers, leases, write replay or additional providers are not active requirements.
-For actual configuration use [the service guide](../../docs/README.md),
+For actual configuration use [the service guide](../../docs/index.md),
 [specification 11](../11-python-package.md), `pyproject.toml` and its lock.
 
 ## Original research recommendation

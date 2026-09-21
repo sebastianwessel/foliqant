@@ -16,11 +16,11 @@ They do not make training dependencies part of the runtime installation.
 
 Implement the complete local model-building and fine-tuning toolchain: rights-declared data preparation, reproducible shared model adaptation, independent customer customization, real evaluation, calibration-policy assessment, merge/export, and artifact verification. Include easy-to-advanced user documentation, reusable agent skills, independent review, cleanup, and evidence of a real end-to-end run.
 
-The user explicitly requested implementation, delegated agent/model selection, and required specs first. This authoring step chooses concrete, reversible implementation behavior within that mandate. It does not authorize paid services, uploading customer data, public model releases, accepting third-party legal terms, or declaring regulatory suitability. Those remain human decisions. Review may not invent additional product scope.
+This records the original implementation scope, not standing authorization for new execution. Current user instructions govern changes and model runs. The scope does not grant permission for paid services, uploading customer data, public model releases, accepting third-party legal terms, or declaring regulatory suitability. Review may not invent additional product scope.
 
 ## Boundaries
 
-- Python model tooling is a standalone installable package and CLI named `foliqant-model`, rooted at `model/src/foliqant_model/` with root `pyproject.toml` and `uv.lock`.
+- Python model tooling is a standalone installable package and CLI named `foliqant-model`, rooted at `model/src/foliqant_model/` with `model/pyproject.toml` and `model/uv.lock`. The root project builds the separate `foliqant` runtime library.
 - MLX LM is the initial real local training backend for Apple Silicon. The user has M1-family and M5-family Macs with 64 GB. Training memory/throughput are measured, not promised from parameter counts.
 - A shared Foliqant model is an adaptation of pinned upstream instruction-capable weights, not pretraining from random initialization. Customer adapters start from an exact merged shared release.
 - Production functions never substitute mocks, synthetic weights, copied expected answers, or fabricated evaluation metrics for real training/generation. Small generated diagnostic samples and small real models are valid integration inputs, but datasets and model weights are never stored in Git. Generate or download them into the local setup workspace. Only recipe/configuration/preparation code belongs in the repository.

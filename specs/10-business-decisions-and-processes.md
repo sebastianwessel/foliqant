@@ -1,5 +1,11 @@
 # Evidence-backed business decisions and process branching
 
+Archived concept, not an active implementation specification. The in-memory
+[package specification](11-python-package.md) supersedes the service, durability
+and child-job direction for current work. Retain this document as design evidence;
+its requirements and readiness checklist do not create a backlog or permission
+to extend the runtime. Category catalog authoring is the implemented subset.
+
 Date: 2026-09-20. Status: target design recorded from the owner's accepted
 direction. Additive category authoring and normalization are implemented;
 the broader process design is not implemented, benchmarked, or formally

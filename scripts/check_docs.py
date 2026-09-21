@@ -9,10 +9,9 @@ import shlex
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from foliqant.cli import _parser as runtime_parser
 from foliqant_model.cli import _parser
 from foliqant_model.errors import ModelError
-
-from foliqant.cli import _parser as runtime_parser
 
 
 def main() -> int:
@@ -51,11 +50,21 @@ def main() -> int:
         for destination in re.findall(r"\[[^\]]*\]\(([^)]+)\)", text):
             target = destination.strip().split(" ", 1)[0].strip("<>")
             url = urlsplit(target)
+            repository_prefix = "/sebastianwessel/foliqant/blob/main/"
+            if url.netloc == "github.com" and url.path.startswith(repository_prefix):
+                repository_path = root / unquote(url.path.removeprefix(repository_prefix))
+                if not repository_path.is_file():
+                    failures.append(f"{path.relative_to(root)}: missing repository link {target}")
+                continue
             if url.scheme or url.netloc or not url.path:
                 continue
             if not (path.parent / unquote(url.path)).exists():
                 failures.append(f"{path.relative_to(root)}: missing link {target}")
-        for command in re.findall(r"foliqant-model ([a-z][a-z-]*)", text):
+        code = "\n".join(
+            block or inline
+            for block, inline in re.findall(r"```[^\n]*\n(.*?)```|`([^`\n]+)`", text, re.DOTALL)
+        )
+        for command in re.findall(r"foliqant-model ([a-z][a-z-]*)", code):
             documented_model.add(command)
             if command not in model_commands:
                 failures.append(f"{path.relative_to(root)}: unavailable command {command}")

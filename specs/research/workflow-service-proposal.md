@@ -1,5 +1,9 @@
 # Earlier architecture proposal
 
+Historical evidence only. [Specification 11](../11-python-package.md) supersedes
+all runtime language, transport, persistence and deployment recommendations here.
+This document grants no implementation or execution authorization.
+
 Superseded for python-package language, envelopes, authoring and provider/MCP
 integration by the [2026-09-21 modular service proposal](modular-workflow-service.md).
 This file retains the earlier rationale and example history; its Go and YAML

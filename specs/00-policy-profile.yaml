@@ -17,13 +17,13 @@ profiles:
     multi-task branching, and research domain datasets using agents
   defaults: specification and primary-source research only; no downloads, inference,
     active-run mutation, new executable source manifests or production claims
-  status: authoring mandate; implementation details and dataset adoption require review
+  status: archived research; no active implementation requirement
 - id: POL-LOCAL-REVERSIBLE
   source: 'user goal: implement model building/fine-tuning, specs first, autonomous
     agents, review and cleanup'
   defaults: private reversible implementation details only; no paid compute/upload/customer-data
     use inferred
-  status: delegated execution mandate; concrete contracts pending readiness
+  status: implemented model lifecycle; current user instructions govern new execution
 - id: POL-NATIVE-DATA-LOCAL
   source: project-owner mandate for a fully automatic local native decision-data pipeline
     based on the answerability research

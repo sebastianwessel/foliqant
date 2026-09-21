@@ -3,7 +3,7 @@
 The local model-tooling scope in `specs/00-vision.md` is implemented. Final
 verification is recorded in [the acceptance report](reviews/final-verification.md).
 
-- All 16 public CLI commands are implemented with strict typed contracts,
+- Public CLI commands are implemented with strict typed contracts,
   including subsequent curation and offline source-projection preparation.
 - One-command setup acquires pinned real assets outside Git and supports offline reuse.
 - Shared adaptation, warm starts, customer LoRA/QLoRA, lineage, rights, held-out
@@ -18,7 +18,8 @@ verification is recorded in [the acceptance report](reviews/final-verification.m
 
 No production financial checkpoint is selected. The tiny setup model exercises
 the toolchain and establishes no financial quality or compliance guarantee.
-The workflow service remains a separate proposal. Current curation results and
+The reusable in-memory runtime is implemented separately; see
+[package status](python-package-status.md). Current curation results and
 remaining pilot/repair work are tracked in [curation status](curation-status.md).
 
 The reproducible native acceptance uses a completed `smoke-v1-2638284b4ec9`

@@ -19,18 +19,16 @@ application authentication.
 
 The normal runtime flow is:
 
-```mermaid
-flowchart LR
-    A[Host application] --> B[Validated envelope]
-    B --> C[Compiled workflow]
-    C --> D[Model, MCP, or Python step]
-    D --> E[Validated result and deterministic route]
-    E --> F[ExecutionResult returned to host]
-```
+1. The host application supplies an envelope.
+2. Foliqant validates it against the compiled workflow.
+3. The runtime executes a model, MCP, or registered Python step.
+4. Foliqant validates the step result and selects the configured route.
+5. The runtime returns one `ExecutionResult` to the host.
 
 Everything happens while the caller awaits the Python method. Admission limits
-bound concurrent work, but they do not create background jobs. Cancellation is
-returned to the caller; process shutdown cannot recover an unfinished run.
+bound concurrent work, but they do not create background jobs. Caller
+cancellation propagates as `asyncio.CancelledError`, not an `ExecutionResult`;
+process shutdown cannot recover an unfinished run.
 
 The model lifecycle is an explicit sequence: acquire or curate source data,
 prepare it, train, evaluate and calibrate, audit, export, then verify the exported

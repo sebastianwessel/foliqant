@@ -35,7 +35,7 @@ back to a cloud service, download models or manage the server. LM Studio may act
 an installed selected model when a request arrives, according to its own loading settings.
 
 The wrapper reads the ignored root `.env` and applies the checked allowlist in
-[`.env.example`](../../.env.example). This is the usual place to choose your
+[`.env.example`](https://github.com/sebastianwessel/foliqant/blob/main/.env.example). This is the usual place to choose your
 loaded model, endpoint limits and structured-output mode. The YAML recipe remains
 the versioned baseline; `.env` remains local to your machine.
 
@@ -49,7 +49,7 @@ Run preparation while LM Studio is stopped or still being configured:
 
 The wrapper ensures the locked base environment while preserving already
 installed optional and development packages, then runs the checked-in
-[curation recipe](../../model/examples/curation.yaml). Preparation downloads
+[curation recipe](https://github.com/sebastianwessel/foliqant/blob/main/model/examples/curation.yaml). Preparation downloads
 exact checksummed assets, reuses valid cached bytes, converts the sources,
 removes reported duplicate or leaking families, freezes source partitions, and
 publishes `source-corpus`. It does not contact the model endpoint.
@@ -179,7 +179,10 @@ The recipe selects up to 1,000 records from each source while retaining whole do
 | MultiDoGO finance | Finance turn intents and slot labels | Published supervised files contain customer turns rather than complete alternating dialogues; sensitive slot values are redacted. Imported into the source corpus but excluded from augmentation because paraphrasing would invalidate token-aligned slot labels. | CDLA-Permissive-1.0 |
 | TAT-QA | Financial-report table-and-text reasoning | Uses the labeled test-gold file; the unrelated unlabeled test serialization is omitted | CC BY 4.0 data; MIT repository code |
 
-The download excludes WANLI raw worker annotations, MultiDoGO unannotated dialogues, TAT-QA's unlabeled test file, CUAD, model weights and gated assets. See [source research](../../specs/research/curation-sources.md) for exact revisions, sizes, checksums and converter counts.
+The download excludes WANLI raw worker annotations, MultiDoGO unannotated
+dialogues, TAT-QA's unlabeled test file, CUAD, model weights and gated assets.
+The packaged source catalog pins exact revisions, sizes, checksums and converter
+settings; completed artifacts record the sources they used.
 
 The current training-augmentation jobs use eligible BANKING77, WANLI and TAT-QA
 training families. typed-decisions and MultiDoGO remain available in the source
@@ -217,7 +220,7 @@ Research and noncommercial sources may be used when their actual terms permit th
 
 ## Change the bounds
 
-Copy [the example](../../model/examples/curation.yaml) and pass your copy with `--config`. The main controls are:
+Copy [the example](https://github.com/sebastianwessel/foliqant/blob/main/model/examples/curation.yaml) and pass your copy with `--config`. The main controls are:
 
 | Field | Default | Meaning |
 |---|---:|---|

@@ -1,3 +1,5 @@
+# business.* shapes and MAP-BUSINESS-TASK-PLAN describe the archived concept in
+# document 10, not implemented or required library representations.
 catalog_version: 1
 applicability:
   status: applicable

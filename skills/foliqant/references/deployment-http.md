@@ -5,6 +5,12 @@ and the composition root in `src/foliqant/bootstrap.py` before changing
 configuration. The package owns an in-memory application API. HTTP is demonstrated
 only by the small runnable example maintained outside the package transport/core.
 
+Embedding code may import `load_environment`, `prepare_application` and
+`open_application` from `foliqant`. Environment loading is explicit: call
+`load_environment(config_path, environment)` to merge the adjacent `.env` with
+caller environment values, then pass the returned mapping to `open_application`.
+Package import does not discover configuration or open clients.
+
 ## Deployment contract
 
 Version 1 requires `workflows` and accepts `models`, `mcp`, `execution` and
@@ -15,6 +21,8 @@ unrecognized unions. Credential fields name environment variables; arbitrary YAM
 strings do not interpolate the environment.
 
 `foliqant init DEST` creates a model-free project without overwriting a path.
+`validate`, `explain`, `doctor` and `run` default to `foliqant.yaml` in the
+current directory; `--config PATH` overrides it without parent-directory search.
 `validate`, `explain` and `doctor` compile offline; `doctor` inspects installed
 capabilities without opening endpoints. `run` reads one bounded envelope and waits
 for one terminal in-memory result. Public CLI output is one safe JSON object.
@@ -22,7 +30,7 @@ Caught exception or validation text must not escape.
 
 There are no `storage`, `worker`, HTTP-auth or execution-mode profiles. There are
 no `migrate`, queue-worker, accepted-job, lookup or cancellation commands. The
-service does not persist state or recover work after process loss.
+library does not persist state or recover work after process loss.
 
 ## Identity and tool permission
 

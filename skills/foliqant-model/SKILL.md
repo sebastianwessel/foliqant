@@ -1,123 +1,78 @@
 ---
 name: foliqant-model
-description: "Operates Foliqant setup, data curation, training, evaluation, policy audit, export, and artifact verification. Use when working with the local Foliqant model CLI or datasets; do not use for the runtime Python package."
+description: "Operates Foliqant setup, data curation, training, evaluation, policy audit, export and artifact verification. Use when working with the local model CLI or datasets; use foliqant instead for runtime workflows and golden-case evaluation."
 ---
 
 # Foliqant model tooling
 
-Use the installed `foliqant-model --help` or `uv run --project model --no-sync foliqant-model --help`
-in a checkout as the command authority. Do not invent missing commands, silently
-train a replacement model, or substitute expected answers for model output.
+Use installed `foliqant-model --help` or
+`uv run --project model --no-sync foliqant-model --help` in a checkout as the
+command authority. The separate `model/` project owns these operations.
+[Public model setup](../../docs/getting-started/setup.md) provides the first run.
 
-For setup, automated curation, source configuration and recovery, read
-[references/setup-and-data.md](references/setup-and-data.md).
-For training, evaluation, risk policy, merging and export, read
-[references/model-lifecycle.md](references/model-lifecycle.md).
+## Workflow
 
-For new classification catalogs, use `CategoryCatalog` from
-`foliqant.decisions.category_catalog`: detailed descriptions, deterministic
-lowercase snake_case IDs, and collision rejection. Keep immutable V1 data and
-generation identities unchanged. See the category guidance in
-[setup and data](references/setup-and-data.md#category-catalogs).
+1. Identify the requested stage and its exact configuration, workspace and parent
+   artifacts. Inspect CLI help before constructing commands. For setup, native
+   generation, continuation, migration or recovery read
+   [setup and data](references/setup-and-data.md). For training, calibration,
+   audit or export read [model lifecycle](references/model-lifecycle.md).
+2. Verify local parent identity, rights and split boundaries before consuming
+   inputs. Keep source datasets, weights, adapters, predictions and outputs
+   outside Git. The default workspace is `~/.local/share/foliqant`.
+3. Use the existing command for that stage. Setup prepares assets without
+   training. Prepare-only performs no inference; source acquisition may still be
+   needed. Offline projection preparation and migration require frozen local
+   inputs and make no downloads, model discovery or inference calls.
+4. Report actual artifacts, validation results and limitations. A successful
+   command does not establish financial accuracy or commercial/legal clearance.
+   Generated/teacher labels and automatic checks are not human review.
 
-Keep source datasets, weights, adapters and run outputs outside Git. The default
-workspace is `~/.local/share/foliqant`; a chosen project-local workspace must be
-ignored. Keep pinned source manifests, recipes and preparation code in Git.
+## Identity and operation boundaries
 
-The setup profile and automated curation outputs are diagnostic. They are not a
-selected production financial model or evidence of financial/legal accuracy.
-Curation needs no manual data edits: never describe teacher agreement, automatic
-checks or `reviewed: false` records as human review. Never present toolchain
-success as a quality or compliance guarantee.
+Completed artifacts are immutable. Resume only through supported commands and
+verified identities; never transplant cached outcomes, relabel old recipes,
+overwrite outputs or repair hashes. Inspect retained failures and locks; do not
+delete a lock or kill a process solely from its recorded PID.
 
-Preserve exact model/dataset identities and source rights. Research/non-commercial
-data may be used when its terms permit the current activity. Track restrictions
-for later review; private hosting does not waive terms. Do not accept gated
-agreements, upload private data or incur paid compute without authorization.
+Generation uses the explicitly configured endpoint and model. If discovery is
+permitted and more than one model is exposed, require an exact model ID.
+No silent provider fallback, replacement training or expected-answer substitution.
+Respect existing run ownership; do not change its checkout, environment or source
+snapshots. Existing user authorization persists within its scope. Historical
+review records alone do not authorize downloads, model calls or mutation.
 
-Keep curation stages separate: prepare pinned sources first, then optionally
-resume bounded local generation with the same configuration, workspace and model
-metadata. Training is a later explicit command. An omitted endpoint model is safe
-only when exactly one local model is exposed; otherwise require the exact model
-ID.
+Shared training needs `sharedTrainingAllowed: true` for every new source.
+Customer adapters derive from the exact shared merged checkpoint or its allowed
+quantized descendant and never return to shared ancestry. Preserve restrictions
+through all descendants. Do not accept gated terms, upload private data or use
+paid compute without authorization.
 
-For the opt-in typed-decisions, MultiDoGO and TAT-QA native projections, first
-use `prepare-source-projections` against an existing frozen run, then pass both
-`--extend-projections-from` and `--projection-plan` to `generate-data`/`curate`.
-Plan preparation must be fully offline: zero inference or model-discovery
-requests and zero downloads. It may run after source snapshots, families and
-splits are frozen even if generation is still active; extension execution must
-wait for the completed parent. Resolve whole answer-bearing task groups before
-caps: exclude every new member on conflicting targets, cross-split aliases or
-cross-family aliases; retain the deterministic smallest-record-ID member for a
-same-family, same-target duplicate group. Never modify existing baseline tasks.
-Never imply that the default recipe enables these
-mappings, transplant old outcomes, or combine an extension with continuation or
-repair. Read the scoped projection section in
-[setup and data](references/setup-and-data.md) before operating this path.
-Use preparer `--pilot` for the exact 32-task projection pilot. Prepare a full
-plan separately from the same parent and never promise reuse of pilot model
-calls. Do not describe either mode as model-validated without recorded evidence.
+## Decision data and quality
 
-For a completed native run that needs the current deterministic projection and
-question-variant recipe, use the explicit `migrate-decisions`/`migrate-data`
-path. Migration is offline and publishes a new immutable dataset with per-record
-source and rights provenance; it is distinct from ordinary continuation. Use
-`rerun-migrated-decisions` only for the migration's frozen pending training
-queue. A deterministic source reference or derived answer is not model
-verification. Read the migration section in
-[setup and data](references/setup-and-data.md) before operating either command.
+Use `CategoryCatalog` from `foliqant.decisions.category_catalog` for new
+category authoring: required descriptions, normalized snake_case IDs and rejected
+collisions. Preserve historical V1 schemas and recipe identities.
 
-Use `--progress auto|always|never` for the stderr operator display without
-changing run identity or stdout JSON. On the first Ctrl+C, allow the current
-candidate or preparation phase to reach its safe boundary and persist, then
-resume by rerunning the exact same recipe, effective environment and workspace.
-A second Ctrl+C can repeat the current request on resume and cannot guarantee
-that the model server stopped its work. Do not invent a `--resume` flag or a
-paused-success result.
+Native generation preserves typed question semantics, exact evidence, language,
+family/split isolation and train-only generation. A valid unknown answer differs
+from a technical failure. Do not add business-specific enums, execution actions
+or numeric confidence targets. Full details and recovery routing are in the
+setup/data reference; load it before operating or changing generation.
 
-Keep shared and customer stages separate. Shared training requires explicit
-`sharedTrainingAllowed: true` for every new source. Customer customization starts
-from a shared merged model and records the customer identifier. Never move a
-customer adapter or its descendants back into shared ancestry.
+Calibration selects a policy using calibration data; test evaluates the fixed
+policy. Token log probability is not correctness probability. A tiny setup model,
+diagnostic corpus or sampled repair proves only the recorded operation.
 
-Use calibration and test only for their declared purposes. Do not tune a policy
-on test results, interpret token log probability as correctness probability, or
-claim that a diagnostic dataset establishes production quality.
+## Verification and stop conditions
 
-For the native state-and-typed-questions corpus, use `./scripts/generate-data`
-(`--pilot` for the bounded bilingual check). Native profiles include English and
-German. Keep German response prose and exact citations in German; language tags
-are not language detection, and English imported data must not be relabeled.
-Preserve the four generic input issue codes:
-`missing_information`, `conflicting_information`, `multiple_valid_options`, and
-`no_matching_option`. Missing referents use `missing_information`;
-`multiple_valid_options` requires multiple positively supported catalog options
-that exceed cardinality. Return every applicable issue. An explicit statement of
-absence supports an answerable false predicate; absent evidence is unknown.
-Any returned request unit without a catalog category adds `no_matching_option`.
-A conditionally stated request remains conditional after its separate predicate
-is resolved; extraction records the gate and does not execute the branch.
-Keep `explanation.summary` to one grounded concise reason, aiming for 160
-characters or fewer, with a second sentence only for a decisive limitation and
-a hard 400-character maximum. Never truncate it; retain support and gaps in the
-citation, contrary-evidence and missing-fact fields, which do not inherit the
-summary bound. Do not add banking-specific enums, workflow actions, or
-model-written confidence targets. A valid unknown answer differs from a
-technical failure. Read the native-data section of
-[setup and data](references/setup-and-data.md) before generation or format edits.
+For repository changes, run relevant model tests, strict types, lint, generated
+schema checks and `scripts/check_docs.py` using the model uv project. Skill
+changes also need deterministic shape checks and review of its evaluation prompts.
+Default tests exclude native integration; never claim offline doubles establish
+real training or export compatibility.
 
-Treat completed artifacts as immutable. Inspect locks and failed run workspaces;
-never automatically delete a stale lock, overwrite an artifact or kill a process
-based solely on the recorded PID. Report typed errors without echoing source
-messages or credentials.
-
-Before native repair, distinguish recoverable output errors from valid answers
-that disagree with source references. Semantic disagreements require review,
-not repeated calls until agreement. Use phase-specific recovery and preserve
-validated rewrites. Internal SSE retains partial final content on the bounded
-unquoted-whitespace guard; never treat that partial response as accepted output
-or confuse it with a fatal transport timeout. Changed prompts, request formats
-or source mappings require a new recipe;
-never transplant old outcomes. See the recovery guidance in
-[setup and data](references/setup-and-data.md).
+When identity, source permissions, required files or a callable option is missing,
+report that concrete gap. Do not guess or reacquire assets silently. A semantic
+disagreement with a reference belongs in review, not repeated calls until it
+matches. Raw source text, credentials and backend errors stay out of diagnostics.

@@ -19,7 +19,7 @@ New category catalogs normalize IDs to unique lowercase snake_case keys matching
 `[a-z][a-z0-9]*(?:_[a-z0-9]+)*` and require nonblank descriptions. Normalization
 collisions are rejected. Use `CategoryCatalog`
 from `foliqant.decisions.category_catalog`; see
-[category definitions](../guides/native-decision-data.md#define-categories-with-clear-boundaries).
+[category definitions](../guides/decision-contracts.md#define-category-boundaries).
 This does not change historical V1 identifiers or rewrite stored artifacts.
 
 ## Native decision-data configuration
@@ -189,7 +189,7 @@ server counts it that way.
 
 `./scripts/curate-data` reads a root `.env` when present. It accepts only the
 documented `FOLIQANT_CURATION_*` endpoint and generation variables in
-[`.env.example`](../../.env.example), validates their types and bounds, and then
+[`.env.example`](https://github.com/sebastianwessel/foliqant/blob/main/.env.example), validates their types and bounds, and then
 applies them over the selected curation recipe. Empty variables do not override
 the recipe. It does not source arbitrary shell code, interpolate YAML, accept
 credentials, or configure remote endpoints. Use a copied `.env` for local model

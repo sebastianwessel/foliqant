@@ -1,41 +1,47 @@
-# Foliqant specifications
+# Specification authority
 
-Start with [the Python package](11-python-package.md) for reusable in-memory
-pipelines, contracts, model/MCP adapters, step isolation and ground-truth
-evaluation. [Repository structure](00-file-structure.md) defines the library,
-model-development and example boundaries. Runtime code is `src/foliqant`, not a
-service deployment. HTTP is an example host only; persistence, queues and
-application authentication are outside scope.
+These specs describe two implemented products. Start with the relevant row;
+do not treat every historical document as an additional requirement.
 
-The separate `model/` project owns training and curation. End-user instructions
-live in `docs/`; these files record implementation requirements. Research and
-historical review records are evidence, not additional implementation mandates.
+| Scope | Behavior authority | Implementation | Evidence |
+| --- | --- | --- | --- |
+| In-memory Python library, compiler, model/MCP clients and evaluation | [Python package](11-python-package.md) | `src/foliqant/` | [Package status](../plans/python-package-status.md), `tests/` |
+| Local model setup, training, evaluation, calibration and export | [Lifecycle](01-model-lifecycle.md), [contracts](03-contracts/model-contracts.md), [setup](07-local-setup.md), [backend](06-backend-and-dependencies.md) | `model/src/foliqant_model/` | [Lifecycle status](../plans/implementation-status.md), `model/tests/` |
+| Curation and native decision data | [Curation](08-automated-data-curation.md), [native data](09-native-decision-data.md) | `model/src/foliqant_model/curation/`, shared `foliqant.decisions` | [Curation status](../plans/curation-status.md) |
 
-Status: the complete local lifecycle is implemented and has native execution evidence, including shared/customer training, QLoRA, held-out evaluation, policy/audit and independent exported-model inference. Final review repairs and packaging checks are recorded in `plans/`; no formal human digest approval or financial production qualification is asserted. This directory owns implementation intent. `research/` records background, not additional requirements. User documentation belongs in `docs/` and explains the working product without implementation history.
+[Repository ownership](00-file-structure.md), [conventions](00-conventions.md),
+[operations](04-operations/security-release.md) and
+[documentation/skills](05-documentation-and-skills.md) apply within those scopes.
+The registries link capabilities, representations and acceptance tests; they do
+not grant permission to add features. Generated schemas derive from the typed
+implementation. CLI help defines callable options. End-user instructions live
+in [the documentation site](../docs/index.md).
 
-Read in order: [scope](00-vision.md), [lifecycle](01-model-lifecycle.md), [contracts](03-contracts/model-contracts.md), [operations](04-operations/security-release.md), [documentation and skills](05-documentation-and-skills.md), and [pinned backend](06-backend-and-dependencies.md), and [local setup](07-local-setup.md). The capability inventory and traceability register bind requirements to acceptance evidence. Later reviews must test behavior, not merely count files.
+## Resolving drift
 
-Active extension: [automated local dataset curation](08-automated-data-curation.md), requested after the original model-tooling acceptance. Its completion is tracked separately and must include real local generation evidence.
+The current user instruction controls the requested change. Compare the active
+spec with types, validators, tests and current behavior before editing. Fix stale
+prose when implementation matches the accepted scope. For a semantic conflict,
+state the conflicting evidence and resolve the decision explicitly; never add a
+fallback or expand scope to make the documents appear consistent.
 
-Accepted bounded quality repair: [native decision-data generation](09-native-decision-data.md)
-turns the answerability research into a bounded local data contract. The final
-verification establishes corrected generation, publication, artifact membership
-and immutable resume for its sampled research recipe. Earlier audited rows remain
-diagnostic and are not promoted. This acceptance does not establish full-recipe
-coverage, model quality, training readiness, native MLX training, formal human
-approval or production fitness.
+Private reversible details inside an authorized task can be decided locally.
+New public behavior, data semantics, integration permissions and irreversible
+operations need authority from that task or an explicit decision. Explicit user authorization remains valid within its scope until revoked;
+historical execution records alone do not grant new permission.
 
-Research basis: [input answerability and evidence-backed decisions](research/input-answerability-and-reliability.md) refines typed questions, complete request handling, explanations, and trustworthy numerical estimates. Specification 09 adopts only its data-generation slice; calibrated estimators, runtime decision APIs and production qualification remain research and are not implemented lifecycle claims.
+## Non-normative material
 
-New target design: [business decisions and process branching](10-business-decisions-and-processes.md)
-records the accepted direction for banking, funds, insurance and public-sector
-work: per-answer evidence, ordered threads, bounded extraction and one process
-with several configured child tasks. Those remain target features with explicit
-readiness gaps. Additive category authoring/normalization is implemented without
-changing the V1 generation contract. Candidate
-[domain datasets](research/business-process-datasets.md) remain research until
-their rights, mappings and acquisition profiles are separately reviewed.
+[Business-process concepts](10-business-decisions-and-processes.md) and all of
+`research/` are background, not active implementation work. Category catalog
+normalization is already implemented; proposed evidence/thread/extraction and
+durable parent/child process designs are not. Specification 11 supersedes older
+service/durability proposals for the library. Persistence, queues, background
+jobs, application authentication and packaged ingress are out of scope, not
+pending package features.
 
-
-[Current package implementation status](../plans/python-package-status.md) tracks
-verification. Removed durability proposals are available in Git history only.
+`plans/` preserves dated execution and review evidence. A passing historical
+pilot establishes only its recorded scope, never current full-recipe coverage,
+financial accuracy or production qualification. The spec manifest records file
+integrity, not human approval. No additional formal approval workflow is implied
+by updating these implementation-aligned specs.

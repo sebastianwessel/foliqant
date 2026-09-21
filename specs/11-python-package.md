@@ -25,7 +25,7 @@ paid inference, customer data and publishing remain outside the library scope.
 
 ## Architecture and reuse
 
-`src/foliqant/` is the root project. `model/` has its own project and environment. Its runtime dependencies exclude
+`src/foliqant/` belongs to the root project. `model/` has its own project and environment. The library's runtime dependencies exclude
 training, curation, MLX, Torch, Transformers, datasets and downloaded model
 weights. It never imports `foliqant_model`.
 
@@ -39,11 +39,18 @@ weights. It never imports `foliqant_model`.
 | `adapters/mcp/` | Maintained MCP client, OAuth, declared catalogs, authorization and schema validation | MCP SDK behind ports; no handwritten protocol stack |
 | `adapters/telemetry/` | Safe logging and optional privacy-filtered observations | Observer port and reviewed telemetry SDK surface |
 | `bootstrap.py` | Resolve environment references once and own adapter lifetimes | Composition only; no hidden global application state |
+| `evaluation/` | Immutable golden suites, isolated/full-pipeline checks and variant reports | Public result contracts and standard-library scoring; no model-training imports or automatic judge calls |
 
 No arbitrary dotted import, executable plugin or environment interpolation is
 accepted from workflow YAML. Hosts explicitly register handlers and authorization
 hooks. Workflow files and local schema resources are read once during preparation;
 request-time execution performs no filesystem or schema-network lookup.
+
+The package root lazily exports `Envelope`, `ExecutionResult`, `Identity`,
+`PreparedApplication`, `RuntimePlugins`, `WorkflowApplication`,
+`load_environment`, `prepare_application` and `open_application`. Embedding code
+uses `load_environment` explicitly when it wants the existing environment loader;
+importing the package alone does not load configuration or initialize clients.
 
 ## Input, identity and output
 
@@ -201,7 +208,11 @@ bounded shutdown; embedded hosts are never silently given a new global provider.
 
 The package exposes embedded composition plus offline `init`, `validate`,
 `explain`, `doctor` and foreground `run` commands. Offline commands do not open
-model/MCP endpoints. Successful CLI output is one safe JSON object; failures use
+model/MCP endpoints. `validate`, `explain`, `doctor` and `run` use `foliqant.yaml`
+in the current directory unless `--config PATH` is supplied; no parent-directory
+search or endpoint discovery occurs. `init` creates a model-free workflow and a
+minimal version/workflows configuration; empty model and MCP maps use typed defaults.
+Successful CLI output is one safe JSON object; failures use
 one stable safe error and a nonzero exit. No `migrate`, queue `worker`, durable
 lookup/cancel or packaged HTTP server command belongs to this scope.
 
@@ -222,6 +233,7 @@ Acceptance families require success and failure evidence:
 | `PACKAGE-MCP` | Current SDK HTTP/stdio behavior, OAuth isolation, declared catalog/schema checks, budgets, authorization and protected context propagation |
 | `PACKAGE-PRIVACY` | Secret/PII sentinel checks across safe logs and optional observations; telemetry failure remains nonfatal |
 | `PACKAGE-DX` | Locked install, public schema drift, CLI/example execution, documentation/skill checks and independent review |
+| `PACKAGE-EVALUATION` | Isolated-step parity, immutable ground truth, exact/set/custom scoring, failure/skip denominators, measured usage, privacy and bounded cancellation |
 
 Tests use synthetic inputs and protocol fixtures. They do not claim live model
 accuracy, application security, durable recovery or production qualification.
@@ -258,6 +270,17 @@ Missing output, skipped steps and execution failures remain visible in coverage
 and denominators. Custom scorers must be explicit host functions. No evaluator
 calls an LLM judge, discovers endpoints, alters prompts or accepts its own output
 as ground truth.
+
+The module ships in the standard wheel and needs no evaluation extra. Its public
+entry points are `evaluate` and `compare_variants`, with `EvaluationSuite`,
+`EvaluationCase`, `Expectation`, `EvaluationVariant` and `RegisteredScorer`.
+These are Python dataclasses, not CLI commands or a file-based suite loader.
+Set comparison ignores top-level array ordering and duplicates while retaining
+JSON type distinctions. Custom scorers are registered async functions with an
+explicit revision. `evaluate` defaults to one worker and a 300-second per-case
+timeout including scoring; results retain suite order. `compare_variants` runs
+variants sequentially. Hosts own dataset loading, report persistence and holdout
+selection. The library neither certifies holdout separation nor optimizes prompts.
 
 Reports identify the suite and its content fingerprint, the variant/configuration
 revision supplied by the caller and observed workflow revisions. They report

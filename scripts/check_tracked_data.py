@@ -24,7 +24,16 @@ FORBIDDEN_SUFFIXES = {
     ".npy",
     ".npz",
 }
-FORBIDDEN_ROOTS = {"data", "artifacts", "models", "checkpoints", "outputs", "runs", ".foliqant"}
+FORBIDDEN_ROOTS = {
+    "data",
+    "artifacts",
+    "models",
+    "checkpoints",
+    "outputs",
+    "runs",
+    ".foliqant",
+    "site",
+}
 
 
 def main() -> int:

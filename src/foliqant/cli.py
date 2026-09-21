@@ -1,4 +1,4 @@
-"""Small, redacted command-line boundary for the workflow service."""
+"""Command-line interface for compiling and running in-memory workflows."""
 
 from __future__ import annotations
 
@@ -60,8 +60,6 @@ _SCAFFOLD: Mapping[str, str] = {
     "foliqant.yaml": """version: 1
 workflows:
   demo: workflows/demo
-models: {}
-mcp: {}
 """,
     "workflows/demo/workflow.yaml": """version: 1
 name: demo
@@ -84,7 +82,7 @@ outcome: completed
 Run the synthetic, model-free workflow:
 
 ```sh
-foliqant run --config foliqant.yaml --workflow demo --input envelope.json
+foliqant run --workflow demo --input envelope.json
 ```
 """,
 }
@@ -124,14 +122,29 @@ def _parser() -> argparse.ArgumentParser:
         ("doctor", "Check configuration and installed optional dependencies offline"),
     ):
         command = commands.add_parser(name, help=help_text)
-        command.add_argument("--config", type=Path, required=True)
+        command.add_argument(
+            "--config",
+            type=Path,
+            default=Path("foliqant.yaml"),
+            help="configuration file (default: ./foliqant.yaml)",
+        )
 
     explain = commands.add_parser("explain", help="Describe compiled workflow plans offline")
-    explain.add_argument("--config", type=Path, required=True)
+    explain.add_argument(
+        "--config",
+        type=Path,
+        default=Path("foliqant.yaml"),
+        help="configuration file (default: ./foliqant.yaml)",
+    )
     explain.add_argument("--workflow")
 
     run = commands.add_parser("run", help="Run one workflow with an envelope")
-    run.add_argument("--config", type=Path, required=True)
+    run.add_argument(
+        "--config",
+        type=Path,
+        default=Path("foliqant.yaml"),
+        help="configuration file (default: ./foliqant.yaml)",
+    )
     run.add_argument("--workflow", required=True)
     run.add_argument("--input", required=True, metavar="PATH|-")
     run.add_argument("--tenant-id")

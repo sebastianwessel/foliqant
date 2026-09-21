@@ -1,29 +1,31 @@
 # Runtime configuration and CLI
 
-The deployment file is strict YAML with `version: 1`. It binds workflow names
-to bundle directories and names the model, MCP, execution, and telemetry
-profiles available at startup.
+The deployment file is strict YAML with `version: 1`. The smallest valid file
+only maps a public workflow name to its bundle directory:
 
 ```yaml
 version: 1
 workflows:
   support_triage: workflows/support_triage
-models: {}
-mcp: {}
-execution:
-  concurrency: 4
-  queue_limit: 16
-  run_timeout: 300
-  model_timeout: 60
-  tool_timeout: 30
-  max_steps: 32
-  model_requests_per_step: 4
-  tool_calls_per_step: 3
 ```
 
-Limits are per process. They bound admitted runs, graph size, time, and attempts;
-they are not a distributed rate limiter or retry policy. Every started request
-consumes an attempt even if it fails. Unavailable token counts remain unknown.
+Add `models`, `mcp`, `execution`, or `telemetry` only when the workflow needs
+them. Execution settings have safe defaults:
+
+| Setting | Default | Meaning |
+| --- | ---: | --- |
+| `concurrency` | `4` | Runs admitted at once per process |
+| `queue_limit` | `16` | Additional runs allowed to wait |
+| `run_timeout` | `300` | Total seconds for one run |
+| `model_timeout` | `60` | Total seconds for one model attempt |
+| `tool_timeout` | `30` | Total seconds for one tool attempt |
+| `max_steps` | `32` | Maximum executed steps per run |
+| `model_requests_per_step` | `4` | Maximum started model requests per step |
+| `tool_calls_per_step` | `3` | Maximum started tool calls per step |
+
+Limits are per process. They are not a distributed rate limiter or retry policy.
+Every started request consumes an attempt even if it fails. Unavailable token
+counts remain unknown.
 
 ## Model profiles
 
@@ -57,11 +59,19 @@ Supported providers are `openai_compatible`, `openai`, `azure_openai`, and
 before inference. The host validates model output against the original schema;
 there is no automatic mode switch or output repair.
 
+The remaining run time and `execution.model_timeout` bound the total model
+attempt. A profile's `request_timeout` configures the provider SDK's network
+timeout. Setting `request_timeout: 300` does not override the default 60-second
+model-attempt limit; raise `execution.model_timeout` explicitly when a local
+model needs more time.
+
 For authenticated providers, `api_key_env` names an environment variable. Put
-the value in the process environment or the deployment directory's `.env`.
-`load_environment(config_path, os.environ)` reads that file once without
-interpolation, then lets process values take precedence. Never put secret values
-in YAML.
+the value in the process environment or the deployment directory's `.env`. The
+CLI reads the adjacent `.env` once without interpolation and lets process values
+take precedence. Embedded applications must call
+`load_environment(config_path, os.environ)` explicitly and pass its result to
+`open_application`; passing `os.environ` alone does not read `.env`. Never put
+secret values in YAML.
 
 ## MCP profiles
 
@@ -79,7 +89,7 @@ by the embedding application and partition credentials by the complete caller
 scope. Stdio commands, arguments, working directory, and environment are trusted
 startup configuration; request data cannot select them.
 
-See the [local public-request example](../../examples/public_request_mcp/README.md)
+See the [local public-request example](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/README.md)
 for a complete stdio profile and authorizer.
 
 ## Telemetry
@@ -97,17 +107,18 @@ text must not enter logs or telemetry. Only protected W3C `traceparent` and
 
 ```text
 foliqant init DEST
-foliqant validate --config PATH
-foliqant doctor --config PATH
-foliqant explain --config PATH [--workflow NAME]
-foliqant run --config PATH --workflow NAME --input PATH|-
+foliqant validate [--config PATH]
+foliqant doctor [--config PATH]
+foliqant explain [--config PATH] [--workflow NAME]
+foliqant run [--config PATH] --workflow NAME --input PATH|-
              [--tenant-id ID] [--principal-id ID] [--debug]
 ```
 
-`init` refuses to overwrite an existing destination. `validate`, `doctor`, and
-`explain` are offline. `run` reads one strict JSON envelope from a regular file
-or stdin and prints one result. It has no `serve`, worker, migration, or job
-status command.
+`init` refuses to overwrite an existing destination. The other commands default
+to `foliqant.yaml` in the current directory; they do not search parent
+directories. `validate`, `doctor`, and `explain` are offline. `run` reads one
+strict JSON envelope from a regular file or stdin and prints one result. It has
+no `serve`, worker, migration, or job status command.
 
 Success is one JSON object on stdout. Failures use a fixed safe error object and
 nonzero exit status. `--debug` changes approved diagnostics only; it does not

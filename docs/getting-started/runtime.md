@@ -8,10 +8,10 @@ training has a separate environment described in [model setup](setup.md).
 - CPython 3.12
 - [uv](https://docs.astral.sh/uv/)
 
-Install the locked development environment from the repository root:
+Install the locked runtime environment from the repository root:
 
 ```sh
-uv sync --locked --all-extras --group dev
+uv sync --locked --no-dev
 ```
 
 For a runtime-only installation, select just the adapters you use. For example,
@@ -73,13 +73,14 @@ import asyncio
 import os
 from pathlib import Path
 
-from foliqant import open_application, prepare_application
-from foliqant.contracts.envelope import Envelope
+from foliqant import Envelope, load_environment, open_application, prepare_application
 
 
 async def main() -> None:
-    prepared = prepare_application(Path("foliqant.yaml"))
-    async with open_application(prepared, environment=os.environ) as application:
+    config_path = Path("foliqant.yaml")
+    prepared = prepare_application(config_path)
+    environment = load_environment(config_path, os.environ)
+    async with open_application(prepared, environment=environment) as application:
         result = await application.run(
             "demo",
             Envelope(payload={"message": "hello"}),
@@ -90,10 +91,16 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+The embedded API uses exactly the environment mapping supplied to
+`open_application`; passing `os.environ` by itself does not load the adjacent
+`.env` file. The CLI loads that file automatically. In both cases, process
+environment values take precedence.
+
 The host owns authentication and supplies trusted `Identity` values when needed.
 Envelope metadata alone does not authenticate a tenant or principal. Keep the
 application context open until active model and tool calls have drained.
 
 Next, follow [workflow authoring](../guides/build-workflows.md) or run the
-[support triage](../../examples/support_triage/README.md) and
-[public-request MCP](../../examples/public_request_mcp/README.md) examples.
+[support triage](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/README.md)
+and [public-request MCP](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/README.md)
+examples.
