@@ -5,7 +5,22 @@ Date: 2026-09-21. Status: dependency research for
 provider-conformance claim. The service lock and specification remain authoritative.
 No endpoint was contacted while preparing this note.
 
-## Recommendation
+## Current implementation boundary
+
+As clarified by the project owner on 2026-09-21, the service is an in-memory
+pipeline. The implementation uses explicit model/MCP adapters and optional
+telemetry. HTTP server dependencies exist only in the `http-example` development
+group. Database, Redis, application authentication, durable execution and worker
+packages have been removed. Bedrock and Azure managed identity are not implemented
+and have no runtime extras. Azure OpenAI uses the OpenAI provider extra.
+
+The historical SDK investigation below records alternatives and observations;
+it is not an instruction to implement them. In particular, references to durable
+ledgers, leases, write replay or additional providers are not active requirements.
+For actual configuration use [the service guide](../../service/README.md),
+[specification 11](../11-workflow-service.md), `service/pyproject.toml` and its lock.
+
+## Original research recommendation
 
 Use `pydantic-ai-slim` with only the selected provider extras. Keep the official
 MCP SDK behind Foliqant's own MCP port and adapt discovered tools with
@@ -20,8 +35,8 @@ continues to depend on typed ports.
 
 ## Frozen dependency surface
 
-The following versions are the versions currently pinned by
-`service/pyproject.toml` and resolved by `service/uv.lock`. “Transitive” means
+The following versions were inspected during the original dependency research.
+They are historical observations, not the current installed dependency surface. “Transitive” means
 runtime code may import the SDK to configure a client, but the provider extra is
 the direct dependency declaration. Any such import is coupled to the locked SDK
 version and must be covered by adapter tests.
@@ -48,8 +63,8 @@ version and must be covered by adapter tests.
 | MCP crypto | `cryptography==50.0.1` | MCP HTTP authentication support | [PyPI](https://pypi.org/project/cryptography/50.0.1/) |
 | OTel | `opentelemetry-api==1.44.0`, `opentelemetry-sdk==1.44.0`, `opentelemetry-exporter-otlp-proto-http==1.44.0` | Optional telemetry adapter | [OpenTelemetry Python](https://opentelemetry.io/docs/languages/python/) |
 
-The HTTP, Redis, PostgreSQL, and development groups are already isolated in
-their own extras and are outside the model/MCP adapter. The lock must remain the
+The earlier HTTP, Redis and PostgreSQL extra proposals are superseded.
+Only the current service lock and project metadata define installed dependencies. The lock must remain the
 source of exact transitive versions; avoid a second hand-maintained provider SDK
 pin list in runtime code.
 

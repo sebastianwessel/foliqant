@@ -142,10 +142,13 @@ def test_thinking_budget_and_sampling_are_not_silently_rewritten() -> None:
             validate({**base, "options": options})
 
 
-def test_bedrock_configuration_has_no_implicit_region_or_credential_values() -> None:
-    base = {"provider": "bedrock", "model": "configured-model", "output_mode": "tool"}
-    validate({**base, "region": "eu-central-1"})
+def test_unimplemented_bedrock_provider_is_rejected_at_validation() -> None:
     with pytest.raises(ValidationError):
-        validate(base)
-    with pytest.raises(ValidationError):
-        validate({**base, "region": "eu-central-1", "secret_access_key": "not-accepted"})
+        validate(
+            {
+                "provider": "bedrock",
+                "region": "eu-central-1",
+                "model": "configured-model",
+                "output_mode": "tool",
+            }
+        )

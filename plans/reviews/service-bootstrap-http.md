@@ -1,3 +1,7 @@
+> Historical milestone record. Current scope and acceptance are recorded in
+> [the in-memory cleanup review](service-in-memory-cleanup.md). Earlier statements
+> about pending persistence, workers, authentication or transports have no authority.
+
 # Bootstrap, CLI and synchronous HTTP review
 
 Status: verified synchronous-service milestone; full-service goal remains incomplete.

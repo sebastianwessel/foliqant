@@ -281,82 +281,6 @@
       "title": "AzureModelConfig",
       "type": "object"
     },
-    "BedrockModelConfig": {
-      "additionalProperties": false,
-      "properties": {
-        "concurrency": {
-          "default": 4,
-          "maximum": 1024,
-          "minimum": 1,
-          "title": "Concurrency",
-          "type": "integer"
-        },
-        "model": {
-          "minLength": 1,
-          "pattern": ".*\\S.*",
-          "title": "Model",
-          "type": "string"
-        },
-        "options": {
-          "$ref": "#/$defs/GenerationOptions"
-        },
-        "output_mode": {
-          "enum": [
-            "native",
-            "tool"
-          ],
-          "title": "Output Mode",
-          "type": "string"
-        },
-        "provider": {
-          "const": "bedrock",
-          "title": "Provider",
-          "type": "string"
-        },
-        "queue_limit": {
-          "default": 16,
-          "maximum": 10000,
-          "minimum": 0,
-          "title": "Queue Limit",
-          "type": "integer"
-        },
-        "region": {
-          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)+$",
-          "title": "Region",
-          "type": "string"
-        },
-        "request_timeout": {
-          "default": 60.0,
-          "exclusiveMinimum": 0,
-          "maximum": 3600,
-          "title": "Request Timeout",
-          "type": "number"
-        },
-        "supports_json_schema": {
-          "default": true,
-          "title": "Supports Json Schema",
-          "type": "boolean"
-        },
-        "supports_text": {
-          "default": true,
-          "title": "Supports Text",
-          "type": "boolean"
-        },
-        "supports_tools": {
-          "default": true,
-          "title": "Supports Tools",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "model",
-        "output_mode",
-        "provider",
-        "region"
-      ],
-      "title": "BedrockModelConfig",
-      "type": "object"
-    },
     "CompatibleModelConfig": {
       "additionalProperties": false,
       "properties": {
@@ -465,49 +389,6 @@
         "base_url"
       ],
       "title": "CompatibleModelConfig",
-      "type": "object"
-    },
-    "GenerationOptions": {
-      "additionalProperties": false,
-      "description": "Common sampling options; absence means use the configured provider default.",
-      "properties": {
-        "max_tokens": {
-          "default": 4096,
-          "maximum": 1048576,
-          "minimum": 1,
-          "title": "Max Tokens",
-          "type": "integer"
-        },
-        "temperature": {
-          "anyOf": [
-            {
-              "maximum": 2,
-              "minimum": 0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Temperature"
-        },
-        "top_p": {
-          "anyOf": [
-            {
-              "exclusiveMinimum": 0,
-              "maximum": 1,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Top P"
-        }
-      },
-      "title": "GenerationOptions",
       "type": "object"
     },
     "OpenAIModelConfig": {
@@ -683,7 +564,6 @@
             "mapping": {
               "anthropic": "#/$defs/AnthropicModelConfig",
               "azure_openai": "#/$defs/AzureModelConfig",
-              "bedrock": "#/$defs/BedrockModelConfig",
               "openai": "#/$defs/OpenAIModelConfig",
               "openai_compatible": "#/$defs/CompatibleModelConfig"
             },
@@ -701,9 +581,6 @@
             },
             {
               "$ref": "#/$defs/AnthropicModelConfig"
-            },
-            {
-              "$ref": "#/$defs/BedrockModelConfig"
             }
           ]
         }

@@ -2,7 +2,7 @@
 
 Read `README.md`, `specs/README.md`, and the relevant area README before changing code. `specs/research/model-research.md` owns model research; `specs/11-workflow-service.md` owns the Python service implementation. `specs/research/background/` is historical context, not a source of implementation requirements.
 
-The local model lifecycle is implemented according to `specs/`; `docs/` is end-user material only. The Python workflow service is under implementation in a separate uv project at `service/`. Read its specification and current implementation status; do not describe planned capabilities as implemented. Keep its environment and runtime dependencies separate from model tooling.
+The local model lifecycle is implemented according to `specs/`; `docs/` is end-user material only. The Python workflow pipeline lives in a separate uv project at `service/`. Its scope is in-memory intake, configured steps and a returned result. Persistence, job queues/workers, application authentication and inbound transport implementations are out of scope; a small HTTP wrapper belongs only in examples. Outbound model/MCP clients, MCP OAuth, protected caller metadata and safe telemetry remain in scope. Read its specification and current implementation status; do not describe planned capabilities as implemented. Keep its environment and runtime dependencies separate from model tooling.
 
 Keep model development, customer customization, model serving, and workflow orchestration separate. Do not add dependencies on PURISTA, Harness, or Voyage without a new explicit decision. No Voyage work is in scope.
 

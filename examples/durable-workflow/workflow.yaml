@@ -1,4 +1,0 @@
-version: 1
-name: durable_echo
-start: echo
-output: {pointer: /steps/echo/result}

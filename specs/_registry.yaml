@@ -1,9 +1,5 @@
 registry_version: 1
 contracts:
-  - id: CONTRACT-SERVICE-WORKER-V1
-    path: 13-durable-worker.md
-  - id: CONTRACT-SERVICE-STORAGE-V1
-    path: 12-durable-execution.md
   - id: CONTRACT-SERVICE-V1
     path: 11-workflow-service.md
   - id: CONTRACT-BUSINESS-PROCESS-TARGET
@@ -24,8 +20,6 @@ capabilities:
   - id: CAP-SERVICE-RUNTIME
     path: 11-workflow-service.md
   - id: CAP-SERVICE-MCP
-    path: 11-workflow-service.md
-  - id: CAP-SERVICE-DURABILITY
     path: 11-workflow-service.md
   - id: CAP-SERVICE-PRIVACY
     path: 11-workflow-service.md

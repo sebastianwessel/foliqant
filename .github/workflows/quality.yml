@@ -40,22 +40,6 @@ jobs:
     name: Workflow service quality gate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: foliqant_test
-          POSTGRES_PASSWORD: test_only_ephemeral
-          POSTGRES_DB: foliqant_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U foliqant_test -d foliqant_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      FOLIQANT_TEST_POSTGRES_DSN: postgresql://foliqant_test:test_only_ephemeral@127.0.0.1:5432/foliqant_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,8 +55,7 @@ jobs:
       - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml service/src examples/embedded-workflow
       - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/inbox/run.py
       - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/mcp-tools
-      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/durable-storage/run.py
-      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/durable-workflow/run.py
+      - run: uv run --project service --no-sync mypy --config-file service/pyproject.toml examples/http-workflow/server.py
       - run: uv run --project service --no-sync ruff check --config service/pyproject.toml service/src service/tests service/scripts examples
       - run: uv run --project service --no-sync ruff format --check --config service/pyproject.toml service/src service/tests service/scripts examples
       - run: uv run --project service --no-sync python service/scripts/generate_schemas.py --check

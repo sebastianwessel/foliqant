@@ -1,200 +1,126 @@
-# Workflow service
+# In-memory workflow pipeline
 
-This is the independent Python package for Foliqant workflow execution. Its
-implementation contract is [specification 11](../specs/11-workflow-service.md).
-PydanticAI owns model/tool conversations; the service owns deterministic routing,
-identity, authorization, admission, persistence and transports.
+Foliqant accepts an envelope, runs configured steps in memory, and returns a
+result. PydanticAI handles model conversations; deterministic rules choose the
+next step. The package does not provide application authentication, a server,
+a job queue, database storage, restart recovery or background execution.
 
-Implemented foundations include strict envelopes, protected metadata, immutable
-core values, bounded admission and blocking execution, the offline compiler,
-embedded runner, model execution, read-only MCP tools, safe OTel observations,
-an executable CLI/bootstrap, and authenticated synchronous HTTP ingress. The
-current CLI/HTTP path is nondurable: durable jobs, retrieval/cancellation endpoints,
-broker recovery, child workflows, and reconciled writes remain future
-work. A separate [PostgreSQL storage adapter](STORAGE.md) provides acceptance,
-fenced leases, checkpoints, persisted budgets and a transactional result outbox.
-The [embedded durable worker](WORKERS.md) restores read-only executions using
-shared routing; it is not yet connected to the CLI/HTTP runner. See the [implementation status](../plans/workflow-service-status.md) for
-verified scope.
+Use [the embedded example](../examples/embedded-workflow/README.md),
+[the model example](../examples/inbox/README.md), or
+[the MCP example](../examples/mcp-tools/README.md). A
+[small HTTP example](../examples/http-workflow/README.md) wraps the same API;
+HTTP is example code, not part of the pipeline package.
 
-## Development environment
+## Setup
 
-Run from this directory:
+The service has its own uv project and environment, separate from model tooling.
+From the repository root:
 
 ```sh
-uv sync --locked --all-extras --group dev
-uv run --no-sync python -m pytest tests
-uv run --no-sync mypy src
-uv run --no-sync ruff check src tests scripts
-uv run --no-sync ruff format --check src tests scripts
-uv run --no-sync python scripts/generate_schemas.py --check
+uv sync --project service --locked --all-extras --group dev
+uv run --project service --no-sync python -m pytest service/tests
+uv run --project service --no-sync mypy --config-file service/pyproject.toml service/src
+uv run --project service --no-sync ruff check --config service/pyproject.toml service/src service/tests
+uv run --project service --no-sync python service/scripts/generate_schemas.py --check
 ```
 
-The local shared decision-contract package is resolved through `tool.uv.sources`.
-Keep its source directory alongside this project when building from the repository.
-Production dependency installation uses `uv sync --locked --no-dev` with only
-the selected adapter extras, for example `--extra openai --extra http`. This is
-dependency separation; it does not wire durable execution or qualify a provider
-deployment. The root model-tooling environment is separate.
+Production uses `uv sync --project service --locked --no-dev` with only the
+selected provider/MCP/telemetry extras, for example `--extra openai --extra mcp`.
+Training packages, test tooling and example HTTP servers are not runtime
+dependencies. The shared local `foliqant-decisions` package supplies the same
+native contracts used by model tooling.
 
-## Boundaries
+## Run a pipeline
 
-`core/` uses standard-library immutable values and async admission. `contracts/`
-validates external representations with Pydantic. Provider, transport, database,
-MCP and telemetry SDK imports belong under `adapters/`; bootstrap owns lifecycle.
-The runtime never imports model training or curation libraries.
-
-Input adapters must authenticate before binding `tenant_id` and `principal_id`.
-These protected metadata fields are independently optional; copying a body field
-into a trusted identity is not authentication. Use `decode_envelope` for untrusted
-JSON and `accept_envelope` to check claims against verified identity. Pydantic
-exceptions may contain input values and must not reach clients or telemetry.
-
-Capacity limits are local to each resource and replica. They prevent an unbounded
-in-process queue; they do not promise distributed provider-wide rate limiting.
-Cancellation releases local capacity but cannot prove a remote mutation stopped.
-
-## Offline compilation
-
-`foliqant.compiler.compile_workflow` reads one workflow directory and explicit
-model/tool/handler registries. It never discovers endpoints or invokes a model.
-Its frozen plan includes exact source revisions, schema resources, bindings and
-validated routes. The shared native decision adapter checks output structure,
-catalog membership and evidence against the actual input before producing route
-facts. Uncertainty remains explicit; it does not become a successful route.
-
-Authoring accepts safe YAML and Markdown frontmatter. Duplicate keys, custom
-tags and YAML aliases are rejected. Workflow schemas support confined local files
-and fragments; declared tool schemas use internal fragments only. Schema `$id`
-is unsupported, with depth and node limits enforced. JSON data inside schema
-`const`, `default` and examples is not interpreted as schema instructions.
-Generate/check the public schemas using the development commands above.
-
-## Deployment, CLI, and synchronous HTTP
-
-`foliqant.yaml` is a strict version 1 deployment document. It maps workflow names
-to relative bundle directories and may configure model, MCP, execution, HTTP, and
-telemetry profiles. Unknown fields, duplicate YAML keys, aliases, custom tags,
-paths escaping the configuration directory, and workflow-name mismatches fail
-startup. Environment substitution is not available inside arbitrary YAML values;
-credential fields contain environment variable names, and bootstrap resolves a
-single environment snapshot before opening adapters.
-
-The installed `foliqant` command provides:
-
-- `init DEST` creates a model-free project without overwriting a path.
-- `validate`, `explain`, and `doctor` compile locally without constructing model,
-  MCP, HTTP, or telemetry clients. `doctor` reports installed optional extras; it
-  does not probe their endpoints.
-- `run` executes one envelope synchronously in the current process. Optional
-  `--tenant-id` and `--principal-id` values are explicit trusted operator input.
-- `serve` owns the configured clients and a synchronous authenticated HTTP
-  listener for its process lifetime.
-
-When telemetry is configured, CLI `run` and `serve` own global installation.
-Programmatic `open_application` leaves global provider ownership with the
-embedding host unless explicitly requested.
-
-Successful commands emit a JSON object (help displays usage text). Technical run
-failures emit no success result; they use a fixed safe error object on
-stderr without exception text, input, prompts, or credentials. The
-[authenticated HTTP example](../examples/http-workflow/README.md) is model-free
-and exercises `validate`, `explain`, `run`, and bearer-protected `serve`.
-
-HTTP supports `POST /workflows/{name}/runs`, `GET /health`, and `GET /ready`.
-Runs finish within that request and return a terminal result or RFC 9457 problem
-details. There is no detached acceptance, job status lookup, or cancellation API;
-the current runner does not preserve work across a process restart.
-
-Authentication happens before reading the request body. A bearer profile resolves
-each `token_env` once at startup, verifies the credential, establishes optional
-tenant/principal identity, and returns explicit workflow grants. A JWT profile
-verifies signature, issuer, audience, expiry, issued-at time, and an asymmetric
-algorithm (`RS256`, `ES256`, or `EdDSA`) against the fixed HTTPS JWKS endpoint.
-The JWKS endpoint must honor `Accept-Encoding: identity`; unexpected compressed
-responses are rejected. Cache-lock waits, reads and cleanup share one deadline.
-JWT claims establish only the configured identity fields; workflow grants always
-come from trusted deployment configuration. Development authentication is allowed
-only with `mode: development` and a literal loopback listener. Nonlocal bearer or
-JWT deployment requires host-managed TLS termination. The built-in Uvicorn setup
-disables proxy headers and never treats forwarded identity headers as trusted.
-
-Authentication and workflow access do not imply permission to use a business
-resource. After the ingress workflow grant and compiled step allowlist, bootstrap's
-default MCP policy permits only declared read tools. A host embedding the service
-can inject `RuntimePlugins(tool_authorizer=...)` to recheck resource-specific
-business permissions from trusted identity and validated arguments on every
-call. Write tools remain disabled pending durable operation identity and
-reconciliation.
-
-## Embedded execution
-
-For the same composition used by the CLI, compile a deployment once and own its
-async lifespan. The caller supplies an authenticated and authorized identity;
-calling this Python API does not verify a token or grant workflow access:
+Compile a configuration once and own the model/tool client lifespan:
 
 ```python
 import asyncio
-import os
 from pathlib import Path
 
-from foliqant.bootstrap import load_environment, open_application, prepare_application
+from foliqant.bootstrap import open_application, prepare_application
 from foliqant.contracts.envelope import Envelope
-from foliqant.core.identity import Identity
 
 async def main() -> None:
-    config = Path("examples/http-workflow/foliqant.yaml")
-    prepared = prepare_application(config)
-    async with open_application(
-        prepared, environment=load_environment(config, os.environ)
-    ) as application:
-        result = await application.run(
-            "hello", Envelope(payload={"message": "hello"}),
-            identity=Identity(principal_id="example_operator"),
+    prepared = prepare_application(Path("examples/http-workflow/foliqant.yaml"))
+    async with open_application(prepared, environment={}) as pipeline:
+        result = await pipeline.run(
+            "hello", Envelope(payload={"message": "Hallo"})
         )
-        assert result.execution.status == "completed"
+        print(result.model_dump_json())
 
 asyncio.run(main())
 ```
 
-Trusted Python hosts can pass named `HandlerRegistration` objects through
-`prepare_application(..., handlers=...)` and runtime adapters through
-`open_application(..., plugins=RuntimePlugins(...))`. Handler callbacks are async,
-receive frozen inputs and a per-call `StepContext`, and return `StepOutcome`.
-Their declared input/output schemas are checked independently of the callback;
-selected write handlers cannot be prepared until effect tracking and reconciliation exist.
-Use the lower-level runner below only when the host needs to own that composition.
+`result` contains payload, metadata, decisions and execution status/usage. A run
+returns its final result; no accepted-job receipt or status lookup exists. A
+business hold is `needs_review`; technical failures have fixed safe error codes.
+Cancellation propagates to the caller. Process shutdown does not preserve runs.
 
-The [offline example](../examples/embedded-workflow/README.md) combines a compiled
-workflow, frozen input schemas, an async handler and a public execution result.
-From the repository root, run:
+Version 1 configuration maps workflow names to directories below its own folder:
 
-```sh
-uv run --project service --no-sync python examples/embedded-workflow/run.py
+```yaml
+version: 1
+workflows:
+  hello: workflows/hello
+models: {}
+mcp: {}
 ```
 
-Construct `WorkflowSchemas(plan)` once and pass it to `WorkflowRunner` alongside
-an async `StepExecutor`, a shared `CapacityLimiter`, and optional `ExecutionLimits`.
-Pass an accepted envelope and explicit trusted `Identity` to `await runner.run(...)`.
-Ingress can also pass a `TraceContext` as `transport_trace=`. A valid transport
-carrier takes precedence over envelope telemetry as a whole; the carriers are
-never merged, and the original metadata remains unchanged.
-Use `to_execution_result(...)` to validate and serialize the returned core result.
-The runner rechecks identity claims and input schemas before admission; these
-boundary errors raise `ServiceError`. Execution failures return a failed result
-with fixed safe error text. `CancelledError` propagates to the caller.
+Optional `execution` settings bound concurrent work, time and model/tool attempts;
+`telemetry` enables configured safe observations. Model and MCP profiles are
+explained below. Unknown settings, duplicate keys, unsafe YAML and escaping file
+paths fail validation. Credentials use environment variable references, not YAML
+interpolation. `load_environment(config_path, os.environ)` reads the configuration
+folder's `.env` once; process values take precedence.
 
-The executor receives immutable inputs and a separate context for each step.
-It owns result validation and operation timeouts within the original run deadline.
-Reserve every model/tool attempt through `context.budget` before starting I/O.
-Failed requests still count. Report measured token usage once per model ticket;
-unavailable counts remain null rather than becoming zero. Pure handlers and
-finish steps do not consume model or tool attempts.
+The CLI provides `init`, `validate`, `explain`, `doctor` and `run`. Validation and
+inspection are offline; `doctor` checks installed extras without contacting any
+endpoint. `run` reads a JSON envelope from a regular file or stdin, awaits the
+pipeline, and prints its result. No `serve`, `worker` or migration command exists.
 
-This runner is nondurable: it has no restart recovery, persisted budgets or
-external mutation reconciliation. It does not launch background business tasks.
-The offline example demonstrates these boundaries without model calls or external
-dependencies; it is not the complete production service application.
+```sh
+uv run --project service --no-sync foliqant run \
+  --config examples/http-workflow/foliqant.yaml \
+  --workflow hello --input examples/http-workflow/envelope.json
+```
+
+## Metadata, async execution and extension points
+
+`tenant_id` and `principal_id` are independently optional context fields. The
+pipeline validates and propagates them; it does not authenticate anyone.
+`pipeline.run(...)` uses the envelope's validated metadata by default. An explicit
+`identity=Identity(...)` from the host checks matching claims and enriches missing
+fields. The embedding application owns any authentication needed before calling
+this API. Do not describe caller-provided metadata as verified credentials.
+
+Protected `metadata.telemetry` contains only W3C `traceparent` and `tracestate`.
+A valid explicit transport carrier can take precedence without modifying the
+original metadata. Identity, arbitrary business data and baggage never enter
+telemetry. Each concurrent call has isolated immutable context, results and budgets.
+
+Supported step types are native `decision`, `llm`, read-only `mcp`, registered
+async `handler`, and `finish`. Schemas and graph routing compile offline. Bind data
+with JSON pointers such as `/payload/text` and `/steps/classify/result`; missing
+and null are different. The model cannot invent a new route.
+
+Use `HandlerRegistration` through `prepare_application(..., handlers=...)` for
+async Python functions. Inputs and outputs are schema-validated. Use
+`RuntimePlugins` to provide model factories, MCP credential hooks or a tool
+permission policy. These are direct Python extension points; configuration does
+not import arbitrary executable modules. A tool allowlist controls external MCP
+operations, not application login. Mutation/reconciliation is outside this scope.
+
+The lower-level `WorkflowRunner` accepts a compiled plan, executor, schema
+validator, admission limiter and optional observer. Its core is independent of
+provider SDKs and inbound transport choices. Prefer `open_application` unless
+your embedding host needs to own this composition itself.
+
+All execution I/O is async. Concurrent-call limits do not create background jobs;
+the caller continues awaiting its own result. Attempt reservations precede I/O,
+failures consume attempts, and unavailable token usage stays unknown. Client
+lifetimes outlive their active operations. Configure real operation timeouts;
+Python cannot forcibly stop a custom callback that ignores cancellation.
 
 ## PydanticAI model execution
 
@@ -235,9 +161,8 @@ unauthenticated access. Official OpenAI, Azure OpenAI (versioned or v1) and
 Anthropic clients use explicit API selection, zero SDK retries and bounded
 timeouts. Client cleanup also runs after partial initialization failure. Unsafe
 ambient SDK header/account overrides are rejected instead of silently changing
-configured requests. Bedrock remains disabled pending its bounded credential and
-worker integration; Azure managed identity and broader Foundry APIs are not yet
-implemented. Offline protocol tests do not qualify a live deployment.
+configured requests. Bedrock, Azure managed identity and broader Foundry APIs are not supported by
+these adapters. Offline protocol tests do not qualify a live deployment.
 
 PydanticAI owns the model conversation. The executor independently validates native
 decision semantics and source evidence before routing. A schema-output LLM step
@@ -317,7 +242,7 @@ a validated result to the model before the workflow accepts its answer. After
 that call, the model may finish normally. The service performs no hidden tool
 retries, automatic sampling or elicitation rounds. Input-required responses end
 in `needs_review`; interactive continuation is not yet implemented. Write tools
-remain disabled until durable effect tracking and reconciliation are available.
+are outside this read-only pipeline scope.
 
 For MCP HTTP authentication, set `auth` to a host-registered credential-provider ID.
 The hook receives the current trusted identity, server and context. The provided
@@ -327,7 +252,7 @@ resource binding and refresh handling. Supply a storage factory partitioned by
 store is supplied. Explicitly allow the HTTPS authorization-server origins.
 Discovery, registration and refresh cannot contact other origins.
 
-Interactive callbacks belong only to an explicit operator login flow. Normal
+Interactive callbacks belong to the embedding application’s explicit tool-login flow. Normal
 workflow providers omit them and never launch a browser. Tokens never belong in
 request bodies, metadata, workflow files or model context. The profile's optional
 domain-qualified identity key forwards only present trusted IDs in MCP `_meta`;
@@ -346,7 +271,7 @@ after session exit.
 
 ## Async execution rules
 
-Use native async clients for HTTP, databases, Redis and MCP. Do not call a
+Use native async clients for model and MCP I/O. Do not call a
 synchronous SDK directly from an async handler. For a blocking-only integration,
 `adapters.execution.blocking.BlockingExecutor` owns a bounded worker pool, copies
 task-local context and rejects excess work before creating an internal task.
@@ -367,8 +292,7 @@ Safe logging queues only sanitized JSON strings, with bounded capacity. Slow
 stderr does not block the event loop; overflow is counted in `dropped_records`.
 The bootstrap owns the returned logging runtime and drains it outside the event
 loop using `await asyncio.to_thread(runtime.close, timeout=...)`, checking the
-boolean outcome. These are tested primitives; full transport/provider scaling
-and durability acceptance remain part of the ongoing implementation.
+boolean outcome. These are local execution limits, not a job queue or a distributed rate limiter.
 
 ## Safe OpenTelemetry
 

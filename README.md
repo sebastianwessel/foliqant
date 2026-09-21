@@ -11,8 +11,9 @@ is specified, not yet implemented in the workflow service.
 
 **Available now:** local setup, pinned public-source curation, data preparation,
 LoRA/QLoRA training, customer customization, evaluation, threshold selection,
-independent audit, and model export. The configurable workflow service remains
-under implementation as a separate Python package.
+independent audit, and model export. The Python workflow package runs configured pipelines in memory and returns
+results; authentication, persistence, queues and inbound transports are outside
+its scope.
 
 ```sh
 ./scripts/setup-model
@@ -42,18 +43,14 @@ final structured content matching the requested JSON Schema.
 - [Generate native decision data](docs/guides/native-decision-data.md)
 
 - [Workflow service setup and CLI](service/README.md)
-- [PostgreSQL storage adapter](service/STORAGE.md)
-- [Resumable execution workers](service/WORKERS.md)
 - [Python workflow service specification](specs/11-workflow-service.md)
-- [Authenticated HTTP example](examples/http-workflow/README.md)
+- [Small HTTP wrapper example](examples/http-workflow/README.md)
 - [Embedded workflow example](examples/embedded-workflow/README.md)
 - [Model-enabled inbox example](examples/inbox/README.md)
 - [Local MCP workflow example](examples/mcp-tools/README.md)
 - [Workflow service agent skill](skills/foliqant-service/SKILL.md)
 - [Apple Silicon training and model lineage](specs/research/apple-silicon.md)
 - [Model research, datasets, calibration, and hosting](specs/research/model-research.md)
-- [Illustrative workflow](workflows/financial-triage/workflow.yaml)
-- [Illustrative service configuration](config/service.example.yaml)
 - [Contributor instructions](AGENTS.md)
 
 ## Repository layout
@@ -68,7 +65,7 @@ inference/          Standard model-server deployment profiles
 service/
   src/foliqant/core/ Transport-independent workflow execution
   src/foliqant/ports/ Typed extension contracts
-  src/foliqant/adapters/ Model endpoints, inputs, outputs, persistence
+  src/foliqant/adapters/ Model/MCP clients, validation and telemetry
 contracts/          Language-neutral data schemas
 workflows/          Versioned processes, prompts, and workflow examples
 config/             Deployment-specific bindings and secret references
@@ -76,7 +73,7 @@ docs/               End-user guides
 specs/              Implementation contracts and research
 ```
 
-The workflow service and model server are separately deployed processes. Training libraries and GPU dependencies do not belong in the service image. Model weights, real customer data, credentials, and generated artifacts do not belong in Git.
+The in-memory workflow package calls a separately hosted model endpoint. Training libraries and GPU dependencies do not belong in the service image. Model weights, real customer data, credentials, and generated artifacts do not belong in Git.
 
 ## Agreed constraints
 
@@ -99,6 +96,7 @@ uses a loopback endpoint by default or an explicitly allowed trusted private-net
 endpoint; training remains a later explicit command.
 The small setup model exercises the lifecycle locally. Selecting and qualifying
 a production financial model is separate from verifying the tooling. The
-configurable workflow service remains under implementation as a separate Python package.
+workflow package provides an in-memory pipeline; see its guide for the supported
+model/MCP steps and caller-owned transport boundary.
 
 Foliqant is a working name derived from folio and quant; no trademark or domain availability is claimed. A distribution license has not yet been selected.

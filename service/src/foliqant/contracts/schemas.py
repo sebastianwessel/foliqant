@@ -8,7 +8,7 @@ from foliqant.core.json import JsonValue
 
 from .deployment import DeploymentConfig
 from .envelope import Envelope
-from .execution import AcceptanceReceipt, ExecutionResult
+from .execution import ExecutionResult
 from .mcp import McpProfiles
 from .models import ModelProfiles
 from .telemetry import TelemetryConfig
@@ -23,7 +23,6 @@ def service_schemas() -> dict[str, dict[str, JsonValue]]:
             "deployment.schema.json": DeploymentConfig.model_json_schema(),
             "envelope.schema.json": Envelope.model_json_schema(),
             "execution-result.schema.json": ExecutionResult.model_json_schema(),
-            "acceptance-receipt.schema.json": AcceptanceReceipt.model_json_schema(),
             "model-profiles.schema.json": ModelProfiles.model_json_schema(),
             "mcp-profiles.schema.json": McpProfiles.model_json_schema(),
             "telemetry.schema.json": TelemetryConfig.model_json_schema(),

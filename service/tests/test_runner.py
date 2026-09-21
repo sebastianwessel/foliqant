@@ -356,3 +356,29 @@ async def test_direct_embedded_metadata_cannot_bypass_identity_constraints(
             identity=Identity(),
         )
     assert error.value.code == ErrorCode.INVALID_INPUT
+
+
+@pytest.mark.parametrize("route", [None, "unexpected", []])
+async def test_invalid_answer_route_returns_safe_output_failure(
+    tmp_path: Path, route: object
+) -> None:
+    plan = make_plan(
+        tmp_path,
+        {
+            "first": _DECISION + "on_answer: {'true': 'done', 'false': 'done'}\n",
+            "done": "type: finish\noutcome: completed\n",
+        },
+    )
+
+    async def handle(
+        step: OperationStep, inputs: FrozenObject, context: StepContext
+    ) -> StepOutcome:
+        return StepOutcome("answer", route_key=route)
+
+    envelope = accepted()
+    result = await runner(plan, Scripted(handle)).run(envelope, identity=Identity())
+    assert result.status == "failed"
+    assert result.error is not None and result.error.code == ErrorCode.INVALID_OUTPUT
+    assert result.payload == envelope.payload
+    assert dict(result.decisions)["first"].status == "failed"
+    assert dict(result.decisions)["done"].status == "skipped"

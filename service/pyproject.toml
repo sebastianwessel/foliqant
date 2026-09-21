@@ -20,12 +20,8 @@ foliqant = "foliqant.cli:main"
 [project.optional-dependencies]
 openai = ["pydantic-ai-slim[openai]==2.46.0"]
 anthropic = ["pydantic-ai-slim[anthropic]==2.46.0"]
-bedrock = ["pydantic-ai-slim[bedrock]==2.46.0"]
-azure = ["pydantic-ai-slim[openai]==2.46.0", "azure-identity==1.25.3"]
+azure = ["pydantic-ai-slim[openai]==2.46.0"]
 mcp = ["mcp==2.2.0", "httpx2==2.13.0", "cryptography==50.0.1"]
-http = ["starlette==1.6.0", "uvicorn==0.53.0", "PyJWT[crypto]==2.14.0", "httpx2==2.13.0"]
-redis = ["redis==8.1.0"]
-postgres = ["psycopg[binary]==3.3.6", "psycopg-pool==3.3.2"]
 telemetry = [
   "opentelemetry-api==1.44.0",
   "opentelemetry-sdk==1.44.0",
@@ -33,7 +29,9 @@ telemetry = [
 ]
 
 [dependency-groups]
+http-example = ["starlette==1.6.0", "uvicorn==0.53.0", "httpx2==2.13.0"]
 dev = [
+  { include-group = "http-example" },
   "pytest==9.1.1", "pytest-asyncio==1.4.0", "mypy==2.3.1", "ruff==0.16.8",
   "types-PyYAML==6.0.12.20260906",
   "types-jsonschema==4.26.0.20260518",
@@ -55,7 +53,7 @@ pythonpath = ["src"]
 asyncio_mode = "auto"
 addopts = "-ra -m 'not live_model'"
 markers = [
-  "integration: real local protocol or database integration",
+  "integration: real local protocol integration",
   "live_model: explicitly enabled model inference; never part of default tests",
 ]
 

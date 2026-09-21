@@ -1,5 +1,0 @@
-type: handler
-handler: echo
-input:
-  message: {pointer: /payload/message}
-next: done

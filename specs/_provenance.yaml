@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:b81b7efb55e1df0a269e06475ec5018c1cdbd03846eba509baa101c2bbdf14d1
-  source_revision: working-tree-44b1339-durable-worker
-  generated_at: 2026-09-21T13:23:05.820Z
+  content_digest: sha256:694db7b828e64b2f162f4e61da9fbda1b7dc9f19e164e8b05c48fc9f566c366c
+  source_revision: working-tree-0201b89-in-memory-cleanup
+  generated_at: 2026-09-21T14:10:02.056Z

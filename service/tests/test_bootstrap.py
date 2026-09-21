@@ -63,6 +63,17 @@ async def test_preparation_and_execution_share_effective_revision_without_mutabl
     assert rejected.value.code == ErrorCode.DEPENDENCY_FAILURE
 
 
+@pytest.mark.parametrize(
+    "metadata",
+    ({"tenant_id": "tenant-context"}, {"principal_id": "principal-context"}),
+)
+async def test_optional_identity_uses_validated_envelope_context(tmp_path, metadata):
+    prepared = prepare_application(settings(tmp_path))
+    async with open_application(prepared, environment={}) as app:
+        result = await app.run("demo", Envelope(payload={}, metadata=metadata))
+    assert result.metadata.model_dump(exclude_none=True) == metadata
+
+
 def test_configuration_changes_update_effective_revision(tmp_path):
     path = settings(tmp_path)
     before = prepare_application(path)
@@ -215,21 +226,6 @@ async def test_context_does_not_reclassify_caller_exceptions_as_configuration(tm
             raise RuntimeError("caller")
 
 
-def test_bearer_config_roundtrip_preserves_independently_optional_identity(tmp_path):
-    path = settings(
-        tmp_path,
-        extra="http:\n  auth:\n    type: bearer\n    bindings:\n"
-        "      operator:\n        token_env: TOKEN\n        principal_id: user\n"
-        "        workflows: [demo]\n",
-    )
-    prepared = prepare_application(path)
-    assert prepared.config.http.auth.bindings["operator"].tenant_id is None
-    assert prepared.config.http.auth.bindings["operator"].principal_id == "user"
-    path.write_text(path.read_text().replace("workflows: [demo]", "workflows: [missing]"))
-    with pytest.raises(CompilationError):
-        prepare_application(path)
-
-
 def test_environment_file_limit_is_enforced(tmp_path):
     path = settings(tmp_path)
     (tmp_path / ".env").write_bytes(b"X" * (1024 * 1024 + 1))
@@ -295,7 +291,7 @@ async def test_client_cleanup_failure_does_not_replace_outcome_or_caller_error(
     assert "private cleanup error" not in caplog.text
 
 
-def test_write_handler_cannot_be_activated_without_durability(tmp_path):
+def test_write_handler_cannot_be_activated_in_read_only_pipeline(tmp_path):
     async def write(inputs, context):
         raise AssertionError("writes cannot execute")
 

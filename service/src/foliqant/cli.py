@@ -58,7 +58,6 @@ _MESSAGES: dict[str, str] = {
 
 _SCAFFOLD: Mapping[str, str] = {
     "foliqant.yaml": """version: 1
-mode: development
 workflows:
   demo: workflows/demo
 models: {}
@@ -92,13 +91,8 @@ foliqant run --config foliqant.yaml --workflow demo --input envelope.json
 
 _OPTIONAL_COMPONENTS: Mapping[str, tuple[str, ...]] = {
     "anthropic": ("anthropic",),
-    "azure": ("azure.identity",),
-    "bedrock": ("boto3",),
-    "http": ("starlette", "uvicorn", "jwt", "httpx2"),
     "mcp": ("mcp", "httpx2", "cryptography"),
     "openai": ("openai",),
-    "postgres": ("psycopg",),
-    "redis": ("redis",),
     "telemetry": ("opentelemetry.sdk",),
 }
 
@@ -144,9 +138,6 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--principal-id")
     run.add_argument("--debug", action="store_true")
 
-    serve = commands.add_parser("serve", help="Serve the configured authenticated HTTP API")
-    serve.add_argument("--config", type=Path, required=True)
-    serve.add_argument("--debug", action="store_true")
     return parser
 
 
@@ -395,7 +386,11 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, object], int]:
         raise _CliFailure(ErrorCode.NOT_FOUND.value, _EXIT_INPUT)
     try:
         envelope = decode_envelope(_read_envelope(args.input))
-        identity = Identity(tenant_id=args.tenant_id, principal_id=args.principal_id)
+        identity = (
+            None
+            if args.tenant_id is None and args.principal_id is None
+            else Identity(tenant_id=args.tenant_id, principal_id=args.principal_id)
+        )
     except ServiceError:
         raise
     except (TypeError, ValueError):
@@ -417,21 +412,6 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, object], int]:
     return cast(dict[str, object], result.model_dump(mode="json")), 0
 
 
-async def _serve(args: argparse.Namespace) -> tuple[dict[str, object], int]:
-    from foliqant.bootstrap import serve_application
-
-    prepared = _prepare(args.config)
-    environment = _environment(args.config)
-    await serve_application(prepared, environment=environment, debug=args.debug)
-    return {"command": "serve", "status": "stopped"}, 0
-
-
-async def _runtime_command(args: argparse.Namespace) -> tuple[dict[str, object], int]:
-    if args.command == "run":
-        return await _run(args)
-    return await _serve(args)
-
-
 def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object], int]:
     if args.command == "init":
         return _init(args.destination), 0
@@ -441,7 +421,7 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object], int]:
         return _explain(args.config, args.workflow), 0
     if args.command == "doctor":
         return _doctor(args.config), 0
-    return asyncio.run(_runtime_command(args))
+    return asyncio.run(_run(args))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

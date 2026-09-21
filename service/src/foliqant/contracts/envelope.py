@@ -102,10 +102,11 @@ class Envelope(BoundaryModel):
 
 
 def accept_envelope(envelope: Envelope, identity: Identity) -> AcceptedEnvelope:
-    """Check caller identity claims and enrich absent fields from trusted context.
+    """Check consistent caller context and fill absent protected identity fields.
 
-    This does not authenticate a token. Input adapters must authenticate first
-    and must not build the trusted identity from these same unverified fields.
+    This is validation, not authentication. The embedding application decides
+    where identity comes from and whether it has been verified. Explicit context
+    must match any identity fields already present in the envelope.
     """
     metadata = cast(dict[str, JsonValue], envelope.metadata.model_dump(mode="json"))
     for key in _IDENTITY_FIELDS:

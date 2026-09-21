@@ -5,11 +5,12 @@ allowed_default_refs:
   - POL-NATIVE-DATA-LOCAL
 profiles:
   - id: POL-WORKFLOW-SERVICE
-    source: project-owner 2026-09-21 full implementation mandate; Python, PydanticAI,
-      uv, latest MCP/OAuth, protected identity and telemetry, examples/docs/skills
-    defaults: secure production; isolated service environment; offline tests and
-      local protocol conformance; agents may implement and independently review
-      within specification 11; no paid inference or external deployment inferred
+    source: project-owner 2026-09-21 narrowed implementation mandate; Python,
+      PydanticAI, uv, maintained MCP/OAuth, optional identity/W3C context and
+      telemetry, examples/docs/skills
+    defaults: isolated in-memory service environment; offline tests and local
+      protocol conformance; no persistence, queue worker, application authentication,
+      packaged transport, paid inference or external deployment inferred
     status: implementation authorized; readiness and production evidence tracked separately
   - id: POL-MODULAR-SERVICE-PROPOSAL
     source: project-owner request to refine modular transport-independent workflow

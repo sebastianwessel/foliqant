@@ -1,46 +1,30 @@
 reuse_inventory_version: 1
-discovery_revision: working-tree-44b1339-durable-worker
+discovery_revision: working-tree-in-memory-service-scope
 assets:
-  - asset_id: service.execution-machine
+  - asset_id: service.runner
     kind: module
-    path: ../service/src/foliqant/core/machine.py
-    public_export: ExecutionMachine
+    path: ../service/src/foliqant/core/runner.py
+    public_export: WorkflowRunner
     owner: workflow-service
     stability: experimental
-    consumers: [embedded-runner, durable-worker]
-    extension_policy: One implementation of binding, deterministic routing and checkpoint restore; no I/O.
-  - asset_id: service.execution-worker
-    kind: module
-    path: ../service/src/foliqant/workers/execution.py
-    public_export: ExecutionWorker, WorkflowBinding
-    owner: workflow-service
-    stability: experimental
-    consumers: [embedded-hosts, future-worker-bootstrap]
-    extension_policy: Preserve exact revisions, persistent accounting and owned shutdown; never enable unreconciled writes.
-  - asset_id: service.durable-storage
-    kind: module
-    path: ../service/src/foliqant/ports/storage.py
-    public_export: ExecutionStore
-    owner: workflow-service
-    stability: experimental
-    consumers: [durable-worker, durable-ingress, outbox-delivery]
-    extension_policy: Preserve exact scopes, immutable checkpoints, live fences and pre-I/O reservations.
+    consumers: [embedded-application, foreground-cli, http-example]
+    extension_policy: One in-memory deterministic runner; no persistence, queues, background ownership or transport policy.
   - asset_id: service.execution-values
     kind: module
     path: ../service/src/foliqant/core/execution.py
     public_export: RunResult, StepRecord, Usage, TokenUsage
     owner: workflow-service
     stability: experimental
-    consumers: [embedded-runner, durable-storage, result-adapters]
-    extension_policy: Reuse immutable values and existing boundary serializers; unknown usage stays unknown.
+    consumers: [in-memory-runner, result-adapters]
+    extension_policy: Reuse immutable values and public boundary serializers; unknown usage stays unknown.
   - asset_id: service.envelope
     kind: schema
     path: ../service/src/foliqant/contracts/envelope.py
     public_export: Envelope, Metadata, TraceCarrier, accept_envelope
     owner: workflow-service
     stability: experimental
-    consumers: [service-input-adapters, embedded-callers]
-    extension_policy: Keep protected identity and trace semantics aligned with specification 11.
+    consumers: [embedded-callers, http-example]
+    extension_policy: Optional identity is validated caller context, not package authentication; keep W3C trace semantics aligned with specification 11.
   - asset_id: service.admission
     kind: module
     path: ../service/src/foliqant/core/admission.py
@@ -48,7 +32,7 @@ assets:
     owner: workflow-service
     stability: experimental
     consumers: [service-engine, model-adapters, tool-adapters]
-    extension_policy: Local bounded resource admission; never imply global provider rate control.
+    extension_policy: Local bounded resource admission only; never imply distributed queueing or provider-wide rate control.
   - asset_id: model.category-catalog
     kind: schema
     path: ../packages/decision-contracts/src/foliqant_decisions/category_catalog.py

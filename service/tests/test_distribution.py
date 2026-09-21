@@ -11,8 +11,8 @@ def test_service_distribution_is_typed() -> None:
     assert files("foliqant").joinpath("py.typed").is_file()
 
 
-def test_minimal_http_install_has_auth_dependencies_and_working_console_entrypoint(tmp_path):
-    """An all-extras development environment must not hide missing HTTP dependencies."""
+def test_minimal_install_has_no_server_storage_or_dev_dependencies(tmp_path):
+    """Check the production install independently of the development environment."""
     import json
     import os
     import shutil
@@ -35,8 +35,6 @@ def test_minimal_http_install_has_auth_dependencies_and_working_console_entrypoi
             "--locked",
             "--offline",
             "--no-dev",
-            "--extra",
-            "http",
         ],
         env=environment,
         check=True,
@@ -48,8 +46,7 @@ def test_minimal_http_install_has_auth_dependencies_and_working_console_entrypoi
         [
             str(binary / "python"),
             "-c",
-            "from foliqant.adapters.auth import JwtAuthenticator; "
-            "from foliqant.adapters.transports.http import create_http_app; "
+            "from foliqant.bootstrap import open_application; "
             "import importlib.metadata as m, json; "
             "print(json.dumps(sorted(d.metadata['Name'] for d in m.distributions())))",
         ],
@@ -58,7 +55,19 @@ def test_minimal_http_install_has_auth_dependencies_and_working_console_entrypoi
         capture_output=True,
         timeout=30,
     )
-    assert not {"pytest", "mypy", "ruff", "mlx", "torch"} & set(json.loads(probe.stdout))
+    assert not {
+        "pytest",
+        "mypy",
+        "ruff",
+        "mlx",
+        "torch",
+        "starlette",
+        "uvicorn",
+        "PyJWT",
+        "psycopg",
+        "psycopg-pool",
+        "redis",
+    } & set(json.loads(probe.stdout))
     bundle = tmp_path / "bundle"
     for arguments in (
         ["init", str(bundle)],

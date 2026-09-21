@@ -1,8 +1,10 @@
 # Model lifecycle specifications
 
 Active service implementation: [Python workflow service](11-workflow-service.md)
-selects PydanticAI, current MCP/OAuth, protected identity/trace metadata, durable
-transports and safe OpenTelemetry. The [design rationale](research/modular-workflow-service.md)
+selects PydanticAI, current MCP/OAuth, optional identity/trace context,
+in-memory execution and safe OpenTelemetry. The package owns no persistence,
+queue worker, application authentication or HTTP/Redis transport. The
+[design rationale](research/modular-workflow-service.md)
 is historical where specification 11 supersedes it. Implementation acceptance is
 separate from design approval; current model lifecycle artifacts remain unchanged.
 
@@ -32,9 +34,8 @@ changing the V1 generation contract. Candidate
 their rights, mappings and acquisition profiles are separately reviewed.
 
 The [Python workflow service](11-workflow-service.md) implements the service side
-separately from model tooling. Its [durable storage contract](12-durable-execution.md)
-defines transactional state, fencing, persisted budgets and output delivery.
-The [worker contract](13-durable-worker.md) defines shared routing and bounded
-read-only recovery.
-[Implementation status](../plans/workflow-service-status.md) distinguishes tested
-adapters from pending worker/transport and production acceptance.
+separately from model tooling as a foreground in-memory input-to-result pipeline.
+[Specifications 12](12-durable-execution.md),
+[13](13-durable-worker.md) and [14](14-durable-deployment.md) are superseded
+historical markers with no active authority. [Implementation status](../plans/workflow-service-status.md)
+tracks the bounded current implementation and acceptance evidence.

@@ -1,14 +1,12 @@
 """Closed deployment settings composed from the existing adapter contracts."""
 
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from foliqant.core.runner import ExecutionLimits
 
-from .auth import BearerAuthConfig, JwtAuthConfig
 from .base import BoundaryModel
-from .http import HttpConfig, validate_http_mode
 from .mcp import McpServerProfile
 from .models import Duration, ModelConfig
 from .telemetry import TelemetryConfig
@@ -43,26 +41,8 @@ class DeploymentConfig(BoundaryModel):
     """Configuration contains references and policy, never resolved credentials."""
 
     version: Literal[1]
-    mode: Literal["production", "development"] = "production"
     workflows: Annotated[dict[Id, NonBlank], Field(min_length=1, max_length=64)]
     models: Annotated[dict[Id, ModelConfig], Field(max_length=128)] = Field(default_factory=dict)
     mcp: Annotated[dict[Id, McpServerProfile], Field(max_length=128)] = Field(default_factory=dict)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
-    http: HttpConfig | None = None
     telemetry: TelemetryConfig | None = None
-
-    @model_validator(mode="after")
-    def validate_modes_and_grants(self) -> Self:
-        if self.http is not None:
-            validate_http_mode(self.http, self.mode)
-            auth = self.http.auth
-            grants = (
-                [grant for binding in auth.bindings.values() for grant in binding.workflows]
-                if isinstance(auth, BearerAuthConfig)
-                else auth.workflows
-                if isinstance(auth, JwtAuthConfig)
-                else []
-            )
-            if not set(grants).issubset(self.workflows):
-                raise ValueError("workflow grants must refer to configured workflows")
-        return self

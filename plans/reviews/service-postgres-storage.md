@@ -1,3 +1,5 @@
+> **SUPERSEDED / OUT OF SCOPE (2026-09-21):** Historical evidence only. The current workflow-service contract is the foreground in-memory pipeline in `specs/11-workflow-service.md`. This review creates no active requirement.
+
 # PostgreSQL storage review
 
 Scope: specification 12, async storage port and core values, PostgreSQL adapter,

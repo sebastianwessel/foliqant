@@ -1,175 +1,126 @@
 ---
 name: foliqant-service
-description: "Build and test Foliqant workflow bundles and embedded async service integrations. Use for the service Python package, workflow compiler, execution ports and adapters; not for model training or data curation."
+description: "Build and test Foliqant workflow bundles and embedded in-memory async integrations. Use when working on the service Python package, compiler, runner, model/MCP adapters or small HTTP example; not for persistence, queue workers, application authentication, model training or data curation."
 ---
 
 # Foliqant workflow service
 
-Use the [service guide](../../service/README.md) and
-[offline example](../../examples/embedded-workflow/README.md) and
-[model-enabled inbox example](../../examples/inbox/README.md) as the
-implemented API authority. The CLI/bootstrap and authenticated synchronous HTTP
-boundary are implemented alongside the embedded runner, model executor, read-only
-MCP adapters, and safe telemetry. Durable jobs, HTTP retrieval/cancellation,
-broker recovery, child workflows, and reconciled writes are not
-implemented. The PostgreSQL store and embedded durable worker are available but
-are not connected to that CLI/HTTP runner. Never present those planned capabilities as working features.
+Use the [service guide](../../service/README.md),
+[embedded example](../../examples/embedded-workflow/README.md), and
+[model-enabled inbox example](../../examples/inbox/README.md) as implemented API
+authority. The service is one in-memory pipeline: accept one envelope, execute a
+compiled sequence of deterministic steps, and return one terminal result. It does
+not own persistence, idempotent intake, queue workers, child jobs, application
+authentication or packaged HTTP/Redis transports. Do not present those removed
+surfaces as pending requirements.
 
-Keep the service in its own uv project and environment. Select only needed extras
-for production; use the dev group for testing. Never import training or curation
-packages. Native decision types and semantic validation come from the shared
-`foliqant_decisions` package, not a duplicated schema or `foliqant_model`.
+Keep the service in its own uv project. Never import training or curation packages.
+Reuse native decision contracts and semantic validation from
+`foliqant_decisions`; do not duplicate their schemas in the service.
 
-## Deployment and ingress
+## Configuration and host boundary
 
-For `foliqant.yaml`, CLI, bootstrap, or HTTP work, read
-[deployment and HTTP](references/deployment-http.md). Treat YAML as a strict
-versioned contract: do not add implicit environment substitution, endpoint
-discovery, executable imports, or compatibility aliases.
+Read [deployment and HTTP example](references/deployment-http.md) for
+`foliqant.yaml`, CLI/bootstrap or example work. Configuration is a strict,
+versioned local contract. Do not add implicit environment interpolation, endpoint
+discovery, executable imports, compatibility aliases, storage profiles, auth
+profiles or worker settings.
 
-Keep authentication, workflow access, and business permission distinct. An
-authenticator establishes immutable optional identity and configuration-owned
-workflow grants. Body metadata and JWT claims never grant workflow access. Once
-a workflow is granted, its compiled MCP allowlist still permits only declared
-read tools by default. A host-supplied `RuntimePlugins.tool_authorizer` must add
-resource-specific business checks for deployments that need them; it receives
-trusted identity and validated frozen arguments for every call.
+`tenant_id` and `principal_id` are independently optional invocation context. If
+an explicit `Identity` is omitted, the application derives context from validated
+envelope metadata. If one is supplied, use it only to check consistency and fill
+missing values. This is not authentication or authorization. Remote embedding
+hosts own both concerns before calling the service.
 
-`run` and HTTP execute synchronously through the nondurable in-process runner.
-Do not add detached background tasks or describe 202 acceptance, job retrieval,
-cancellation, restart recovery, or write reconciliation as available on that path.
+A W3C trace carrier is also optional context. Keep it separate from permission,
+do not forward baggage, and never let trace fields enable debug behavior.
 
-## Workflow and runtime boundaries
+## Compiler and in-memory runtime
 
 - Compile YAML/Markdown bundles with `compile_workflow` and explicit registries.
-  Compilation never discovers endpoints. Use supported `decision`, `llm`, `mcp`,
-  `handler` and `finish` authoring; dispatch is not implemented. Provider/tool
-  execution needs a configured executor. Do not infer executable support
-  merely because a step compiles.
-- Bind data explicitly with `{pointer: /payload/...}` or `{literal: ...}`.
-  Previous step results live under `/steps/<id>/result`. Public output uses
-  `decisions`, not `steps`. Missing optional bindings require explicit defaults;
-  null is not missing. Quote predicate route keys `"true"` and `"false"` in YAML.
-- Construct `WorkflowSchemas(plan)` once from frozen schema resources. References
-  are confined to the bundle. Never introduce request-time schema retrieval.
-- Decode untrusted bytes with `decode_envelope`; use `accept_envelope` with an
-  explicit trusted `Identity`. Body IDs are claims, not authentication. Tenant
-  and principal are independently optional and remain immutable downstream.
-- `WorkflowRunner.run` is async and needs an executor, validator and admission
-  limiter. Reuse admission per resource, not one global serialization lock.
-  Each invocation owns its records, context and budgets. Map its result through
-  `to_execution_result`; do not serialize internal dataclasses directly.
-- Reserve attempts through `StepContext.budget` before external I/O, including
-  failed calls. Missing usage is unknown, not zero. The executor validates
-  output and enforces model/tool timeouts within the original deadline. No
-  adapter may let model output pick arbitrary routes or mutate trusted identity.
-- Business uncertainty follows `on_unresolved` or ends in `needs_review` before
-  ordinary routing. Technical failures are safe errors, not answerability values.
-  Cancellation propagates. The embedded runner does not persist or reconcile
-  effects; never claim that local cancellation proves a remote mutation stopped.
+  Compilation reads confined local files only and never discovers endpoints.
+  Supported steps are `decision`, `llm`, `mcp`, `handler` and `finish`.
+- Bind data with tagged literals or RFC 6901 pointers. Earlier results live at
+  `/steps/<id>/result`; public output uses `decisions`. Missing and null differ.
+- Build `WorkflowSchemas(plan)` from frozen schema resources. Never retrieve a
+  schema during an invocation.
+- Decode untrusted bytes with `decode_envelope`. Use `accept_envelope` for optional
+  identity consistency/enrichment and immutable core mapping.
+- Reuse one local `CapacityLimiter` for application admission and the configured
+  per-model/per-tool limiters. Each invocation owns records, budgets, identity
+  context and trace context. Shared clients must hold no caller state.
+- `WorkflowRunner.run` returns the result for the current call only. Map internal
+  values through `to_execution_result`; do not serialize core dataclasses.
+- Reserve model/tool attempts before external I/O. Missing usage is unknown, not
+  zero. Keep operation timeouts inside the original monotonic run deadline.
+- Cancellation propagates. It never proves a remote operation stopped. A started
+  blocking SDK call retains capacity until it actually finishes.
+- Handlers are trusted host registrations, never YAML imports. Keep external
+  effects read-only; writes needing durable operation identity are out of scope.
 
-For model steps, construct `ModelProfiles`, then own `open_model_bindings` in the
-application lifespan. Inject `ModelExecutor(bindings, schemas)` into the runner.
-Aliases and model IDs are explicit; no `/models` discovery. Structured output
-mode is `native` or `tool`, not a prompt-only fallback. Tool mode only formats the
-output; it does not grant function-tool access. Store credentials outside profiles
-and pass environment references. The factory disables SDK retries, validates
-effective options and closes clients even when startup fails.
+## Models
 
-Native decisions use shared semantic/evidence validation. LLM schema references are fully inlined
-offline for providers; public results unwrap the provider's `value` object and
-are checked against the original schema. Dynamic/recursive provider schemas fail
-before inference. Use non-strict provider mode for authored schemas to preserve
-constraints; Anthropic requires `tool` mode for these steps. Local provider
-preflight precedes admission and accounting; unsupported modes never silently
-switch or consume an attempt. Never relax validation to accept a refusal or truncated reply.
-Missing token measurements remain unknown. Bedrock remains incomplete; do not
-imply it is ready because its dependencies or contracts exist.
+Construct `ModelProfiles`, own `open_model_bindings` for the application lifetime,
+and inject `ModelExecutor`. Aliases and model IDs are explicit; no `/models`
+discovery or hidden SDK retries. Structured output uses supported native or tool
+mode, followed by independent host validation. Fully inline confined local schema
+references for provider calls. Reject unsupported dynamic/recursive schemas and
+provider/mode combinations before admission or attempt reservation.
 
-For MCP, reuse `McpProfiles` and the existing `DeclaredToolCatalog`. Construct
-`McpClientSessionFactory` once and inject it plus a `ToolAuthorizer` into
-`McpRuntime`. Bootstrap supplies a declared-read policy; a host can inject a
-stricter authorizer through `RuntimePlugins`. Use `McpExecutor` for explicit calls
-or inject the runtime into `ModelExecutor(..., tools=runtime)`. `supports_tools`
-is a model capability, not permission. Every step allowlists tools and every call
-reauthorizes its frozen arguments against the current trusted identity. Do not
-share authenticated SDK clients or mutable token state between callers.
+Native decisions use the shared strict contract and semantic validator. Refusals,
+truncation and invalid output remain failures. No prompt-only structured-output
+fallback is allowed. Never relax validation merely to obtain a result.
 
-Catalog schema drift, duplicate names, pagination cycles and oversized catalogs
-fail closed. Tool results use declared schema validation; nontext blocks are not
-silently discarded. Required/named choices need a successful validated call in
-model context, then allow final output. Automatic interaction/retry rounds are
-disabled. MCP input-required becomes `needs_review`; interactive continuation and
-write-effect execution await durable identity/reconciliation support.
+## MCP and OAuth
 
-MCP HTTP auth profiles contain a registered credential-hook ID, never a token. Use
-`SdkOAuthCredentialProvider` with explicit allowed HTTPS authorization origins
-and a host storage factory partitioned by the complete credential scope, with
-protection at rest. Interactive callbacks are for explicit operator login only;
-normal runs use stored/refreshable credentials and never launch a browser. Pass
-only present trusted IDs under the configured domain-qualified `_meta` key;
-forward W3C trace fields separately, without baggage or business metadata.
-Stdio uses trusted command/args and the SDK's fixed safe environment baseline
-plus an explicit overlay. Never copy all environment secrets into a child.
+Reuse `McpProfiles`, `DeclaredToolCatalog`, `McpClientSessionFactory` and
+`McpRuntime`. Use the maintained MCP SDK for Streamable HTTP and stdio. Discovery
+must match the configured catalog; validate and freeze arguments before host tool
+authorization and I/O, and validate results independently. Every step allowlists
+its tools. Required or named tool choice needs a successful validated call.
+Input-required ends in `needs_review`; do not add automatic interaction rounds.
 
-Use native async I/O. A blocking-only SDK uses the owned bounded
-`BlockingExecutor` plus SDK timeouts; started workers retain capacity after caller
-cancellation. Keep request identity, auth and trace state off shared mutable
-adapters. Only safe allowlisted events reach the JSON logger, never raw errors,
-prompts, responses or credentials.
+MCP OAuth profiles contain a credential-hook ID, never a token. Use
+`SdkOAuthCredentialProvider` with explicit allowed HTTPS authorization origins and
+host-owned protected token storage partitioned by complete server/resource/auth
+and optional tenant/principal context. Interactive login is an explicit operator
+action. Never put tokens in model messages, tool arguments, metadata, logs or
+traces. Stdio receives the fixed safe environment baseline plus the configured
+overlay, not the entire process environment.
 
-## Durable storage boundaries
+Caller-supplied optional identity context may be forwarded only in the configured
+domain-qualified MCP `_meta` field. Forward W3C trace fields separately without
+baggage. MCP OAuth and `ToolAuthorizer` protect the external tool boundary; they
+do not implement application authentication.
 
-Read the [storage guide](../../service/STORAGE.md) for the async `ExecutionStore`,
-`PostgresStore`, and `PersistentStepBudget`. Keep SQL and Psycopg imports in the
-storage adapter; immutable values and the port stay dependency-free. Migration
-is explicit. Configure safe logging before SDK startup, including pool startup.
-Use a real disposable PostgreSQL database to test recovery and transactions.
+## Async ownership and safe observations
 
-Every write needs live ownership and a fence; never use local wall time to
-replace database lease/deadline checks. Preserve exact optional identity scope,
-idempotency input identity, checkpoint transitions, and attempt counts across
-reclaim. Reserve before external I/O, never keep the transaction open during it,
-and never turn missing usage into zero. Result delivery has independent attempts
-and fencing; consumers deduplicate its stable ID. This storage implementation
-does not enable write effects or make the current HTTP runner durable.
+Use native async I/O. Put blocking SDK work behind the owned bounded
+`BlockingExecutor` plus SDK timeouts. Do not create per-request event loops, call
+`asyncio.run` in runtime code, block the loop, or launch unbounded tasks. Open
+shared clients once in bootstrap and close them only after active work drains.
+Report incomplete cleanup safely.
 
-For recovery work, read the [worker guide](../../service/WORKERS.md). Reuse
-`ExecutionMachine` for binding, routing, restore validation and terminal output;
-do not fork a second routing implementation. `ExecutionWorker` accepts exact
-revision bindings and owns bounded polling, heartbeat and cancellation tasks.
-Remaining time comes from the database and is anchored before claim on the local
-monotonic clock. Refresh ownership/check cancellation before I/O. Read total
-persisted usage before finalization; preserve store-error provenance through
-executor exception handling. A failed checkpoint discards uncommitted local state.
+Use safe JSON logging with fixed allowlisted fields. Diagnostics, errors, logs and
+telemetry never contain payloads, identities, prompts, responses, tool values,
+credentials or raw exceptions. The caller-facing `ExecutionResult` intentionally
+contains its accepted business payload and validated step outputs.
 
-Shutdown closes intake and retains uncooperative work/lease guardians. Check
-`aclose()`; false forbids closing shared clients. Do not release ownership while
-an old read remains active or claim that coroutine cancellation stopped a remote
-operation. Add real PostgreSQL recovery/cancellation tests, not a memory-only
-simulation. CLI/HTTP durability and write effects still need their own integration.
+Optional telemetry requires an explicit endpoint. Sanitize spans before queueing,
+including SDK events and tool definitions. Use configured bounded labels only.
+Observation/export failures cannot replace the business result. Embedded use must
+not silently replace a host global tracer.
 
-## Safe observations
+## CLI, HTTP example and checks
 
-Use the `telemetry` extra and `TelemetryRuntime.build` with explicit signal URLs,
-header environment references and a reviewed `TelemetryLabels` allowlist. Missing
-or empty endpoints allocate no exporters. Keep runtime ownership in bootstrap;
-`install_global()` is explicit for the MCP SDK and refuses an existing host
-provider. Pass `WorkflowTelemetry` to the runner, `ModelTelemetry` to the model
-executor and W3C `trace_carrier` to MCP. Do not patch SDK global tracers or reset
-OTel globals between tests; isolate global installation tests in a subprocess.
+The package supports offline `init`, `validate`, `explain`, `doctor` and foreground
+`run`. Offline commands do not open model/MCP endpoints. There is no migration,
+queue worker, durable lookup/cancel or packaged HTTP server command.
 
-Never bypass `SafeSpanProcessor`: it sanitizes before batch queueing, including
-SDK exception events, tool definitions, names and resource/scope/link metadata.
-Disabling model content capture alone is insufficient. Keep PydanticAI raw
-metrics disabled; host counters use actual measurement presence, not default
-zeros or duplicate component totals. Approve labels at startup, never from input.
-No identity, prompts, responses or baggage belongs in observations. Configure
-safe JSON logging before SDK initialization, including debug runs. Shutdown is
-async/bounded; report incomplete telemetry cleanup without changing a completed
-business outcome. See the service guide and the embedded `--telemetry` example.
-
-## Checks
+The runnable HTTP example is a thin adapter around one in-memory call. It may not
+create detached jobs or imply authentication, persistence, recovery or production
+hosting. Keep its request/result shapes aligned with generated envelope and
+execution-result schemas.
 
 From `service/`:
 
@@ -182,8 +133,6 @@ uv run --no-sync ruff format --check src tests scripts
 uv run --no-sync python scripts/generate_schemas.py --check
 ```
 
-Update canonical boundary types and regenerate service schemas together. Keep
-the root example executable and test real compiler/validator/runner integration,
-concurrent isolation, cancellation and error redaction with offline adapters.
-Default tests must not discover endpoints or issue model requests. Protocol
-simulation is not evidence of live model accuracy or production recovery.
+Tests use synthetic inputs and offline adapters by default. Protocol fixtures prove
+wire behavior, not live provider accuracy, application security, persistence or
+production recovery.

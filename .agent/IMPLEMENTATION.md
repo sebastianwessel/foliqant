@@ -102,6 +102,8 @@ integration boundaries, not only with primitive semaphore tests.
 Use fixed safe logging events. Only sanitized JSON strings enter the bounded log
 queue, never raw records or exceptions. Keep shutdown joins off the event loop
 and check incomplete-drain results. Compilation is startup work; execution uses
-frozen plans and immutable accepted input. No database transaction may stay open
-while awaiting an external model/tool call. Record uncertain mutations instead
-of assuming cancellation makes retry safe.
+frozen plans and immutable accepted input. The service pipeline is in-memory only: do not add persistence, job queues,
+background workers, application authentication or HTTP/Redis ingress. Transport
+wrappers belong to examples or the embedding application. MCP OAuth is outbound
+tool support, not application authentication. Do not assume cancellation makes
+remote mutations safe to retry.

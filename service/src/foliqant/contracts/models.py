@@ -118,18 +118,8 @@ class AnthropicModelConfig(_ModelConfig):
     options: AnthropicOptions = Field(default_factory=AnthropicOptions)
 
 
-class BedrockModelConfig(_ModelConfig):
-    provider: Literal["bedrock"]
-    region: Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)+$")]
-    options: GenerationOptions = Field(default_factory=GenerationOptions)
-
-
 ModelConfig = Annotated[
-    OpenAIModelConfig
-    | CompatibleModelConfig
-    | AzureModelConfig
-    | AnthropicModelConfig
-    | BedrockModelConfig,
+    OpenAIModelConfig | CompatibleModelConfig | AzureModelConfig | AnthropicModelConfig,
     Field(discriminator="provider"),
 ]
 

@@ -334,7 +334,7 @@ async def test_anthropic_adaptive_settings_are_transmitted_or_rejected_from_prof
 
 
 @pytest.mark.asyncio
-async def test_missing_secret_bedrock_and_ambient_headers_fail_closed(
+async def test_missing_secret_and_ambient_headers_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     openai_profile = _profiles(
@@ -350,21 +350,6 @@ async def test_missing_secret_bedrock_and_ambient_headers_fail_closed(
     with pytest.raises(ServiceError) as error:
         async with open_model_bindings(openai_profile, environment={}):
             pytest.fail("missing secret was accepted")
-    assert error.value.code == ErrorCode.INVALID_CONFIGURATION
-
-    bedrock_profile = _profiles(
-        {
-            "model": {
-                "provider": "bedrock",
-                "region": "eu-central-1",
-                "model": "anthropic.claude-sonnet-4-6-v1:0",
-                "output_mode": "tool",
-            }
-        }
-    )
-    with pytest.raises(ServiceError) as error:
-        async with open_model_bindings(bedrock_profile, environment={}):
-            pytest.fail("ambient AWS credential discovery was enabled")
     assert error.value.code == ErrorCode.INVALID_CONFIGURATION
 
     monkeypatch.setenv("OPENAI_CUSTOM_HEADERS", "X-Unsafe: process-value")
@@ -415,11 +400,10 @@ async def test_partial_construction_failure_closes_prior_client(
                 "model": "gpt-4o-mini",
                 "output_mode": "tool",
             },
-            "unsafe_bedrock": {
-                "provider": "bedrock",
-                "region": "eu-central-1",
-                "model": "anthropic.claude-sonnet-4-6-v1:0",
-                "output_mode": "tool",
+            "missing_anthropic_secret": {
+                "provider": "anthropic",
+                "model": "claude-3-5-sonnet-latest",
+                "output_mode": "native",
             },
         }
     )

@@ -15,7 +15,6 @@ from pydantic_ai.settings import ModelSettings
 from foliqant.contracts.models import (
     AnthropicModelConfig,
     AzureModelConfig,
-    BedrockModelConfig,
     CompatibleModelConfig,
     ModelConfig,
     ModelProfiles,
@@ -369,12 +368,6 @@ def _build_one(
         return _build_azure(config, environment, owned_clients)
     if isinstance(config, AnthropicModelConfig):
         return _build_anthropic(config, environment, owned_clients)
-    if isinstance(config, BedrockModelConfig):
-        # A region alone makes boto3 use its ambient credential provider chain,
-        # which may perform EC2 metadata I/O during construction. The contract
-        # needs explicit credentials or an explicit provider-chain opt-in plus a
-        # separately bounded worker policy before this can be safe.
-        raise _invalid_configuration()
     raise _invalid_configuration()
 
 

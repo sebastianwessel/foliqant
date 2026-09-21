@@ -72,7 +72,7 @@ def prepare_application(
                 isinstance(step, HandlerStepPlan) and registered[step.handler].effect != "read"
                 for step in plan.steps
             ):
-                raise ValueError("write handlers require durable execution")
+                raise ValueError("write handlers are unsupported by the read-only pipeline")
             if plan.name != name:
                 raise ValueError("workflow name differs from deployment key")
             plans[name] = plan

@@ -16,10 +16,6 @@ requirements:
     capability_ids: [CAP-SERVICE-MCP]
     path_ids: [PATH-SERVICE-MCP-SUCCESS, PATH-SERVICE-MCP-FAILURE]
     acceptance_ids: [ACCEPT-SERVICE-MCP]
-  - requirement_id: REQ-SERVICE-DURABILITY
-    capability_ids: [CAP-SERVICE-DURABILITY]
-    path_ids: [PATH-SERVICE-DURABILITY-SUCCESS, PATH-SERVICE-DURABILITY-FAILURE]
-    acceptance_ids: [ACCEPT-SERVICE-DURABILITY]
   - requirement_id: REQ-SERVICE-PRIVACY
     capability_ids: [CAP-SERVICE-PRIVACY]
     path_ids: [PATH-SERVICE-PRIVACY-SUCCESS, PATH-SERVICE-PRIVACY-FAILURE]
@@ -149,9 +145,6 @@ capabilities:
   - capability_id: CAP-SERVICE-MCP
     requirement_ids: [REQ-SERVICE-MCP]
     path_ids: [PATH-SERVICE-MCP-SUCCESS, PATH-SERVICE-MCP-FAILURE]
-  - capability_id: CAP-SERVICE-DURABILITY
-    requirement_ids: [REQ-SERVICE-DURABILITY]
-    path_ids: [PATH-SERVICE-DURABILITY-SUCCESS, PATH-SERVICE-DURABILITY-FAILURE]
   - capability_id: CAP-SERVICE-PRIVACY
     requirement_ids: [REQ-SERVICE-PRIVACY]
     path_ids: [PATH-SERVICE-PRIVACY-SUCCESS, PATH-SERVICE-PRIVACY-FAILURE]
@@ -284,18 +277,6 @@ paths:
     kind: failure
     contract_refs: [CONTRACT-SERVICE-V1]
     acceptance_ids: [ACCEPT-SERVICE-MCP]
-  - path_id: PATH-SERVICE-DURABILITY-SUCCESS
-    capability_ids: [CAP-SERVICE-DURABILITY]
-    requirement_ids: [REQ-SERVICE-DURABILITY]
-    kind: success
-    contract_refs: [CONTRACT-SERVICE-V1]
-    acceptance_ids: [ACCEPT-SERVICE-DURABILITY]
-  - path_id: PATH-SERVICE-DURABILITY-FAILURE
-    capability_ids: [CAP-SERVICE-DURABILITY]
-    requirement_ids: [REQ-SERVICE-DURABILITY]
-    kind: failure
-    contract_refs: [CONTRACT-SERVICE-V1]
-    acceptance_ids: [ACCEPT-SERVICE-DURABILITY]
   - path_id: PATH-SERVICE-PRIVACY-SUCCESS
     capability_ids: [CAP-SERVICE-PRIVACY]
     requirement_ids: [REQ-SERVICE-PRIVACY]
@@ -618,10 +599,6 @@ acceptance:
   - acceptance_id: ACCEPT-SERVICE-MCP
     requirement_ids: [REQ-SERVICE-MCP]
     path_ids: [PATH-SERVICE-MCP-SUCCESS, PATH-SERVICE-MCP-FAILURE]
-    verification_refs: [11-workflow-service.md#developer-experience-artifacts-and-acceptance]
-  - acceptance_id: ACCEPT-SERVICE-DURABILITY
-    requirement_ids: [REQ-SERVICE-DURABILITY]
-    path_ids: [PATH-SERVICE-DURABILITY-SUCCESS, PATH-SERVICE-DURABILITY-FAILURE]
     verification_refs: [11-workflow-service.md#developer-experience-artifacts-and-acceptance]
   - acceptance_id: ACCEPT-SERVICE-PRIVACY
     requirement_ids: [REQ-SERVICE-PRIVACY]

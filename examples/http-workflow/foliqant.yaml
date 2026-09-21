@@ -1,17 +1,5 @@
 version: 1
-mode: production
 workflows:
   hello: workflows/hello
 models: {}
 mcp: {}
-http:
-  host: 127.0.0.1
-  port: 8765
-  auth:
-    type: bearer
-    bindings:
-      local_operator:
-        token_env: FOLIQANT_HTTP_EXAMPLE_TOKEN
-        principal_id: example_operator
-        workflows:
-          - hello

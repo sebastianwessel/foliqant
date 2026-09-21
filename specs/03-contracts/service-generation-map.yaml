@@ -9,9 +9,8 @@ entries:
     drift_check: uv run --project service python service/scripts/generate_schemas.py --check
     handwritten_remainder:
       - path confinement, offline compilation, immutable snapshots and secret-free effective revisions
-      - loopback development policy, workflow grants and signature verification with bounded JWKS caching
-      - asynchronous lifecycle, admission, handler schema validation and transport cancellation
-    verification: [../../service/tests/test_bootstrap.py, ../../service/tests/test_auth.py, ../../service/tests/test_http.py, ../../service/tests/test_application_http.py, ../../service/tests/test_cli.py, ../../service/tests/test_server_lifespan.py]
+      - asynchronous application lifecycle, local admission and handler schema validation
+    verification: [../../service/tests/test_bootstrap.py, ../../service/tests/test_cli.py]
   - id: GEN-SERVICE-TELEMETRY
     canonical_source: ../../service/src/foliqant/contracts/telemetry.py
     generated_outputs: [../../contracts/service/telemetry.schema.json]
@@ -27,7 +26,7 @@ entries:
     command: uv run --project service python service/scripts/generate_schemas.py
     drift_check: uv run --project service python service/scripts/generate_schemas.py --check
     handwritten_remainder:
-      - confined schema validation, exact discovery matching and identity-scoped credential hooks
+      - confined schema validation, exact discovery matching and caller-context-scoped credential hooks
     verification: [../../service/tests/test_mcp_configuration.py, ../../service/tests/test_mcp_catalog.py, ../../service/tests/test_mcp_runtime.py, ../../service/tests/test_mcp_transport.py]
   - id: GEN-SERVICE-MODEL-PROFILES
     canonical_source: ../../service/src/foliqant/contracts/models.py
@@ -44,13 +43,12 @@ entries:
     drift_check: uv run --project service python service/scripts/generate_schemas.py --check
     handwritten_remainder:
       - raw JSON decoder rejects duplicate keys and enforces byte/depth limits
-      - trusted identity binding and immutable core mapping
+      - optional identity consistency/enrichment and immutable core mapping
     verification: [../../service/tests/test_envelope.py, ../../service/tests/test_decoding.py]
   - id: GEN-SERVICE-EXECUTION
     canonical_source: ../../service/src/foliqant/contracts/execution.py
     generated_outputs:
       - ../../contracts/service/execution-result.schema.json
-      - ../../contracts/service/acceptance-receipt.schema.json
     command: uv run --project service python service/scripts/generate_schemas.py
     drift_check: uv run --project service python service/scripts/generate_schemas.py --check
     handwritten_remainder:
@@ -81,11 +79,6 @@ entries:
       - cross-field invariants remain strict Pydantic runtime validators
     verification: [../../service/tests/test_compiler.py, ../../service/tests/test_bindings.py]
 
-# Internal dataclasses and SQL are not a second public JSON Schema contract.
-# Persistence reuses generated envelope/execution boundaries above; the owned
-# SQL migration is hashed and verified explicitly at migrate/use time.
-# Custom row mapping and digest vectors are covered by MAP-SERVICE-DURABLE-ROWS.
-
-# ExecutionMachine and WorkflowBinding are internal Python composition, not a
-# new wire format. Worker restore reuses storage Checkpoint and generated public
-# ExecutionResult boundaries; no handwritten duplicate JSON schemas are added.
+# Internal in-memory dataclasses are not a second public JSON Schema contract.
+# The small HTTP example maps the generated envelope and ExecutionResult shapes;
+# it adds no accepted-job, persistence, lookup or transport schema.

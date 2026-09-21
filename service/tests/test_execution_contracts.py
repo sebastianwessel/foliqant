@@ -8,7 +8,6 @@ from pydantic import ValidationError
 
 from foliqant.contracts.envelope import Metadata
 from foliqant.contracts.execution import (
-    AcceptanceReceipt,
     ExecutionInfo,
     ExecutionResult,
     SafeError,
@@ -379,17 +378,3 @@ def test_malformed_core_error_code_fails_without_exposing_its_value() -> None:
     assert error.value.code == ErrorCode.INVALID_OUTPUT
     assert "PRIVATE_UNKNOWN_CODE" not in str(error.value)
     assert error.value.__suppress_context__
-
-
-def test_acceptance_receipt_is_closed_and_literal() -> None:
-    assert AcceptanceReceipt(execution_id="run-123", status="accepted").model_dump(mode="json") == {
-        "execution_id": "run-123",
-        "status": "accepted",
-    }
-    for invalid in (
-        {"execution_id": "", "status": "accepted"},
-        {"execution_id": "run-123", "status": "completed"},
-        {"execution_id": "run-123", "status": "accepted", "result": None},
-    ):
-        with pytest.raises(ValidationError):
-            AcceptanceReceipt.model_validate(invalid, strict=True)

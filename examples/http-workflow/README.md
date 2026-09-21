@@ -1,54 +1,43 @@
-# Authenticated HTTP workflow example
+# Small HTTP example
 
-This model-free workflow finishes deterministically. It makes no model, MCP, or
-external network calls. From the repository root, prepare the locked service
-environment and validate the strict deployment YAML:
+The pipeline itself has no server, authentication, job queue or database. This
+example adds one local HTTP handler: read an envelope, await the pipeline, return
+the result. The configured finish step returns the original payload without
+calling a model. Every request is independent and nothing is persisted.
+
+From the repository root:
 
 ```sh
-uv sync --project service --locked --no-dev --extra http
-uv run --project service --no-sync foliqant validate \
-  --config examples/http-workflow/foliqant.yaml
-uv run --project service --no-sync foliqant explain \
-  --config examples/http-workflow/foliqant.yaml --workflow hello
+uv sync --project service --locked --group http-example
+uv run --project service --no-sync python examples/http-workflow/server.py
 ```
 
-Run the same workflow directly through the nondurable CLI boundary:
+In a second terminal:
+
+```sh
+curl --fail-with-body http://127.0.0.1:8765/run \
+  -H 'Content-Type: application/json' \
+  -d '{"payload":{"message":"Hallo"},"metadata":{"reference":"example"}}'
+```
+
+The response contains the payload, metadata, step results and execution status.
+It completes within the request. There is no job ID lookup, retry queue, result
+store or background execution. Ctrl+C stops the example.
+
+The handler is deliberately unauthenticated and binds only to loopback. It
+supplies an empty identity context, so the body cannot establish a tenant or
+principal. Your application decides how caller context is obtained; that is
+outside the pipeline. The example bounds body size and read time, and returns
+safe errors without exposing raw exceptions.
+
+Starlette and Uvicorn belong to the `http-example` dependency group, not production
+pipeline dependencies. Use a different transport by calling the same
+`open_application(...).run(...)` API from your own adapter.
+
+You can also run the same input without HTTP:
 
 ```sh
 uv run --project service --no-sync foliqant run \
   --config examples/http-workflow/foliqant.yaml \
-  --workflow hello \
-  --input examples/http-workflow/envelope.json
+  --workflow hello --input examples/http-workflow/envelope.json
 ```
-
-`run` receives trusted identity only from its explicit `--tenant-id` and
-`--principal-id` operator options; the HTTP bearer profile does not authenticate
-the local CLI invocation.
-
-To exercise the synchronous HTTP boundary, choose a local secret and start the
-server in one terminal:
-
-```sh
-export FOLIQANT_HTTP_EXAMPLE_TOKEN='replace-with-a-local-secret'
-uv run --project service --no-sync foliqant serve \
-  --config examples/http-workflow/foliqant.yaml
-```
-
-Then submit the envelope from another terminal:
-
-```sh
-export FOLIQANT_HTTP_EXAMPLE_TOKEN='replace-with-the-same-local-secret'
-curl --fail-with-body \
-  -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer ${FOLIQANT_HTTP_EXAMPLE_TOKEN}" \
-  --data-binary @examples/http-workflow/envelope.json \
-  http://127.0.0.1:8765/workflows/hello/runs
-```
-
-The configured token grants access only to `hello` and establishes the example
-principal. The response contains a terminal execution result with that protected
-identity added to metadata. The token value stays in the process environment and
-must not be committed. This server executes requests synchronously in memory: it
-does not create a detached job, persist progress, or provide retrieval/cancel
-endpoints after a process restart. Keep this plain-HTTP example on loopback;
-nonlocal bearer or JWT deployment requires trusted TLS termination.

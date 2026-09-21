@@ -1,6 +1,6 @@
 """Strict public execution results mapped from immutable engine values."""
 
-from typing import Annotated, Literal, Self, cast
+from typing import Annotated, Self, cast
 
 from pydantic import (
     BeforeValidator,
@@ -234,11 +234,6 @@ class ExecutionResult(_ExecutionBoundary):
             except (TypeError, ValueError):
                 raise ValueError("invalid metadata") from None
         return value
-
-
-class AcceptanceReceipt(_ExecutionBoundary):
-    execution_id: _NonBlank
-    status: Literal["accepted"]
 
 
 def _safe_error(failure: Failure) -> dict[str, JsonValue]:

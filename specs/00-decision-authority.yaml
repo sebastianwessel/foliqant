@@ -5,10 +5,11 @@ default_allowed_classes:
 decisions:
   - decision_id: DEC-WORKFLOW-SERVICE
     class: D2
-    authority: explicit project-owner instruction to implement the accepted modular
-      service in Python using PydanticAI and delegate research/review/routine choices
+    authority: explicit project-owner instruction to keep the Python/PydanticAI
+      service as a simple in-memory input-to-result pipeline, with persistence,
+      queue workers, application authentication and packaged transports out of scope
     scope_refs: [CAP-SERVICE-CONTRACTS, CAP-SERVICE-COMPILER, CAP-SERVICE-RUNTIME,
-      CAP-SERVICE-MCP, CAP-SERVICE-DURABILITY, CAP-SERVICE-PRIVACY, CAP-SERVICE-DX]
+      CAP-SERVICE-MCP, CAP-SERVICE-PRIVACY, CAP-SERVICE-DX]
     source_refs: [11-workflow-service.md]
     status: implementation mandate; no fabricated digest-bound human or production approval
   - decision_id: DEC-CATEGORY-CATALOG-AUTHORING

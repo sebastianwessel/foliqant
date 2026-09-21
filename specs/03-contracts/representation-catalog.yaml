@@ -2,6 +2,9 @@ catalog_version: 1
 applicability:
   status: applicable
   scope_refs:
+    - CAP-SERVICE-CONTRACTS
+    - CAP-SERVICE-RUNTIME
+    - CAP-SERVICE-PRIVACY
     - CAP-ENV
     - CAP-DATA
     - CAP-MODEL
@@ -14,24 +17,6 @@ applicability:
     - CAP-CURATE
     - CAP-NATIVE-DATA
 shapes:
-  - shape_id: service.durable-state
-    representation_class: domain
-    canonical_source: ../service/src/foliqant/core/storage.py
-    owner: service-durable-storage
-    stability: internal
-    open_policy: closed
-    allowed_consumers: [durable-worker, storage-adapters]
-    source_contract_refs: [CONTRACT-SERVICE-STORAGE-V1]
-    mapping_refs: [MAP-SERVICE-DURABLE-ROWS]
-  - shape_id: service.postgres-rows
-    representation_class: persistence
-    canonical_source: 12-durable-execution.md
-    owner: service-postgres
-    stability: versioned
-    open_policy: closed
-    allowed_consumers: [service-postgres]
-    source_contract_refs: [CONTRACT-SERVICE-STORAGE-V1]
-    mapping_refs: [MAP-SERVICE-DURABLE-ROWS]
   - shape_id: service.envelope
     representation_class: boundary
     canonical_source: ../service/src/foliqant/contracts/envelope.py
@@ -514,26 +499,18 @@ shapes:
     mapping_refs:
       - MAP-SCOPED-SOURCE-PROJECTION
 mappings:
-  - mapping_id: MAP-SERVICE-DURABLE-ROWS
-    from_shape: service.durable-state
-    to_shape: service.postgres-rows
-    direction: custom
-    allowed_differences: [database-clock-timestamps, canonical-digests, lease-fences, normalized-json]
-    redaction_or_loss_policy: Preserve accepted content and identity privately; no credentials or raw SQL errors in diagnostics.
-    field_operations: [identity:exact-scope, input:canonical-digest, checkpoints:immutable, usage:preserve-unknown]
-    verification: [service/tests/test_postgres_store.py, 12-durable-execution.md]
   - mapping_id: MAP-SERVICE-ACCEPT-ENVELOPE
     from_shape: service.envelope
     to_shape: service.accepted-envelope
     direction: boundary_to_domain
-    allowed_differences: [populate_missing_verified_identity, recursively_freeze_json]
+    allowed_differences: [derive_or_enrich_optional_identity_context, recursively_freeze_json]
     redaction_or_loss_policy: No business fields are omitted or coerced; mismatched
-      protected claims reject; absent verified identity stays absent.
+      optional context rejects when an explicit caller identity differs.
     field_operations:
       - payload:copy:immutable_json
       - metadata:copy:immutable_json
-      - metadata.tenant_id:validate_against_trusted_context_and_populate_if_absent
-      - metadata.principal_id:validate_against_trusted_context_and_populate_if_absent
+      - metadata.tenant_id:derive_context_or_validate_and_enrich_from_explicit_identity
+      - metadata.principal_id:derive_context_or_validate_and_enrich_from_explicit_identity
     verification: [../service/tests/test_envelope.py, ../service/tests/test_decoding.py]
   - mapping_id: MAP-CATEGORY-OPTIONS
     from_shape: model.category-catalog

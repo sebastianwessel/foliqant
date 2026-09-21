@@ -2,9 +2,9 @@
 
 Future business-process semantics live in `10-business-decisions-and-processes.md`;
 candidate sources and their limitations live in `research/business-process-datasets.md`.
-These documents add no runtime module or executable download profile. The proposed
-service core remains separate from model tooling; exact future schema generation
-and module contracts must be settled before implementation.
+These documents add no runtime module or executable download profile. The active
+in-memory service remains separate from model tooling and is governed by
+specification 11 and the service-specific inventories.
 
 Scoped native source preparation lives in `curation/source_projections.py`
 (pure adapters), `projection_contracts.py` (closed plan/report contracts),
@@ -13,7 +13,7 @@ Scoped native source preparation lives in `curation/source_projections.py`
 `scripts/prepare-source-projections` expose preparation without importing a GPU
 backend or contacting a model. Plans and reports live outside the checkout.
 
-`pyproject.toml` and `uv.lock`: single Python distribution for model tooling. `model/src/foliqant_model/`: a contracts/ package with explicit public re-exports, CLI, data, artifacts, MLX backend, training, evaluation, calibration and export modules. Keep backend imports lazy. `model/tests/`: unit/contract/CLI tests and a marked real integration lifecycle. `model/examples/`: YAML recipes and optional diagnostic-data generation code, never dataset files. Downloaded/prepared data and model weights live in the external local setup workspace; project-local overrides must be ignored. `model/base/`, `model/customization/`, `model/evaluation/`, `model/export/`: task-oriented recipes and pointers, not parallel copies of code. `contracts/model/`: generated schemas. `scripts/`: schema/docs/skill verification commands. `skills/foliqant-model/`: installable agent skill. `docs/`: user guides. `specs/`: implementation requirements and research. `plans/`: readiness/review evidence and implementation tracking. `artifacts/`, `runs/`, `.venv/`: ignored local outputs. Existing `service/`, `workflows/`, `config/service.example.yaml` are outside this goal and must remain clearly separate proposals.
+`pyproject.toml` and `uv.lock`: single Python distribution for model tooling. `model/src/foliqant_model/`: a contracts/ package with explicit public re-exports, CLI, data, artifacts, MLX backend, training, evaluation, calibration and export modules. Keep backend imports lazy. `model/tests/`: unit/contract/CLI tests and a marked real integration lifecycle. `model/examples/`: YAML recipes and optional diagnostic-data generation code, never dataset files. Downloaded/prepared data and model weights live in the external local setup workspace; project-local overrides must be ignored. `model/base/`, `model/customization/`, `model/evaluation/`, `model/export/`: task-oriented recipes and pointers, not parallel copies of code. `contracts/model/`: generated schemas. `scripts/`: schema/docs/skill verification commands. `skills/foliqant-model/`: installable agent skill. `docs/`: user guides. `specs/`: implementation requirements and research. `plans/`: readiness/review evidence and implementation tracking. `artifacts/`, `runs/`, `.venv/`: ignored local outputs. The independent `service/` project and `skills/foliqant-service/` implement the bounded in-memory workflow scope without entering model-tooling runtime dependencies.
 
 No package imports the workflow service or PURISTA. Data and artifact modules are MLX-independent. MLX backend depends on typed contracts and subprocess utilities, not CLI parsing. CLI composes modules. Evaluation and export use backend interfaces and verified artifact identities. Canonical closed contract types are reused, and schema generation is one-way from their source.
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-import sys
 from collections.abc import AsyncIterator, Mapping
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
@@ -26,7 +25,6 @@ from foliqant.core.identity import Identity
 from foliqant.core.json import FrozenObject
 from foliqant.core.plan import HandlerStepPlan, McpStepPlan
 from foliqant.core.runner import WorkflowRunner
-from foliqant.ports.auth import AuthenticatedCaller, Authenticator
 from foliqant.ports.execution import OperationStep, StepContext, StepExecutor
 from foliqant.ports.observation import ExecutionObserver, TraceContext
 from foliqant.settings import PreparedApplication, load_environment, prepare_application
@@ -83,8 +81,8 @@ class _DeclaredReadAuthorizer:
     async def authorize(
         self, server: str, tool: str, arguments: FrozenObject, context: StepContext
     ) -> None:
-        # Input adapters grant workflow access; the compiled step bounds its tools.
-        # A host can replace this policy for resource-specific business permissions.
+        # The host-declared workflow and step bound the available tools. A host can
+        # replace this policy for resource-specific business permissions.
         from foliqant.core.plan import LlmStepPlan
 
         plan = self._plans.get(context.workflow)
@@ -127,23 +125,31 @@ class WorkflowApplication:
         workflow: str,
         envelope: Envelope,
         *,
-        identity: Identity,
+        identity: Identity | None = None,
         transport_trace: TraceContext | None = None,
     ) -> ExecutionResult:
-        """Execute as an already authenticated/authorized host caller."""
+        """Execute with optional caller-provided identity context."""
         if not self._ready:
             raise ServiceError(ErrorCode.DEPENDENCY_FAILURE)
         runner = self._runners.get(workflow)
         if runner is None:
             raise ServiceError(ErrorCode.NOT_FOUND)
-        accepted = accept_envelope(envelope, identity)
+        selected_identity = identity or Identity(
+            tenant_id=envelope.metadata.tenant_id,
+            principal_id=envelope.metadata.principal_id,
+        )
+        accepted = accept_envelope(envelope, selected_identity)
         task = asyncio.current_task()
         if task is None:  # Defensive; this async method normally has a caller task.
             raise ServiceError(ErrorCode.DEPENDENCY_FAILURE)
         self._active[task] = self._active.get(task, 0) + 1
         try:
             return to_execution_result(
-                await runner.run(accepted, identity=identity, transport_trace=transport_trace)
+                await runner.run(
+                    accepted,
+                    identity=selected_identity,
+                    transport_trace=transport_trace,
+                )
             )
         finally:
             remaining = self._active[task] - 1
@@ -153,7 +159,7 @@ class WorkflowApplication:
                 del self._active[task]
 
     async def aclose(self, *, timeout: float = 10.0) -> bool:
-        """Stop intake, drain callers and cancel remaining cooperative invocations."""
+        """Stop new runs, drain callers and cancel remaining cooperative invocations."""
         if (
             type(timeout) not in (int, float)
             or not math.isfinite(timeout)
@@ -170,58 +176,6 @@ class WorkflowApplication:
         if pending:
             _, pending = await asyncio.wait(pending, timeout=2.0)
         return not pending
-
-
-class _HttpRuntime:
-    """Protocol-compatible delegate activated only inside the ASGI lifespan."""
-
-    def __init__(self) -> None:
-        self._application: WorkflowApplication | None = None
-        self._authenticator: Authenticator | None = None
-
-    def activate(self, application: WorkflowApplication, authenticator: Authenticator) -> None:
-        if self._application is not None or self._authenticator is not None:
-            raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
-        self._application = application
-        self._authenticator = authenticator
-
-    def deactivate(self) -> None:
-        self._application = None
-        self._authenticator = None
-
-    @property
-    def workflow_names(self) -> tuple[str, ...]:
-        application = self._application
-        return () if application is None else application.workflow_names
-
-    @property
-    def ready(self) -> bool:
-        application = self._application
-        return application is not None and application.ready
-
-    async def run(
-        self,
-        workflow: str,
-        envelope: Envelope,
-        *,
-        identity: Identity,
-        transport_trace: TraceContext | None = None,
-    ) -> ExecutionResult:
-        application = self._application
-        if application is None:
-            raise ServiceError(ErrorCode.DEPENDENCY_FAILURE)
-        return await application.run(
-            workflow,
-            envelope,
-            identity=identity,
-            transport_trace=transport_trace,
-        )
-
-    async def authenticate(self, authorization: str | None) -> AuthenticatedCaller:
-        authenticator = self._authenticator
-        if authenticator is None:
-            raise ServiceError(ErrorCode.DEPENDENCY_FAILURE)
-        return await authenticator.authenticate(authorization)
 
 
 def _report_incomplete() -> None:
@@ -264,7 +218,9 @@ async def open_application(
     plugins: RuntimePlugins | None = None,
     install_global_telemetry: bool = False,
 ) -> AsyncIterator[WorkflowApplication]:
-    """Own clients and optional observations; do no model/MCP calls during startup."""
+    """Own the in-memory runners, clients and optional observations."""
+    from foliqant.lifecycle import drain_before_close
+
     selected = plugins or RuntimePlugins()
     config = prepared.config
     credentials = dict(environment)
@@ -287,9 +243,7 @@ async def open_application(
                         step.name for plan in prepared.plans.values() for step in plan.steps
                     ),
                     models=frozenset(profile.model for profile in config.models.values()),
-                    providers=frozenset(
-                        {"openai", "anthropic", "azure", "aws.bedrock", "function"}
-                    ),
+                    providers=frozenset({"openai", "anthropic", "azure", "function"}),
                     tools=frozenset(
                         tool for server in config.mcp.values() for tool in server.catalog.tools
                     ),
@@ -363,8 +317,7 @@ async def open_application(
             try:
                 yield application
             finally:
-                if not await application.aclose():
-                    _report_incomplete()
+                await drain_before_close(application)
     except (ImportError, ValueError, RuntimeError):
         if application is None:
             raise ServiceError(ErrorCode.INVALID_CONFIGURATION) from None
@@ -374,121 +327,6 @@ async def open_application(
             _report_incomplete()
 
 
-async def serve_application(
-    prepared: PreparedApplication,
-    *,
-    environment: Mapping[str, str],
-    plugins: RuntimePlugins | None = None,
-    debug: bool = False,
-) -> None:
-    """Run HTTP with every runtime resource owned by the standard ASGI lifespan."""
-    try:
-        import uvicorn
-
-        from foliqant.adapters.auth import (
-            BearerAuthenticator,
-            DevelopmentAuthenticator,
-            JwtAuthenticator,
-        )
-        from foliqant.adapters.telemetry.logging import LogLabels, configure_logging
-        from foliqant.adapters.transports.http import create_http_app
-        from foliqant.contracts.auth import BearerAuthConfig, DevelopmentAuthConfig, JwtAuthConfig
-    except ImportError:
-        raise ServiceError(ErrorCode.INVALID_CONFIGURATION) from None
-    config = prepared.config
-    http_config = config.http
-    if http_config is None:
-        raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
-    runtime = _HttpRuntime()
-    logging_runtime = configure_logging(
-        debug=debug,
-        labels=LogLabels(
-            services=frozenset({"foliqant"}),
-            workflows=frozenset(prepared.plans),
-            steps=frozenset(step.name for plan in prepared.plans.values() for step in plan.steps),
-        ),
-    )
-    logging_closed = False
-
-    async def close_logging() -> None:
-        nonlocal logging_closed
-        if logging_closed:
-            return
-        clean = await asyncio.to_thread(logging_runtime.close)
-        logging_closed = True
-        if not clean:
-            try:
-                sys.stderr.write('{"level": "warning", "event": "logging_shutdown_incomplete"}\n')
-                sys.stderr.flush()
-            except Exception:
-                pass
-
-    @asynccontextmanager
-    async def lifespan(_: object) -> AsyncIterator[None]:
-        authenticator: Authenticator | None = None
-        try:
-            auth = http_config.auth
-            if isinstance(auth, BearerAuthConfig):
-                authenticator = BearerAuthenticator(auth, environment=environment)
-            elif isinstance(auth, JwtAuthConfig):
-                authenticator = JwtAuthenticator(auth)
-            elif isinstance(auth, DevelopmentAuthConfig):
-                authenticator = DevelopmentAuthenticator(frozenset(prepared.plans))
-            else:
-                raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
-            async with open_application(
-                prepared,
-                environment=environment,
-                plugins=plugins,
-                install_global_telemetry=True,
-            ) as application:
-                runtime.activate(application, authenticator)
-                try:
-                    yield
-                finally:
-                    runtime.deactivate()
-        finally:
-            if isinstance(authenticator, JwtAuthenticator):
-                await authenticator.aclose()
-            await close_logging()
-
-    app = create_http_app(
-        runtime,
-        runtime,
-        config=http_config,
-        mode=config.mode,
-        lifespan=lifespan,
-    )
-    try:
-        server = uvicorn.Server(
-            uvicorn.Config(
-                app,
-                host=http_config.host,
-                port=http_config.port,
-                log_config=None,
-                access_log=False,
-                proxy_headers=False,
-                server_header=False,
-                timeout_graceful_shutdown=10,
-            )
-        )
-        try:
-            await server.serve()
-        except SystemExit:
-            # Uvicorn uses SystemExit for bind failures after asking the ASGI
-            # lifespan to shut down. Keep CLI failures inside the safe contract.
-            raise ServiceError(ErrorCode.DEPENDENCY_FAILURE) from None
-        if not server.started:
-            # Lifespan startup failures set should_exit without raising back to
-            # the caller. Do not report a successful stopped service.
-            raise ServiceError(ErrorCode.DEPENDENCY_FAILURE)
-    finally:
-        # Handles configuration/server construction and lifespan startup errors.
-        # Normal signal shutdown already closes this inside ASGI lifespan before
-        # Uvicorn restores and replays the process signal.
-        await close_logging()
-
-
 __all__ = [
     "PreparedApplication",
     "RuntimePlugins",
@@ -496,5 +334,4 @@ __all__ = [
     "load_environment",
     "open_application",
     "prepare_application",
-    "serve_application",
 ]

@@ -1,4 +1,4 @@
-"""Per-step attempt accounting for explicitly nondurable embedded execution."""
+"""Per-step attempt accounting for in-memory workflow execution."""
 
 from .errors import ErrorCode, ServiceError
 from .execution import TokenUsage, Usage
@@ -7,8 +7,7 @@ from .execution import TokenUsage, Usage
 class StepBudget:
     """Reserve before I/O; failures and missing reports do not erase attempts.
 
-    Each instance belongs to one step execution on one event loop. Production
-    durable adapters must persist reservations before issuing external requests.
+    Each instance belongs to one step execution on one event loop.
     """
 
     def __init__(self, *, model_requests: int, tool_calls: int) -> None:

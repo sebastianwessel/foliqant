@@ -1,64 +1,63 @@
 module_boundary_version: 1
 modules:
-  - module_id: service-execution-machine
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/core/machine.py
-    public_symbols: [ExecutionMachine, validate_execution_identity]
-    owned_concepts: [deterministic-transitions, checkpoint-restore, terminal-result]
-    allowed_dependencies: [standard-library, service-core]
-    forbidden_dependencies: [provider-sdk, storage-sdk, transport-client]
-    architecture_check: service/tests/test_architecture.py
-  - module_id: service-execution-worker
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/workers/execution.py
-    public_symbols: [ExecutionWorker, WorkflowBinding]
-    owned_concepts: [bounded-polling, live-lease-supervision, durable-resume]
-    allowed_dependencies: [standard-library, service-core, service-ports, persistent-budget, safe-logging]
-    forbidden_dependencies: [model-training-runtime, storage-sdk, transport-client]
-  - module_id: service-durable-storage
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/ports/storage.py
-    public_symbols: [ExecutionStore, Submission, Lease, StoredExecution]
-    owned_concepts: [accepted-run-state, fenced-checkpoints, durable-attempts, result-outbox]
-    allowed_dependencies: [standard-library, service-core, service-ports]
-    forbidden_dependencies: [model-training-runtime, provider-sdk, transport-client]
-    architecture_check: service/tests/test_architecture.py
-  - module_id: service-postgres
-    owner: workflow-service
-    public_entrypoint: service/src/foliqant/adapters/storage/postgres/__init__.py
-    public_symbols: [PostgresStore]
-    owned_concepts: [explicit-migrations, database-clock-leases, transactional-storage-mapping]
-    allowed_dependencies: [service-core, service-ports, service-contracts, psycopg, psycopg-pool]
-    forbidden_dependencies: [model-training-runtime, provider-sdk, model-executor]
   - module_id: service-core
     owner: workflow-service
     public_entrypoint: service/src/foliqant/core/__init__.py
     public_symbols: [Identity, CapacityLimiter, ServiceError, freeze_json, thaw_json]
-    owned_concepts: [immutable-execution-values, bounded-admission, safe-error-codes]
+    owned_concepts: [immutable-execution-values, in-memory-budgets, bounded-admission, deterministic-runner, safe-error-codes]
     allowed_dependencies: [standard-library, service-ports]
-    forbidden_dependencies: [pydantic, model-training-runtime, provider-sdk, transport-client]
+    forbidden_dependencies: [pydantic, model-training-runtime, provider-sdk, transport-client, persistence-client]
     architecture_check: service/tests/test_architecture.py
   - module_id: service-contracts
     owner: workflow-service
     public_entrypoint: service/src/foliqant/contracts/envelope.py
     public_symbols: [Envelope, Metadata, TraceCarrier, accept_envelope]
-    owned_concepts: [strict-envelope, protected-identity, boundary-to-core-mapping]
+    owned_concepts: [strict-envelope, optional-protected-context, boundary-to-core-mapping, public-result]
     allowed_dependencies: [pydantic, service-core, shared-decision-contracts]
-    forbidden_dependencies: [model-training-runtime, provider-sdk, transport-client]
+    forbidden_dependencies: [model-training-runtime, provider-sdk, transport-client, persistence-client]
+  - module_id: service-compiler
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/compiler/__init__.py
+    public_symbols: [compile_workflow, CompilationError]
+    owned_concepts: [safe-authoring, confined-schemas, deterministic-plan]
+    allowed_dependencies: [standard-library, pydantic, service-core, service-contracts, shared-decision-contracts]
+    forbidden_dependencies: [provider-sdk, transport-client, persistence-client]
+    architecture_check: service/tests/test_architecture.py
+  - module_id: service-model-adapters
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/adapters/models/__init__.py
+    public_symbols: [ModelBinding, ModelExecutor, open_model_bindings, request_token_usage]
+    owned_concepts: [provider-bindings, structured-output, measured-usage]
+    allowed_dependencies: [service-core, service-ports, service-contracts, pydantic-ai, provider-sdk]
+    forbidden_dependencies: [model-training-runtime, transport-client, persistence-client]
+  - module_id: service-mcp-adapters
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/adapters/mcp/__init__.py
+    public_symbols: [McpRuntime, McpExecutor, McpClientSessionFactory, SdkOAuthCredentialProvider, ToolAuthorizer]
+    owned_concepts: [declared-tool-catalog, mcp-session-lifecycle, oauth-credential-hook, tool-authorization]
+    allowed_dependencies: [service-core, service-ports, service-contracts, mcp-sdk]
+    forbidden_dependencies: [model-training-runtime, application-authentication, persistence-client]
+  - module_id: service-bootstrap
+    owner: workflow-service
+    public_entrypoint: service/src/foliqant/bootstrap.py
+    public_symbols: [PreparedApplication, RuntimePlugins, WorkflowApplication, open_application]
+    owned_concepts: [adapter-composition, environment-resolution, application-lifecycle]
+    allowed_dependencies: [service-core, service-ports, service-contracts, service-compiler, service-adapters]
+    forbidden_dependencies: [model-training-runtime, application-authentication, packaged-transport, persistence-client]
   - module_id: service-blocking-execution
     owner: workflow-service
     public_entrypoint: service/src/foliqant/adapters/execution/blocking.py
     public_symbols: [BlockingExecutor]
     owned_concepts: [bounded-sdk-workers, worker-lifecycle, cancellation-capacity]
     allowed_dependencies: [standard-library, service-core]
-    forbidden_dependencies: [model-training-runtime, transport-client]
+    forbidden_dependencies: [model-training-runtime, transport-client, persistence-client]
   - module_id: service-safe-logging
     owner: workflow-service
     public_entrypoint: service/src/foliqant/adapters/telemetry/logging.py
     public_symbols: [LogEvent, LogLabels, SafeJsonFormatter, emit_event, configure_logging]
     owned_concepts: [allowlisted-log-events, bounded-sanitized-log-queue]
     allowed_dependencies: [standard-library, service-core]
-    forbidden_dependencies: [model-training-runtime, transport-client]
+    forbidden_dependencies: [model-training-runtime, transport-client, persistence-client]
   - module_id: acquisition
     owner: model-tooling
     public_entrypoint: model/src/foliqant_model/acquisition.py

@@ -20,9 +20,10 @@ def test_help_lists_only_implemented_commands() -> None:
     process = _cli("--help")
     assert process.returncode == 0
     assert process.stderr == ""
-    for command in ("init", "validate", "explain", "doctor", "run", "serve"):
+    for command in ("init", "validate", "explain", "doctor", "run"):
         assert command in process.stdout
-    assert " test " not in process.stdout
+    for unavailable in (" serve ", " migrate ", " worker ", " test "):
+        assert unavailable not in process.stdout
 
 
 def test_invalid_arguments_are_redacted_json() -> None:
@@ -47,7 +48,7 @@ def test_init_is_atomic_non_overwriting_and_scaffolds_model_free_workflow(tmp_pa
     assert created.stderr == ""
     assert json.loads(created.stdout) == {"command": "init", "status": "created"}
     assert (destination / "foliqant.yaml").read_text(encoding="utf-8") == (
-        "version: 1\nmode: development\nworkflows:\n  demo: workflows/demo\nmodels: {}\nmcp: {}\n"
+        "version: 1\nworkflows:\n  demo: workflows/demo\nmodels: {}\nmcp: {}\n"
     )
     assert (destination / "workflows/demo/workflow.yaml").read_text(encoding="utf-8") == (
         "version: 1\nname: demo\nstart: done\n"
@@ -98,13 +99,8 @@ def test_scaffold_validate_explain_doctor_and_run_offline(tmp_path: Path) -> Non
     assert diagnosis["status"] == "ok"
     assert set(diagnosis["optional_dependencies"]) == {
         "anthropic",
-        "azure",
-        "bedrock",
-        "http",
         "mcp",
         "openai",
-        "postgres",
-        "redis",
         "telemetry",
     }
 
@@ -141,6 +137,8 @@ def test_stdin_is_bounded_and_body_is_not_echoed_on_rejection(tmp_path: Path) ->
         "demo",
         "--input",
         "-",
+        "--tenant-id",
+        "trusted-tenant",
         stdin=json.dumps({"payload": secret, "metadata": {"tenant_id": "claimed"}}),
     )
     assert process.returncode == 2
@@ -148,6 +146,27 @@ def test_stdin_is_bounded_and_body_is_not_echoed_on_rejection(tmp_path: Path) ->
     assert secret not in process.stderr
     assert "claimed" not in process.stderr
     assert json.loads(process.stderr)["error"]["code"] == "forbidden"
+
+
+def test_run_without_identity_flags_preserves_envelope_identity_context(tmp_path: Path) -> None:
+    destination = tmp_path / "project"
+    assert _cli("init", str(destination)).returncode == 0
+    envelope = destination / "tenant-envelope.json"
+    envelope.write_text(
+        json.dumps({"payload": {}, "metadata": {"tenant_id": "tenant-context"}}),
+        encoding="utf-8",
+    )
+    process = _cli(
+        "run",
+        "--config",
+        str(destination / "foliqant.yaml"),
+        "--workflow",
+        "demo",
+        "--input",
+        str(envelope),
+    )
+    assert process.returncode == 0 and process.stderr == ""
+    assert json.loads(process.stdout)["metadata"] == {"tenant_id": "tenant-context"}
 
 
 def test_explain_includes_branch_edges_and_alias_without_prompt_content(tmp_path):
@@ -177,97 +196,6 @@ def test_explain_includes_branch_edges_and_alias_without_prompt_content(tmp_path
     )
     assert step["model"] == "local"
     assert step["on_answer"] == {"true": "done", "false": "done"}
-
-
-def test_serve_authenticates_on_real_loopback_and_stops_cleanly(tmp_path):
-    import http.client
-    import os
-    import socket
-    import time
-
-    destination = tmp_path / "project"
-    assert _cli("init", str(destination)).returncode == 0
-    with socket.socket() as reservation:
-        reservation.bind(("127.0.0.1", 0))
-        port = reservation.getsockname()[1]
-    config = destination / "foliqant.yaml"
-    config.write_text(
-        "version: 1\nworkflows: {demo: workflows/demo}\nhttp:\n"
-        f"  host: 127.0.0.1\n  port: {port}\n"
-        "  auth:\n    type: bearer\n    bindings:\n      operator:\n"
-        "        token_env: CLI_TEST_TOKEN\n        workflows: [demo]\n"
-    )
-    token = "synthetic-only-loopback-token"
-    environment = dict(os.environ, CLI_TEST_TOKEN=token)
-    server = subprocess.Popen(
-        [sys.executable, "-m", "foliqant", "serve", "--config", str(config)],
-        env=environment,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-    def request(method, route, headers=None):
-        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=1)
-        try:
-            connection.request(
-                method,
-                route,
-                body='{"payload": {}}' if method == "POST" else None,
-                headers=headers or {},
-            )
-            response = connection.getresponse()
-            return response.status, json.loads(response.read())
-        finally:
-            connection.close()
-
-    try:
-        deadline = time.monotonic() + 10
-        while True:
-            try:
-                assert request("GET", "/health") == (200, {"status": "ok"})
-                break
-            except OSError:
-                assert server.poll() is None, "server exited during startup"
-                if time.monotonic() > deadline:
-                    raise AssertionError("server startup timeout") from None
-                time.sleep(0.02)
-        route = "/workflows/demo/runs"
-        assert request("POST", route, {"Content-Type": "application/json"})[0] == 401
-        status, result = request(
-            "POST", route, {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
-        )
-        assert status == 200 and result["execution"]["status"] == "completed"
-        server.terminate()
-        stdout, stderr = server.communicate(timeout=10)
-        assert token.encode() not in stdout + stderr
-        assert server.returncode in {0, -15}
-    finally:
-        if server.poll() is None:
-            server.kill()
-            server.communicate(timeout=5)
-
-
-def test_serve_bind_failure_returns_fixed_cli_error(tmp_path):
-    import socket
-
-    destination = tmp_path / "project"
-    assert _cli("init", str(destination)).returncode == 0
-    config = destination / "foliqant.yaml"
-    with socket.socket() as occupied:
-        occupied.bind(("127.0.0.1", 0))
-        occupied.listen()
-        port = occupied.getsockname()[1]
-        config.write_text(
-            "version: 1\nmode: development\nworkflows: {demo: workflows/demo}\n"
-            f"http:\n  port: {port}\n  auth: {{type: development}}\n"
-        )
-        process = _cli("serve", "--config", str(config))
-    assert process.returncode == 4
-    assert process.stdout == ""
-    error = json.loads(process.stderr.splitlines()[-1])
-    assert error["error"]["code"] == "dependency_failure"
-    assert str(port) not in process.stderr
-    assert "address already in use" not in process.stderr.lower()
 
 
 def test_failed_execution_is_a_safe_cli_error_not_success_output(tmp_path, monkeypatch, capsys):
