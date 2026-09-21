@@ -135,3 +135,13 @@ Python report by an explicit scalar input value without rerunning work. Missing
 and null differ; no inferred language or hidden scorer calls. This API does not
 load saved artifact paths. Example evaluators persist full private reports by
 default; their console summaries are not the complete result.
+
+## Check fallback without inflating classification quality
+
+Keep native-answer gold separate from effective `selection/category/id` and
+`selection/origin` gold under `/decisions/<step>`. Assert issue codes and intended
+unresolved routes. A fallback leaves the native answer unresolved and is never
+counted as model correctness. Step summaries count model/fallback selections;
+`fallback_rate` divides by all observed step records, including skipped/error
+records. Include unclear requests, known out-of-catalog requests, contradictory
+facts and multiple valid options; do not merge their diagnoses into `misc`.

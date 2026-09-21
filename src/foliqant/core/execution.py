@@ -1,11 +1,12 @@
 """Immutable execution values shared by the engine and adapter ports."""
 
 from dataclasses import dataclass, fields
-from typing import Literal
+from typing import Literal, cast
 
 from .errors import ErrorCode, ServiceError
 from .identity import Identity
-from .json import FrozenJson, FrozenObject
+from .json import FrozenJson, FrozenObject, freeze_json
+from .plan import CategoryPlan, DecisionIssue
 
 type RunStatus = Literal["completed", "needs_review", "failed", "cancelled"]
 type StepStatus = Literal["completed", "needs_review", "failed", "cancelled", "skipped"]
@@ -80,6 +81,20 @@ class Failure:
 
 
 @dataclass(frozen=True, slots=True)
+class Selection:
+    """Effective classification, kept separate from the unchanged native result."""
+
+    category: CategoryPlan
+    origin: Literal["model", "fallback"]
+
+    def as_json(self) -> FrozenObject:
+        category: dict[str, str] = {"id": self.category.id}
+        if self.category.description is not None:
+            category["description"] = self.category.description
+        return cast(FrozenObject, freeze_json({"category": category, "origin": self.origin}))
+
+
+@dataclass(frozen=True, slots=True)
 class StepRecord:
     status: StepStatus
     result: FrozenJson = None
@@ -87,6 +102,7 @@ class StepRecord:
     error: Failure | None = None
     elapsed_seconds: float | None = None
     usage: Usage | None = None
+    selection: Selection | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +112,8 @@ class StepOutcome:
     result: FrozenJson
     needs_review: bool = False
     route_key: str | None = None
+    selection: Selection | None = None
+    unresolved_issues: tuple[DecisionIssue, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

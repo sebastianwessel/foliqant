@@ -22,7 +22,13 @@ def _construct_mapping(
     loader.flatten_mapping(node)
     result: dict[object, object] = {}
     for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
+        # The workflow policy field is a literal mapping key. PyYAML's YAML
+        # 1.1 resolver otherwise reads unquoted `on` as boolean True.
+        key = (
+            "on"
+            if key_node.tag == "tag:yaml.org,2002:bool" and key_node.value == "on"
+            else loader.construct_object(key_node, deep=deep)
+        )
         try:
             duplicate = key in result
         except TypeError as error:

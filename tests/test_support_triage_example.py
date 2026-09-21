@@ -47,12 +47,13 @@ async def test_invalid_decision_evidence_fails_without_exposing_output() -> None
         profiles: ModelProfiles, *, environment: Mapping[str, str]
     ) -> AsyncIterator[Mapping[str, ModelBinding]]:
         yield {
-            "local_qwen": ModelBinding(
+            alias: ModelBinding(
                 model=FunctionModel(model),
                 settings=ModelSettings(),
                 output_mode="native",
                 admission=CapacityLimiter(concurrency=1, queue_limit=0),
             )
+            for alias in profiles.models
         }
 
     async with open_example(

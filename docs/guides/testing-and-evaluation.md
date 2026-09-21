@@ -436,18 +436,20 @@ After installing development extras, run the existing synthetic example suites:
 ```sh
 uv run --no-sync python -m examples.support_triage.evaluate
 uv run --no-sync python -m examples.public_request_mcp.evaluate
+uv run --no-sync python -m examples.extracted_request_mcp.evaluate
 uv run --no-sync python -m examples.http_workflow.evaluate
 ```
 
 Support triage checks full pipelines and isolated classification/extraction.
-Its nine authored inputs cover all three queue categories, missing information,
-multiple active intents, contradictory instructions, explicit corrections,
+Its twelve authored inputs cover all three queue categories, missing information,
+out-of-catalog requests, multiple active intents, contradictory instructions, explicit corrections,
 and English/German inputs. Extraction gold checks account versus invoice
 references, absent values, and unchanged deadline wording. The HTTP example
 reuses these same inputs; the MCP example adds two synthetic request lookups.
-These are eleven distinct scenarios, not separate data for every repeated step.
+The extraction-to-MCP example adds a selected-field binding between steps.
+Repeated pipelines and isolated steps do not create additional independent gold.
 Its default scripted model verifies wiring. MCP uses a real local stdio server
-without a model. HTTP uses an in-process ASGI client. Support and HTTP accept
+without a model. HTTP uses an in-process ASGI client. Model-backed examples accept
 `--live` to use the explicitly configured model; those small suites remain smoke
 checks, not a reviewed quality benchmark.
 

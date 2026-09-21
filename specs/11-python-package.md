@@ -147,6 +147,47 @@ path and corrective hint. Raw Pydantic errors and authored values are never
 rendered. CLI `validate` and Python `prepare_application` share this compiler;
 there is no parallel validation engine or network preflight.
 
+### Classification selection and unresolved policy
+
+A single-choice decision can declare `fallback: {category: {id, description?},
+on: [issue, ...]}`. Category IDs use the same deterministic normalization as
+catalog IDs and must not collide with model-selectable options. Descriptions
+are optional, nonblank when supplied, and may contain multiline examples.
+There are no separate positive/negative-example fields. The fallback definition
+is not an option sent to the model.
+
+Validated single-choice results expose a separate step `selection` containing
+`category` and `origin: model|fallback`. The native `result` remains unchanged.
+Fallback requires `not_answerable`, nonempty issues, and every reported issue in
+the explicit allowlist. It never changes answerability, step review status or
+technical failure. Omit selection when there is no supported selection; do not
+serialize null. Expose selection through public step records and binding context.
+
+`on_unresolved` accepts the existing target string or a map with `default` and
+optional keys from the four issue codes. Resolve each issue through its entry or
+default; follow their shared target only if all agree, otherwise follow default.
+Absent issues, undetermined/nondecision outcomes use default. No issue order or
+priority is inferred. All targets participate in reachability, cycle, dominance,
+and binding validation. Fallback selection does not bypass unresolved routing.
+
+### Per-step model selection and explicit context
+
+Model steps may inherit the workflow default, use an existing profile alias,
+use `{profile, model?, options?}` to override that profile, or supply an existing
+complete provider-discriminated model configuration. Partial options inherit
+unspecified values and validate against the effective provider's existing option
+type. Do not copy incompatible settings between providers. Profile-derived
+bindings share the source profile's admission limit; overrides must not multiply
+allowed parallel requests. Inline credentials must be environment references.
+Only designated model deployment fields are environment-expanded, never prompts
+or bound context. Public plans retain binding identity without credentials.
+
+Prior-step context is explicitly selected using existing `input`, `sources`, or
+MCP `arguments` bindings. RFC 6901 pointers can select a complete result or named
+fields; optional bindings require an explicit default and preserve missing/null
+semantics. No prior history or caller envelope is forwarded implicitly. Compile
+known type/dominance errors offline and validate tool arguments before I/O.
+
 ## In-memory execution
 
 `WorkflowRunner.run` validates and accepts one envelope, acquires shared local
@@ -416,6 +457,12 @@ declared catalog for each measure, yielding null if any label has an undefined
 value for that measure. Coverage and unobserved outcomes remain separate rather
 than inventing label predictions. With repetition, `support`/`excluded` count
 attempts and `source_support`/`source_excluded` identify authored cases.
+
+Step summaries also count `model_selected_cases` and `fallback_selected_cases`.
+`fallback_rate` is fallback selections divided by all observed step records,
+including skipped/error records, or null with no records. Repeated attempts
+count separately. These are policy-use measurements, not accuracy. Replay and
+grouping preserve the selection origin from the validated public result.
 
 Report and step summaries include measured latency count, unavailable count,
 minimum, median, p95, and maximum in seconds. The median averages middle values

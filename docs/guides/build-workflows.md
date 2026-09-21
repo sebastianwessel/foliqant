@@ -112,6 +112,53 @@ An operation reporting uncertainty follows `on_unresolved` before any success
 route. If `on_unresolved` is absent, it ends the run with `needs_review`. For a
 decision, this prevents an unresolved answer from falling through to `next`.
 
+## Classify with an explicit fallback
+
+Keep normal categories specific. Their multiline descriptions can include
+examples and exclusions; no separate example fields are needed. For a
+single-choice decision, an optional fallback is a separate category object:
+
+```yaml
+fallback:
+  category:
+    id: misc
+    description: |
+      Requests that need a person to select the next action.
+      This is a process fallback, not a model-selected business category.
+  on: [no_matching_option, missing_information]
+on_unresolved:
+  default: review
+  missing_information: clarify
+  no_matching_option: manual_triage
+```
+
+Add those finish steps to the workflow with `outcome: needs_review`. They mark
+which process branch was selected; the embedding application implements any
+actual clarification or handoff. A single `on_unresolved: review` is still valid.
+If several reported issues map to different targets, the map's required
+`default` wins. An undetermined result or unresolved non-decision operation also
+uses the default. Without a route, the run stops with `needs_review`.
+
+Fallback applies only to a validated `not_answerable` result with nonempty issues
+that are **all** listed in `fallback.on`. It never handles timeouts, invalid
+model output, or undetermined results. The fallback is not a selectable model
+option, does not make the answer valid, and does not take an `on_answer` route.
+The category ID uses the same normalization as the category catalog and cannot
+collide with a normal option. This feature is limited to single-choice decisions.
+
+The native answer, issues, explanation and evidence stay unchanged. The public
+step record adds a separate selection when there is a resolved choice or an
+applicable fallback:
+
+```json
+{"category": {"id": "misc", "description": "Requests needing review."}, "origin": "fallback"}
+```
+
+Its public path is `/decisions/classify/selection`; workflow bindings use
+`/steps/classify/selection`. An ordinary model choice uses `origin: model`.
+Uncovered unresolved cases have no selection. Score the native answer and this
+effective selection separately: a populated fallback is not model accuracy.
+
 ## Share schemas and bind values
 
 A workflow's `input_schema` accepts a JSON Schema object, as above, or a local
@@ -184,6 +231,30 @@ Similarly, an output projection must be available at every possible terminal,
 including an earlier operation's implicit `needs_review` outcome, or have an
 explicit default. Schemas may describe a property without requiring it; actual
 missing values still fail at runtime unless the binding has a default.
+
+## Pass only the context a step needs
+
+Use existing input bindings for previous results; there is no automatic history
+or full-envelope forwarding. For example, after an `extract` step produces
+`reference`, a declared MCP step can receive only that field:
+
+```yaml
+type: mcp
+server: requests
+tool: get_request_status
+arguments:
+  reference: {pointer: /steps/extract/result/reference}
+next: done
+```
+
+The MCP server/tool names and argument schema must match the deployment's
+reviewed catalog. Keep the extraction before this step on every path, or use
+`optional: true` with an explicit default when the tool schema permits it.
+Optional means missing, not null: a present null must still satisfy the tool's
+schema. The compiler checks graph availability and known types; runtime validates
+the actual arguments. See the
+[extraction-to-MCP example](https://github.com/sebastianwessel/foliqant/blob/main/examples/extracted_request_mcp/README.md)
+for a complete runnable bundle and isolated-step evaluations.
 
 ## Write instructions in Markdown
 

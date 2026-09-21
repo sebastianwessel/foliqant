@@ -7,8 +7,9 @@ from typing import Never
 from pydantic import ValidationError
 
 from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.core.execution import Selection
 from foliqant.core.json import FrozenJson, FrozenObject, freeze_json, thaw_json
-from foliqant.core.plan import DecisionQuestionPlan, DecisionStepPlan
+from foliqant.core.plan import CategoryPlan, DecisionIssue, DecisionQuestionPlan, DecisionStepPlan
 from foliqant.decisions import (
     ChoiceResult,
     DecisionInput,
@@ -27,6 +28,8 @@ class ValidatedDecision:
     value: FrozenJson
     answerable: bool
     route_key: str | None
+    selection: Selection | None = None
+    unresolved_issues: tuple[DecisionIssue, ...] = ()
 
 
 def _fail(code: ErrorCode) -> Never:
@@ -156,4 +159,31 @@ def validate_decision_result(
         _fail(ErrorCode.INVALID_OUTPUT)
     if not isinstance(value, Mapping):
         _fail(ErrorCode.INVALID_OUTPUT)
-    return ValidatedDecision(value=value, answerable=answerable, route_key=route_key)
+    # Facts are projected only after complete native semantic validation. An
+    # undetermined question forces the default route even if it reports issues.
+    unresolved = [item for item in output.results if item.answerability.status != "answerable"]
+    issues: tuple[DecisionIssue, ...] = (
+        tuple(dict.fromkeys(issue for item in unresolved for issue in item.answerability.issues))
+        if unresolved and all(item.answerability.status != "undetermined" for item in unresolved)
+        else ()
+    )
+    selection = None
+    if step.question_mode == "single" and step.questions[0].type == "choice":
+        item = output.results[0]
+        if answerable:
+            option = next(option for option in step.questions[0].options if option.id == route_key)
+            selection = Selection(CategoryPlan(option.id, option.description), "model")
+        elif (
+            step.fallback is not None
+            and item.answerability.status == "not_answerable"
+            and issues
+            and set(issues).issubset(step.fallback.on)
+        ):
+            selection = Selection(step.fallback.category, "fallback")
+    return ValidatedDecision(
+        value=value,
+        answerable=answerable,
+        route_key=route_key,
+        selection=selection,
+        unresolved_issues=issues,
+    )

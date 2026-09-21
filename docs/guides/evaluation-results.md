@@ -56,6 +56,23 @@ median averages its middle two values. Usage fields each contain `observed`,
 `unknown`, `known_total`, and `total`: a partial known total is not a complete
 total, and a completely unobserved field has no numeric total.
 
+## Measure model choices and fallback policy separately
+
+For a single-choice step, score its native answer at
+`/decisions/classify/result/answer/optionId`. Independently score the effective
+category at `/decisions/classify/selection/category/id` and its origin at
+`/decisions/classify/selection/origin`. Supply reviewed expected values for each
+metric. Include the issue codes and intended route in gold so that a convenient
+`misc` category does not conceal a wrong diagnosis.
+
+Step summaries include `model_selected_cases`, `fallback_selected_cases`, and
+`fallback_rate`. The rate divides fallback selections by all observed records
+for that step, including skipped/error records; no records produces `null`.
+Repeated attempts count separately. These describe policy usage, not correctness.
+Raw-answer metrics retain null abstentions and missing predictions even when an
+effective fallback category is present. The support-triage example demonstrates
+separate confusion matrices for native queues and effective selections.
+
 ## Measure repeatability
 
 Run the same authored cases three times explicitly:

@@ -255,6 +255,7 @@ class StepReport:
     status: str
     elapsed_seconds: float | None
     usage: Usage | None
+    selection_origin: Literal["model", "fallback"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,6 +315,10 @@ class StepSummary:
     review_cases: int
     latency: LatencySummary = field(default_factory=lambda: summarize_latency(()))
     usage: UsageSummary = field(default_factory=lambda: summarize_usage(()))
+
+    model_selected_cases: int = 0
+    fallback_selected_cases: int = 0
+    fallback_rate: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

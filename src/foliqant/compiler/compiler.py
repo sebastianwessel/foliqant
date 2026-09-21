@@ -25,16 +25,20 @@ from foliqant.contracts.workflow import (
     PredicateQuestionShorthand,
     RequestUnitsQuestionShorthand,
     StepAuthoring,
+    UnresolvedRouting,
     WorkflowAuthoring,
 )
 from foliqant.core.errors import ServiceError
 from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import (
     BindingPlan,
+    CategoryPlan,
     CompiledStep,
+    DecisionIssue,
     DecisionOptionPlan,
     DecisionQuestionPlan,
     DecisionStepPlan,
+    FallbackPlan,
     FinishStepPlan,
     HandlerStepPlan,
     LlmStepPlan,
@@ -42,6 +46,7 @@ from foliqant.core.plan import (
     SchemaResourcePlan,
     SourceLocation,
     ToolPolicyPlan,
+    UnresolvedRoutingPlan,
     WorkflowPlan,
 )
 from foliqant.decisions import (
@@ -54,6 +59,7 @@ from foliqant.decisions import (
 
 from ._loader import load_step, load_yaml
 from .errors import CompilationError
+from .models import ModelRegistry
 from .schema_helpers import (
     resolve_schema_fragment as _resolve_confined_schema_fragment,
 )
@@ -108,6 +114,9 @@ def _validate[T](adapter: TypeAdapter[T], value: object, location: SourceLocatio
             "type",
             "next",
             "on_unresolved",
+            "fallback",
+            "category",
+            "on",
             "sources",
             "question",
             "questions",
@@ -429,6 +438,19 @@ def _answer_keys(question: DecisionQuestionPlan) -> set[str] | None:
     return None
 
 
+def _unresolved(value: str | UnresolvedRouting | None) -> str | UnresolvedRoutingPlan | None:
+    if not isinstance(value, UnresolvedRouting):
+        return value
+    return UnresolvedRoutingPlan(
+        value.default,
+        tuple(
+            (cast(DecisionIssue, key), target)
+            for key, target in value.model_dump(exclude_none=True).items()
+            if key != "default"
+        ),
+    )
+
+
 def _compile_step(
     authored: StepAuthoring,
     *,
@@ -472,9 +494,9 @@ def _compile_step(
             type=authored.type,
             location=location,
             next=authored.next,
-            on_unresolved=authored.on_unresolved,
+            on_unresolved=_unresolved(authored.on_unresolved),
             unresolved_before_transition=True,
-            model=_model(authored.model, default_model, model_aliases, location),
+            model=_model(cast(str | None, authored.model), default_model, model_aliases, location),
             sources=tuple(
                 (key, _binding(value, location)) for key, value in sorted(authored.sources.items())
             ),
@@ -482,6 +504,16 @@ def _compile_step(
             question_mode="single" if authored.question is not None else "multiple",
             instructions=authored.instructions,
             on_answer=tuple(sorted(routes.items())),
+            fallback=(
+                FallbackPlan(
+                    CategoryPlan(
+                        authored.fallback.category.id, authored.fallback.category.description
+                    ),
+                    tuple(authored.fallback.on),
+                )
+                if authored.fallback is not None
+                else None
+            ),
         )
     if isinstance(authored, LlmStepAuthoring):
         policy = None
@@ -527,8 +559,8 @@ def _compile_step(
             type=authored.type,
             location=location,
             next=authored.next,
-            on_unresolved=authored.on_unresolved,
-            model=_model(authored.model, default_model, model_aliases, location),
+            on_unresolved=_unresolved(authored.on_unresolved),
+            model=_model(cast(str | None, authored.model), default_model, model_aliases, location),
             input=tuple(
                 (key, _binding(value, location)) for key, value in sorted(authored.input.items())
             ),
@@ -549,7 +581,7 @@ def _compile_step(
             type=authored.type,
             location=location,
             next=authored.next,
-            on_unresolved=authored.on_unresolved,
+            on_unresolved=_unresolved(authored.on_unresolved),
             server=authored.server,
             tool=authored.tool,
             arguments=tuple(
@@ -565,7 +597,7 @@ def _compile_step(
             type=authored.type,
             location=location,
             next=authored.next,
-            on_unresolved=authored.on_unresolved,
+            on_unresolved=_unresolved(authored.on_unresolved),
             handler=authored.handler,
             input=tuple(
                 (key, _binding(value, location)) for key, value in sorted(authored.input.items())
@@ -582,7 +614,10 @@ def _edges(step: CompiledStep) -> tuple[str, ...]:
     targets: list[str] = []
     if step.next is not None:
         targets.append(step.next)
-    if step.on_unresolved is not None:
+    if isinstance(step.on_unresolved, UnresolvedRoutingPlan):
+        targets.append(step.on_unresolved.default)
+        targets.extend(target for _, target in step.on_unresolved.issues)
+    elif step.on_unresolved is not None:
         targets.append(step.on_unresolved)
     if isinstance(step, DecisionStepPlan):
         targets.extend(target for _, target in step.on_answer)
@@ -710,7 +745,10 @@ def _validate_output(
 
 
 def _validate_model_capabilities(
-    steps: Mapping[str, CompiledStep], profiles: Mapping[str, ModelConfig] | None
+    steps: Mapping[str, CompiledStep],
+    profiles: Mapping[str, ModelConfig] | None,
+    *,
+    allow_missing: bool = False,
 ) -> None:
     if profiles is None:
         return
@@ -719,6 +757,8 @@ def _validate_model_capabilities(
             continue
         profile = profiles.get(step.model)
         if profile is None:
+            if allow_missing:
+                continue
             _fail("unknown_model", step.location, "model")
         schema_output = isinstance(step, DecisionStepPlan) or step.output_kind == "schema"
         tools = isinstance(step, LlmStepPlan) and step.tools is not None
@@ -788,6 +828,21 @@ def _validate_schema_bindings(
                         "properties": {
                             "status": {"type": "string"},
                             "result": {},
+                            "selection": {
+                                "type": "object",
+                                "properties": {
+                                    "origin": {"type": "string"},
+                                    "category": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "description": {"type": "string"},
+                                        },
+                                        "additionalProperties": False,
+                                    },
+                                },
+                                "additionalProperties": False,
+                            },
                             "error": {
                                 "type": "object",
                                 "properties": {
@@ -918,13 +973,8 @@ def _revision(
             }
             for name, schema in sorted(handler_schemas.items())
         },
-        "model_capabilities": {
-            name: {
-                "text": profile.supports_text,
-                "schema": profile.supports_json_schema,
-                "tools": profile.supports_tools,
-                "output_mode": profile.output_mode,
-            }
+        "model_profiles": {
+            name: profile.model_dump(mode="json")
             for name, profile in sorted((model_profiles or {}).items())
         },
     }
@@ -940,6 +990,7 @@ def compile_workflow(
     handler_names: Collection[str],
     model_profiles: Mapping[str, ModelConfig] | None = None,
     handler_schemas: Mapping[str, HandlerSchemas] | None = None,
+    _model_registry: ModelRegistry | None = None,
 ) -> WorkflowPlan:
     """Compile a local bundle using only the supplied offline registries.
 
@@ -1030,13 +1081,32 @@ def compile_workflow(
         authored_steps.append((step, step_id, location))
     if not authored_steps:
         _fail("missing_step", workflow_location)
+    registry = _model_registry if _model_registry is not None else ModelRegistry(model_profiles)
+    selected_steps: list[tuple[StepAuthoring, str, SourceLocation]] = []
+    effective_aliases = dict(model_aliases)
+    effective_profiles = dict(model_profiles or {})
+    for step, step_id, location in authored_steps:
+        if isinstance(step, (DecisionStepAuthoring, LlmStepAuthoring)):
+            alias = registry.select(
+                step.model,
+                default=workflow.defaults.model,
+                aliases=model_aliases,
+                workflow=workflow.name,
+                step=step_id,
+                location=location,
+            )
+            if alias in registry.profiles:
+                effective_profiles[alias] = registry.profiles[alias]
+                effective_aliases[alias] = registry.profiles[alias].model
+            step = step.model_copy(update={"model": alias})
+        selected_steps.append((step, step_id, location))
     compiled = {
         step_id: _compile_step(
             step,
             step_id=step_id,
             location=location,
             default_model=workflow.defaults.model,
-            model_aliases=model_aliases,
+            model_aliases=effective_aliases,
             catalogs=catalogs,
             handler_names=handler_names,
             bundle=bundle,
@@ -1044,7 +1114,7 @@ def compile_workflow(
             schema_sources=sources,
             validated_schema_nodes=validated_schema_nodes,
         )
-        for step, step_id, location in authored_steps
+        for step, step_id, location in selected_steps
     }
     for compiled_step in compiled.values():
         if not isinstance(compiled_step, FinishStepPlan) and compiled_step.next is None:
@@ -1054,7 +1124,7 @@ def compile_workflow(
     _validate_bindings(compiled, dominators)
     output = _binding(workflow.output, workflow_location) if workflow.output is not None else None
     _validate_output(output, compiled, dominators, workflow_location)
-    _validate_model_capabilities(compiled, model_profiles)
+    _validate_model_capabilities(compiled, effective_profiles, allow_missing=model_profiles is None)
     _validate_schema_bindings(
         compiled,
         input_schema_path,

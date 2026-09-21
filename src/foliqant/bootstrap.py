@@ -7,8 +7,10 @@ import logging
 import math
 from collections.abc import AsyncIterator, Mapping
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Annotated, Protocol
+
+from pydantic import Field
 
 from foliqant.adapters.handlers import HandlerExecutor
 from foliqant.adapters.models import ModelBinding, ModelExecutor
@@ -17,7 +19,8 @@ from foliqant.adapters.telemetry.logging import LogEvent, emit_event
 from foliqant.adapters.validation import WorkflowSchemas
 from foliqant.contracts.envelope import Envelope, accept_envelope
 from foliqant.contracts.execution import ExecutionResult, to_execution_result
-from foliqant.contracts.models import ModelProfiles
+from foliqant.contracts.identifiers import Id
+from foliqant.contracts.models import ModelConfig, ModelProfiles
 from foliqant.core.admission import CapacityLimiter
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import StepOutcome
@@ -36,6 +39,12 @@ if TYPE_CHECKING:
     from foliqant.adapters.telemetry.models import ModelTelemetry
 
 _LOGGER = logging.getLogger("foliqant.runtime")
+
+
+class _ApplicationModelProfiles(ModelProfiles):
+    """Expanded runtime profiles; deployment aliases retain their authored limit."""
+
+    models: Annotated[dict[Id, ModelConfig], Field(min_length=1)]
 
 
 class ModelFactory(Protocol):
@@ -271,7 +280,13 @@ async def open_application(
 
     selected = plugins or RuntimePlugins()
     credentials = load_environment(prepared.source, environment)
-    config = EnvironmentResolver(credentials).resolve(prepared.config)
+    resolver = EnvironmentResolver(credentials)
+    config = resolver.resolve(prepared.config)
+    effective_models = (
+        resolver.resolve(_ApplicationModelProfiles(models=dict(prepared._models)))
+        if prepared._models
+        else None
+    )
     observer: ExecutionObserver | None = None
     model_observation: ModelTelemetry | None = None
     telemetry = None
@@ -290,7 +305,7 @@ async def open_application(
                     steps=frozenset(
                         step.name for plan in prepared.plans.values() for step in plan.steps
                     ),
-                    models=frozenset(profile.model for profile in prepared.config.models.values()),
+                    models=frozenset(profile.model for profile in prepared._models.values()),
                     providers=frozenset({"openai", "anthropic", "azure", "function"}),
                     tools=frozenset(
                         tool for server in config.mcp.values() for tool in server.catalog.tools
@@ -312,14 +327,21 @@ async def open_application(
                     telemetry.tracer_provider, telemetry.meter_provider, labels
                 )
             models: Mapping[str, ModelBinding] = {}
-            if config.models:
+            if effective_models is not None:
                 models = await stack.enter_async_context(
-                    _owned_models(
-                        selected.model_factory, ModelProfiles(models=config.models), credentials
-                    )
+                    _owned_models(selected.model_factory, effective_models, credentials)
                 )
-                if set(models) != set(config.models):
+                if set(models) != set(effective_models.models):
                     raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+                models = {
+                    alias: replace(
+                        binding,
+                        admission=models[prepared._model_admission_groups[alias]].admission,
+                    )
+                    if alias in prepared._model_admission_groups
+                    else binding
+                    for alias, binding in models.items()
+                }
             mcp_runtime = None
             mcp_executor: StepExecutor | None = None
             if config.mcp:

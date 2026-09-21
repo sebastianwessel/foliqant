@@ -19,7 +19,7 @@ from .execution import CallerContext, Failure, RunResult, RunStatus, StepOutcome
 from .identity import Identity, validate_identity_id
 from .json import FrozenJson, FrozenObject, freeze_json
 from .observation import incoming_trace, observe
-from .plan import DecisionStepPlan, FinishStepPlan, McpStepPlan, WorkflowPlan
+from .plan import DecisionStepPlan, FinishStepPlan, McpStepPlan, UnresolvedRoutingPlan, WorkflowPlan
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +49,8 @@ def _binding_context(envelope: AcceptedEnvelope, records: dict[str, StepRecord])
         value: dict[str, FrozenJson] = {"status": record.status}
         if record.has_result:
             value["result"] = record.result
+        if record.selection is not None:
+            value["selection"] = record.selection.as_json()
         if record.error is not None:
             value["error"] = MappingProxyType(
                 {
@@ -301,9 +303,18 @@ class WorkflowRunner:
                             True,
                             elapsed_seconds=asyncio.get_running_loop().time() - step_started,
                             usage=step_usage,
+                            selection=outcome.selection,
                         )
                         if outcome.needs_review:
-                            current = step.on_unresolved
+                            current = (
+                                step.on_unresolved.target(
+                                    outcome.unresolved_issues
+                                    if isinstance(step, DecisionStepPlan)
+                                    else ()
+                                )
+                                if isinstance(step.on_unresolved, UnresolvedRoutingPlan)
+                                else step.on_unresolved
+                            )
                             if current is None:
                                 status = "needs_review"
                         elif isinstance(step, DecisionStepPlan) and step.on_answer:

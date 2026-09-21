@@ -4,7 +4,8 @@ This example turns a synthetic customer email into two bounded operations. A
 native decision selects the queue from quoted evidence, then a schema-output
 step extracts the current requested action as a concise verbatim source span,
 the full deadline wording, and the account reference. The
-workflow routes an unanswerable classification to review.
+workflow keeps unresolved classifications in review and can attach an explicit
+`misc` fallback without changing the original answer.
 
 Install the runtime with the OpenAI-compatible adapter:
 
@@ -22,7 +23,8 @@ FOLIQANT_CURATION_MODEL=incoai/Qwen3.8-27B-Splash
 
 The example’s `foliqant.yaml` binds those values with `$NAME` references.
 Reasoning, token limit, temperature and timeouts live in that YAML profile; edit
-that one profile to change runtime behavior. Curation has its own recipe.
+the profile to change shared behavior. The extraction step overrides only
+`max_tokens` to 4096; other options inherit the profile. Curation has its own recipe.
 
 The model ID is mandatory. Foliqant does not discover a served model or choose a
 fallback. The committed script performs no call unless `--live` is present:
@@ -45,11 +47,11 @@ uv run --no-sync python -m examples.support_triage.evaluate
 ```
 
 The default uses scripted `FunctionModel` responses without contacting a model.
-It checks nine independently authored synthetic pipeline cases: all three queue
-labels, a missing action, two simultaneous active queues, unresolved conflicting
-instructions, an explicit correction, and English and German requests. Seven
-inputs are English and two are German; category keys remain English. It checks
-classification on all nine inputs and extraction on the six single-action inputs.
+It checks twelve independently authored synthetic pipeline cases: all three queue
+labels, missing actions, clear out-of-catalog requests, two simultaneous active
+queues, unresolved conflicting instructions, and an explicit correction. Eight
+inputs are English and four are German; category keys remain English. It checks
+classification on all twelve inputs and extraction on the six single-action inputs.
 Extraction retains source-language action wording and deadline operators such as
 `by` and `bis`. Expected answers live in `evaluate.py`; scripted outputs in
 `offline.py` only exercise wiring and validation. A negative-control test proves
@@ -97,5 +99,9 @@ configured dataset is loaded only for evaluation; ordinary workflow startup does
 not require the file. Console reports omit case/check details. The private
 artifact retains inputs, expected and actual values, model explanations within
 returned results, and safe mismatch reasons. Queue classification reports include
-an ordered confusion matrix; the three review cases have no queue gold and are
-counted as excluded. Isolated reports identify `classify` or `extract` explicitly.
+an ordered confusion matrix; the six review cases have no queue gold and are
+counted as excluded. Separate effective-category and origin metrics check six
+model selections and four `misc` fallbacks; conflict/multiple-intent cases have no
+selection. Issue and finish-step expectations distinguish clarification from
+manual triage and general review. Isolated reports identify `classify` or
+`extract` explicitly.

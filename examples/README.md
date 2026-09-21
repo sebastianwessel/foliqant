@@ -4,6 +4,8 @@
   extraction, plus in-code synthetic evaluation cases.
 - [Public-request lookup](public_request_mcp/README.md): read-only local MCP
   integration without a model call.
+- [Extract then look up](extracted_request_mcp/README.md): local Qwen extracts a
+  reference and passes only selected fields to a read-only MCP tool.
 - [HTTP wrapper](http_workflow/README.md): a thin transport around support triage.
 
 All records are synthetic. Model-backed commands require an explicit `--live`

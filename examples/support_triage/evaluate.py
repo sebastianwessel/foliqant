@@ -30,6 +30,11 @@ _MESSAGES = {
     "explicit_cancellation": "Cancel renewal for account C-1049 by 30 September 2026.",
     "billing_dispute": "I dispute invoice INV-882. Please review the duplicate charge.",
     "insufficient_information": "Please help.",
+    "out_of_catalog": "I would like to apply for the advertised accountant position.",
+    "german_out_of_catalog": (
+        "Ich möchte mich auf die ausgeschriebene Stelle als Buchhalter bewerben."
+    ),
+    "german_insufficient_information": "Bitte helfen Sie mir.",
     "service_change": "Add priority support to account A-2205 by 15 October 2026.",
     "german_cancellation": (
         "Bitte stoppen Sie die automatische Verlängerung für Kundenkonto "
@@ -74,9 +79,9 @@ def _action(case_id: str, required: str, allowed: str) -> Expectation:
 
 def _gold_suite() -> EvaluationSuite:
     """Independent gold for clear, incomplete, competing, and corrected requests."""
-    return EvaluationSuite(
+    original = EvaluationSuite(
         name="support_triage",
-        revision="5",
+        revision="6",
         cases=(
             EvaluationCase(
                 "explicit_cancellation",
@@ -336,6 +341,81 @@ def _gold_suite() -> EvaluationSuite:
         ),
     )
 
+    extra = (
+        _unresolved_case("out_of_catalog", "eval-010", "en", "no_matching_option"),
+        _unresolved_case("german_out_of_catalog", "eval-011", "de", "no_matching_option"),
+        _unresolved_case(
+            "german_insufficient_information", "eval-012", "de", "missing_information"
+        ),
+    )
+    return EvaluationSuite(
+        original.name,
+        original.revision,
+        tuple(_with_selection_gold(case) for case in (*original.cases, *extra)),
+    )
+
+
+def _unresolved_case(case_id: str, request_id: str, language: str, issue: str) -> EvaluationCase:
+    """Author a contrasting source and expected diagnosis without model predictions."""
+    return EvaluationCase(
+        case_id,
+        Envelope(
+            payload={"requestId": request_id, "message": _MESSAGES[case_id]},
+            metadata=Metadata.model_validate({"language": language}),
+        ),
+        (
+            Expectation("review", "/execution/status", "needs_review"),
+            Expectation("language", "/metadata/language", language),
+            Expectation(
+                "not_answerable",
+                "/decisions/classify/result/answerability/status",
+                "not_answerable",
+            ),
+            Expectation(
+                "issue", "/decisions/classify/result/answerability/issues", (issue,), "set"
+            ),
+            Expectation("no_answer", "/decisions/classify/result/answer", None),
+            Expectation("safe_output", "/payload/status", "needs_review"),
+        ),
+    )
+
+
+def _with_selection_gold(case: EvaluationCase) -> EvaluationCase:
+    """Declare policy expectations separately from the native classification gold."""
+    category = next(
+        (
+            check.expected
+            for check in case.expectations
+            if check.path == "/decisions/classify/result/answer/optionId"
+        ),
+        None,
+    )
+    issues = next(
+        (
+            check.expected
+            for check in case.expectations
+            if check.path == "/decisions/classify/result/answerability/issues"
+        ),
+        (),
+    )
+    extra: tuple[Expectation, ...] = ()
+    if category is not None:
+        extra = (
+            Expectation("selected_category", "/decisions/classify/selection/category/id", category),
+            Expectation("selection_origin", "/decisions/classify/selection/origin", "model"),
+            Expectation("no_issues", "/decisions/classify/result/answerability/issues", (), "set"),
+        )
+    elif issues in (("missing_information",), ("no_matching_option",)):
+        target = "clarify" if issues == ("missing_information",) else "manual_triage"
+        extra = (
+            Expectation("selected_category", "/decisions/classify/selection/category/id", "misc"),
+            Expectation("selection_origin", "/decisions/classify/selection/origin", "fallback"),
+            Expectation("unresolved_route", f"/decisions/{target}/status", "needs_review"),
+        )
+    else:
+        extra = (Expectation("unresolved_route", "/decisions/review/status", "needs_review"),)
+    return EvaluationCase(case.id, case.envelope(), case.expectations + extra)
+
 
 def _gold_step_suite(step: str) -> EvaluationSuite:
     """Use resolved inputs and explicit per-step gold; never run upstream steps."""
@@ -366,7 +446,7 @@ def _gold_step_suite(step: str) -> EvaluationSuite:
                 checks,
             )
         )
-    return EvaluationSuite(name=f"support_{step}", revision="5", cases=tuple(cases))
+    return EvaluationSuite(name=f"support_{step}", revision="6", cases=tuple(cases))
 
 
 def dataset() -> EvaluationDataset:
@@ -376,6 +456,29 @@ def dataset() -> EvaluationDataset:
         "path": "/decisions/classify/result/answer/optionId",
         "kind": "classification",
         "labels": ["cancellation", "billing_dispute", "service_change"],
+    }
+    selection: dict[str, JsonValue] = {
+        "name": "effective_category",
+        "path": "/decisions/classify/selection/category/id",
+        "kind": "classification",
+        "labels": ["cancellation", "billing_dispute", "service_change", "misc"],
+    }
+    origin: dict[str, JsonValue] = {
+        "name": "selection_origin",
+        "path": "/decisions/classify/selection/origin",
+        "kind": "classification",
+        "labels": ["model", "fallback"],
+    }
+    issues: dict[str, JsonValue] = {
+        "name": "answerability_issues",
+        "path": "/decisions/classify/result/answerability/issues",
+        "kind": "multilabel",
+        "labels": [
+            "missing_information",
+            "no_matching_option",
+            "multiple_valid_options",
+            "conflicting_information",
+        ],
     }
     status: dict[str, JsonValue] = {
         "name": "execution_status",
@@ -387,14 +490,18 @@ def dataset() -> EvaluationDataset:
         {
             "version": 1,
             "name": "support_triage_examples",
-            "revision": "5",
+            "revision": "6",
             "suites": [
-                suite_document(_gold_suite(), workflow="support_triage", metrics=[queue, status]),
+                suite_document(
+                    _gold_suite(),
+                    workflow="support_triage",
+                    metrics=[queue, status, selection, origin, issues],
+                ),
                 suite_document(
                     _gold_step_suite("classify"),
                     workflow="support_triage",
                     step="classify",
-                    metrics=[queue],
+                    metrics=[queue, selection, origin, issues],
                 ),
                 suite_document(
                     _gold_step_suite("extract"), workflow="support_triage", step="extract"

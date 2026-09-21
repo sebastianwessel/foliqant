@@ -65,6 +65,47 @@ timeout. Setting `request_timeout: 300` does not override the default 60-second
 model-attempt limit; raise `execution.model_timeout` explicitly when a local
 model needs more time.
 
+## Select a model for one step
+
+A `decision` or `llm` step inherits `defaults.model` from its workflow. Set
+`model: local_qwen` on the step to select another declared profile. To adjust
+one step without copying the profile, use:
+
+```yaml
+model:
+  profile: local_qwen
+  options:
+    max_tokens: 4096
+    temperature: 0.1
+```
+
+The override can also set `model` to a different provider model ID. Unspecified
+options inherit the profile; explicit `null` clears an optional setting. The
+merged settings are validated against the original provider's supported fields
+and constraints. Derived steps share their source profile's admission limits,
+so creating several variants does not multiply its allowed concurrency.
+
+For a different provider or an independent connection, a step may contain a
+complete provider configuration using the same fields as a deployment profile:
+
+```yaml
+model:
+  provider: openai_compatible
+  model: '$EXTRACTION_MODEL'
+  base_url: '$EXTRACTION_URL'
+  api_key: '$EXTRACTION_KEY'
+  output_mode: native
+  options:
+    temperature: 0.1
+```
+
+Inline configurations do not inherit another provider's settings. Use environment
+references for inline credentials; literal API keys in workflow files are
+rejected. Only designated deployment fields accept references; prompts, binding
+values and customer content are never expanded. Preparation validates the
+configuration offline and opening resolves its environment once. No per-step
+model discovery, request retry, or automatic provider fallback is added.
+
 ## Environment references
 
 Use a complete `$VARIABLE` value in supported deployment fields:

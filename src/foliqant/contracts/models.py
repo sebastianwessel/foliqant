@@ -3,7 +3,7 @@
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import ConfigDict, Field, SecretStr, ValidationInfo, model_validator
+from pydantic import AfterValidator, ConfigDict, Field, SecretStr, ValidationInfo, model_validator
 
 from .base import BoundaryModel
 from .endpoints import validate_http_endpoint
@@ -13,7 +13,7 @@ from .environment import (
     EnvironmentText,
     is_environment_reference,
 )
-from .workflow import Id
+from .identifiers import Id
 
 Duration = Annotated[float, Field(gt=0, le=3600)]
 
@@ -156,3 +156,57 @@ class ModelProfiles(BoundaryModel):
     """Named profiles have no reserved alias or implicit endpoint/model discovery."""
 
     models: Annotated[dict[Id, ModelConfig], Field(min_length=1, max_length=128)]
+
+
+class ModelOptionOverrides(BoundaryModel):
+    """Only supplied values replace profile options; null clears optional settings.
+
+    Provider-specific fields are checked against the selected profile by the
+    offline compiler after merging. Omitted values retain the profile setting.
+    """
+
+    max_tokens: Annotated[int, Field(strict=True, ge=1, le=1_048_576)] | None = None
+    temperature: Annotated[float, Field(ge=0, le=2)] | None = None
+    top_p: Annotated[float, Field(gt=0, le=1)] | None = None
+    seed: Annotated[int, Field(strict=True)] | None = None
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh"] | None = None
+    thinking: Literal["disabled", "adaptive"] | None = None
+    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
+    thinking_budget: Annotated[int, Field(strict=True, ge=1024)] | None = None
+
+
+class ModelProfileOverride(BoundaryModel):
+    """Reuse a deployment profile and replace its model ID or generation options.
+
+    Example: ``{profile: local, options: {max_tokens: 800}}`` retains the
+    profile's provider, credentials, capabilities, timeout, and shared admission.
+    """
+
+    profile: Id
+    model: Annotated[EnvironmentText, Field(min_length=1, pattern=r"\S")] | None = Field(
+        default=None, json_schema_extra=ENVIRONMENT_FIELD
+    )
+    options: ModelOptionOverrides = Field(default_factory=ModelOptionOverrides)
+
+    @model_validator(mode="after")
+    def explicit_values_are_valid(self) -> Self:
+        if "model" in self.model_fields_set and self.model is None:
+            raise ValueError("model override must be a nonblank model ID")
+        if "max_tokens" in self.options.model_fields_set and self.options.max_tokens is None:
+            raise ValueError("maximum output tokens cannot be cleared")
+        return self
+
+
+def _inline_credentials_are_references(config: ModelConfig) -> ModelConfig:
+    if config.api_key is not None and not is_environment_reference(
+        config.api_key.get_secret_value()
+    ):
+        raise ValueError("inline model credentials must use an environment reference")
+    return config
+
+
+StepModel = (
+    Id
+    | ModelProfileOverride
+    | Annotated[ModelConfig, AfterValidator(_inline_credentials_are_references)]
+)

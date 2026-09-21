@@ -1,5 +1,5 @@
 spec_manifest_version: 1
-content_digest: sha256:3b72c1463f13d9ca5b897b179187711039683c40dd3ad56f8192ee44ba1ba62d
+content_digest: sha256:1c5f25bc52dd839734d1031e4fcca79e057d820d4bebace466da2b22b155f15e
 artifacts:
   - path: 00-applicability.yaml
     sha256: sha256:f4f27579afa175878b0f9202ebd507291e5791523a08ad1394f790ff91cce975
@@ -54,7 +54,7 @@ artifacts:
   - path: 10-business-decisions-and-processes.md
     sha256: sha256:e56d27d054c10254ccba39d34c75689aa9409dbf5e8ff74677be2200fab6f1c5
   - path: 11-python-package.md
-    sha256: sha256:7454b1c807c27623d883373790638ec0f2c27cab7f239bc164025f08ce222631
+    sha256: sha256:e9d13fb804cc46c60021560e262e89a8cbd35913e30797b7144cc428956ea7a9
   - path: README.md
     sha256: sha256:f72175c81ccb37266fb93f1c380cff22969897d327769e4856838600505ece06
   - path: _registry.yaml
@@ -94,6 +94,6 @@ artifacts:
   - path: research/workflow-service-proposal.md
     sha256: sha256:6114e68214a130ffdd8df207e31144228638152debf1736e13ce7ae44e6da80d
 provenance:
-  source_revision: working-tree-5727fa8-evaluation-hardening
-  generated_at: 2026-09-21T19:58:35.512Z
+  source_revision: working-tree-254605c-fallback-context-models
+  generated_at: 2026-09-21T21:07:35.829Z
   generator: spec-manifest/v1

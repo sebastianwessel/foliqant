@@ -6,15 +6,18 @@ from typing import Annotated, Literal
 from pydantic import Discriminator, Field, StrictBool, Tag, field_validator, model_validator
 
 from foliqant.core.json import JsonValue
+from foliqant.core.plan import DecisionIssue
 from foliqant.decisions import (
     CategoryCatalog,
     DecisionOption,
     DecisionQuestion,
 )
+from foliqant.decisions.category_catalog import CategoryDescription, CategoryKey
 
 from .base import BoundaryModel, Version1
+from .identifiers import Id as Id
+from .models import StepModel
 
-Id = Annotated[str, Field(pattern=r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")]
 NonBlank = Annotated[str, Field(min_length=1, pattern=r".*\S.*")]
 JsonPointer = Annotated[str, Field(pattern=r"^(?:/(?:[^~/]|~[01])*)*$")]
 
@@ -108,21 +111,51 @@ class WorkflowDefaults(BoundaryModel):
     model: Id | None = None
 
 
+class FallbackCategory(BoundaryModel):
+    """Caller-defined fallback category, excluded from the model's options."""
+
+    id: CategoryKey
+    description: CategoryDescription | None = None
+
+
+class DecisionFallback(BoundaryModel):
+    category: FallbackCategory
+    on: Annotated[list[DecisionIssue], Field(min_length=1, max_length=4)]
+
+    @field_validator("on")
+    @classmethod
+    def unique_issues(cls, value: list[DecisionIssue]) -> list[DecisionIssue]:
+        if len(set(value)) != len(value):
+            raise ValueError("fallback issues must be unique")
+        return value
+
+
+class UnresolvedRouting(BoundaryModel):
+    """Issue-specific routes with a required default for ambiguity or no issue."""
+
+    default: Id
+    missing_information: Id | None = None
+    no_matching_option: Id | None = None
+    conflicting_information: Id | None = None
+    multiple_valid_options: Id | None = None
+
+
 class _CommonStep(BoundaryModel):
     name: Id | None = None
     type: str
     next: Id | None = None
-    on_unresolved: Id | None = None
+    on_unresolved: Id | UnresolvedRouting | None = None
 
 
 class DecisionStepAuthoring(_CommonStep):
     type: Literal["decision"]
-    model: Id | None = None
+    model: StepModel | None = None
     sources: dict[Id, Binding]
     question: QuestionShorthand | None = None
     questions: Annotated[list[DecisionQuestion], Field(min_length=2, max_length=64)] | None = None
     instructions: NonBlank
     on_answer: dict[str, Id] | None = None
+    fallback: DecisionFallback | None = None
 
     @model_validator(mode="after")
     def exactly_one_question_form(self) -> "DecisionStepAuthoring":
@@ -132,6 +165,13 @@ class DecisionStepAuthoring(_CommonStep):
             raise ValueError("next and on_answer are mutually exclusive")
         if self.questions is not None and self.on_answer is not None:
             raise ValueError("multi-question steps cannot route by answer")
+        if self.fallback is not None:
+            if not isinstance(self.question, ChoiceQuestionShorthand):
+                raise ValueError("fallback requires a single choice question")
+            if self.fallback.category.id in {
+                category.id for category in self.question.catalog.categories
+            }:
+                raise ValueError("fallback category must differ from ordinary options")
         if self.questions is not None:
             question_ids = [question.id for question in self.questions]
             if len(question_ids) != len(set(question_ids)):
@@ -164,7 +204,7 @@ class ToolPolicy(BoundaryModel):
 
 class LlmStepAuthoring(_CommonStep):
     type: Literal["llm"]
-    model: Id | None = None
+    model: StepModel | None = None
     input: dict[Id, Binding]
     instructions: NonBlank
     output: Literal["text"] | SchemaOutput

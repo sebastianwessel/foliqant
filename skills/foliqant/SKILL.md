@@ -35,6 +35,12 @@ Pydantic adapters stay outside it.
   `next` when all successful answers share a route.
 - Bind inputs with tagged literals or RFC 6901 pointers. Earlier results are
   `/steps/<id>/result`; public returned records are under `decisions`.
+- Pass selected prior fields through existing bindings, including MCP arguments;
+  do not add automatic conversation history or a second context DSL.
+- Single-choice fallback is a category object with an explicit issue allowlist.
+  Preserve the native result and separate `selection.origin: model|fallback`.
+  Unresolved routes may use an issue map with a required default; disagreement
+  uses the default. Never route a fallback as a successful native answer.
 - Missing differs from null. A final output referencing a conditional step needs
   an explicit optional/default binding. Do not bypass compiler dominance checks.
 - Decode untrusted input with `decode_envelope`. Optional `tenant_id` and
@@ -51,6 +57,10 @@ changing bootstrap, CLI or the thin HTTP example.
 
 Use explicit `ModelProfiles`, model aliases and provider IDs. Structured output
 uses supported native or tool mode, followed by independent host validation.
+Steps may select an alias, override `{profile, model?, options?}`, or provide a
+full provider configuration. Reuse provider validation and environment resolution;
+derived profiles share source admission. Inline credentials require references.
+Omitted options inherit and explicit null clears optional settings.
 Native decisions append shared contract guidance for answerability, exact
 citations, and concise explanations; keep business criteria in the workflow.
 Refusals, truncation and invalid values remain failures. Never weaken validation

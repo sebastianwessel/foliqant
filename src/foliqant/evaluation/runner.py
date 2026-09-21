@@ -188,7 +188,13 @@ async def _case(
         ]
     )
     steps = tuple(
-        StepReport(name, step.status, step.elapsed_seconds, step.usage)
+        StepReport(
+            name,
+            step.status,
+            step.elapsed_seconds,
+            step.usage,
+            step.selection.origin if step.selection is not None else None,
+        )
         for name, step in result.decisions.items()
     )
     report = CaseReport(
@@ -241,6 +247,15 @@ def _step_summaries(cases: tuple[CaseReport, ...]) -> tuple[StepSummary, ...]:
                 summarize_usage(
                     next((step.usage for step in case.steps if step.name == name), None)
                     for case in cases
+                ),
+                model_selected_cases=sum(step.selection_origin == "model" for step in records),
+                fallback_selected_cases=sum(
+                    step.selection_origin == "fallback" for step in records
+                ),
+                fallback_rate=(
+                    sum(step.selection_origin == "fallback" for step in records) / len(records)
+                    if records
+                    else None
                 ),
             )
         )

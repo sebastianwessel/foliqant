@@ -25,8 +25,8 @@ async def test_http_boundary_reuses_gold_suite_and_real_workflow(tmp_path) -> No
     assert result["mode"] == "offline_asgi"
     report = json.loads(Path(result["report"]).read_text())["reports"][0]
     assert isinstance(report, dict)
-    assert report["case_count"] == 9
-    assert report["review_rate"] == pytest.approx(1 / 3)
+    assert report["case_count"] == 12
+    assert report["review_rate"] == pytest.approx(1 / 2)
 
 
 def test_example_evaluation_fails_when_gold_disagrees(
@@ -64,12 +64,22 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
     assert "details" not in json.dumps(result)
     reports = json.loads(artifact.read_text())["reports"]
     pipeline, classification, extraction = reports
-    queue, status = pipeline["metrics"]
+    queue, status, effective, origin, issues = pipeline["metrics"]
     assert queue["support"] == queue["observed"] == 6
-    assert queue["excluded"] == 3  # Review gold does not invent a queue label.
+    assert queue["excluded"] == 6  # Review gold does not invent a queue label.
     assert queue["confusion_matrix"] == [[2, 0, 0], [0, 2, 0], [0, 0, 2]]
     assert queue["accuracy"] == queue["coverage"] == 1
-    assert status["support"] == 9
+    assert status["support"] == 12
+    assert effective["support"] == effective["observed"] == 10
+    assert effective["excluded"] == 2  # Conflicting/multiple intents are not coerced to misc.
+    assert effective["confusion_matrix"][-1] == [0, 0, 0, 4]
+    assert origin["confusion_matrix"] == [[6, 0], [0, 4]]
+    assert issues["support"] == 12
+    assert issues["accuracy"] == 1
+    classify_summary = next(step for step in pipeline["steps"] if step["name"] == "classify")
+    assert classify_summary["model_selected_cases"] == 6
+    assert classify_summary["fallback_selected_cases"] == 4
+    assert classify_summary["fallback_rate"] == pytest.approx(4 / 12)
     for report, step in ((classification, "classify"), (extraction, "extract")):
         assert report["target_step"] == step
         assert [entry["name"] for entry in report["steps"]] == [step]
@@ -88,6 +98,14 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
             decision["explanation"]["evidence"] + decision["explanation"]["contraryEvidence"]
         )
         assert all(item["sourceId"] == "message" and item["quote"] in message for item in citations)
+        step_result = details["result"]["decisions"]["classify"]
+        if case["id"] in {"multiple_active_intents", "unresolved_contradiction"}:
+            assert "selection" not in step_result
+        elif case["status"] == "needs_review":
+            assert step_result["selection"]["origin"] == "fallback"
+            assert step_result["selection"]["category"]["id"] == "misc"
+            assert decision["answer"] is None
+            assert decision["answerability"]["status"] == "not_answerable"
         if case["status"] == "completed":
             action = details["result"]["payload"]["requested_action"]
             assert action in message  # The extraction contract is source-language extractive.
@@ -98,7 +116,7 @@ async def test_http_metrics_reuse_shared_golden_catalog(tmp_path) -> None:
     metric = json.loads(Path(result["report"]).read_text())["reports"][0]["metrics"][0]
     assert metric["labels"] == ["cancellation", "billing_dispute", "service_change"]
     assert metric["confusion_matrix"] == [[2, 0, 0], [0, 2, 0], [0, 0, 2]]
-    assert metric["support"] == 6 and metric["excluded"] == 3
+    assert metric["support"] == 6 and metric["excluded"] == 6
 
 
 def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(monkeypatch) -> None:
@@ -110,10 +128,10 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
     monkeypatch.setattr(support_evaluation.offline, "scripted_response", forbidden)
     dataset = support_evaluation.dataset()
     pipeline, classification, extraction = dataset.suites
-    assert [len(spec.gold_cases) for spec in dataset.suites] == [9, 9, 6]
+    assert [len(spec.gold_cases) for spec in dataset.suites] == [12, 12, 6]
     assert Counter(
         case.input.metadata.model_dump()["language"] for case in pipeline.gold_cases
-    ) == {"en": 7, "de": 2}
+    ) == {"en": 8, "de": 4}
     category_path = "/decisions/classify/result/answer/optionId"
     expected_categories = {
         check.expected
@@ -126,6 +144,9 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
         "insufficient_information",
         "multiple_active_intents",
         "unresolved_contradiction",
+        "out_of_catalog",
+        "german_out_of_catalog",
+        "german_insufficient_information",
     }
     assert {case.id for case in extraction.gold_cases} == {
         case.id for case in pipeline.gold_cases if case.id not in review_ids
@@ -140,6 +161,9 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
         "insufficient_information": ["missing_information"],
         "multiple_active_intents": ["multiple_valid_options"],
         "unresolved_contradiction": ["conflicting_information"],
+        "out_of_catalog": ["no_matching_option"],
+        "german_out_of_catalog": ["no_matching_option"],
+        "german_insufficient_information": ["missing_information"],
     }
     for step in (classification, extraction):
         for isolated in step.gold_cases:
@@ -233,7 +257,7 @@ async def test_exported_dataset_and_report_replay_through_shared_cli(
     monkeypatch.setattr(support_evaluation, "CONFIG_PATH", config_path)
     await write_example_dataset(support_evaluation.dataset(), project / "private/gold.json")
     saved = tmp_path / "observed.json"
-    await support_evaluation.run_evaluations(output=saved)
+    await support_evaluation.run_evaluations(output=saved, repeat=2)
 
     async def forbidden(*args, **kwargs):
         pytest.fail("replay must never open model clients")
@@ -257,5 +281,21 @@ async def test_exported_dataset_and_report_replay_through_shared_cli(
         )
         == 0
     )
-    assert json.loads(rescored.read_text())["reports"][0]["check_pass_rate"] == 1
+    original_reports = json.loads(saved.read_text())["reports"]
+    replay_reports = json.loads(rescored.read_text())["reports"]
+    assert replay_reports[0]["check_pass_rate"] == 1
+    for original, replay in zip(original_reports, replay_reports, strict=True):
+        assert replay["repeat"] == 2
+        assert replay["steps"] == original["steps"]
+        assert replay["metrics"] == original["metrics"]
+        for before, after in zip(original["cases"], replay["cases"], strict=True):
+            assert after["steps"] == before["steps"]
+            assert (
+                after["details"]["result"]["decisions"] == before["details"]["result"]["decisions"]
+            )
+    classify = next(step for step in replay_reports[0]["steps"] if step["name"] == "classify")
+    assert classify["model_selected_cases"] == 12
+    assert classify["fallback_selected_cases"] == 8
+    assert classify["observed_cases"] == 24
+    assert classify["fallback_rate"] == pytest.approx(8 / 24)
     capsys.readouterr()

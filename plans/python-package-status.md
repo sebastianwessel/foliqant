@@ -21,6 +21,11 @@ Implemented functionality:
 - Optional `evaluation.dataset` configuration, offline dataset checks/replay,
   explicit classification/multilabel metrics and private full-result artifacts.
   Runtime startup neither reads gold nor requires it to be deployed.
+- Optional single-choice fallback categories retain original answers and record
+  model/fallback selection separately; unresolved issue maps select deterministic
+  routes. Evaluations score original answers, effective selections, and origins.
+- Per-step profile/model/options selection reuses offline provider validation
+  and shared admission. Explicit prior-result bindings drive extraction-to-MCP.
 - Public package docs, local Qwen business examples and separate model-development
   guides and skills. Production dependencies exclude model-training and HTTP-host
   dependencies.
@@ -33,3 +38,6 @@ Initial package verification is recorded in
 [the package/evaluation review](reviews/python-package-evaluation.md); configuration-based
 evaluation evidence is in [the evaluation DX record](reviews/evaluation-dx-proposal-2026-09-21.md).
 Small synthetic model runs verify integration only, not production accuracy.
+
+Current fallback, context, and step-model verification is recorded in
+[the implementation review](reviews/fallback-context-models-2026-09-21.md).

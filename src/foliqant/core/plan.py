@@ -56,6 +56,40 @@ class ToolPolicyPlan:
     choice_name: str | None = None
 
 
+type DecisionIssue = Literal[
+    "missing_information", "conflicting_information", "multiple_valid_options", "no_matching_option"
+]
+
+
+@dataclass(frozen=True, slots=True)
+class CategoryPlan:
+    """An exact category identifier and optional caller-authored description."""
+
+    id: str
+    description: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FallbackPlan:
+    """Deterministic classification for explicitly allowed native uncertainty."""
+
+    category: CategoryPlan
+    on: tuple[DecisionIssue, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class UnresolvedRoutingPlan:
+    """Route agreeing issue targets, otherwise use the required default."""
+
+    default: str
+    issues: tuple[tuple[DecisionIssue, str], ...] = ()
+
+    def target(self, issues: tuple[DecisionIssue, ...]) -> str:
+        routes = dict(self.issues)
+        targets = {routes.get(issue, self.default) for issue in issues}
+        return targets.pop() if len(targets) == 1 else self.default
+
+
 @dataclass(frozen=True, slots=True)
 class StepPlan:
     """Common immutable step data.
@@ -69,7 +103,7 @@ class StepPlan:
     type: str
     location: SourceLocation
     next: str | None = None
-    on_unresolved: str | None = None
+    on_unresolved: str | UnresolvedRoutingPlan | None = None
     unresolved_before_transition: bool = False
 
 
@@ -81,6 +115,7 @@ class DecisionStepPlan(StepPlan):
     question_mode: Literal["single", "multiple"] = "single"
     instructions: str = ""
     on_answer: tuple[tuple[str, str], ...] = ()
+    fallback: FallbackPlan | None = None
 
 
 @dataclass(frozen=True, slots=True)

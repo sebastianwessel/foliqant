@@ -9,6 +9,7 @@ _HINTS = {
     "ambiguous_step_name": "Use the inline mapping key as the step name; remove the name field.",
     "ambiguous_instructions": "Use either the Markdown body or the instructions field.",
     "missing_transition": "Set next or exhaustive on_answer routes to an explicit finish step.",
+    "invalid_model_options": "Use options supported by the selected profile and compatible values.",
     "unknown_model": "Declare the selected model alias or configure a workflow default.",
     "unsupported_model_capability": "Select a profile supporting this output and tool policy.",
     "dangling_pointer": "Select a declared payload or step-result path supported by its schema.",

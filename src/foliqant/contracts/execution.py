@@ -1,6 +1,6 @@
 """Strict public execution results mapped from immutable engine values."""
 
-from typing import Annotated, Self, cast
+from typing import Annotated, Literal, Self, cast
 
 from pydantic import (
     BeforeValidator,
@@ -29,6 +29,7 @@ from foliqant.core.execution import (
     Usage as CoreUsage,
 )
 from foliqant.core.json import JsonValue, thaw_json
+from foliqant.decisions import ChoiceResult
 
 from .base import BoundaryModel
 from .envelope import Metadata
@@ -156,9 +157,47 @@ class ExecutionInfo(_ExecutionBoundary):
         return values
 
 
+class SelectedCategory(_ExecutionBoundary):
+    """Exact configured category identity; descriptions retain authored whitespace."""
+
+    id: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=128, pattern=r"\S")]
+    description: (
+        Annotated[str, StringConstraints(strict=True, min_length=1)] | SkipJsonSchema[None]
+    ) = Field(default=None, json_schema_extra=_omit_default)
+
+    @model_validator(mode="after")
+    def omitted_description_is_not_null(self) -> Self:
+        if "description" in self.model_fields_set and self.description is None:
+            raise ValueError("description must be omitted rather than null")
+        return self
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        if "description" not in self.model_fields_set:
+            values.pop("description", None)
+        return values
+
+
+class StepSelection(_ExecutionBoundary):
+    """Effective classification without changing the native answer or uncertainty."""
+
+    category: SelectedCategory
+    origin: Literal["model", "fallback"]
+
+
 class StepResult(_ExecutionBoundary):
     model_config = ConfigDict(
         json_schema_extra={
+            "allOf": [
+                {
+                    "if": {"required": ["selection"]},
+                    "then": {
+                        "required": ["result"],
+                        "properties": {"status": {"enum": ["completed", "needs_review"]}},
+                    },
+                }
+            ],
             "oneOf": [
                 {
                     "properties": {"status": {"const": "completed"}},
@@ -182,7 +221,7 @@ class StepResult(_ExecutionBoundary):
                     "properties": {"status": {"const": "skipped"}},
                     "not": {"anyOf": [{"required": ["result"]}, {"required": ["error"]}]},
                 },
-            ]
+            ],
         }
     )
 
@@ -190,11 +229,40 @@ class StepResult(_ExecutionBoundary):
     elapsed_seconds: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
     usage: Usage | None = None
     result: JsonValue = Field(default=None, json_schema_extra=_omit_default)
+    selection: StepSelection | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
     error: SafeError | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
 
     @model_validator(mode="after")
     def status_matches_optional_fields(self) -> Self:
         has_result = "result" in self.model_fields_set
+        if "selection" in self.model_fields_set:
+            if self.selection is None or not has_result:
+                raise ValueError("selection requires a result and cannot be null")
+            expected_status = "completed" if self.selection.origin == "model" else "needs_review"
+            if self.status != expected_status:
+                raise ValueError("selection origin must match step status")
+            if not isinstance(self.result, dict) or self.result.get("type") != "choice":
+                raise ValueError("selection requires a native choice result")
+            ChoiceResult.model_validate(self.result, strict=True)
+            answerability = self.result.get("answerability")
+            if not isinstance(answerability, dict):
+                raise ValueError("selection requires native answerability")
+            if self.selection.origin == "model":
+                answer = self.result.get("answer")
+                if (
+                    answerability.get("status") != "answerable"
+                    or not isinstance(answer, dict)
+                    or answer.get("optionId") != self.selection.category.id
+                ):
+                    raise ValueError("model selection must match the native answer")
+            elif (
+                answerability.get("status") != "not_answerable"
+                or not answerability.get("issues")
+                or self.result.get("answer") is not None
+            ):
+                raise ValueError("fallback selection requires a native unanswered result")
         has_error = "error" in self.model_fields_set
         if has_error and self.error is None:
             raise ValueError("error must be omitted rather than null")
@@ -223,6 +291,8 @@ class StepResult(_ExecutionBoundary):
         values = cast(dict[str, JsonValue], handler(self))
         if "result" not in self.model_fields_set:
             values.pop("result", None)
+        if "selection" not in self.model_fields_set:
+            values.pop("selection", None)
         if "error" not in self.model_fields_set:
             values.pop("error", None)
         if self.elapsed_seconds is None:
@@ -281,6 +351,8 @@ def _step_result(record: StepRecord) -> dict[str, JsonValue]:
         value["usage"] = _usage(record.usage)
     if record.has_result:
         value["result"] = thaw_json(record.result)
+    if record.selection is not None:
+        value["selection"] = thaw_json(record.selection.as_json())
     if record.error is not None:
         value["error"] = _safe_error(record.error)
     return value

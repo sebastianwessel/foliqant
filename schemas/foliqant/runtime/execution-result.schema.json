@@ -194,8 +194,53 @@
       "title": "SafeError",
       "type": "object"
     },
+    "SelectedCategory": {
+      "additionalProperties": false,
+      "description": "Exact configured category identity; descriptions retain authored whitespace.",
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "SelectedCategory",
+      "type": "object"
+    },
     "StepResult": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "selection"
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "completed",
+                  "needs_review"
+                ]
+              }
+            },
+            "required": [
+              "result"
+            ]
+          }
+        }
+      ],
       "oneOf": [
         {
           "not": {
@@ -294,6 +339,10 @@
         "result": {
           "$ref": "#/$defs/JsonValue"
         },
+        "selection": {
+          "$ref": "#/$defs/StepSelection",
+          "title": "Selection"
+        },
         "status": {
           "$ref": "#/$defs/StepStatus"
         },
@@ -313,6 +362,29 @@
         "status"
       ],
       "title": "StepResult",
+      "type": "object"
+    },
+    "StepSelection": {
+      "additionalProperties": false,
+      "description": "Effective classification without changing the native answer or uncertainty.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/SelectedCategory"
+        },
+        "origin": {
+          "enum": [
+            "model",
+            "fallback"
+          ],
+          "title": "Origin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "origin"
+      ],
+      "title": "StepSelection",
       "type": "object"
     },
     "StepStatus": {

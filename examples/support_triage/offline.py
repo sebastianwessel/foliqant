@@ -88,7 +88,16 @@ def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
             "deadline": "by 1 November 2026",
             "account_reference": "A-3100",
         }
-    elif "Please help." in text:
+    elif "advertised accountant position" in text or "Stelle als Buchhalter" in text:
+        option, extracted = None, None
+        quote = (
+            "Ich möchte mich auf die ausgeschriebene Stelle als Buchhalter bewerben."
+            if "Stelle als Buchhalter" in text
+            else "I would like to apply for the advertised accountant position."
+        )
+        status = "not_answerable"
+        issues = ["no_matching_option"]
+    elif "Please help." in text or "Bitte helfen Sie mir." in text:
         option, quote, extracted = None, None, None
         status = "not_answerable"
         issues = ["missing_information"]
@@ -135,9 +144,8 @@ async def model_factory(
 ) -> AsyncIterator[Mapping[str, ModelBinding]]:
     """Inject a PydanticAI FunctionModel; no SDK clients or sockets are opened."""
     del environment
-    assert set(profiles.models) == {"local_qwen"}
     yield {
-        "local_qwen": ModelBinding(
+        alias: ModelBinding(
             model=FunctionModel(scripted_response),
             settings=ModelSettings(),
             admission=CapacityLimiter(concurrency=1, queue_limit=0),
@@ -145,4 +153,5 @@ async def model_factory(
             supports_text=True,
             supports_json_schema=True,
         )
+        for alias in profiles.models
     }

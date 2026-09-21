@@ -110,6 +110,20 @@ These functions are application policy. Do not branch on the wording of an
 explanation. Authentication, authorization, business prerequisites, and the
 safety of an external action remain application responsibilities.
 
+## Keep fallback separate from evidence
+
+`missing_information` and `no_matching_option` are both declared issue codes.
+They should remain distinct: the first can need more facts; the second can need
+a different catalog or process. The runtime does not infer one from the other.
+
+A workflow may deliberately map either to the same fallback category without
+merging those facts. Configure an optional category object and allowed issues
+on a single-choice decision, as shown in [workflow routing](build-workflows.md#classify-with-an-explicit-fallback).
+The native answer stays unresolved; `selection.origin: fallback` records the
+policy choice separately. Contradictions or multiple valid options remain
+unresolved unless explicitly covered by that policy. A fallback cannot hide an
+invalid response or turn a request needing review into a successful model answer.
+
 ## Treat explanations as evidence summaries
 
 An explanation summary is a bounded human-readable reason, not a transcript of

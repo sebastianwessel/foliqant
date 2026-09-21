@@ -1,5 +1,8 @@
 ---
 type: llm
+model:
+  profile: local_qwen
+  options: {max_tokens: 4096}
 input:
   message: {pointer: /payload/message}
 output:

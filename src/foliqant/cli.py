@@ -26,6 +26,7 @@ from foliqant.core.plan import (
     LlmStepPlan,
     McpStepPlan,
     SourceLocation,
+    UnresolvedRoutingPlan,
     WorkflowPlan,
 )
 
@@ -286,17 +287,29 @@ def _init(destination: Path) -> dict[str, object]:
     return {"command": "init", "status": "created"}
 
 
-def _plan_report(plan: WorkflowPlan) -> dict[str, object]:
+def _plan_report(
+    plan: WorkflowPlan, prepared: PreparedApplication | None = None
+) -> dict[str, object]:
     steps: list[dict[str, object]] = []
     for step in plan.steps:
         item: dict[str, object] = {"name": step.name, "type": step.type}
         if step.next is not None:
             item["next"] = step.next
         if step.on_unresolved is not None:
-            item["on_unresolved"] = step.on_unresolved
+            if isinstance(step.on_unresolved, UnresolvedRoutingPlan):
+                unresolved: dict[str, str] = {"default": step.on_unresolved.default}
+                unresolved.update(step.on_unresolved.issues)
+                item["on_unresolved"] = unresolved
+            else:
+                item["on_unresolved"] = step.on_unresolved
         if isinstance(step, DecisionStepPlan):
             item["model"] = step.model
             item["on_answer"] = dict(step.on_answer)
+            if step.fallback is not None:
+                category = {"id": step.fallback.category.id}
+                if step.fallback.category.description is not None:
+                    category["description"] = step.fallback.category.description
+                item["fallback"] = {"category": category, "on": list(step.fallback.on)}
         elif isinstance(step, LlmStepPlan):
             item["model"] = step.model
             if step.tools is not None:
@@ -305,6 +318,15 @@ def _plan_report(plan: WorkflowPlan) -> dict[str, object]:
             item["server"], item["tool"] = step.server, step.tool
         elif isinstance(step, HandlerStepPlan):
             item["handler"] = step.handler
+        if prepared is not None and isinstance(step, (DecisionStepPlan, LlmStepPlan)):
+            profile = prepared._models[step.model]
+            selection: dict[str, object] = {"provider": profile.provider, "model": profile.model}
+            source = prepared._model_admission_groups.get(step.model)
+            if source is not None:
+                selection["profile"] = source
+            elif step.model in prepared.config.models:
+                selection["profile"] = step.model
+            item["model_selection"] = selection
         steps.append(item)
     return {
         "name": plan.name,
@@ -336,7 +358,7 @@ def _explain(config_path: Path, workflow: str | None) -> dict[str, object]:
     return {
         "command": "explain",
         "configuration_digest": prepared.configuration_digest,
-        "workflows": [_plan_report(plan) for plan in plans],
+        "workflows": [_plan_report(plan, prepared) for plan in plans],
     }
 
 

@@ -60,6 +60,7 @@ Continue with [workflow authoring](docs/guides/build-workflows.md).
 
 - [Support triage](examples/support_triage/README.md): decisions and extraction with a local model.
 - [Public-request lookup](examples/public_request_mcp/README.md): read-only MCP without a model.
+- [Extraction to MCP](examples/extracted_request_mcp/README.md): pass selected model output to a tool.
 - [HTTP wrapper](examples/http_workflow/README.md): thin transport around the in-memory API.
 
 ## Development

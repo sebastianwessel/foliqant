@@ -310,6 +310,8 @@ class ModelExecutor:
             validated.value,
             needs_review=not validated.answerable,
             route_key=validated.route_key,
+            selection=validated.selection,
+            unresolved_issues=validated.unresolved_issues,
         )
 
     async def _run_schema(

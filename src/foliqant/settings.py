@@ -15,7 +15,9 @@ from pydantic import ValidationError
 from foliqant.adapters.handlers import HandlerExecutor, HandlerRegistration
 from foliqant.compiler import CompilationError, compile_workflow
 from foliqant.compiler._loader import load_yaml
+from foliqant.compiler.models import ModelRegistry
 from foliqant.contracts.deployment import DeploymentConfig
+from foliqant.contracts.models import ModelConfig
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import HandlerStepPlan, SourceLocation, WorkflowPlan
@@ -32,6 +34,8 @@ class PreparedApplication:
     configuration_digest: str
     _configuration: FrozenObject = field(repr=False)
     handlers: Mapping[str, HandlerRegistration] = field(repr=False)
+    _models: Mapping[str, ModelConfig] = field(repr=False)
+    _model_admission_groups: Mapping[str, str] = field(repr=False)
 
     @property
     def config(self) -> DeploymentConfig:
@@ -54,6 +58,7 @@ def prepare_application(
         root = source.parent
         plans: dict[str, WorkflowPlan] = {}
         registered = dict(handlers or {})
+        models = ModelRegistry(config.models)
         HandlerExecutor(registered)  # Validate declared schemas offline before activation.
         for name, relative in config.workflows.items():
             path = Path(relative)
@@ -69,6 +74,7 @@ def prepare_application(
                 handler_names=set(registered),
                 model_profiles=config.models,
                 handler_schemas=registered,
+                _model_registry=models,
             )
             if any(
                 isinstance(step, HandlerStepPlan) and registered[step.handler].effect != "read"
@@ -112,6 +118,8 @@ def prepare_application(
             digest,
             cast(FrozenObject, freeze_json(document)),
             MappingProxyType(registered),
+            MappingProxyType(models.profiles),
+            MappingProxyType(models.admission_groups),
         )
     except CompilationError:
         raise

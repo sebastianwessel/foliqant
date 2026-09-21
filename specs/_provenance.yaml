@@ -1,4 +1,4 @@
 spec_manifest:
-  content_digest: sha256:3b72c1463f13d9ca5b897b179187711039683c40dd3ad56f8192ee44ba1ba62d
-  source_revision: working-tree-5727fa8-evaluation-hardening
-  generated_at: 2026-09-21T19:58:35.512Z
+  content_digest: sha256:1c5f25bc52dd839734d1031e4fcca79e057d820d4bebace466da2b22b155f15e
+  source_revision: working-tree-254605c-fallback-context-models
+  generated_at: 2026-09-21T21:07:35.829Z

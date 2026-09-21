@@ -12,6 +12,12 @@ overlays the supplied environment and resolves marked deployment references.
 Use `load_environment` only to load an explicitly selected additional location.
 Package import does not discover configuration or open clients.
 
+Decision/LLM steps may select a declared model alias, a `{profile, model?,
+options?}` override, or a complete provider configuration. Inline API keys must
+be environment references. Compile effective profiles offline and resolve them
+once at open; derived profiles share source admission. `explain` shows the
+authored provider/model and optional source profile without credentials.
+
 ## Deployment contract
 
 Version 1 requires `workflows` and accepts `models`, `mcp`, `execution` and
