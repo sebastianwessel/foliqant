@@ -441,10 +441,12 @@ uv run --no-sync python -m examples.http_workflow.evaluate
 ```
 
 Support triage checks full pipelines and isolated classification/extraction.
-Its twelve authored inputs cover all three queue categories, missing information,
-out-of-catalog requests, multiple active intents, contradictory instructions, explicit corrections,
-and English/German inputs. Extraction gold checks account versus invoice
-references, absent values, and unchanged deadline wording. The HTTP example
+Its sixteen authored inputs cover all three queue categories, missing information,
+out-of-catalog requests, multiple active intents, contradictory instructions,
+explicit corrections, category words without a request, a withdrawn request, and
+a missing referent. Eleven inputs are English and five are German. Extraction
+gold checks account versus invoice references, absent values, and unchanged
+deadline wording. The HTTP example
 reuses these same inputs; the MCP example adds two synthetic request lookups.
 The extraction-to-MCP example adds a selected-field binding between steps.
 Repeated pipelines and isolated steps do not create additional independent gold.

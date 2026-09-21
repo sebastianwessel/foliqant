@@ -27,6 +27,19 @@ from foliqant.evaluation import (
 from foliqant.evaluation.dataset import EvaluationDataset, metric_specs
 
 _MESSAGES = {
+    "category_words_without_request": (
+        "Your help page lists cancellation and priority support. "
+        "I am only confirming that I read it; I am not requesting either action."
+    ),
+    "german_category_words_without_request": (
+        "Ihre Hilfeseite nennt Kündigung und Premium-Support. Ich bestätige nur, "
+        "dass ich sie gelesen habe; ich beantrage keine dieser Änderungen."
+    ),
+    "withdrawn_request": (
+        "Earlier message: 'Please cancel my renewal.' I withdraw that request. "
+        "Please make no changes; I have no other request."
+    ),
+    "missing_referent": "Please stop it. I have not specified what 'it' refers to.",
     "explicit_cancellation": "Cancel renewal for account C-1049 by 30 September 2026.",
     "billing_dispute": "I dispute invoice INV-882. Please review the duplicate charge.",
     "insufficient_information": "Please help.",
@@ -81,7 +94,7 @@ def _gold_suite() -> EvaluationSuite:
     """Independent gold for clear, incomplete, competing, and corrected requests."""
     original = EvaluationSuite(
         name="support_triage",
-        revision="7",
+        revision="8",
         cases=(
             EvaluationCase(
                 "explicit_cancellation",
@@ -345,6 +358,10 @@ def _gold_suite() -> EvaluationSuite:
         _unresolved_case("out_of_catalog", "eval-010", "en"),
         _unresolved_case("german_out_of_catalog", "eval-011", "de"),
         _unresolved_case("german_insufficient_information", "eval-012", "de"),
+        _unresolved_case("category_words_without_request", "eval-013", "en"),
+        _unresolved_case("german_category_words_without_request", "eval-014", "de"),
+        _unresolved_case("withdrawn_request", "eval-015", "en"),
+        _unresolved_case("missing_referent", "eval-016", "en"),
     )
     return EvaluationSuite(
         original.name,
@@ -446,7 +463,7 @@ def _gold_step_suite(step: str) -> EvaluationSuite:
                 checks,
             )
         )
-    return EvaluationSuite(name=f"support_{step}", revision="7", cases=tuple(cases))
+    return EvaluationSuite(name=f"support_{step}", revision="8", cases=tuple(cases))
 
 
 def dataset() -> EvaluationDataset:
@@ -489,7 +506,7 @@ def dataset() -> EvaluationDataset:
         {
             "version": 1,
             "name": "support_triage_examples",
-            "revision": "7",
+            "revision": "8",
             "suites": [
                 suite_document(
                     _gold_suite(),

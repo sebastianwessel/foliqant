@@ -25,8 +25,8 @@ async def test_http_boundary_reuses_gold_suite_and_real_workflow(tmp_path) -> No
     assert result["mode"] == "offline_asgi"
     report = json.loads(Path(result["report"]).read_text())["reports"][0]
     assert isinstance(report, dict)
-    assert report["case_count"] == 12
-    assert report["review_rate"] == pytest.approx(1 / 2)
+    assert report["case_count"] == 16
+    assert report["review_rate"] == pytest.approx(10 / 16)
 
 
 def test_example_evaluation_fails_when_gold_disagrees(
@@ -66,15 +66,15 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
     pipeline, classification, extraction = reports
     queue, status, effective, origin, issues = pipeline["metrics"]
     assert queue["support"] == queue["observed"] == 6
-    assert queue["excluded"] == 6  # Review gold does not invent a queue label.
+    assert queue["excluded"] == 10  # Review gold does not invent a queue label.
     assert queue["confusion_matrix"] == [[2, 0, 0], [0, 2, 0], [0, 0, 2]]
     assert queue["accuracy"] == queue["coverage"] == 1
-    assert status["support"] == 12
-    assert effective["support"] == effective["observed"] == 10
+    assert status["support"] == 16
+    assert effective["support"] == effective["observed"] == 14
     assert effective["excluded"] == 2  # Conflicting/multiple intents are not coerced to misc.
-    assert effective["confusion_matrix"][-1] == [0, 0, 0, 4]
-    assert origin["confusion_matrix"] == [[6, 0], [0, 4]]
-    assert issues["support"] == 12
+    assert effective["confusion_matrix"][-1] == [0, 0, 0, 8]
+    assert origin["confusion_matrix"] == [[6, 0], [0, 8]]
+    assert issues["support"] == 16
     assert issues["labels"] == [
         "no_supported_answer",
         "conflicting_information",
@@ -83,8 +83,8 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
     assert issues["accuracy"] == 1
     classify_summary = next(step for step in pipeline["steps"] if step["name"] == "classify")
     assert classify_summary["model_selected_cases"] == 6
-    assert classify_summary["fallback_selected_cases"] == 4
-    assert classify_summary["fallback_rate"] == pytest.approx(4 / 12)
+    assert classify_summary["fallback_selected_cases"] == 8
+    assert classify_summary["fallback_rate"] == pytest.approx(8 / 16)
     for report, step in ((classification, "classify"), (extraction, "extract")):
         assert report["target_step"] == step
         assert [entry["name"] for entry in report["steps"]] == [step]
@@ -121,7 +121,7 @@ async def test_http_metrics_reuse_shared_golden_catalog(tmp_path) -> None:
     metric = json.loads(Path(result["report"]).read_text())["reports"][0]["metrics"][0]
     assert metric["labels"] == ["cancellation", "billing_dispute", "service_change"]
     assert metric["confusion_matrix"] == [[2, 0, 0], [0, 2, 0], [0, 0, 2]]
-    assert metric["support"] == 6 and metric["excluded"] == 6
+    assert metric["support"] == 6 and metric["excluded"] == 10
 
 
 def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(monkeypatch) -> None:
@@ -133,10 +133,10 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
     monkeypatch.setattr(support_evaluation.offline, "scripted_response", forbidden)
     dataset = support_evaluation.dataset()
     pipeline, classification, extraction = dataset.suites
-    assert [len(spec.gold_cases) for spec in dataset.suites] == [12, 12, 6]
+    assert [len(spec.gold_cases) for spec in dataset.suites] == [16, 16, 6]
     assert Counter(
         case.input.metadata.model_dump()["language"] for case in pipeline.gold_cases
-    ) == {"en": 8, "de": 4}
+    ) == {"en": 11, "de": 5}
     category_path = "/decisions/classify/result/answer/optionId"
     expected_categories = {
         check.expected
@@ -152,6 +152,10 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
         "out_of_catalog",
         "german_out_of_catalog",
         "german_insufficient_information",
+        "category_words_without_request",
+        "german_category_words_without_request",
+        "withdrawn_request",
+        "missing_referent",
     }
     assert {case.id for case in extraction.gold_cases} == {
         case.id for case in pipeline.gold_cases if case.id not in review_ids
@@ -169,6 +173,10 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
         "out_of_catalog": ["no_supported_answer"],
         "german_out_of_catalog": ["no_supported_answer"],
         "german_insufficient_information": ["no_supported_answer"],
+        "category_words_without_request": ["no_supported_answer"],
+        "german_category_words_without_request": ["no_supported_answer"],
+        "withdrawn_request": ["no_supported_answer"],
+        "missing_referent": ["no_supported_answer"],
     }
     for step in (classification, extraction):
         for isolated in step.gold_cases:
@@ -300,7 +308,7 @@ async def test_exported_dataset_and_report_replay_through_shared_cli(
             )
     classify = next(step for step in replay_reports[0]["steps"] if step["name"] == "classify")
     assert classify["model_selected_cases"] == 12
-    assert classify["fallback_selected_cases"] == 8
-    assert classify["observed_cases"] == 24
-    assert classify["fallback_rate"] == pytest.approx(8 / 24)
+    assert classify["fallback_selected_cases"] == 16
+    assert classify["observed_cases"] == 32
+    assert classify["fallback_rate"] == pytest.approx(16 / 32)
     capsys.readouterr()

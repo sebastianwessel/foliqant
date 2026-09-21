@@ -30,7 +30,20 @@ def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
     issues: list[str] = []
     contrary: list[dict[str, str]] = []
     missing: list[str] = []
-    if "Cancel renewal for account C-1049 by 30 September 2026." in text:
+    if any(
+        marker in text
+        for marker in (
+            "Your help page lists cancellation and priority support.",
+            "Ihre Hilfeseite nennt Kündigung und Premium-Support.",
+            "I withdraw that request.",
+            "I have not specified what",
+        )
+    ):
+        option, quote, extracted = None, None, None
+        status = "not_answerable"
+        issues = ["no_supported_answer"]
+        missing = ["No current action in the category catalog is established."]
+    elif "Cancel renewal for account C-1049 by 30 September 2026." in text:
         option, quote = "cancellation", "Cancel renewal"
         extracted = {
             "requested_action": "Cancel renewal",

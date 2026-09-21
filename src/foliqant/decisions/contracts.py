@@ -350,6 +350,34 @@ def _has_path(edges: list[tuple[str, str]], start: str, end: str) -> bool:
     return False
 
 
+def validate_answerability(
+    *,
+    prefix: str,
+    task_type: str,
+    answerability: Answerability,
+    has_answer: bool,
+    predicate_value: str | None,
+) -> list[str]:
+    """Check answer presence and status without interpreting support or explanations."""
+    problems: list[str] = []
+    status = answerability.status
+    if status != "answerable" and not answerability.issues:
+        problems.append(f"{prefix}:issues-required")
+    if status == "partially_answerable" and task_type not in {"multiselect", "request_units"}:
+        problems.append(f"{prefix}:partial-not-supported")
+    if task_type == "predicate":
+        if status == "answerable" and predicate_value == "unknown":
+            problems.append(f"{prefix}:unknown-on-answerable")
+        if status in {"not_answerable", "undetermined"} and predicate_value != "unknown":
+            problems.append(f"{prefix}:substantive-on-unanswerable")
+    else:
+        if status in {"answerable", "partially_answerable"} and not has_answer:
+            problems.append(f"{prefix}:answer-required")
+        if status in {"not_answerable", "undetermined"} and has_answer:
+            problems.append(f"{prefix}:answer-must-be-null")
+    return problems
+
+
 def validate_decision_output(task: DecisionInput, result: DecisionOutput) -> list[str]:
     """Check cross-field consistency and exact evidence references, not prose entailment."""
 
@@ -370,18 +398,15 @@ def validate_decision_output(task: DecisionInput, result: DecisionOutput) -> lis
             problems.append(f"{prefix}:type-mismatch")
             continue
         status = item.answerability.status
-        if status != "answerable" and not item.answerability.issues:
-            problems.append(f"{prefix}:issues-required")
-        if status == "partially_answerable" and item.type not in {
-            "multiselect",
-            "request_units",
-        }:
-            problems.append(f"{prefix}:partial-not-supported")
-        if item.type != "predicate":
-            if status in {"answerable", "partially_answerable"} and item.answer is None:
-                problems.append(f"{prefix}:answer-required")
-            if status in {"not_answerable", "undetermined"} and item.answer is not None:
-                problems.append(f"{prefix}:answer-must-be-null")
+        problems.extend(
+            validate_answerability(
+                prefix=prefix,
+                task_type=item.type,
+                answerability=item.answerability,
+                has_answer=item.answer is not None,
+                predicate_value=item.answer.value if isinstance(item, PredicateResult) else None,
+            )
+        )
         explanation_citations = item.explanation.evidence + item.explanation.contraryEvidence
         problems.extend(
             _citation_problems(
@@ -409,13 +434,6 @@ def validate_decision_output(task: DecisionInput, result: DecisionOutput) -> lis
                     problems.append(f"{prefix}:partial-answer-empty")
                 if not question.minSelections <= count <= question.maxSelections:
                     problems.append(f"{prefix}:selection-cardinality")
-        elif isinstance(question, PredicateQuestion) and isinstance(item, PredicateResult):
-            if status == "answerable" and item.answer.value == "unknown":
-                problems.append(f"{prefix}:unknown-on-answerable")
-            if status in {"not_answerable", "undetermined"} and item.answer.value != "unknown":
-                problems.append(f"{prefix}:substantive-on-unanswerable")
-            if status == "partially_answerable":
-                problems.append(f"{prefix}:partial-not-supported")
         elif isinstance(question, OrdinalQuestion) and isinstance(item, OrdinalResult):
             if item.answer is not None and item.answer.levelId not in {
                 level.id for level in question.levels
@@ -475,16 +493,41 @@ def _request_answer_problems(
             unit.subject in citation.quote for citation in unit.evidence
         ):
             problems.append(f"{unit_prefix}:subject-not-in-evidence")
+    problems.extend(
+        validate_request_relations(
+            prefix=prefix,
+            unit_ids=set(units),
+            predicate_ids={
+                item.id for item in task.questions if isinstance(item, PredicateQuestion)
+            },
+            relations=answer.relations,
+        )
+    )
+    return problems
+
+
+def validate_request_relations(
+    *,
+    prefix: str,
+    unit_ids: set[str],
+    predicate_ids: set[str],
+    relations: list[RequestRelation],
+) -> list[str]:
+    """Validate request graph references and consistency without evidence formatting.
+
+    This check is shared by artifact and runtime boundaries. It does not establish
+    whether the input text supports a relation.
+    """
+    problems: list[str] = []
     relation_keys: list[tuple[object, ...]] = []
     directed: list[tuple[str, str]] = []
     requires: list[tuple[str, str]] = []
     exclusive_groups: list[set[str]] = []
     conditions: dict[tuple[str, str], set[str]] = defaultdict(set)
-    predicate_ids = {item.id for item in task.questions if isinstance(item, PredicateQuestion)}
-    for relation in answer.relations:
+    for relation in relations:
         relation_keys.append(_relation_key(relation))
         if isinstance(relation, ConditionalRelation):
-            if relation.requestId not in units:
+            if relation.requestId not in unit_ids:
                 problems.append(f"{prefix}:relation-unknown-request")
             if relation.predicateQuestionId not in predicate_ids:
                 problems.append(f"{prefix}:relation-unknown-predicate")
@@ -492,7 +535,7 @@ def _request_answer_problems(
                 relation.requiredValue
             )
         elif isinstance(relation, RequiresRelation):
-            if relation.requestId not in units or relation.requiredRequestId not in units:
+            if relation.requestId not in unit_ids or relation.requiredRequestId not in unit_ids:
                 problems.append(f"{prefix}:relation-unknown-request")
             if relation.requestId == relation.requiredRequestId:
                 problems.append(f"{prefix}:relation-self-reference")
@@ -500,13 +543,13 @@ def _request_answer_problems(
             requires.append(edge)
             directed.append(edge)
         elif isinstance(relation, PrecedesRelation):
-            if relation.beforeRequestId not in units or relation.afterRequestId not in units:
+            if relation.beforeRequestId not in unit_ids or relation.afterRequestId not in unit_ids:
                 problems.append(f"{prefix}:relation-unknown-request")
             if relation.beforeRequestId == relation.afterRequestId:
                 problems.append(f"{prefix}:relation-self-reference")
             directed.append((relation.beforeRequestId, relation.afterRequestId))
         else:
-            if not set(relation.requestIds) <= units.keys():
+            if not set(relation.requestIds) <= unit_ids:
                 problems.append(f"{prefix}:relation-unknown-request")
             exclusive_groups.append(set(relation.requestIds))
     if len(relation_keys) != len(set(relation_keys)):

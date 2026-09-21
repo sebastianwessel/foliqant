@@ -47,11 +47,12 @@ uv run --no-sync python -m examples.support_triage.evaluate
 ```
 
 The default uses scripted `FunctionModel` responses without contacting a model.
-It checks twelve independently authored synthetic pipeline cases: all three queue
+It checks sixteen independently authored synthetic pipeline cases: all three queue
 labels, missing actions, clear out-of-catalog requests, two simultaneous active
-queues, unresolved conflicting instructions, and an explicit correction. Eight
-inputs are English and four are German; category keys remain English. It checks
-classification on all twelve inputs and extraction on the six single-action inputs.
+queues, unresolved conflicting instructions, an explicit correction, category
+words without a request, a withdrawn request, and a missing referent. Eleven
+inputs are English and five are German; category keys remain English. It checks
+classification on all sixteen inputs and extraction on the six single-action inputs.
 Extraction retains source-language action wording and deadline operators such as
 `by` and `bis`. Expected answers live in `evaluate.py`; scripted outputs in
 `offline.py` only exercise wiring and validation. A negative-control test proves
@@ -80,7 +81,7 @@ that file without opening a model client:
 
 ```sh
 uv run --no-sync python -m examples.support_triage.evaluate \
-  --write-dataset .foliqant/evaluation/support-triage-v2.json
+  --write-dataset .foliqant/evaluation/support-triage-r8.json
 uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yaml --check
 ```
 
