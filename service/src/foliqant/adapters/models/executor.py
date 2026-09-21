@@ -24,9 +24,11 @@ from foliqant.core.execution import StepOutcome
 from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import DecisionStepPlan, HandlerStepPlan, LlmStepPlan, McpStepPlan
 from foliqant.ports.execution import OperationStep, StepContext
+from foliqant.ports.tools import ToolInputRequired, ToolRuntime
 
 from .accounting import request_token_usage
 from .binding import ModelBinding
+from .tools import ModelTools
 
 
 def _fail(code: ErrorCode) -> Never:
@@ -36,10 +38,13 @@ def _fail(code: ErrorCode) -> Never:
 class _InvocationModel(WrapperModel):
     """Apply one step's admission, deadline, budget, and accounting to every request."""
 
-    def __init__(self, binding: ModelBinding, context: StepContext) -> None:
+    def __init__(
+        self, binding: ModelBinding, context: StepContext, tools: ModelTools | None = None
+    ) -> None:
         super().__init__(binding.model)
         self._binding = binding
         self._context = context
+        self._tools = tools
 
     async def request(
         self,
@@ -47,6 +52,8 @@ class _InvocationModel(WrapperModel):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
+        if self._tools is not None:
+            model_settings = self._tools.settings(model_settings)
         loop = asyncio.get_running_loop()
         if not math.isfinite(self._context.model_timeout) or self._context.model_timeout <= 0:
             _fail(ErrorCode.TIMEOUT)
@@ -112,9 +119,16 @@ def _structured_output(
 class ModelExecutor:
     """Execute decision and LLM steps with configured PydanticAI models."""
 
-    def __init__(self, bindings: Mapping[str, ModelBinding], schemas: WorkflowSchemas) -> None:
+    def __init__(
+        self,
+        bindings: Mapping[str, ModelBinding],
+        schemas: WorkflowSchemas,
+        *,
+        tools: ToolRuntime | None = None,
+    ) -> None:
         self._bindings = dict(bindings)
         self._schemas = schemas
+        self._tools = tools
 
     async def execute(
         self,
@@ -128,6 +142,8 @@ class ModelExecutor:
             return await self._execute(step, inputs, context)
         except asyncio.CancelledError:
             raise
+        except ToolInputRequired:
+            return StepOutcome(None, needs_review=True)
         except ServiceError:
             raise
         except UnexpectedModelBehavior:
@@ -147,23 +163,43 @@ class ModelExecutor:
     ) -> StepOutcome:
         if isinstance(step, (McpStepPlan, HandlerStepPlan)):
             _fail(ErrorCode.INVALID_CONFIGURATION)
-        if isinstance(step, LlmStepPlan) and step.tools is not None:
-            _fail(ErrorCode.INVALID_CONFIGURATION)
         if context.step_id != step.name:
             _fail(ErrorCode.INVALID_CONFIGURATION)
         binding = self._bindings.get(step.model)
         if binding is None:
             _fail(ErrorCode.INVALID_CONFIGURATION)
-        if isinstance(step, LlmStepPlan) and step.output_kind == "text":
-            if not binding.supports_text:
-                _fail(ErrorCode.INVALID_CONFIGURATION)
-            return await self._run_text(step, inputs, context, binding)
-        if not binding.supports_json_schema:
-            _fail(ErrorCode.INVALID_CONFIGURATION)
         if isinstance(step, DecisionStepPlan):
+            if not binding.supports_json_schema:
+                _fail(ErrorCode.INVALID_CONFIGURATION)
             return await self._run_decision(step, inputs, context, binding)
-        if isinstance(step, LlmStepPlan) and step.output_kind == "schema":
-            return await self._run_schema(step, inputs, context, binding)
+        if not isinstance(step, LlmStepPlan):
+            _fail(ErrorCode.INVALID_CONFIGURATION)
+        if step.output_kind == "text" and not binding.supports_text:
+            _fail(ErrorCode.INVALID_CONFIGURATION)
+        if step.output_kind == "schema" and not binding.supports_json_schema:
+            _fail(ErrorCode.INVALID_CONFIGURATION)
+        if step.tools is None:
+            return await self._run_llm(step, inputs, context, binding)
+        if self._tools is None or not binding.supports_tools:
+            _fail(ErrorCode.INVALID_CONFIGURATION)
+        async with self._tools.open(step.tools.server, step.tools.allow, context) as session:
+            model_tools = ModelTools(session, step.tools)
+            outcome = await self._run_llm(step, inputs, context, binding, model_tools)
+            model_tools.validate_completion()
+            return outcome
+
+    async def _run_llm(
+        self,
+        step: LlmStepPlan,
+        inputs: FrozenObject,
+        context: StepContext,
+        binding: ModelBinding,
+        tools: ModelTools | None = None,
+    ) -> StepOutcome:
+        if step.output_kind == "text":
+            return await self._run_text(step, inputs, context, binding, tools)
+        if step.output_kind == "schema":
+            return await self._run_schema(step, inputs, context, binding, tools)
         _fail(ErrorCode.INVALID_CONFIGURATION)
 
     @staticmethod
@@ -173,16 +209,18 @@ class ModelExecutor:
         *,
         instructions: str,
         output_type: OutputSpec[Any],
+        tools: ModelTools | None = None,
     ) -> Agent[None, Any]:
         try:
             settings = copy.deepcopy(binding.settings)
         except Exception:
             _fail(ErrorCode.INVALID_CONFIGURATION)
         agent: Agent[None, Any] = Agent(
-            _InvocationModel(binding, context),
+            _InvocationModel(binding, context, tools),
             name="foliqant_workflow_model",
             instructions=instructions,
             output_type=output_type,
+            tools=tools.tools if tools is not None else [],
             model_settings=settings,
             retries=0,
         )
@@ -195,12 +233,14 @@ class ModelExecutor:
         inputs: FrozenObject,
         context: StepContext,
         binding: ModelBinding,
+        tools: ModelTools | None = None,
     ) -> StepOutcome:
         agent = self._agent(
             binding,
             context,
             instructions=step.instructions,
             output_type=str,
+            tools=tools,
         )
         result = await agent.run(_prompt(thaw_json(inputs)), retries=0)
         if not isinstance(result.output, str):
@@ -240,6 +280,7 @@ class ModelExecutor:
         inputs: FrozenObject,
         context: StepContext,
         binding: ModelBinding,
+        tools: ModelTools | None = None,
     ) -> StepOutcome:
         schema = self._schemas.provider_output_schema(step.name)
         provider_schema: dict[str, object] = {
@@ -260,6 +301,7 @@ class ModelExecutor:
             context,
             instructions=step.instructions,
             output_type=output_type,
+            tools=tools,
         )
         result = await agent.run(_prompt(thaw_json(inputs)), retries=0)
         if not isinstance(result.output, Mapping) or set(result.output) != {"value"}:

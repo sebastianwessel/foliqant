@@ -2,6 +2,14 @@ generation_map_version: 1
 contract_ref: CONTRACT-SERVICE-V1
 authority: ../11-workflow-service.md
 entries:
+  - id: GEN-SERVICE-MCP-PROFILES
+    canonical_source: ../../service/src/foliqant/contracts/mcp.py
+    generated_outputs: [../../contracts/service/mcp-profiles.schema.json]
+    command: uv run --project service python service/scripts/generate_schemas.py
+    drift_check: uv run --project service python service/scripts/generate_schemas.py --check
+    handwritten_remainder:
+      - confined schema validation, exact discovery matching and identity-scoped credential hooks
+    verification: [../../service/tests/test_mcp_configuration.py, ../../service/tests/test_mcp_catalog.py, ../../service/tests/test_mcp_runtime.py, ../../service/tests/test_mcp_transport.py]
   - id: GEN-SERVICE-MODEL-PROFILES
     canonical_source: ../../service/src/foliqant/contracts/models.py
     generated_outputs: [../../contracts/service/model-profiles.schema.json]

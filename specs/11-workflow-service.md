@@ -263,6 +263,18 @@ to the declared catalog; missing/changed schemas fail closed. Freeze validated
 catalog identity per run and recheck on a new connection/resume. `doctor` can
 report a new catalog for explicit operator review, never silently authorize it.
 
+MCP deployment profiles are closed `McpProfiles {servers: {alias: profile}}`
+objects. Each profile contains `transport`, a reused declared `catalog`, optional
+`auth` (a registered credential-provider ID), optional `identity_meta_key`,
+`concurrency` (4), `queue_limit` (16), `request_timeout` (30 seconds) and
+`output_limit_bytes` (1 MiB). HTTP transport uses `type: streamable_http`, an
+explicit endpoint and an opt-in insecure-HTTP development flag. Stdio transport
+uses `type: stdio`, a trusted command/argument list, optional absolute working
+directory and explicit environment overlay on the SDK's fixed safe baseline.
+There is no shell, ambient full-environment copy or input-controlled command.
+Catalog discovery is bounded to 128 pages, 1,024 tools and 1 MiB serialized data;
+repeated pagination cursors and duplicate names fail closed.
+
 Compile rejects missing/unreachable nodes, cycles, incomplete answer routes,
 unknown model/server/tool/handler IDs, dangling pointers, incompatible output
 binding and references to prior steps not available on every path. Explicit
@@ -360,8 +372,9 @@ validation. Provider preflight precedes admission and attempt reservation.
 Bound reference expansion before passing schemas to the
 SDK, preserving literal annotation values and the original host validator.
 Instrumented spans and MCP tools are added through their dedicated integrations;
-until those are present, model instrumentation is explicitly disabled and
-tool-bearing steps fail before making a request. Bedrock remains disabled until
+until safe telemetry is connected, model instrumentation is explicitly disabled.
+Tool-bearing LLM steps use the host MCP runtime and the same catalog/authorization
+checks as direct MCP steps. Bedrock remains disabled until
 credential discovery and its worker-thread lifecycle are explicitly bounded.
 
 One owner enforces retry budgets: disable provider SDK retries. PydanticAI may
@@ -384,6 +397,17 @@ text. Bound output bytes, request count, concurrency and deadline. Tool annotati
 are hints, not proof of read-only safety. Mutation requires a host effect policy
 and stable operation identity; uncertain completion enters review/reconciliation.
 
+The current embedded adapter enables read effects only. Write effects remain
+rejected before connection until durable operation identities and reconciliation
+are implemented; declaring `effect: write` is not sufficient authorization.
+Direct MCP steps have one operation deadline spanning connection, discovery and
+call. Model-tool sessions bound connection/discovery separately and give each
+actual tool invocation its own operation timeout, always inside the run deadline.
+All tool inputs are frozen once before validation/authorization/awaiting I/O.
+Discovery and calls both carry the same protected metadata policy. The SDK's
+public typed `send_request` performs protocol validation; the host checks declared
+tool output independently without SDK automatic interaction/retry rounds.
+
 Tool choice `required` means at least one allowed tool successfully executed and
 its result entered model context. A named choice additionally requires that tool.
 A failed call or mere emitted call does not satisfy the postcondition. After
@@ -395,6 +419,13 @@ OAuth uses the maintained SDK's protected-resource/authorization-server discover
 resource/audience binding and PKCE state validation. Interactive authorization is
 an explicit operator action, never a request-time browser launch. Noninteractive
 production uses a configured supported grant or an injected credential provider.
+A credential provider returns a fresh SDK-compatible auth object and configured
+allowed authorization-server origins. The HTTP transport gates every request,
+including discovery, registration and refresh, against the endpoint origin plus
+that explicit HTTPS allowlist. It disables environment proxy inheritance and
+implicit redirects. The OAuth adapter delegates discovery, state/PKCE and
+resource binding to the maintained SDK. Without explicit operator callbacks it
+can use/refresh stored credentials but cannot initiate interactive login.
 Tokens are stored outside Git, excluded from logs, protected at rest by the
 selected store and keyed by server plus tenant/principal/authentication scope.
 Never reuse a user token across identities or accept input-body access tokens.

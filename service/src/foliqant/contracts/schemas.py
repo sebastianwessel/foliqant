@@ -8,6 +8,7 @@ from foliqant.core.json import JsonValue
 
 from .envelope import Envelope
 from .execution import AcceptanceReceipt, ExecutionResult
+from .mcp import McpProfiles
 from .models import ModelProfiles
 from .workflow import DeclaredToolCatalog, StepAuthoring, WorkflowAuthoring
 
@@ -21,6 +22,7 @@ def service_schemas() -> dict[str, dict[str, JsonValue]]:
             "execution-result.schema.json": ExecutionResult.model_json_schema(),
             "acceptance-receipt.schema.json": AcceptanceReceipt.model_json_schema(),
             "model-profiles.schema.json": ModelProfiles.model_json_schema(),
+            "mcp-profiles.schema.json": McpProfiles.model_json_schema(),
             "workflow.schema.json": WorkflowAuthoring.model_json_schema(),
             "step.schema.json": TypeAdapter(StepAuthoring).json_schema(),
             "tool-catalog.schema.json": DeclaredToolCatalog.model_json_schema(),

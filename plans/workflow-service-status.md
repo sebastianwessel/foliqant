@@ -88,9 +88,35 @@ passed. The matching CI job has been added but has not run remotely.
   359 service tests, strict typing, lint/format and seven schema snapshots.
 
 The full service remains incomplete. Bedrock is explicitly disabled until its
-credential discovery and worker lifetime can be bounded. Tools, MCP/OAuth,
-production telemetry, durable transports and child workflows still need their
-implementation and acceptance checks.
+credential discovery and worker lifetime can be bounded. Production telemetry, durable transports and child workflows still need their
+implementation and acceptance checks. The subsequent MCP slice below covers
+read-only tools and SDK OAuth integration.
+
+## MCP and model-tool slice
+
+- Eight service schemas now include closed HTTP/stdio MCP deployment profiles.
+  Frozen declared catalogs are checked against bounded SDK discovery, with
+  confined schemas and independent argument/result validation.
+- Host-authorized read tools run as explicit MCP steps or PydanticAI function
+  tools. Required/named tool policies require validated success before final
+  output. Input-required stops in review without automatic interaction rounds.
+- Fresh per-caller SDK sessions preserve independently optional trusted IDs,
+  forward only configured identity/W3C metadata, strip baggage task-locally and
+  retain admission through bounded same-task cleanup.
+- SDK OAuth owns discovery, registration, PKCE/state, resource binding and refresh.
+  HTTP egress checks include explicit authorization origins. Credential hooks and
+  token storage are scoped to server/resource/auth reference/tenant/principal;
+  production storage protection and actual authorization remain host obligations.
+- `examples/mcp-tools` executes a real stdio subprocess and compiled workflow
+  with no inference. In-process, ASGI, MockTransport and subprocess tests cover
+  protocol behavior; see [MCP review](reviews/service-mcp.md).
+- Closing checks: 452 service tests plus strict typing, lint/format, eight service
+  schemas, unchanged native schemas, docs/skill and staged-data audits pass.
+
+Writes and interactive continuation remain disabled pending durable identity and
+reconciliation. Full service deployment, privacy-filtered OTel export, database/
+broker recovery and child workflows remain required, not implicitly delivered
+by these adapter tests.
 
 ## Remaining implementation sequence
 
@@ -99,10 +125,9 @@ implementation and acceptance checks.
 2. Complete executable service CLI/bootstrap and safe observations around the
    implemented compiler, bounded embedded runner and PydanticAI model adapter;
    extend the current `examples/inbox` application as these capabilities land.
-3. Add authenticated HTTP and host-owned current MCP stdio/HTTP with declared
-   catalogs, schema verification, OAuth/credential hooks, protected metadata and
-   required-tool success semantics. Verify concurrent callers cannot share auth
-   state; no blocking SDK work on the event loop.
+3. Add authenticated HTTP ingress and integrate the implemented MCP runtime into
+   service bootstrap. Complete production credential storage/login operations
+   and deployment conformance; retain SDK wire and caller-isolation regressions.
 4. Add standards-based OTel trace/metric export and MCP propagation, pre-export
    privacy filtering including third-party spans/events, bounded cleanup and
    no-exporter behavior. Finish safe logging and operator configuration.

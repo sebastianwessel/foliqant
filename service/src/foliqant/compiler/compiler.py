@@ -5,7 +5,6 @@ import json
 from collections.abc import Collection, Mapping
 from pathlib import Path
 from typing import Literal, Never, cast
-from urllib.parse import unquote
 
 from foliqant_decisions import (
     ChoiceQuestion,
@@ -54,6 +53,15 @@ from foliqant.core.plan import (
 
 from ._loader import load_step, load_yaml
 from .errors import CompilationError
+from .schema_helpers import (
+    resolve_schema_fragment as _resolve_confined_schema_fragment,
+)
+from .schema_helpers import (
+    validate_confined_tool_schema,
+)
+from .schema_helpers import (
+    walk_schema_nodes as _walk_schema_nodes,
+)
 
 _WORKFLOW_ADAPTER = TypeAdapter(WorkflowAuthoring)
 _STEP_ADAPTER: TypeAdapter[StepAuthoring] = TypeAdapter(StepAuthoring)
@@ -237,101 +245,11 @@ def _load_schema(
         _fail("invalid_json_schema", SourceLocation(relative, 1, 1))
 
 
-_SCHEMA_MAP_KEYWORDS = {
-    "$defs",
-    "definitions",
-    "properties",
-    "patternProperties",
-    "dependentSchemas",
-}
-_SCHEMA_SINGLE_KEYWORDS = {
-    "additionalProperties",
-    "unevaluatedProperties",
-    "propertyNames",
-    "contains",
-    "not",
-    "if",
-    "then",
-    "else",
-    "additionalItems",
-    "unevaluatedItems",
-    "contentSchema",
-}
-_SCHEMA_ARRAY_KEYWORDS = {"allOf", "anyOf", "oneOf", "prefixItems"}
-
-
-def _walk_schema_nodes(root: dict[str, object]) -> list[dict[str, object]]:
-    """Traverse schema positions without interpreting annotation JSON as schemas."""
-
-    found: list[dict[str, object]] = []
-    pending: list[tuple[dict[str, object], int]] = [(root, 0)]
-    while pending:
-        schema, depth = pending.pop()
-        if depth > 64 or len(found) >= 10_000:
-            raise ValueError("schema structure exceeds compiler bounds")
-        found.append(schema)
-        children: list[dict[str, object]] = []
-        for keyword in _SCHEMA_MAP_KEYWORDS:
-            value = schema.get(keyword)
-            if isinstance(value, dict):
-                children.extend(
-                    cast(dict[str, object], child)
-                    for child in cast(dict[object, object], value).values()
-                    if isinstance(child, dict)
-                )
-        dependencies = schema.get("dependencies")
-        if isinstance(dependencies, dict):
-            children.extend(
-                cast(dict[str, object], child)
-                for child in cast(dict[object, object], dependencies).values()
-                if isinstance(child, dict)
-            )
-        for keyword in _SCHEMA_SINGLE_KEYWORDS:
-            child = schema.get(keyword)
-            if isinstance(child, dict):
-                children.append(cast(dict[str, object], child))
-        items = schema.get("items")
-        if isinstance(items, dict):
-            children.append(cast(dict[str, object], items))
-        elif isinstance(items, list):
-            children.extend(
-                cast(dict[str, object], child)
-                for child in cast(list[object], items)
-                if isinstance(child, dict)
-            )
-        for keyword in _SCHEMA_ARRAY_KEYWORDS:
-            value = schema.get(keyword)
-            if isinstance(value, list):
-                children.extend(
-                    cast(dict[str, object], child)
-                    for child in cast(list[object], value)
-                    if isinstance(child, dict)
-                )
-        pending.extend((child, depth + 1) for child in children)
-    return found
-
-
 def _resolve_schema_fragment(resource: dict[str, object], fragment: str, relative: str) -> object:
-    decoded = unquote(fragment)
-    if not decoded:
-        return resource
-    if decoded.startswith("/"):
-        current: object = resource
-        for raw_token in decoded[1:].split("/"):
-            if "~" in raw_token.replace("~0", "").replace("~1", ""):
-                _fail("invalid_schema_reference", SourceLocation(relative, 1, 1))
-            token = raw_token.replace("~1", "/").replace("~0", "~")
-            if isinstance(current, dict) and token in current:
-                current = cast(dict[str, object], current)[token]
-            elif isinstance(current, list) and token.isdigit() and int(token) < len(current):
-                current = cast(list[object], current)[int(token)]
-            else:
-                _fail("invalid_schema_reference", SourceLocation(relative, 1, 1))
-        return current
-    for node in _walk_schema_nodes(resource):
-        if node.get("$anchor") == decoded or node.get("$dynamicAnchor") == decoded:
-            return node
-    _fail("invalid_schema_reference", SourceLocation(relative, 1, 1))
+    try:
+        return _resolve_confined_schema_fragment(resource, fragment)
+    except ValueError:
+        _fail("invalid_schema_reference", SourceLocation(relative, 1, 1))
 
 
 def _validate_schema_object(
@@ -706,43 +624,13 @@ def _catalogs(
         catalog = _validate(_TOOL_CATALOG_ADAPTER, value, location)
         try:
             for tool in catalog.tools.values():
-                _validate_declared_tool_schema(tool.input_schema, location)
+                validate_confined_tool_schema(tool.input_schema)
                 if tool.output_schema is not None:
-                    _validate_declared_tool_schema(tool.output_schema, location)
+                    validate_confined_tool_schema(tool.output_schema)
         except (ValueError, RecursionError, SchemaError, CompilationError):
             _fail("invalid_tool_schema", location)
         result[name] = catalog
     return result
-
-
-def _validate_declared_tool_schema(schema: Mapping[str, object], location: SourceLocation) -> None:
-    schema_object = dict(schema)
-    Draft202012Validator.check_schema(schema_object)
-    pending = [schema_object]
-    validated: set[int] = set()
-    while pending:
-        start = pending.pop()
-        for node in _walk_schema_nodes(start):
-            if id(node) in validated:
-                continue
-            validated.add(id(node))
-            if "$id" in node:
-                _fail("invalid_tool_schema", location)
-            for keyword in ("$ref", "$dynamicRef"):
-                reference = node.get(keyword)
-                if not isinstance(reference, str):
-                    continue
-                if not reference.startswith("#"):
-                    _fail("invalid_tool_schema", location)
-                try:
-                    target = _resolve_schema_fragment(schema_object, reference[1:], location.path)
-                except CompilationError:
-                    _fail("invalid_tool_schema", location)
-                if isinstance(target, bool):
-                    continue
-                if not isinstance(target, dict):
-                    _fail("invalid_tool_schema", location)
-                pending.append(cast(dict[str, object], target))
 
 
 def _is_id(value: object) -> bool:

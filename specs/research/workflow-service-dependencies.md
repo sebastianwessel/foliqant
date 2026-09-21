@@ -433,3 +433,28 @@ smoke above:
 
 The tests establish local schema and request behavior, not live provider
 acceptance of every JSON Schema keyword or financial decision accuracy.
+
+## Host-owned MCP integration evidence
+
+Rechecked the [official SDK list](https://modelcontextprotocol.io/docs/2026-07-28/sdk)
+and [MCP package release](https://pypi.org/project/mcp/) on 2026-09-21: Python SDK
+2.2.0 remains the stable release and supports protocol 2026-07-28. Tests use its
+automatic negotiation, public typed request API and maintained OAuth provider.
+No legacy protocol pin or separate MCP wire implementation is introduced.
+
+Installed-SDK tests exercise real in-process calls, a stdio subprocess and
+Streamable HTTP through an ASGI transport. OAuth tests use MockTransport for
+protected-resource and authorization-server discovery, registration, PKCE S256,
+state callback, resource binding and refresh. No external endpoint or model is
+contacted. Separate sessions and auth objects are created per caller identity.
+Required/named model tools switch back to automatic choice after a validated
+success; claims or emitted calls alone do not satisfy completion.
+
+The public SDK `ClientSession.send_request` retains protocol validation and
+request stamping. Using it for `CallToolRequest` lets the host apply its frozen
+catalog validation without the SDK's redundant output validation raising an
+untyped RuntimeError. A typed union admits complete and input-required results;
+the latter stops in review with no automatic sampling or elicitation loop.
+SDK timeout code `REQUEST_TIMEOUT` is mapped independently of message text.
+Application control signals are retained until SDK context cleanup finishes,
+so AnyIO task groups cannot turn business review into a generic failure.

@@ -70,10 +70,7 @@ def _profile(config: ModelConfig) -> ModelProfile:
     return ModelProfile(
         supports_text_output=config.supports_text,
         supports_json_schema_output=config.supports_json_schema,
-        # In this slice tool mode is used only for the structured output tool.
-        # General function tools remain rejected by the executor until their
-        # independent capability contract is implemented.
-        supports_tools=config.output_mode == "tool",
+        supports_tools=config.supports_tools,
         default_structured_output_mode=config.output_mode,
     )
 
@@ -206,6 +203,7 @@ def _binding(
         output_mode=config.output_mode,
         supports_text=config.supports_text,
         supports_json_schema=config.supports_json_schema,
+        supports_tools=config.supports_tools,
         timeout_errors=timeout_errors,
     )
 

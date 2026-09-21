@@ -1,0 +1,6 @@
+type: mcp
+server: synthetic_records
+tool: lookup
+arguments:
+  query: {pointer: /payload/query}
+next: done

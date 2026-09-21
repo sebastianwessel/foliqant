@@ -9,8 +9,8 @@ Use the [service guide](../../service/README.md) and
 [offline example](../../examples/embedded-workflow/README.md) and
 [model-enabled inbox example](../../examples/inbox/README.md) as the
 implemented API authority. The service is still under implementation: the
-embedded runner and PydanticAI model executor work, but a deployable CLI, MCP adapters, durable
-transports and recovery are not yet available. Never present planned commands or
+embedded runner, model executor and read-only MCP adapters work, but a deployable
+CLI, durable transports and recovery are not yet available. Never present planned commands or
 production guarantees as working features.
 
 Keep the service in its own uv project and environment. Select only needed extras
@@ -62,9 +62,34 @@ before inference. Use non-strict provider mode for authored schemas to preserve
 constraints; Anthropic requires `tool` mode for these steps. Local provider
 preflight precedes admission and accounting; unsupported modes never silently
 switch or consume an attempt. Never relax validation to accept a refusal or truncated reply.
-Missing token measurements remain unknown. Bedrock, MCP tools and model OTel
+Missing token measurements remain unknown. Bedrock and model OTel
 integration remain incomplete; do not imply they are ready because their
 dependencies or contracts exist.
+
+For MCP, reuse `McpProfiles` and the existing `DeclaredToolCatalog`. Construct
+`McpClientSessionFactory` once and inject it plus a required host `ToolAuthorizer`
+into `McpRuntime`. Use `McpExecutor` for explicit calls or inject the runtime into
+`ModelExecutor(..., tools=runtime)`. `supports_tools` is a model capability, not
+permission. Every step allowlists tools and every call reauthorizes its frozen
+arguments against the current trusted identity. Do not share authenticated SDK
+clients or mutable token state between callers.
+
+Catalog schema drift, duplicate names, pagination cycles and oversized catalogs
+fail closed. Tool results use declared schema validation; nontext blocks are not
+silently discarded. Required/named choices need a successful validated call in
+model context, then allow final output. Automatic interaction/retry rounds are
+disabled. MCP input-required becomes `needs_review`; interactive continuation and
+write-effect execution await durable identity/reconciliation support.
+
+HTTP auth profiles contain a registered credential-hook ID, never a token. Use
+`SdkOAuthCredentialProvider` with explicit allowed HTTPS authorization origins
+and a host storage factory partitioned by the complete credential scope, with
+protection at rest. Interactive callbacks are for explicit operator login only;
+normal runs use stored/refreshable credentials and never launch a browser. Pass
+only present trusted IDs under the configured domain-qualified `_meta` key;
+forward W3C trace fields separately, without baggage or business metadata.
+Stdio uses trusted command/args and the SDK's fixed safe environment baseline
+plus an explicit overlay. Never copy all environment secrets into a child.
 
 Use native async I/O. A blocking-only SDK uses the owned bounded
 `BlockingExecutor` plus SDK timeouts; started workers retain capacity after caller

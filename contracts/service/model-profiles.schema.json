@@ -61,6 +61,11 @@
           "default": true,
           "title": "Supports Text",
           "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
         }
       },
       "required": [
@@ -258,6 +263,11 @@
           "default": true,
           "title": "Supports Text",
           "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
         }
       },
       "required": [
@@ -330,6 +340,11 @@
         "supports_text": {
           "default": true,
           "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
           "type": "boolean"
         }
       },
@@ -435,6 +450,11 @@
         "supports_text": {
           "default": true,
           "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
           "type": "boolean"
         }
       },
@@ -558,6 +578,11 @@
         "supports_text": {
           "default": true,
           "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
           "type": "boolean"
         }
       },

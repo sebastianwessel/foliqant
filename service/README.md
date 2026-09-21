@@ -10,8 +10,8 @@ protected metadata validation, immutable core values, safe errors and bounded
 async admission, bounded blocking-I/O execution, safe JSON logging, an offline
 workflow compiler, embedded async runner, public execution results, PydanticAI
 model execution and shared native decision validation. A model-enabled inbox
-example is available. The executable service CLI, MCP integration and durable
-transports are not yet complete. See the
+example is available. The executable service CLI and durable
+transports are not yet complete; read-only MCP steps and model tools are available. See the
 [implementation status](../plans/workflow-service-status.md) for verified scope.
 
 ## Development environment
@@ -160,9 +160,88 @@ Requests consume a budget only after admission, immediately before I/O. Each
 request has an operation timeout within the original run deadline. Failed
 requests count, missing token measurements stay null, and truncation/refusal is
 an invalid output rather than a successful partial decision. Automatic output
-repairs are currently disabled. Tool-bearing LLM steps are rejected until MCP
-integration is available. Model instrumentation is explicitly off until the safe
+repairs are currently disabled. Tool-bearing LLM steps require an explicitly
+injected host MCP runtime and a tool-capable model profile. Model instrumentation is explicitly off until the safe
 OTel integration is connected.
+
+## MCP tools and authentication
+
+The [local MCP example](../examples/mcp-tools/README.md) runs a real stdio server
+and a compiled workflow without model inference.
+
+Install the `mcp` extra. Define `McpProfiles` with a declared catalog, then build
+one `McpClientSessionFactory` and `McpRuntime` for the application. The factory
+creates a fresh SDK session for each caller; it never shares authenticated clients.
+Pass the runtime to `McpExecutor` for explicit MCP steps, or as
+`ModelExecutor(..., tools=runtime)` for model-selected tool calls.
+
+```python
+from foliqant.adapters.mcp.runtime import McpExecutor, McpRuntime
+from foliqant.adapters.mcp.transport import McpClientSessionFactory
+from foliqant.contracts.mcp import McpProfiles
+
+profiles = McpProfiles.model_validate({
+    "servers": {"records": {
+        "transport": {
+            "type": "streamable_http",
+            "endpoint": "https://tools.example.com/mcp",
+        },
+        "identity_meta_key": "example.com/identity",
+        "catalog": {"tools": {"lookup": {
+            "input_schema": {
+                "type": "object",
+                "properties": {"reference": {"type": "string"}},
+                "required": ["reference"],
+            },
+            "effect": "read",
+        }}},
+    }},
+})
+# authorizer implements async authorize(server, tool, arguments, context).
+# It checks current business permissions; the catalog alone is not user authorization.
+factory = McpClientSessionFactory(profiles, credential_providers={})
+runtime = McpRuntime(profiles, factory, authorizer)
+executor = McpExecutor(runtime)
+```
+
+Use the server's exact input/output schemas in the reviewed catalog. Discovery
+checks every declared tool and its schema before use; extra discovered tools do
+not gain permission. Arguments are validated before authorization or budget
+reservation. Structured results require a matching declared output schema; text
+results remain strings, with multiple text blocks joined by a newline. Unsupported
+content blocks and oversized results fail safely. SDK protocol timeouts map to
+`timeout`, and each started tool call stays charged even if it fails.
+
+Each step allowlists tool names. A required or named tool must successfully return
+a validated result to the model before the workflow accepts its answer. After
+that call, the model may finish normally. The service performs no hidden tool
+retries, automatic sampling or elicitation rounds. Input-required responses end
+in `needs_review`; interactive continuation is not yet implemented. Write tools
+remain disabled until durable effect tracking and reconciliation are available.
+
+For HTTP authentication, set `auth` to a host-registered credential-provider ID.
+The hook receives the current trusted identity, server and context. The provided
+`SdkOAuthCredentialProvider` uses the MCP SDK's OAuth discovery, PKCE/state,
+resource binding and refresh handling. Supply a storage factory partitioned by
+**every** `McpCredentialScope` field and protected at rest; no plaintext token
+store is supplied. Explicitly allow the HTTPS authorization-server origins.
+Discovery, registration and refresh cannot contact other origins.
+
+Interactive callbacks belong only to an explicit operator login flow. Normal
+workflow providers omit them and never launch a browser. Tokens never belong in
+request bodies, metadata, workflow files or model context. The profile's optional
+domain-qualified identity key forwards only present trusted IDs in MCP `_meta`;
+it does not authenticate the user. A host `trace_carrier` callback can supply
+only W3C `traceparent`/`tracestate` for discovery and calls. Full OTel instrumentation
+is a separate integration still in progress.
+
+Stdio profiles accept only trusted deployment commands and arguments. The SDK
+inherits its fixed safe environment baseline plus the explicit `env` overlay;
+the service does not copy the complete environment or mutate it around async
+calls. Child stderr is discarded so it cannot expose uncontrolled diagnostics.
+Session cleanup remains in its owning task with a ten-second deadline. Caller
+baggage is removed task-locally while preserving trace context, then restored
+after session exit.
 
 ## Async execution rules
 

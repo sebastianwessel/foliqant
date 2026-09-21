@@ -1,11 +1,12 @@
 """Explicit deployment model profiles; credentials are environment references only."""
 
 from typing import Annotated, Literal, Self
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
 from pydantic import ConfigDict, Field, model_validator
 
 from .base import BoundaryModel
+from .endpoints import validate_http_endpoint
 from .workflow import Id, NonBlank
 
 EnvironmentName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
@@ -53,6 +54,7 @@ class _ModelConfig(BoundaryModel):
     output_mode: Literal["native", "tool"]
     supports_text: bool = True
     supports_json_schema: bool = True
+    supports_tools: bool = True
     concurrency: Annotated[int, Field(strict=True, ge=1, le=1024)] = 4
     queue_limit: Annotated[int, Field(strict=True, ge=0, le=10_000)] = 16
     request_timeout: Duration = 60.0
@@ -61,32 +63,9 @@ class _ModelConfig(BoundaryModel):
     def at_least_one_output(self) -> Self:
         if not self.supports_text and not self.supports_json_schema:
             raise ValueError("model must support at least one output kind")
+        if self.output_mode == "tool" and not self.supports_tools:
+            raise ValueError("tool output requires tool support")
         return self
-
-
-def _validate_endpoint(value: str, *, allow_http: bool) -> None:
-    """Endpoints are trusted deployment settings, never supplied by request payloads."""
-    try:
-        parsed = urlsplit(value)
-        port = parsed.port
-    except ValueError:
-        raise ValueError("invalid model endpoint") from None
-    if (
-        parsed.scheme not in ({"https", "http"} if allow_http else {"https"})
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.query
-        or parsed.fragment
-        or any(
-            character.isspace() or ord(character) < 32 or ord(character) == 127
-            for character in value
-        )
-        or "\\" in value
-        or any(segment in {".", ".."} for segment in unquote(parsed.path).split("/"))
-        or (port is not None and port == 0)
-    ):
-        raise ValueError("invalid model endpoint")
 
 
 class OpenAIModelConfig(_ModelConfig):
@@ -108,7 +87,7 @@ class CompatibleModelConfig(_ModelConfig):
 
     @model_validator(mode="after")
     def valid_endpoint(self) -> Self:
-        _validate_endpoint(self.base_url, allow_http=self.allow_insecure_http)
+        validate_http_endpoint(self.base_url, allow_insecure_http=self.allow_insecure_http)
         return self
 
 
@@ -123,7 +102,7 @@ class AzureModelConfig(_ModelConfig):
 
     @model_validator(mode="after")
     def explicit_api_flavor(self) -> Self:
-        _validate_endpoint(self.endpoint, allow_http=False)
+        validate_http_endpoint(self.endpoint, allow_insecure_http=False)
         path = urlsplit(self.endpoint).path.rstrip("/")
         if self.api_flavor == "versioned":
             if self.api_version is None or path:

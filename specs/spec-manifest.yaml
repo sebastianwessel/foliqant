@@ -1,5 +1,5 @@
 spec_manifest_version: 1
-content_digest: sha256:ccf6c791689355f9600c1e161a982edae954bc49e0c7e373503909af7d58ecd0
+content_digest: sha256:c3c1410901a79eb4e936bd04500ddd6af496bce5564b4c3dca136dcc3a8cd606
 artifacts:
   - path: 00-applicability.yaml
     sha256: sha256:0982cb434f46a6d2f83f2544fce27c7b24644696210c0af23954ead564a3bf48
@@ -36,7 +36,7 @@ artifacts:
   - path: 03-contracts/representation-catalog.yaml
     sha256: sha256:99061414c844951f37f72a1cc22b786b8634266fa4bf0fa92ac83ce10ab842bc
   - path: 03-contracts/service-generation-map.yaml
-    sha256: sha256:3a8d94df88c550645f01d3d611453e2b3e10b87b383577ddad14df5b927d276e
+    sha256: sha256:a67ceee2c3be9bfbc08ce400d874d4fa9391d8c3db2eb4193cdedc7fc603f6cd
   - path: 03-flows/e2e-coverage.md
     sha256: sha256:1ee8fa604489b1a729218059cc8d6eee26728b4c5f2884c5123f705124d330f7
   - path: 04-operations/security-release.md
@@ -54,7 +54,7 @@ artifacts:
   - path: 10-business-decisions-and-processes.md
     sha256: sha256:4c787f27dfd46cc4216cd955a50677985a8c4ab559f6503e9b02454c2929e4ce
   - path: 11-workflow-service.md
-    sha256: sha256:96854075949927fdcc2827ba92b9133dde1941c70258708f7e83f10c59d3424b
+    sha256: sha256:9463a6d23ab8c2eddbeb88c1a3746a668d418b255b98741d5460381f0217bf60
   - path: README.md
     sha256: sha256:f3821193e712d036e87566012fbc044f85b92c52205b2317297ff505247a4dd3
   - path: _registry.yaml
@@ -86,10 +86,10 @@ artifacts:
   - path: research/modular-workflow-service.md
     sha256: sha256:599bf3b81766fdf61287cda65cbfbaeddcc87445366d37ee82848176a32e4da9
   - path: research/workflow-service-dependencies.md
-    sha256: sha256:a13d46e03f8032e8b8119cfd8256c00bf50f1bda88cd80dbf85fb91b4c70beb2
+    sha256: sha256:4bcaacb7ec69684f3b9e48d3146bc4cddff1e947fd8e6d751f8d5fbc9ff66bcb
   - path: research/workflow-service-proposal.md
     sha256: sha256:c822ff78eaa2a9ae2c64105b781e02a45c485fa333a48a4098232fe5fa14a2ac
 provenance:
-  source_revision: working-tree-5966e79-model-execution
-  generated_at: 2026-09-21T11:05:13.626Z
+  source_revision: working-tree-299ff98-mcp
+  generated_at: 2026-09-21T11:28:02.819Z
   generator: spec-manifest/v1

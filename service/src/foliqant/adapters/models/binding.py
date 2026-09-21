@@ -19,5 +19,6 @@ class ModelBinding:
     output_mode: Literal["native", "tool"]
     supports_text: bool = True
     supports_json_schema: bool = True
+    supports_tools: bool = True
     # Populated by the provider factory without importing optional SDKs here.
     timeout_errors: tuple[type[Exception], ...] = ()
