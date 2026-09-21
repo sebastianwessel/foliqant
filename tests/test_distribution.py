@@ -109,7 +109,7 @@ def test_minimal_install_has_no_server_storage_or_dev_dependencies(tmp_path):
 
 
 def test_wheel_contains_and_runs_the_public_package(tmp_path):
-    """Install the wheel offline and run its public imports and model-free CLI."""
+    """Install the wheel in an isolated environment and run its public API."""
     import json
     import os
     import shutil
@@ -163,7 +163,6 @@ def test_wheel_contains_and_runs_the_public_package(tmp_path):
             "install",
             "--python",
             str(binary / "python"),
-            "--offline",
             str(wheel),
         ],
         check=True,

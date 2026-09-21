@@ -50,9 +50,11 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked --all-extras --group dev
+      # Individual tests opt into offline mode where it is part of their
+      # contract. Do not force it for the whole suite: the wheel smoke test
+      # creates a fresh virtual environment and must resolve its published
+      # runtime dependencies on an uncached runner.
       - run: uv run --no-sync python -m pytest tests -q
-        env:
-          UV_OFFLINE: '1'
       - run: uv run --no-sync mypy src examples
       - run: uv run --no-sync ruff check src tests scripts examples
       - run: uv run --no-sync ruff format --check src tests scripts examples
