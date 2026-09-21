@@ -22,7 +22,7 @@ from foliqant_model.curation.decision_contracts import DecisionDataSettings
 def _task() -> DecisionInput:
     return DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {
                 "sources": [{"id": "message-1", "kind": "message", "text": "Send my statement."}]
             },
@@ -47,7 +47,7 @@ def _task() -> DecisionInput:
 def _output(*, quote: str = "Send my statement.") -> DecisionOutput:
     return DecisionOutput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "results": [
                 {
                     "questionId": "route",
@@ -87,12 +87,11 @@ def test_settings_are_strict_and_bounded() -> None:
         DecisionDataSettings(minimumAcceptedPerCell=1001)
 
 
-def test_answerability_issues_are_the_four_generic_input_failures() -> None:
+def test_answerability_issues_are_the_three_generic_input_failures() -> None:
     expected = {
-        "missing_information",
+        "no_supported_answer",
         "conflicting_information",
         "multiple_valid_options",
-        "no_matching_option",
     }
     for issue in expected:
         assert Answerability(status="not_answerable", issues=[issue]).issues == [issue]
@@ -152,7 +151,7 @@ def test_semantic_validation_checks_result_bijection_options_and_citations() -> 
 def test_predicate_unknown_is_distinct_from_false() -> None:
     task = DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {"sources": [{"id": "s", "kind": "document", "text": "No count."}]},
             "questions": [
                 {
@@ -167,14 +166,14 @@ def test_predicate_unknown_is_distinct_from_false() -> None:
         strict=True,
     )
     payload = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "p",
                 "type": "predicate",
                 "answerability": {
                     "status": "not_answerable",
-                    "issues": ["missing_information"],
+                    "issues": ["no_supported_answer"],
                 },
                 "answer": {"value": "unknown"},
                 "explanation": {
@@ -198,7 +197,7 @@ def test_predicate_unknown_is_distinct_from_false() -> None:
 def test_request_units_allow_same_category_and_validate_relations() -> None:
     task = DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {
                 "sources": [{"id": "m", "kind": "message", "text": "Send January and March."}]
             },
@@ -218,14 +217,14 @@ def test_request_units_allow_same_category_and_validate_relations() -> None:
     )
     citation = {"sourceId": "m", "quote": "Send January and March."}
     payload = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "requests",
                 "type": "request_units",
                 "answerability": {
                     "status": "answerable",
-                    "issues": ["no_matching_option"],
+                    "issues": ["no_supported_answer"],
                 },
                 "answer": {
                     "units": [
@@ -285,7 +284,7 @@ def test_request_units_allow_same_category_and_validate_relations() -> None:
 def test_request_relations_reject_conflicts_and_canonicalize_symmetric_sets() -> None:
     task = DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {"sources": [{"id": "m", "kind": "message", "text": "Do A or B."}]},
             "questions": [
                 {
@@ -310,12 +309,12 @@ def test_request_relations_reject_conflicts_and_canonicalize_symmetric_sets() ->
     )
     citation = {"sourceId": "m", "quote": "Do A or B."}
     base = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "condition",
                 "type": "predicate",
-                "answerability": {"status": "not_answerable", "issues": ["missing_information"]},
+                "answerability": {"status": "not_answerable", "issues": ["no_supported_answer"]},
                 "answer": {"value": "unknown"},
                 "explanation": {
                     "summary": "The condition is not supplied.",
@@ -329,7 +328,7 @@ def test_request_relations_reject_conflicts_and_canonicalize_symmetric_sets() ->
                 "type": "request_units",
                 "answerability": {
                     "status": "answerable",
-                    "issues": ["no_matching_option"],
+                    "issues": ["no_supported_answer"],
                 },
                 "answer": {
                     "units": [
@@ -431,7 +430,7 @@ def test_request_relations_reject_conflicts_and_canonicalize_symmetric_sets() ->
 def test_request_subject_is_exact_and_must_use_its_own_evidence() -> None:
     task = DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {
                 "sources": [{"id": "m", "kind": "message", "text": "Refund the EUR 152 charge."}]
             },
@@ -450,14 +449,14 @@ def test_request_subject_is_exact_and_must_use_its_own_evidence() -> None:
         strict=True,
     )
     payload = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "requests",
                 "type": "request_units",
                 "answerability": {
                     "status": "answerable",
-                    "issues": ["no_matching_option"],
+                    "issues": ["no_supported_answer"],
                 },
                 "answer": {
                     "units": [
@@ -491,7 +490,7 @@ def test_request_subject_is_exact_and_must_use_its_own_evidence() -> None:
     missing_issue_payload["results"][0]["answer"]["units"][0]["subject"] = "EUR 152"
     missing_issue = DecisionOutput.model_validate(missing_issue_payload, strict=True)
     assert validate_decision_output(task, missing_issue) == [
-        "question:requests:null-category-without-no-match-issue"
+        "question:requests:null-category-without-no-supported-answer-issue"
     ]
 
 
@@ -510,7 +509,7 @@ def test_semantic_signature_ignores_explanation_but_retains_answerability_and_an
 
 def test_semantic_signature_treats_multiselect_as_an_unordered_set() -> None:
     payload = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "categories",

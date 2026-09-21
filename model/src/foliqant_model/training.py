@@ -51,6 +51,7 @@ from .lineage import (
     union_source_rights,
     write_leakage_index,
 )
+from .native_data import validate_native_dataset
 
 _ID_ADAPTER = TypeAdapter(Id)
 _PUBLISHED_ADAPTER_FILES = {"adapter_config.json", "adapters.safetensors"}
@@ -360,6 +361,7 @@ def train_model(
         raise ModelError("CONFIG_INVALID", "steps must be divisible by gradientAccumulation")
     model = load_verified_artifact(model_path)
     dataset = load_verified_artifact(dataset_path)
+    validate_native_dataset(dataset_path, dataset)
     _validate_training_parent(model, customer)
     dataset_details = _validate_dataset(dataset, config, customer)
     warm: ArtifactManifest | None = None

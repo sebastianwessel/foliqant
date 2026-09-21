@@ -444,8 +444,8 @@
       "type": "array"
     },
     "schemaVersion": {
-      "const": 1,
-      "default": 1,
+      "const": 2,
+      "default": 2,
       "title": "Schemaversion",
       "type": "integer"
     },

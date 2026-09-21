@@ -84,7 +84,7 @@ def _seed(
     text = f"The receipt for request {record_id} was requested."
     task = DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {"sources": [{"id": "message-1", "kind": "message", "text": text}]},
             "questions": [
                 {
@@ -100,7 +100,7 @@ def _seed(
     )
     output = DecisionOutput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "results": [
                 {
                     "questionId": "receipt",

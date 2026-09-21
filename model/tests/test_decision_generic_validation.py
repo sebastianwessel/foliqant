@@ -180,7 +180,7 @@ def _collection_task(kind: str) -> DecisionInput:
         question.update(catalog=options, allowNoMatch=True)
     return DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {"sources": [{"id": "ticket", "kind": "message", "text": "Repair the pump."}]},
             "questions": [question],
         },
@@ -213,14 +213,14 @@ def _collection_output(
         }
     return DecisionOutput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "results": [
                 {
                     "questionId": "items",
                     "type": kind,
                     "answerability": {
                         "status": "partially_answerable" if partial else "answerable",
-                        "issues": ["missing_information"] if partial else [],
+                        "issues": ["no_supported_answer"] if partial else [],
                     },
                     "answer": answer,
                     "explanation": {

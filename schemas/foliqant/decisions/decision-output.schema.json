@@ -7,7 +7,7 @@
           "items": {
             "$ref": "#/$defs/AnswerabilityIssue"
           },
-          "maxItems": 32,
+          "maxItems": 3,
           "title": "Issues",
           "type": "array"
         },
@@ -24,10 +24,9 @@
     },
     "AnswerabilityIssue": {
       "enum": [
-        "missing_information",
+        "no_supported_answer",
         "conflicting_information",
-        "multiple_valid_options",
-        "no_matching_option"
+        "multiple_valid_options"
       ],
       "type": "string"
     },
@@ -682,8 +681,8 @@
       "type": "array"
     },
     "schemaVersion": {
-      "const": 1,
-      "default": 1,
+      "const": 2,
+      "default": 2,
       "title": "Schemaversion",
       "type": "integer"
     }

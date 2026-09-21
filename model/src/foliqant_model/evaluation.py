@@ -48,6 +48,7 @@ from .contracts import (
 from .errors import ModelError
 from .execution import run_worker
 from .lineage import leakage_reference, read_leakage_index, union_source_rights
+from .native_data import validate_native_dataset
 from .scoring import (
     ReferenceScore,
     aggregate_predictions,
@@ -279,6 +280,7 @@ def evaluate_model(
     schema = None if schema_value is None else validate_output_schema(schema_value)
     model = load_verified_artifact(model_path)
     dataset = load_verified_artifact(dataset_path)
+    validate_native_dataset(dataset_path, dataset)
     adapter = None if adapter_path is None else load_verified_artifact(adapter_path)
     _validate_model_and_adapter(model, adapter)
     if dataset.root.kind != "dataset":

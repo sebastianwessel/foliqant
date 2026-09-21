@@ -125,16 +125,14 @@ fallback:
     description: |
       Requests that need a person to select the next action.
       This is a process fallback, not a model-selected business category.
-  on: [no_matching_option, missing_information]
-on_unresolved:
-  default: review
-  missing_information: clarify
-  no_matching_option: manual_triage
+  on: [no_supported_answer]
+on_unresolved: review
 ```
 
-Add those finish steps to the workflow with `outcome: needs_review`. They mark
-which process branch was selected; the embedding application implements any
-actual clarification or handoff. A single `on_unresolved: review` is still valid.
+Add the `review` finish step with `outcome: needs_review`. It marks the selected
+process branch; the embedding application implements any actual handoff.
+For issue-specific handling, use a map with `default` and any of the three issue
+keys: `no_supported_answer`, `conflicting_information`, `multiple_valid_options`.
 If several reported issues map to different targets, the map's required
 `default` wins. An undetermined result or unresolved non-decision operation also
 uses the default. Without a route, the run stops with `needs_review`.

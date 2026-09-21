@@ -179,7 +179,7 @@ def _old_wanli_seed(row: ImportedRecord, current: DecisionSeed) -> DecisionSeed:
                 type="predicate",
                 answerability=Answerability(
                     status="not_answerable" if value == "unknown" else "answerable",
-                    issues=["missing_information"] if value == "unknown" else [],
+                    issues=["no_supported_answer"] if value == "unknown" else [],
                 ),
                 answer=PredicateAnswer(value=value),
                 explanation=Explanation(

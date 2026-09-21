@@ -68,19 +68,27 @@ Use stable status and issue codes in code. Explanation text is for people:
 | `not_answerable` | The evidence or question constraints do not support an answer. |
 | `undetermined` | The assessment could not establish answerability. |
 
-Issue codes distinguish different obstacles:
+Three stable issue codes describe obstacles to answering:
 
-- `missing_information`: a required fact or referent is absent.
+- `no_supported_answer`: the supplied information does not establish a substantive
+  answer or category for a required part of the question. This includes absent
+  facts or referents and clear requests that the supplied catalog cannot represent.
 - `conflicting_information`: incompatible evidence has no stated resolution.
-- `multiple_valid_options`: multiple positively supported answers exceed the
-  question’s permitted cardinality.
-- `no_matching_option`: a supported fact or request falls outside the catalog.
+- `multiple_valid_options`: several positively supported answers exceed the
+  question's permitted cardinality. Merely imaginable alternatives do not qualify.
 
-An unknown request is not an established out-of-catalog request. A missing
-attachment or unclear reference uses `missing_information`. Several clear
-requests are valid when a collection question permits them. A predicate uses `unknown` when the
-evidence establishes neither true nor false; an explicit absence can support
-`false` for a presence predicate.
+Use the explanation, citations and `missingFacts` to understand the particular
+case. Do not parse explanation text to choose a workflow route or infer that
+asking for more information will always resolve `no_supported_answer`.
+An overall request collection may still be `answerable` when `allowNoMatch`
+permits a null category: the requests are known, but at least one has no supported
+category, so `no_supported_answer` is still required. Do not assume that every
+issue makes the entire result unanswerable.
+Do not add `no_supported_answer` merely because a conflict or several supported
+options prevent selection; an additional issue needs an independent obstacle.
+Several clear requests are valid when a collection question permits them. A
+predicate uses `unknown` when the evidence establishes neither true nor false;
+an explicit absence can support `false` for a presence predicate.
 
 A partially answerable collection must contain at least one supported item and
 an evidence citation. A missing requested item keeps the collection partial even
@@ -100,8 +108,6 @@ After validation, apply your own policy:
 ```python
 if result.answerability.status == "answerable":
     handle_proposed_answer(result.answer)
-elif "missing_information" in result.answerability.issues:
-    request_missing_information(result.explanation.missingFacts)
 else:
     send_for_review(result)
 ```
@@ -112,13 +118,9 @@ safety of an external action remain application responsibilities.
 
 ## Keep fallback separate from evidence
 
-`missing_information` and `no_matching_option` are both declared issue codes.
-They should remain distinct: the first can need more facts; the second can need
-a different catalog or process. The runtime does not infer one from the other.
-
-A workflow may deliberately map either to the same fallback category without
-merging those facts. Configure an optional category object and allowed issues
-on a single-choice decision, as shown in [workflow routing](build-workflows.md#classify-with-an-explicit-fallback).
+A single-choice workflow can map `no_supported_answer` to a configured fallback
+category such as `misc`. Configure the category object and allowed issues as shown
+in [workflow routing](build-workflows.md#classify-with-an-explicit-fallback).
 The native answer stays unresolved; `selection.origin: fallback` records the
 policy choice separately. Contradictions or multiple valid options remain
 unresolved unless explicitly covered by that policy. A fallback cannot hide an
@@ -139,3 +141,23 @@ All authored, projected, and generated decision records are unreviewed research
 data. Automatic checks are useful filters, but numerical confidence requires
 independently labelled data, held-out calibration, and a separate audit. Never
 relabel generated diagnostic partitions as human-gold evaluation data.
+
+## Native contract version
+
+Native `DecisionInput` and `DecisionOutput` use `schemaVersion: 2`. Runtime and
+model generation reject version 1 and its old issue values. Outer dataset records,
+artifact manifests and category catalogs retain their independent versions.
+
+Recognized published V1 decision datasets can be upgraded offline without regeneration; see
+[decision data maintenance](decision-run-maintenance.md). The explicit upgrade
+merges the former missing-information and no-matching-option codes into
+`no_supported_answer` and removes duplicates. It publishes a new artifact and
+preserves source evidence, business answers, explanations, citations, language
+and splits. Only contract-bearing fields are transformed.
+A contract upgrade is not a new model verification or a quality improvement.
+
+Update workflow fallback allowlists and unresolved route maps to the new issue
+name. Two old routes need one explicit shared policy; do not infer a route from
+the reason text. Re-export example evaluation datasets under their documented V2
+paths. Keep old evaluation reports as historical evidence and run fresh
+evaluations against the new contract.

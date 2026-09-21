@@ -644,6 +644,9 @@ def load_verified_artifact(directory: Path) -> ArtifactManifest:
             for path in paths
         }
         verify_dataset_contents(details, manifest.root.sourceRights, retained)
+        from .native_data import verify_upgrade_provenance
+
+        verify_upgrade_provenance(directory, manifest)
     _verify_model_identity(directory, manifest)
     _verify_inherited_leakage(directory, manifest)
     for node in [manifest.root, *_ancestor_nodes(manifest).values()]:

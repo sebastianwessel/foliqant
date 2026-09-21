@@ -41,3 +41,9 @@ Small synthetic model runs verify integration only, not production accuracy.
 
 Current fallback, context, and step-model verification is recorded in
 [the implementation review](reviews/fallback-context-models-2026-09-21.md).
+
+Native input/output now use schema version 2 with `no_supported_answer`,
+`conflicting_information`, and `multiple_valid_options`. Missing facts and
+unrepresentable answers share one issue and the example review route. See
+[the contract upgrade review](reviews/unified-answerability-v2.md) for runtime,
+model-data conversion, and current evaluation evidence.

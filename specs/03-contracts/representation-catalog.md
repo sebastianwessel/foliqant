@@ -198,8 +198,9 @@ request-unit questions. Caller IDs, criteria and allowed source IDs are data,
 not model-selected metadata. `DecisionOutput` is the generated-schema wire root
 for one typed result per question, question-relative answerability, closed issue
 codes, citations and concise explanations. The closed issue set is exactly
-`missing_information`, `conflicting_information`, `multiple_valid_options`,
-and `no_matching_option`; malformed questions fail contract validation. It
+`no_supported_answer`, `conflicting_information`, and `multiple_valid_options`;
+native input/output roots use schema version 2. Malformed questions fail contract
+validation. Explicit offline upgrade is the only legacy native acceptance boundary. It
 contains no numeric confidence or calibration target. Every request unit has a
 required nullable subject: a non-null subject is a literal substring of its
 cited evidence and identifies a discriminating reference; a generic request
@@ -221,3 +222,10 @@ artifact-manifest branch, evaluation result, calibration profile or human
 approval record. `CurateResult` remains the CLI success variant. Coverage-gate
 failure returns the existing typed CLI failure and points to the retained report.
 See [native decision-data generation](../09-native-decision-data.md).
+
+The `upgrade-decision-data` CLI result reports the new dataset/report paths,
+parent and child artifact IDs, and record count. Its inventory-bound private
+`decision-upgrade-provenance.json` records the operation version, verified parent
+manifest/file hashes and per-record before/after hashes and splits. These are
+migration evidence, not a new native decision wire shape or model verification.
+The verifier checks the original parent, source rights, families and row lineage.

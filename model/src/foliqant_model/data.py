@@ -34,6 +34,7 @@ from .contracts.inputs import (
     SourceDeclaration,
 )
 from .errors import ModelError
+from .native_data import validate_native_record
 
 _SPLITS = ("train", "validation", "calibration", "test")
 
@@ -134,6 +135,7 @@ def _prepare_record(value: object, expected_source: str) -> _PreparedRecord:
         raise ModelError("DATA_RECORD_INVALID", "Data record does not match its schema") from error
     if record.sourceId != expected_source:
         raise ModelError("DATA_RECORD_INVALID", "Data record source does not match its declaration")
+    validate_native_record(record)
     record = _normalize_record(record)
     messages = [message.model_dump(mode="json") for message in record.messages]
     conversation = _canonical_bytes(messages)
@@ -462,7 +464,9 @@ def _file_ref(path: str, data: bytes, count: int) -> InventoryFileRef:
     )
 
 
-def prepare_dataset(config_path: Path, output: Path) -> ArtifactManifest:
+def prepare_dataset(
+    config_path: Path, output: Path, *, provenance: dict[str, object] | None = None
+) -> ArtifactManifest:
     """Validate, normalize, partition, and atomically publish one dataset artifact."""
 
     prepared = _load_inputs(config_path)
@@ -577,6 +581,11 @@ def prepare_dataset(config_path: Path, output: Path) -> ArtifactManifest:
             write_private_bytes(chats_directory / f"{split}.jsonl", chat_bytes[split])
             write_private_bytes(records_directory / f"{split}.jsonl", record_bytes[split])
         write_private_bytes(transaction.staging_path / "leakage.jsonl", leakage_bytes)
+        if provenance is not None:
+            write_private_bytes(
+                transaction.staging_path / "decision-upgrade-provenance.json",
+                _canonical_bytes(provenance),
+            )
         manifest = create_manifest(transaction.staging_path, fields)
         transaction.publish(manifest)
     return manifest

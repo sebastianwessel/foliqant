@@ -54,7 +54,7 @@ from .generation import (
 from .storage import load_object, store_object
 
 _REWRITE_PROMPT_VERSION = "native-decision-state-rewrite-v6"
-_SOLVER_PROMPT_VERSION = "native-decision-blind-solve-v9"
+_SOLVER_PROMPT_VERSION = "native-decision-blind-solve-v10"
 _SOLVER_SCHEMA_PROJECTION_VERSION = "task-result-types-reachable-definitions-v1"
 _MAX_CANONICAL_CITATION_CHARACTERS = 4096
 _REWRITE_SYSTEM = (
@@ -181,7 +181,7 @@ _REPAIR_GUIDANCE = {
         "choose the supported distinguishing span or null when absent."
     ),
     "null-category-without-no-match-issue": (
-        "Every null category requires no_matching_option among that result's issues."
+        "Every null category requires no_supported_answer among that result's issues."
     ),
     "relation-exclusive-dependency": (
         "Remove unsupported dependencies: mutually exclusive requests cannot require "

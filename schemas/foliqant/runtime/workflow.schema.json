@@ -545,7 +545,7 @@
           "items": {
             "$ref": "#/$defs/DecisionIssue"
           },
-          "maxItems": 4,
+          "maxItems": 3,
           "minItems": 1,
           "title": "On",
           "type": "array"
@@ -560,10 +560,9 @@
     },
     "DecisionIssue": {
       "enum": [
-        "missing_information",
+        "no_supported_answer",
         "conflicting_information",
-        "multiple_valid_options",
-        "no_matching_option"
+        "multiple_valid_options"
       ],
       "type": "string"
     },
@@ -2113,19 +2112,6 @@
           "title": "Default",
           "type": "string"
         },
-        "missing_information": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Missing Information"
-        },
         "multiple_valid_options": {
           "anyOf": [
             {
@@ -2139,7 +2125,7 @@
           "default": null,
           "title": "Multiple Valid Options"
         },
-        "no_matching_option": {
+        "no_supported_answer": {
           "anyOf": [
             {
               "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
@@ -2150,7 +2136,7 @@
             }
           ],
           "default": null,
-          "title": "No Matching Option"
+          "title": "No Supported Answer"
         }
       },
       "required": [

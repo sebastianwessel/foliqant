@@ -735,7 +735,7 @@ paths:
   - REQ-NATIVE-DATA
   kind: success
   contract_refs:
-  - CONTRACT-NATIVE-DECISION-V1
+  - CONTRACT-NATIVE-DECISION-V2
   - CONTRACT-CURATION-V1
   - CONTRACT-MODEL-V1
   acceptance_ids:
@@ -747,7 +747,7 @@ paths:
   - REQ-NATIVE-DATA
   kind: failure
   contract_refs:
-  - CONTRACT-NATIVE-DECISION-V1
+  - CONTRACT-NATIVE-DECISION-V2
   - CONTRACT-CURATION-V1
   - CONTRACT-MODEL-V1
   acceptance_ids:

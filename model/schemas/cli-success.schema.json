@@ -191,6 +191,7 @@
           "schema": "#/$defs/SchemaSuccess",
           "setup": "#/$defs/SetupSuccess",
           "train": "#/$defs/TrainSuccess",
+          "upgrade-decision-data": "#/$defs/DecisionUpgradeSuccess",
           "verify": "#/$defs/VerifySuccess"
         },
         "propertyName": "command"
@@ -216,6 +217,9 @@
         },
         {
           "$ref": "#/$defs/MigrateDecisionsSuccess"
+        },
+        {
+          "$ref": "#/$defs/DecisionUpgradeSuccess"
         },
         {
           "$ref": "#/$defs/RerunMigratedDecisionsSuccess"
@@ -261,6 +265,7 @@
         "prepare",
         "prepare-source-projections",
         "migrate-decisions",
+        "upgrade-decision-data",
         "rerun-migrated-decisions",
         "curate",
         "quantize",
@@ -524,6 +529,85 @@
         "result"
       ],
       "title": "CustomizeSuccess",
+      "type": "object"
+    },
+    "DecisionUpgradeResult": {
+      "additionalProperties": false,
+      "description": "Immutable current native dataset and explicit schema upgrade provenance.",
+      "properties": {
+        "artifactId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Artifactid",
+          "type": "string"
+        },
+        "command": {
+          "const": "upgrade-decision-data",
+          "title": "Command",
+          "type": "string"
+        },
+        "datasetPath": {
+          "title": "Datasetpath",
+          "type": "string"
+        },
+        "parentArtifactId": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Parentartifactid",
+          "type": "string"
+        },
+        "records": {
+          "minimum": 0,
+          "title": "Records",
+          "type": "integer"
+        },
+        "reportPath": {
+          "title": "Reportpath",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "datasetPath",
+        "artifactId",
+        "parentArtifactId",
+        "reportPath",
+        "records"
+      ],
+      "title": "DecisionUpgradeResult",
+      "type": "object"
+    },
+    "DecisionUpgradeSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "upgrade-decision-data",
+          "title": "Command",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/DecisionUpgradeResult"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "ok",
+        "command",
+        "result"
+      ],
+      "title": "DecisionUpgradeSuccess",
       "type": "object"
     },
     "DoctorResult": {

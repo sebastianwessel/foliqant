@@ -31,6 +31,12 @@ def _strict_one(value: object) -> object:
     return value
 
 
+def _strict_two(value: object) -> object:
+    if type(value) is not int or value != 2:
+        raise ValueError("must be the integer 2")
+    return value
+
+
 NonEmptyStr = Annotated[
     str, StringConstraints(strict=True, min_length=1), AfterValidator(_non_empty)
 ]
@@ -44,3 +50,6 @@ Id = Annotated[
     ),
 ]
 SchemaVersion = Annotated[Literal[1], BeforeValidator(_strict_one)]
+
+DecisionSchemaVersion = Annotated[Literal[2], BeforeValidator(_strict_two)]
+"""Wire version for native decision inputs and outputs only."""

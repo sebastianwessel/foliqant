@@ -150,7 +150,7 @@ def test_decision_validation_rejects_key_outside_authored_catalog() -> None:
     )
     output = DecisionOutput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "results": [
                 {
                     "questionId": "route",

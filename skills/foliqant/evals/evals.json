@@ -50,6 +50,11 @@
       "id": 10,
       "prompt": "Run these ten gold cases three times and compare the saved results to our baseline without more model calls.",
       "expected_output": "Distinguishes the authorized 30 real executions from ten source cases. Uses explicit repeat with bounded sequential defaults, retains every failed attempt and unknown usage, and performs saved-report comparison offline only for compatible inputs/gold/targets/scorers. Does not portray repeated observations as independent data or replay latency as model speed."
+    },
+    {
+      "id": 11,
+      "prompt": "Route missing facts to clarification and out-of-catalog requests to a different branch by reading their explanation text.",
+      "expected_output": "Explains both use no_supported_answer in native schemaVersion 2 and chooses an explicitly configured shared unresolved policy. Does not parse explanations, restore legacy issue aliases, or invent a second diagnostic flag. Keeps contradictions and multiple supported options distinct and preserves original answerability when a fallback category is configured."
     }
   ]
 }

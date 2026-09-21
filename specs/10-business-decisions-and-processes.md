@@ -83,7 +83,7 @@ same deterministic normalization and exact membership check. This cannot recover
 an unknown or semantically incorrect category. Persist canonical keys from the
 start of a new task rather than changing immutable historical data.
 Evidence for each selected label is still the future extension described below;
-current V1 classification explanations are attached to the question result.
+current native V2 classification explanations are attached to the question result.
 
 Keep support dimensions as separate questions: request kind (`incident`,
 `information_request`, `confirmation`), topic/queue, and priority under a supplied
@@ -94,13 +94,16 @@ span; resolving "tomorrow" requires trusted reference time and timezone.
 Computing an SLA deadline is deterministic policy, not a model target or an
 invented date. Missing date evidence stays missing.
 
-The catalog-authoring validation is additive to V1 tooling. Frozen V1 artifacts,
-generation schemas and recipe identities remain unchanged so their completion,
-repair and extension can be verified. Strict catalog authoring must not be
-misrepresented as a retrospective new restriction on every historical V1 ID.
+Category catalogs retain their independent schema version 1; native decision
+messages use version 2. Historical native V1 artifacts and recipe identities
+remain immutable. Use the explicit offline data upgrade for recognized V1 native
+records; do not reinterpret their cached responses through continuation, repair
+or extension. Catalog normalization is not a retrospective restriction on
+historical native IDs.
 
-Keep the existing English issue enums: `missing_information`,
-`conflicting_information`, `multiple_valid_options`, `no_matching_option`.
+Keep the current English issue enums: `no_supported_answer`,
+`conflicting_information`, `multiple_valid_options`. Missing details and catalog
+gaps share `no_supported_answer`; explanations retain their specific meaning.
 `multiple_valid_options` applies when positively supported options exceed the
 task's cardinality; it is not an error merely to have two valid multiselect
 labels. Two possible referents for "cancel it" must not become two executable

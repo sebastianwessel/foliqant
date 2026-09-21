@@ -11,7 +11,7 @@ contracts:
   path: 07-local-setup.md
 - id: CONTRACT-CURATION-V1
   path: 08-automated-data-curation.md
-- id: CONTRACT-NATIVE-DECISION-V1
+- id: CONTRACT-NATIVE-DECISION-V2
   path: 09-native-decision-data.md
 capabilities:
 - id: CAP-PACKAGE-EVALUATION

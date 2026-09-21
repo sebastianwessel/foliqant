@@ -52,6 +52,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     migrate.add_argument("--from-run", type=Path, required=True)
     migrate.add_argument("--output", type=Path)
+    upgrade = commands.add_parser(
+        "upgrade-decision-data", help="Upgrade native V1 data to V2 offline without changing labels"
+    )
+    upgrade.add_argument("--from-dataset", type=Path, required=True)
+    upgrade.add_argument("--output", type=Path, required=True)
     rerun = commands.add_parser(
         "rerun-migrated-decisions", help="Run selected pending tasks from a frozen migration"
     )
@@ -148,6 +153,7 @@ def main(argv: list[str] | None = None) -> int:
                     "prepare",
                     "prepare-source-projections",
                     "migrate-decisions",
+                    "upgrade-decision-data",
                     "rerun-migrated-decisions",
                     "curate",
                     "train",
@@ -249,6 +255,13 @@ def main(argv: list[str] | None = None) -> int:
                     },
                 },
                 strict=True,
+            ).model_dump(mode="json")
+        elif command == "upgrade-decision-data":
+            from .contracts.cli import DecisionUpgradeResult
+            from .curation.decision_upgrade import upgrade_decision_data
+
+            payload = DecisionUpgradeResult.model_validate(
+                upgrade_decision_data(args.from_dataset, args.output), strict=True
             ).model_dump(mode="json")
         elif command == "rerun-migrated-decisions":
             from .contracts.cli import MigrationResult

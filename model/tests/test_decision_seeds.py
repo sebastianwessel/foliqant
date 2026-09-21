@@ -189,7 +189,7 @@ def test_observed_oracle_failures_have_question_relative_labels_and_subjects() -
     assert reference.answer.value == "false"
 
     ambiguous = next(seed for seed in seeds if seed.scenario == "choice-ambiguous")
-    assert ambiguous.oracle.results[0].answerability.issues == ["missing_information"]
+    assert ambiguous.oracle.results[0].answerability.issues == ["no_supported_answer"]
 
     for seed in seeds:
         if seed.scenario not in {
@@ -205,7 +205,7 @@ def test_observed_oracle_failures_have_question_relative_labels_and_subjects() -
             result for result in seed.oracle.results if result.type == "request_units"
         )
         assert request_result.answerability.status == "answerable"
-        assert request_result.answerability.issues == ["no_matching_option"]
+        assert request_result.answerability.issues == ["no_supported_answer"]
         assert request_result.answer is not None
         assert {unit.subject for unit in request_result.answer.units} == {expected_subject.group(0)}
         assert f'"{expected_subject.group(0)}"' in source
@@ -487,7 +487,7 @@ def test_incompatible_sources_are_explicitly_not_projected() -> None:
 
 def test_recipe_digest_is_stable_and_shaped_like_sha256() -> None:
     first = decision_seed_recipe_digest()
-    assert decision_seeds_module._RECIPE_VERSION == "native-decisions-v12"
+    assert decision_seeds_module._RECIPE_VERSION == "native-decisions-v13"
     assert first == decision_seed_recipe_digest()
     assert len(first) == 64
     int(first, 16)
@@ -541,7 +541,7 @@ def test_native_system_defines_status_and_collection_semantics() -> None:
     assert "does not change a branch request to active" in system
     assert "otherwise remain mutually exclusive" in system
     assert "inside the quote marks" in system
-    assert "still uses no_matching_option" in system
+    assert "no_supported_answer when the allowed evidence supports no permitted answer" in system
     assert "one grounded, concise reason" in system
     assert "aiming for 160 characters or fewer" in system
     assert "second sentence only for a decisive limitation" in system

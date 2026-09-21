@@ -39,7 +39,7 @@ from ..contracts.base import canonical_digest
 from .contracts import ImportedRecord
 from .decision_seeds import DecisionSeed, _projected_seed
 
-PROJECTION_VERSION = "auxiliary-native-projections-v1"
+PROJECTION_VERSION = "auxiliary-native-projections-v2"
 
 _TASK_VERSIONS = {
     "typed-decisions": "typed-all-questions-v1",

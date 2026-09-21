@@ -149,6 +149,15 @@ there is no parallel validation engine or network preflight.
 
 ### Classification selection and unresolved policy
 
+Native input/output messages use schema version 2. Their issue domain is exactly
+`no_supported_answer`, `conflicting_information`, and `multiple_valid_options`.
+Missing details and requests outside the allowed answers share the first code;
+retain the distinction only in human-readable explanations and missing facts.
+Runtime configuration and model responses reject the old issue names. Do not
+restore them through aliases, another diagnostic flag or parsing explanation
+text. Existing authoring/workflow/envelope versions are independent of this
+native message version change.
+
 A single-choice decision can declare `fallback: {category: {id, description?},
 on: [issue, ...]}`. Category IDs use the same deterministic normalization as
 catalog IDs and must not collide with model-selectable options. Descriptions
@@ -164,7 +173,7 @@ technical failure. Omit selection when there is no supported selection; do not
 serialize null. Expose selection through public step records and binding context.
 
 `on_unresolved` accepts the existing target string or a map with `default` and
-optional keys from the four issue codes. Resolve each issue through its entry or
+optional keys from the three issue codes. Resolve each issue through its entry or
 default; follow their shared target only if all agree, otherwise follow default.
 Absent issues, undetermined/nondecision outcomes use default. No issue order or
 priority is inferred. All targets participate in reachability, cycle, dominance,

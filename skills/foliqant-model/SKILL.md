@@ -52,7 +52,11 @@ paid compute without authorization.
 
 Use `CategoryCatalog` from `foliqant.decisions.category_catalog` for new
 category authoring: required descriptions, normalized snake_case IDs and rejected
-collisions. Preserve historical V1 schemas and recipe identities.
+collisions. Current native input/output messages use schema version 2; outer
+records and catalog versions are independent. Preserve historical artifact bytes
+and recipe identities; use explicit offline upgrade for legacy native data.
+The only issue codes are `no_supported_answer`, `conflicting_information`, and
+`multiple_valid_options`. Do not reintroduce the merged diagnostic distinction.
 
 Native generation preserves typed question semantics, exact evidence, language,
 family/split isolation and train-only generation. A valid unknown answer differs

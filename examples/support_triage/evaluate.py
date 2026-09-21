@@ -81,7 +81,7 @@ def _gold_suite() -> EvaluationSuite:
     """Independent gold for clear, incomplete, competing, and corrected requests."""
     original = EvaluationSuite(
         name="support_triage",
-        revision="6",
+        revision="7",
         cases=(
             EvaluationCase(
                 "explicit_cancellation",
@@ -159,9 +159,9 @@ def _gold_suite() -> EvaluationSuite:
                         "not_answerable",
                     ),
                     Expectation(
-                        "missing_information",
+                        "no_supported_answer",
                         "/decisions/classify/result/answerability/issues",
-                        ("missing_information",),
+                        ("no_supported_answer",),
                         comparison="set",
                     ),
                     Expectation("no_answer", "/decisions/classify/result/answer", None),
@@ -342,11 +342,9 @@ def _gold_suite() -> EvaluationSuite:
     )
 
     extra = (
-        _unresolved_case("out_of_catalog", "eval-010", "en", "no_matching_option"),
-        _unresolved_case("german_out_of_catalog", "eval-011", "de", "no_matching_option"),
-        _unresolved_case(
-            "german_insufficient_information", "eval-012", "de", "missing_information"
-        ),
+        _unresolved_case("out_of_catalog", "eval-010", "en"),
+        _unresolved_case("german_out_of_catalog", "eval-011", "de"),
+        _unresolved_case("german_insufficient_information", "eval-012", "de"),
     )
     return EvaluationSuite(
         original.name,
@@ -355,8 +353,8 @@ def _gold_suite() -> EvaluationSuite:
     )
 
 
-def _unresolved_case(case_id: str, request_id: str, language: str, issue: str) -> EvaluationCase:
-    """Author a contrasting source and expected diagnosis without model predictions."""
+def _unresolved_case(case_id: str, request_id: str, language: str) -> EvaluationCase:
+    """Author a distinct unsupported source without deriving gold from predictions."""
     return EvaluationCase(
         case_id,
         Envelope(
@@ -372,7 +370,10 @@ def _unresolved_case(case_id: str, request_id: str, language: str, issue: str) -
                 "not_answerable",
             ),
             Expectation(
-                "issue", "/decisions/classify/result/answerability/issues", (issue,), "set"
+                "no_supported_answer",
+                "/decisions/classify/result/answerability/issues",
+                ("no_supported_answer",),
+                "set",
             ),
             Expectation("no_answer", "/decisions/classify/result/answer", None),
             Expectation("safe_output", "/payload/status", "needs_review"),
@@ -405,12 +406,11 @@ def _with_selection_gold(case: EvaluationCase) -> EvaluationCase:
             Expectation("selection_origin", "/decisions/classify/selection/origin", "model"),
             Expectation("no_issues", "/decisions/classify/result/answerability/issues", (), "set"),
         )
-    elif issues in (("missing_information",), ("no_matching_option",)):
-        target = "clarify" if issues == ("missing_information",) else "manual_triage"
+    elif issues == ("no_supported_answer",):
         extra = (
             Expectation("selected_category", "/decisions/classify/selection/category/id", "misc"),
             Expectation("selection_origin", "/decisions/classify/selection/origin", "fallback"),
-            Expectation("unresolved_route", f"/decisions/{target}/status", "needs_review"),
+            Expectation("unresolved_route", "/decisions/review/status", "needs_review"),
         )
     else:
         extra = (Expectation("unresolved_route", "/decisions/review/status", "needs_review"),)
@@ -446,7 +446,7 @@ def _gold_step_suite(step: str) -> EvaluationSuite:
                 checks,
             )
         )
-    return EvaluationSuite(name=f"support_{step}", revision="6", cases=tuple(cases))
+    return EvaluationSuite(name=f"support_{step}", revision="7", cases=tuple(cases))
 
 
 def dataset() -> EvaluationDataset:
@@ -474,10 +474,9 @@ def dataset() -> EvaluationDataset:
         "path": "/decisions/classify/result/answerability/issues",
         "kind": "multilabel",
         "labels": [
-            "missing_information",
-            "no_matching_option",
-            "multiple_valid_options",
+            "no_supported_answer",
             "conflicting_information",
+            "multiple_valid_options",
         ],
     }
     status: dict[str, JsonValue] = {
@@ -490,7 +489,7 @@ def dataset() -> EvaluationDataset:
         {
             "version": 1,
             "name": "support_triage_examples",
-            "revision": "6",
+            "revision": "7",
             "suites": [
                 suite_document(
                     _gold_suite(),

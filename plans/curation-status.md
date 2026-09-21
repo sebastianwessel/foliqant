@@ -1,12 +1,27 @@
 # Automated curation implementation
 
-## Current native run — 2026-09-20
+## Current native contract — V2
+
+The latest completed migrated dataset has been deterministically upgraded to
+native contract version 2, without model calls or changes to its parent. It
+contains 2,913 records: 1,868 train, 282 validation, 264 calibration, and 499 test;
+2,684 English and 229 German. Its artifact ID is
+`5ee3ea7ded3f9151e4ae9af3d472d58fb06e3dbeaa2c9844b7cdf2bfa7e7f063`.
+The upgrade changes 186 result issue lists to `no_supported_answer`; answers,
+explanations, citations, rights, reviewed status, and splits are unchanged.
+The parent's 118 review items remain unresolved historical evidence, not newly
+accepted rows. No model training or remote dataset publication is implied.
+
+Current evidence: [contract upgrade review](reviews/unified-answerability-v2.md).
+The earlier run counts below are historical and are not the current corpus totals.
+
+## Historical native run — 2026-09-20
 
 The bilingual continuation `native-financial-decisions-en-de-v1-continue-3beaee64b8c2`
 completed all 865 jobs: 654 accepted (75.6%) and 211 quarantined (24.4%).
 The published native-decisions artifact is
 `844c86503e824db6c90442f54ec7a9759c9ae358bbc0e393f95b9837a9dc587d`.
-It passed the current CLI integrity verifier. Accepted-job counts are not
+It passed the CLI integrity verifier at that revision. Accepted-job counts are not
 training-row counts or accuracy estimates. Repair and source-projection pilot
 execution are separate subsequent runs; neither has been performed in this update.
 
@@ -16,9 +31,9 @@ The 9,600-record auxiliary source corpus remains separate. Authored accepted
 rewrites can publish both a reference parent and its derivative, which explains
 why accepted jobs and published rows differ.
 
-The post-merge repair command targets this completed continuation child with
+The repair workflow at that revision targeted this completed continuation child with
 `--repair-from`, retaining 654 accepted outcomes and retrying 211 quarantines.
-After repair completes, prepare fresh projection plans from the repair child:
+Projection plans must be prepared from their exact completed parent:
 old plans are bound to the exact earlier parent. Keep the 32-task sequential
 projection pilot before a full extension. Full training remains a later step.
 

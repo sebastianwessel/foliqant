@@ -62,7 +62,7 @@ def test_mixed_sufficiency_distinguishes_explicit_false_from_unknown() -> None:
         assert isinstance(unavailable, PredicateResult)
         assert unavailable.answerability.status == "not_answerable"
         assert unavailable.answer.value == "unknown"
-        assert unavailable.answerability.issues == ["missing_information"]
+        assert unavailable.answerability.issues == ["no_supported_answer"]
 
 
 @pytest.mark.parametrize(
@@ -90,6 +90,6 @@ def test_applicability_oracles_account_for_every_authored_condition(
     result = output.results[0]
     assert isinstance(result, PredicateResult)
     assert result.answerability.status == "not_answerable"
-    assert result.answerability.issues == ["missing_information"]
+    assert result.answerability.issues == ["no_supported_answer"]
     assert result.answer.value == "unknown"
     assert result.explanation.missingFacts == missing_facts

@@ -41,7 +41,7 @@ def _json(value: object) -> str:
 def _seed(record_id: str, *, mode: Literal["annotate", "rewrite"] = "annotate") -> DecisionSeed:
     task = DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {
                 "sources": [
                     {
@@ -64,7 +64,7 @@ def _seed(record_id: str, *, mode: Literal["annotate", "rewrite"] = "annotate") 
     )
     output = DecisionOutput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "results": [
                 {
                     "questionId": "receipt",

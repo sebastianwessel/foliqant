@@ -75,6 +75,11 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
     assert effective["confusion_matrix"][-1] == [0, 0, 0, 4]
     assert origin["confusion_matrix"] == [[6, 0], [0, 4]]
     assert issues["support"] == 12
+    assert issues["labels"] == [
+        "no_supported_answer",
+        "conflicting_information",
+        "multiple_valid_options",
+    ]
     assert issues["accuracy"] == 1
     classify_summary = next(step for step in pipeline["steps"] if step["name"] == "classify")
     assert classify_summary["model_selected_cases"] == 6
@@ -158,12 +163,12 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
         if case.id in review_ids
     }
     assert authored_issues == {
-        "insufficient_information": ["missing_information"],
+        "insufficient_information": ["no_supported_answer"],
         "multiple_active_intents": ["multiple_valid_options"],
         "unresolved_contradiction": ["conflicting_information"],
-        "out_of_catalog": ["no_matching_option"],
-        "german_out_of_catalog": ["no_matching_option"],
-        "german_insufficient_information": ["missing_information"],
+        "out_of_catalog": ["no_supported_answer"],
+        "german_out_of_catalog": ["no_supported_answer"],
+        "german_insufficient_information": ["no_supported_answer"],
     }
     for step in (classification, extraction):
         for isolated in step.gold_cases:

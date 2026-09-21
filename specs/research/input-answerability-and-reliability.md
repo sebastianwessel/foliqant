@@ -5,8 +5,9 @@ Date: 2026-09-19. Status: research recommendation, not an implemented API, train
 2026-09-20 target refinement: [specification 10](../10-business-decisions-and-processes.md)
 records per-label/value evidence, host-resolved source spans, explicit ordered
 thread snapshots, bounded extraction and one process with multiple child tasks.
-These additions remain unimplemented. Existing V1 curation retains its exact
-contract, source snapshots and artifact identities.
+These additions remain unimplemented. Historical native V1 artifacts, source
+snapshots and recipe identities remain immutable. Current native curation uses
+the V2 contract in specification 09; this research does not redefine that API.
 
 ## 1. Product decision
 
@@ -93,7 +94,7 @@ Illustrative assessment for the two-request email, if a caller requires exactly 
 
 This is a proposed result shape, not a current contract or a measured prediction. Statuses are predictions too. The application attaches calibration metadata and chooses a permitted resolution. It must not let untrusted input change the question contract.
 
-Use a compact top-level status (`answerable`, `partially_answerable`, `not_answerable`, `undetermined`) plus only four generic issue codes: `missing_information`, `conflicting_information`, `multiple_valid_options`, `no_matching_option`. This follows the user's refinement to avoid domain-specific enum growth. Missing attachments, ambiguous referents and cardinality details belong in explanations. Multiple causes can coexist. Several clear requests are not an issue when a collection answer is allowed. A failed model call or malformed contract is a technical error, not evidence of unanswerability. Do not overload the binary probability target with partial answerability: retain per-question or per-unit results and define all-required-units sufficiency separately.
+Use a compact top-level status (`answerable`, `partially_answerable`, `not_answerable`, `undetermined`) plus only three generic issue codes: `no_supported_answer`, `conflicting_information`, `multiple_valid_options`. This follows the user's refinement to avoid domain-specific enum growth. Missing attachments, ambiguous referents and cardinality details belong in explanations. Multiple causes can coexist. Several clear requests are not an issue when a collection answer is allowed. A failed model call or malformed contract is a technical error, not evidence of unanswerability. Do not overload the binary probability target with partial answerability: retain per-question or per-unit results and define all-required-units sufficiency separately.
 
 Issue codes do not mechanically imply unanswerability. When the answer space explicitly permits `no_match`, sufficient evidence for no catalog match can yield `answerable`; a forced catalog choice cannot. For predicates, preserve the distinction between evidence supporting true/false and a correct report that neither is established. A question specifically asking whether evidence is missing can itself be answerable. The rubric must define its substantive target, including no-match and unknown semantics, before labelling or calibration.
 

@@ -178,6 +178,7 @@ type Command = Literal[
     "prepare",
     "prepare-source-projections",
     "migrate-decisions",
+    "upgrade-decision-data",
     "rerun-migrated-decisions",
     "curate",
     "quantize",

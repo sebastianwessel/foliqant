@@ -39,7 +39,7 @@ def _json(value: object) -> str:
 def _task() -> DecisionInput:
     return DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {
                 "sources": [
                     {
@@ -66,7 +66,7 @@ def _task() -> DecisionInput:
 def _output(*, value: str = "true", summary: str = "The request is explicit.") -> DecisionOutput:
     return DecisionOutput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "results": [
                 {
                     "questionId": "receipt-requested",
@@ -1292,7 +1292,7 @@ def test_sse_whitespace_rejection_is_cached_and_repairs_only_solver(
     from foliqant_model.curation.storage import load_object
 
     seed = _seed(mode="rewrite")
-    partial = '{"schemaVersion":1,"results":' + " " * 1024
+    partial = '{"schemaVersion":2,"results":' + " " * 1024
     requests = _in_memory_sse_endpoint(
         monkeypatch,
         [

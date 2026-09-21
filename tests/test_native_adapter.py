@@ -115,7 +115,7 @@ def _choice_result(
         "type": "choice",
         "answerability": {
             "status": status,
-            "issues": [] if status == "answerable" else ["missing_information"],
+            "issues": [] if status == "answerable" else ["no_supported_answer"],
         },
         "answer": None if option_id is None else {"optionId": option_id},
         "explanation": _explanation()
@@ -134,7 +134,7 @@ def test_builds_canonical_input_from_actual_nonblank_sources() -> None:
     task = build_decision_input(step, _sources())
 
     assert task.model_dump(mode="json") == {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "state": {
             "sources": [
                 {"id": "ticket", "kind": "document", "text": "Billing failed for invoice 17."}
@@ -181,7 +181,7 @@ def test_single_choice_is_unwrapped_immutable_and_keeps_exact_route_key() -> Non
     result = validate_decision_result(
         step,
         task,
-        {"schemaVersion": 1, "results": [_choice_result()]},
+        {"schemaVersion": 2, "results": [_choice_result()]},
     )
 
     assert result.answerable is True
@@ -197,7 +197,7 @@ def test_predicate_routes_only_validated_true_or_false() -> None:
     step = _step(question)
     task = build_decision_input(step, _sources("Access is not blocked."))
     raw = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "classify",
@@ -220,7 +220,7 @@ def test_ordinal_route_preserves_the_validated_level_id() -> None:
     step = _step(_ordinal())
     task = build_decision_input(step, _sources("This invoice issue is high priority."))
     raw = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "classify",
@@ -243,7 +243,7 @@ def test_any_uncertainty_disables_routing_and_multi_question_retains_wrapper() -
     step = _step(_choice("queue"), _predicate("blocked"), mode="multiple")
     task = build_decision_input(step, _sources())
     raw = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             _choice_result(question_id="queue", status="undetermined", option_id=None),
             {
@@ -251,7 +251,7 @@ def test_any_uncertainty_disables_routing_and_multi_question_retains_wrapper() -
                 "type": "predicate",
                 "answerability": {
                     "status": "undetermined",
-                    "issues": ["missing_information"],
+                    "issues": ["no_supported_answer"],
                 },
                 "answer": {"value": "unknown"},
                 "explanation": {
@@ -276,7 +276,7 @@ def test_answerable_multiselect_remains_inside_multi_question_wrapper() -> None:
         _sources("Billing failed and technical access is blocked."),
     )
     raw = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "queues",
@@ -310,7 +310,7 @@ def test_existing_decision_output_is_reparsed_before_acceptance() -> None:
     step = _step(_choice())
     task = build_decision_input(step, _sources())
     output = DecisionOutput.model_validate(
-        {"schemaVersion": 1, "results": [_choice_result()]}, strict=True
+        {"schemaVersion": 2, "results": [_choice_result()]}, strict=True
     )
 
     result = validate_decision_result(step, task, output)
@@ -325,10 +325,10 @@ def test_mutated_or_constructed_model_cannot_bypass_validation_without_warning(
     step = _step(_choice())
     task = build_decision_input(step, _sources())
     if constructed:
-        output = DecisionOutput.model_construct(schemaVersion=1, results=[])
+        output = DecisionOutput.model_construct(schemaVersion=2, results=[])
     else:
         output = DecisionOutput.model_validate(
-            {"schemaVersion": 1, "results": [_choice_result()]}, strict=True
+            {"schemaVersion": 2, "results": [_choice_result()]}, strict=True
         )
         output.results[0].questionId = "PRIVATE INVALID MUTATION"
 
@@ -346,10 +346,10 @@ def test_mutated_or_constructed_model_cannot_bypass_validation_without_warning(
     "raw",
     [
         "PRIVATE_MODEL_TEXT",
-        {"schemaVersion": 1, "results": [_choice_result()], "PRIVATE_FIELD": "SECRET"},
-        {"schemaVersion": 1, "results": [{**_choice_result(), "answer": None}]},
+        {"schemaVersion": 2, "results": [_choice_result()], "PRIVATE_FIELD": "SECRET"},
+        {"schemaVersion": 2, "results": [{**_choice_result(), "answer": None}]},
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "results": [
                 {
                     **_choice_result(),
@@ -357,7 +357,7 @@ def test_mutated_or_constructed_model_cannot_bypass_validation_without_warning(
                 }
             ],
         },
-        {"schemaVersion": 1, "results": [_choice_result(question_id="other")]},
+        {"schemaVersion": 2, "results": [_choice_result(question_id="other")]},
     ],
 )
 def test_raw_schema_and_semantic_failures_are_safe_invalid_output(raw: object) -> None:
@@ -369,3 +369,115 @@ def test_raw_schema_and_semantic_failures_are_safe_invalid_output(raw: object) -
     assert str(error.value) == "An operation returned an invalid result."
     assert "PRIVATE" not in str(error.value)
     assert error.value.__suppress_context__
+
+
+@pytest.mark.parametrize("version", [1, True, 2.0, "2", 3])
+def test_native_decision_boundaries_reject_legacy_and_noninteger_versions(version) -> None:
+    from pydantic import ValidationError
+
+    from foliqant.decisions import DecisionInput
+
+    step = _step(_choice())
+    task = build_decision_input(step, _sources())
+    raw_input = task.model_dump(mode="json")
+    raw_input["schemaVersion"] = version
+    with pytest.raises(ValidationError):
+        DecisionInput.model_validate(raw_input)
+    with pytest.raises(ServiceError) as error:
+        validate_decision_result(
+            step, task, {"schemaVersion": version, "results": [_choice_result()]}
+        )
+    assert error.value.code == ErrorCode.INVALID_OUTPUT
+
+
+def test_native_defaults_and_shared_schema_version_are_independent() -> None:
+    from pydantic import TypeAdapter, ValidationError
+
+    from foliqant.decisions import DecisionInput, SchemaVersion
+
+    task_value = build_decision_input(_step(_choice()), _sources()).model_dump(mode="json")
+    del task_value["schemaVersion"]
+    assert DecisionInput.model_validate(task_value).schemaVersion == 2
+    assert DecisionOutput.model_validate({"results": [_choice_result()]}).schemaVersion == 2
+    assert TypeAdapter(SchemaVersion).validate_python(1) == 1
+    with pytest.raises(ValidationError):
+        TypeAdapter(SchemaVersion).validate_python(2)
+
+
+@pytest.mark.parametrize("legacy_issue", ["missing_information", "no_matching_option"])
+def test_legacy_issue_codes_are_rejected_without_runtime_mapping(legacy_issue) -> None:
+    step = _step(_choice())
+    raw = _choice_result(status="not_answerable", option_id=None)
+    raw["answerability"]["issues"] = [legacy_issue]
+    with pytest.raises(ServiceError) as error:
+        validate_decision_result(
+            step, build_decision_input(step, _sources()), {"schemaVersion": 2, "results": [raw]}
+        )
+    assert error.value.code == ErrorCode.INVALID_OUTPUT
+    assert raw["answerability"]["issues"] == [legacy_issue]
+
+
+@pytest.mark.parametrize(
+    "issues",
+    [
+        ["no_supported_answer", "no_supported_answer"],
+        ["no_supported_answer", "conflicting_information", "multiple_valid_options", "extra"],
+    ],
+)
+def test_native_issues_are_unique_and_bounded(issues) -> None:
+    from pydantic import ValidationError
+
+    from foliqant.decisions import Answerability
+
+    with pytest.raises(ValidationError):
+        Answerability.model_validate({"status": "not_answerable", "issues": issues})
+
+
+@pytest.mark.parametrize("allow_no_match", [False, True])
+@pytest.mark.parametrize("issues", [[], ["conflicting_information"], ["no_supported_answer"]])
+def test_null_request_category_requires_permission_and_supported_issue(
+    allow_no_match, issues
+) -> None:
+    step = _step(
+        DecisionQuestionPlan(
+            id="classify",
+            type="request_units",
+            prompt="Identify the requests.",
+            criteria=("Use explicit requests.",),
+            allowed_source_ids=("ticket",),
+            options=(DecisionOptionPlan("technical", "Technical requests"),),
+            allow_no_match=allow_no_match,
+        )
+    )
+    raw = {
+        "schemaVersion": 2,
+        "results": [
+            {
+                "questionId": "classify",
+                "type": "request_units",
+                "answerability": {"status": "answerable", "issues": issues},
+                "answer": {
+                    "units": [
+                        {
+                            "id": "request",
+                            "status": "active",
+                            "categoryId": None,
+                            "subject": None,
+                            "description": "A billing request outside the catalog.",
+                            "evidence": [{"sourceId": "ticket", "quote": "Billing failed"}],
+                        }
+                    ],
+                    "relations": [],
+                },
+                "explanation": _explanation(),
+            }
+        ],
+    }
+    task = build_decision_input(step, _sources())
+    if allow_no_match and issues == ["no_supported_answer"]:
+        validated = validate_decision_result(step, task, raw)
+        assert thaw_json(validated.value) == raw["results"][0]
+    else:
+        with pytest.raises(ServiceError) as error:
+            validate_decision_result(step, task, raw)
+        assert error.value.code == ErrorCode.INVALID_OUTPUT

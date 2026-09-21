@@ -318,12 +318,12 @@ remain different questions.
 ### Typed questions
 
 New caller-authored category catalogs use the additive `CategoryCatalog`
-contract in `foliqant_model.curation.category_catalog` and its generated
+contract in `foliqant.decisions.category_catalog` and its generated
 `category-catalog.schema.json`: IDs deterministically normalized to unique
 lowercase snake_case keys, collisions rejected, and nonblank
 descriptions. `decision_options()` converts these definitions to the existing
 option representation without changing text. This authoring boundary preserves
-V1 message schemas, historical source IDs and frozen recipe identities; it does
+historical source IDs and frozen recipe identities; it does
 not retroactively rename existing category answers. Detailed catalog and support
 task semantics are recorded in
 [the business decision concept](10-business-decisions-and-processes.md#category-catalogs-and-support-decisions).
@@ -363,7 +363,7 @@ cannot supply a subject, and a generated rewrite must retain the exact subject
 span. A null
 category is permitted only under the question's no-match and answerability
 semantics. Any returned request-unit answer containing one or more null
-`categoryId` values includes `no_matching_option` exactly once in the result's
+`categoryId` values includes `no_supported_answer` exactly once in the result's
 exhaustive issue list. This also applies to a supported conditional branch whose
 requested action is outside the supplied catalog. Relations are a closed discriminated union:
 `conditional_on` links a request to a predicate question and required boolean
@@ -425,6 +425,9 @@ output; identifying one missing fact does not excuse an omitted request.
 
 ### Result, answerability, issues and evidence
 
+`DecisionInput` and `DecisionOutput` use native `schemaVersion: 2`; unrelated
+outer records, catalogs and artifacts retain their own versions. Old issue codes
+and native version 1 are rejected outside the explicit offline upgrade boundary.
 `DecisionOutput` is exactly `{schemaVersion, results}`. It contains one result
 for every question ID and no unknown result. Each result is exactly
 `{questionId, type, answer, answerability, explanation}`. `answerability` is
@@ -437,28 +440,22 @@ without the schema or this exact graph is insufficient.
 Status is one of `answerable`, `partially_answerable`, `not_answerable`, or
 `undetermined` and is always relative to that question's criteria,
 cardinality, allowed sources and time boundary. Issue codes are closed to
-exactly `missing_information`, `conflicting_information`,
-`multiple_valid_options`, and `no_matching_option`. Their meanings are:
+exactly `no_supported_answer`, `conflicting_information`, and
+`multiple_valid_options`. Their meanings are:
 
-- `missing_information`: a required source, referent, fact, prerequisite,
-  cardinality-resolving detail, or applicability fact is absent. A pronoun or
-  other unresolved reference uses this code even when several referents are
-  imaginable.
-- `conflicting_information`: two or more allowed facts are incompatible under
-  the question criteria and no caller-authored precedence rule resolves them.
-- `multiple_valid_options`: two or more supplied options are each positively
-  supported and the question's maximum cardinality cannot represent them all.
-  Possibility created only by missing information is not this issue.
-- `no_matching_option`: the allowed facts establish a determinate category or
-  request, but the supplied option/catalog space has no representation for it.
-  It is not used when the underlying fact or referent is unknown. A returned
-  request unit with `categoryId=null` always establishes this issue at the
-  result level.
+- `no_supported_answer`: supplied information cannot establish a substantive
+  answer or category for a required part, including absent facts/referents and requests that
+  the catalog cannot represent. The explanation preserves the specific reason;
+  no secondary enum or prose parsing recreates the former split.
+- `conflicting_information`: allowed facts are incompatible under the question
+  criteria and no caller-authored precedence rule resolves them.
+- `multiple_valid_options`: supplied options are positively supported and exceed
+  the question's maximum cardinality. Imaginable alternatives alone do not count.
 
 The issue list is exhaustive for every independently supported obstacle, not a
 primary-cause list. Codes are unique and order has no meaning. For example,
 conflicting allowed facts and a separate missing applicability date require
-both `conflicting_information` and `missing_information`. A malformed question
+both `conflicting_information` and `no_supported_answer`. A malformed question
 is a contract-validation failure, not an issue value. Multiple issues may
 coexist and do not mechanically imply one status. Several clear requests are
 answerable through `multiselect` or `request_units`; multiplicity alone is not
@@ -796,7 +793,7 @@ bounded semantic failures are quarantined with safe reasons.
 For model requests, project the canonical output schema onto only result types
 present in the caller's task and remove unreachable definitions. Preserve schema
 declaration order, all surviving constraints, IDs and value domains. The public
-V1 output schema and full post-response validation remain unchanged. Bind the
+V2 output schema and full post-response validation remain unchanged. Bind the
 projection rule version into the recipe and the actual projected schema into
 request/cache identity. Verify all nonempty combinations of the five result
 types; an all-types task must retain the full schema. This reduces request
@@ -925,7 +922,7 @@ Implementation verification covers:
   evidence validation and invalid cross-variant combination;
 - oracle invariant and counterfactual tests covering every required scenario,
   including explicit-absence predicates returning answerable false, missing
-  referents using `missing_information`, all applicable issue codes, objective
+  referents using `no_supported_answer`, all applicable issue codes, objective
   ordinal rubrics and explicit whole-answer task contracts;
 - request regressions for exact amount/reference subjects, order without
   inferred dependency, explicit prerequisite, alternative-condition graphs,
@@ -969,7 +966,7 @@ Implementation verification covers:
   preserving `task-contract` and `proposed-answer` byte-for-byte;
 - conditional extraction tests proving predicate truth does not execute a
   branch or change `status=conditional`, and every returned null category adds
-  `no_matching_option` to the exhaustive issue list;
+  `no_supported_answer` to the exhaustive issue list;
 - date/value preservation tests accepting equivalent ISO and written-date forms
   plus `per month`/`monthly` rate phrasing while rejecting duration/rate swaps,
   changed dates, numbers, currency, units and identifiers;
@@ -1037,3 +1034,26 @@ and explicit ancestry in an immutable child containing the unchanged migrated ro
 Neither command implicitly uploads, trains, changes source labels, or reassigns
 held-out families. Tests cover offline network prohibition, unchanged parent bytes,
 tamper rejection, exact labels/evidence, variants, rights, queue isolation and resume.
+
+## Native contract V1-to-V2 upgrade
+
+`upgrade-decision-data --from-dataset DATASET --output NEW` is the only explicit
+legacy native-record acceptance boundary. Validate exact V1 versions, unique old
+issue values and the old null-category rule before deterministic translation and
+current canonical shape/semantic validation. Map `missing_information` and
+`no_matching_option` to `no_supported_answer`, preserving stable order and
+removing merge duplicates. Upgrade native input/output versions and recognized
+system/question contract instructions only; never replace tokens in source prose,
+answers, explanations or annotations.
+
+Publish through the existing dataset artifact transaction. Preserve record IDs,
+source rights, generation ancestry, reviewed state, languages, family assignments
+and splits. Bind the verified parent manifest and file inventory plus each parent
+and child record hash in a provenance file included in the artifact inventory.
+Ordinary artifact verification must verify that parent and record lineage offline.
+Exact retries validate/reuse a completed upgrade; changed input or output fails.
+No downloads, endpoint discovery, inference, training, publication to a remote
+host, quarantine promotion or modification of historical reports is performed.
+Native prepare/train/evaluate reject V1 outside the explicit boundary; generic
+non-native chat data remains valid. Generated and evaluated future native records
+use V2 and versioned recipe identities; historical recipe hashes stay immutable.

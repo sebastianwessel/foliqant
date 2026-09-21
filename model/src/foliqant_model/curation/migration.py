@@ -40,7 +40,7 @@ from .storage import (
     write_once,
 )
 
-MIGRATION_VERSION = "native-migration-v1"
+MIGRATION_VERSION = "native-migration-v2"
 
 
 def migration_recipe_digest() -> str:

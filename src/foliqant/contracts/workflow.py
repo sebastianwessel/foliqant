@@ -120,7 +120,7 @@ class FallbackCategory(BoundaryModel):
 
 class DecisionFallback(BoundaryModel):
     category: FallbackCategory
-    on: Annotated[list[DecisionIssue], Field(min_length=1, max_length=4)]
+    on: Annotated[list[DecisionIssue], Field(min_length=1, max_length=3)]
 
     @field_validator("on")
     @classmethod
@@ -134,8 +134,7 @@ class UnresolvedRouting(BoundaryModel):
     """Issue-specific routes with a required default for ambiguity or no issue."""
 
     default: Id
-    missing_information: Id | None = None
-    no_matching_option: Id | None = None
+    no_supported_answer: Id | None = None
     conflicting_information: Id | None = None
     multiple_valid_options: Id | None = None
 

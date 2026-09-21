@@ -38,7 +38,7 @@ def _record(*, language: str = "en", selected: list[str] | None = None) -> DataR
         else "The annotation supports all selected requests."
     )
     task = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "state": {"sources": [{"id": "message-1", "kind": "message", "text": source_text}]},
         "questions": [
             {
@@ -65,7 +65,7 @@ def _record(*, language: str = "en", selected: list[str] | None = None) -> DataR
         ],
     }
     output = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "other",

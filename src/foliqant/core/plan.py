@@ -57,7 +57,7 @@ class ToolPolicyPlan:
 
 
 type DecisionIssue = Literal[
-    "missing_information", "conflicting_information", "multiple_valid_options", "no_matching_option"
+    "no_supported_answer", "conflicting_information", "multiple_valid_options"
 ]
 
 

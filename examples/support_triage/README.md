@@ -80,7 +80,7 @@ that file without opening a model client:
 
 ```sh
 uv run --no-sync python -m examples.support_triage.evaluate \
-  --write-dataset .foliqant/evaluation/support-triage.json
+  --write-dataset .foliqant/evaluation/support-triage-v2.json
 uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yaml --check
 ```
 
@@ -102,6 +102,6 @@ returned results, and safe mismatch reasons. Queue classification reports includ
 an ordered confusion matrix; the six review cases have no queue gold and are
 counted as excluded. Separate effective-category and origin metrics check six
 model selections and four `misc` fallbacks; conflict/multiple-intent cases have no
-selection. Issue and finish-step expectations distinguish clarification from
-manual triage and general review. Isolated reports identify `classify` or
-`extract` explicitly.
+selection. Missing-action and known out-of-catalog cases remain separate English
+and German gold scenarios, but both use `no_supported_answer` and the same review
+route. Isolated reports identify `classify` or `extract` explicitly.

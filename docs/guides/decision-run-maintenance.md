@@ -4,6 +4,42 @@ Use these operations after the main [native decision-data workflow](native-decis
 They verify frozen inputs and publish immutable children; they never modify or
 relabel the parent run.
 
+## Upgrade native contract version 1
+
+Use this for a published native dataset artifact with frozen splits and
+`schemaVersion: 1`. Records must use the three-message system/user/assistant
+layout produced by the native data tooling. The current
+input and output contract is version 2. No model calls or regeneration are needed:
+
+```sh
+uv run --project model --no-sync foliqant-model upgrade-decision-data \
+  --from-dataset /absolute/path/to/existing/datasets/native-decisions \
+  --output /absolute/path/to/new-upgrade
+```
+
+Supply the dataset artifact, not its enclosing generation or migration run.
+The command recognizes the shipped V1 system instructions and their audited
+English/German contract criteria. Unknown contract-bearing prompt variants are
+rejected for review instead of rewritten by guesswork. It strictly checks the
+old records, replaces `missing_information` and
+`no_matching_option` with `no_supported_answer`, removes duplicate merged issues,
+and updates native versions and contract instructions. Answers, source text,
+explanations, evidence, language, review status, rights, and frozen splits remain
+unchanged. No quarantined or disputed row becomes accepted through this upgrade.
+
+It publishes a new dataset with parent and per-record provenance, ordinary chat
+JSONL for fine-tuning, and full records for auditing. The original dataset and
+reports remain immutable. Verify the returned `datasetPath` with
+`foliqant-model verify /absolute/path/to/new-upgrade/datasets/native-decisions`.
+The parent must remain available for ancestry verification. Repeating the exact
+command checks and reuses the completed upgrade; it cannot overwrite a different
+artifact. Existing model weights and adapters are not changed by a data upgrade.
+
+Runtime, generation, training, and evaluation require current native records.
+Ordinary non-native chat datasets keep their existing contract. Source
+reprojection below is a separate operation; do not use continuation or repair
+to reinterpret an older contract's cached responses.
+
 ## Add scoped source projections
 
 The standard recipes project BANKING77 and WANLI records. typed-decisions,

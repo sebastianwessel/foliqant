@@ -163,7 +163,7 @@ def test_invalid_source_label_cardinality_is_not_projected(labels: list[str]) ->
 def test_historical_v1_predicate_projection_remains_valid() -> None:
     task = DecisionInput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "state": {
                 "sources": [
                     {"id": "evidence", "kind": "document", "text": "The transfer was submitted."}
@@ -183,14 +183,14 @@ def test_historical_v1_predicate_projection_remains_valid() -> None:
     )
     oracle = DecisionOutput.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "results": [
                 {
                     "questionId": "claim",
                     "type": "predicate",
                     "answerability": {
                         "status": "not_answerable",
-                        "issues": ["missing_information"],
+                        "issues": ["no_supported_answer"],
                     },
                     "answer": {"value": "unknown"},
                     "explanation": {

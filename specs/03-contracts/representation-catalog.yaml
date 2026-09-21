@@ -107,7 +107,7 @@ shapes:
   allowed_consumers:
   - caller-question-authoring
   source_contract_refs:
-  - CONTRACT-NATIVE-DECISION-V1
+  - CONTRACT-NATIVE-DECISION-V2
   mapping_refs:
   - MAP-CATEGORY-OPTIONS
 - shape_id: business.decision-observations
@@ -514,7 +514,7 @@ shapes:
   - curation-module
   - cli-module
   source_contract_refs:
-  - CONTRACT-NATIVE-DECISION-V1
+  - CONTRACT-NATIVE-DECISION-V2
   mapping_refs:
   - MAP-NATIVE-DECISION-PUBLISH
 - shape_id: model.decision-input
@@ -527,7 +527,7 @@ shapes:
   - curation-module
   - data-module
   source_contract_refs:
-  - CONTRACT-NATIVE-DECISION-V1
+  - CONTRACT-NATIVE-DECISION-V2
   mapping_refs:
   - MAP-AUXILIARY-NATIVE-PROJECTION
   - MAP-NATIVE-DECISION-PUBLISH
@@ -541,7 +541,7 @@ shapes:
   - curation-module
   - data-module
   source_contract_refs:
-  - CONTRACT-NATIVE-DECISION-V1
+  - CONTRACT-NATIVE-DECISION-V2
   mapping_refs:
   - MAP-AUXILIARY-NATIVE-PROJECTION
   - MAP-NATIVE-DECISION-PUBLISH
@@ -556,7 +556,7 @@ shapes:
   - cli-module
   - operator
   source_contract_refs:
-  - CONTRACT-NATIVE-DECISION-V1
+  - CONTRACT-NATIVE-DECISION-V2
   mapping_refs:
   - MAP-NATIVE-DECISION-PUBLISH
 - shape_id: model.source-projection-plan
@@ -569,7 +569,7 @@ shapes:
   - curation-module
   - cli-module
   source_contract_refs:
-  - CONTRACT-NATIVE-DECISION-V1
+  - CONTRACT-NATIVE-DECISION-V2
   mapping_refs:
   - MAP-SCOPED-SOURCE-PROJECTION
 mappings:

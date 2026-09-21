@@ -1,6 +1,6 @@
 """Shared native decision and category contracts for Foliqant runtimes."""
 
-from .base import ContractModel, Id, NonEmptyStr, SchemaVersion
+from .base import ContractModel, DecisionSchemaVersion, Id, NonEmptyStr, SchemaVersion
 from .category_catalog import (
     CategoryCatalog,
     CategoryDefinition,
@@ -65,6 +65,7 @@ __all__ = [
     "DecisionOutput",
     "DecisionQuestion",
     "DecisionResult",
+    "DecisionSchemaVersion",
     "DecisionSource",
     "DecisionState",
     "Explanation",

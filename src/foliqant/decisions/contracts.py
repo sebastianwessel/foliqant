@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, StrictBool, StrictInt, field_validator, model_validator
 
-from .base import ContractModel, Id, NonEmptyStr, SchemaVersion
+from .base import ContractModel, DecisionSchemaVersion, Id, NonEmptyStr
 
 
 class DecisionSource(ContractModel):
@@ -112,7 +112,7 @@ type DecisionQuestion = Annotated[
 
 
 class DecisionInput(ContractModel):
-    schemaVersion: SchemaVersion = 1
+    schemaVersion: DecisionSchemaVersion = 2
     state: DecisionState
     questions: Annotated[list[DecisionQuestion], Field(min_length=1, max_length=256)]
 
@@ -142,16 +142,15 @@ type AnswerabilityStatus = Literal[
     "answerable", "partially_answerable", "not_answerable", "undetermined"
 ]
 type AnswerabilityIssue = Literal[
-    "missing_information",
+    "no_supported_answer",
     "conflicting_information",
     "multiple_valid_options",
-    "no_matching_option",
 ]
 
 
 class Answerability(ContractModel):
     status: AnswerabilityStatus
-    issues: Annotated[list[AnswerabilityIssue], Field(max_length=32)]
+    issues: Annotated[list[AnswerabilityIssue], Field(max_length=3)]
 
     @field_validator("issues")
     @classmethod
@@ -273,7 +272,7 @@ type DecisionResult = Annotated[
 
 
 class DecisionOutput(ContractModel):
-    schemaVersion: SchemaVersion = 1
+    schemaVersion: DecisionSchemaVersion = 2
     results: Annotated[list[DecisionResult], Field(min_length=1, max_length=256)]
 
 
@@ -428,9 +427,9 @@ def validate_decision_output(task: DecisionInput, result: DecisionOutput) -> lis
                     problems.append(f"{prefix}:partial-answer-empty")
                 if (
                     any(unit.categoryId is None for unit in item.answer.units)
-                    and "no_matching_option" not in item.answerability.issues
+                    and "no_supported_answer" not in item.answerability.issues
                 ):
-                    problems.append(f"{prefix}:null-category-without-no-match-issue")
+                    problems.append(f"{prefix}:null-category-without-no-supported-answer-issue")
                 problems.extend(
                     _request_answer_problems(
                         prefix=prefix,

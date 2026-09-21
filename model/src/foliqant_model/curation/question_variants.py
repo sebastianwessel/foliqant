@@ -23,7 +23,7 @@ from foliqant.decisions import (
 from ..contracts.base import canonical_digest
 from ..contracts.inputs import ChatMessage, DataRecord
 
-QUESTION_VARIANT_RECIPE_VERSION = "question-variants-v1"
+QUESTION_VARIANT_RECIPE_VERSION = "question-variants-v2"
 
 _ISOLATED_MULTISELECT = "isolated-multiselect"
 _SINGLE_CHOICE = "single-choice-cardinality"

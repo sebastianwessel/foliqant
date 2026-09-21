@@ -16,7 +16,10 @@ result. Do not add persistence, queues, background jobs, application login,
 HTTP/Redis transport packages or infrastructure placeholders. A small HTTP host
 belongs under examples. MCP OAuth is outbound tool access, not app authentication.
 
-Native decision contracts live once in `foliqant.decisions`. Runtime code never
+Native decision contracts live once in `foliqant.decisions`. Native input/output
+use schema version 2 with `no_supported_answer`, `conflicting_information`, and
+`multiple_valid_options`. Missing information and catalog gaps share the first
+code; do not recreate that split with extra flags or parse explanations to route. Runtime code never
 imports model training/curation. Importing contracts must not initialize model
 clients or telemetry. Core depends on standard-library values and ports; SDKs and
 Pydantic adapters stay outside it.

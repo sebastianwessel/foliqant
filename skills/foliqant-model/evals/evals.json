@@ -22,7 +22,7 @@
     {
       "id": 4,
       "prompt": "The source says the reference is missing. Label the presence question unknown with multiple_valid_options.",
-      "expected_output": "Rejects that labeling: explicit absence is answerable false, while a missing referent uses missing_information and multiple_valid_options requires multiple positively supported options beyond cardinality.",
+      "expected_output": "Rejects that labeling: explicit absence is answerable false, while a missing referent uses no_supported_answer and multiple_valid_options requires multiple positively supported options beyond cardinality.",
       "files": []
     },
     {
@@ -47,6 +47,12 @@
       "id": 8,
       "prompt": "Keep my existing weights and generated data with this repository and start the next data operation.",
       "expected_output": "Uses ignored .foliqant in the repo through shared model_workspace/default wrapper behavior or explicit --workspace. Verifies Git exclusion and active process ownership, preserves immutable records and absolute ancestry when relocating, never commits contents or regenerates data silently. Does not run inference unless authorized."
+    },
+    {
+      "id": 9,
+      "prompt": "My native dataset has schemaVersion 1. Upgrade it to the merged issue contract without generating the answers again.",
+      "expected_output": "Uses upgrade-decision-data with the exact dataset artifact and a new output path; verifies the immutable V2 child and parent ancestry. Preserves answers, explanations, languages, rights, splits and review status. Makes no inference calls, does not promote quarantines, and does not claim trained weights are updated.",
+      "files": []
     }
   ]
 }

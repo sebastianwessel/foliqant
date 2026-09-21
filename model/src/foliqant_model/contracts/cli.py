@@ -69,6 +69,17 @@ class MigrationResult(ContractModel):
     reviewItems: NonNegativeInt
 
 
+class DecisionUpgradeResult(ContractModel):
+    """Immutable current native dataset and explicit schema upgrade provenance."""
+
+    command: Literal["upgrade-decision-data"]
+    datasetPath: LocalPath
+    artifactId: Digest
+    parentArtifactId: Digest
+    reportPath: LocalPath
+    records: NonNegativeInt
+
+
 class DoctorResult(ContractModel):
     command: Literal["doctor"]
     pythonVersion: NonEmptyStr
@@ -301,6 +312,7 @@ type CliResultValue = Annotated[
     | FetchResult
     | PrepareResult
     | MigrationResult
+    | DecisionUpgradeResult
     | CurateResult
     | QuantizeResult
     | TrainResult
@@ -353,6 +365,11 @@ class ProjectionPreparationSuccess(_CliSuccessCommon):
 class MigrateDecisionsSuccess(_CliSuccessCommon):
     command: Literal["migrate-decisions"]
     result: MigrationResult
+
+
+class DecisionUpgradeSuccess(_CliSuccessCommon):
+    command: Literal["upgrade-decision-data"]
+    result: DecisionUpgradeResult
 
 
 class RerunMigratedDecisionsSuccess(_CliSuccessCommon):
@@ -418,6 +435,7 @@ type CliSuccessValue = Annotated[
     | PrepareSuccess
     | ProjectionPreparationSuccess
     | MigrateDecisionsSuccess
+    | DecisionUpgradeSuccess
     | RerunMigratedDecisionsSuccess
     | CurateSuccess
     | QuantizeSuccess

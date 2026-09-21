@@ -39,21 +39,20 @@ _FALLBACK = """fallback:
     description: |
       Unresolved category.
       Requires triage.
-  on: [no_matching_option, missing_information]
+  on: [no_supported_answer]
 """
 _ROUTES = """next: done
 on_unresolved:
   default: review
-  no_matching_option: other
-  missing_information: other
+  no_supported_answer: other
   conflicting_information: review
 """
 
 
 def _raw(status="not_answerable", issues=None, *, option=None):
     result = _choice_result(question_id="first", status=status, option_id=option)
-    result["answerability"]["issues"] = issues if issues is not None else ["no_matching_option"]
-    return {"schemaVersion": 1, "results": [result]}
+    result["answerability"]["issues"] = issues if issues is not None else ["no_supported_answer"]
+    return {"schemaVersion": 2, "results": [result]}
 
 
 def _compiled(tmp_path, *, fallback=_FALLBACK, routes=_ROUTES, extra=""):
@@ -85,24 +84,17 @@ def _app(plan, raw):
     "status,issues,option,origin,target",
     [
         ("answerable", [], "billing", "model", "done"),
-        ("not_answerable", ["no_matching_option"], None, "fallback", "other"),
-        (
-            "not_answerable",
-            ["no_matching_option", "missing_information"],
-            None,
-            "fallback",
-            "other",
-        ),
+        ("not_answerable", ["no_supported_answer"], None, "fallback", "other"),
         ("not_answerable", ["conflicting_information"], None, None, "review"),
         ("not_answerable", ["multiple_valid_options"], None, None, "review"),
         (
             "not_answerable",
-            ["no_matching_option", "conflicting_information"],
+            ["no_supported_answer", "conflicting_information"],
             None,
             None,
             "review",
         ),
-        ("undetermined", ["no_matching_option"], None, None, "review"),
+        ("undetermined", ["no_supported_answer"], None, None, "review"),
     ],
 )
 async def test_policy_and_routes_share_full_and_isolated_execution(
@@ -182,13 +174,13 @@ async def test_selection_projection_and_cli_policy_description(tmp_path):
         step for step in json.loads(json.dumps(report))["steps"] if step["name"] == "first"
     )
     assert first["fallback"]["category"]["id"] == "misc_queue"
-    assert first["on_unresolved"]["missing_information"] == "other"
+    assert first["on_unresolved"]["no_supported_answer"] == "other"
     await app.aclose()
 
 
 def test_normal_selection_preserves_exact_native_option_id():
     step = _step(_choice())
-    raw = {"schemaVersion": 1, "results": [_choice_result()]}
+    raw = {"schemaVersion": 2, "results": [_choice_result()]}
     validated = validate_decision_result(step, build_decision_input(step, _sources()), raw)
     assert validated.selection.category.id == "billing.queue-v2"
     assert validated.selection.origin == "model"
@@ -202,7 +194,7 @@ def test_conflict_requires_explicit_policy_and_optional_description_is_omitted()
     raw = _choice_result(status="not_answerable", option_id=None)
     raw["answerability"]["issues"] = ["conflicting_information"]
     validated = validate_decision_result(
-        step, build_decision_input(step, _sources()), {"schemaVersion": 1, "results": [raw]}
+        step, build_decision_input(step, _sources()), {"schemaVersion": 2, "results": [raw]}
     )
     assert dict(validated.selection.as_json()["category"]) == {"id": "misc"}
     assert validated.selection.origin == "fallback"
@@ -211,12 +203,12 @@ def test_conflict_requires_explicit_policy_and_optional_description_is_omitted()
 @pytest.mark.parametrize(
     "fallback",
     [
-        "fallback: {category: misc, on: [no_matching_option]}\n",
-        "fallback: {category: {id: BILLING}, on: [no_matching_option]}\n",
+        "fallback: {category: misc, on: [no_supported_answer]}\n",
+        "fallback: {category: {id: BILLING}, on: [no_supported_answer]}\n",
         "fallback: {category: {id: misc}, on: []}\n",
-        "fallback: {category: {id: misc}, on: [no_matching_option, no_matching_option]}\n",
+        "fallback: {category: {id: misc}, on: [no_supported_answer, no_supported_answer]}\n",
         "fallback: {category: {id: misc}, on: [technical_error]}\n",
-        "fallback: {category: {id: misc, description: '  '}, on: [no_matching_option]}\n",
+        "fallback: {category: {id: misc, description: '  '}, on: [no_supported_answer]}\n",
     ],
 )
 def test_invalid_fallback_authoring_rejected(tmp_path, fallback):
@@ -232,7 +224,7 @@ def test_fallback_restricted_to_single_choice():
                 "instructions": "Decide.",
                 "sources": {},
                 "question": {"type": "predicate", "criteria": ["Explicit facts"]},
-                "fallback": {"category": {"id": "misc"}, "on": ["no_matching_option"]},
+                "fallback": {"category": {"id": "misc"}, "on": ["no_supported_answer"]},
             }
         )
 
@@ -240,9 +232,9 @@ def test_fallback_restricted_to_single_choice():
 @pytest.mark.parametrize(
     "routes",
     [
-        "next: done\non_unresolved: {no_matching_option: other}\n",
-        _ROUTES.replace("no_matching_option: other", "no_matching_option: absent"),
-        _ROUTES.replace("no_matching_option: other", "no_matching_option: first"),
+        "next: done\non_unresolved: {no_supported_answer: other}\n",
+        _ROUTES.replace("no_supported_answer: other", "no_supported_answer: absent"),
+        _ROUTES.replace("no_supported_answer: other", "no_supported_answer: first"),
         _ROUTES.replace("conflicting_information", "unknown_issue"),
     ],
 )
@@ -253,12 +245,12 @@ def test_issue_routes_use_existing_graph_validation(tmp_path, routes):
 
 def test_issue_routing_defaults_without_facts_and_when_targets_disagree():
     routing = UnresolvedRoutingPlan(
-        "review", (("no_matching_option", "other"), ("missing_information", "other"))
+        "review", (("no_supported_answer", "other"), ("multiple_valid_options", "other"))
     )
     assert routing.target(()) == "review"
-    assert routing.target(("no_matching_option", "missing_information")) == "other"
-    assert routing.target(("missing_information", "conflicting_information")) == "review"
-    assert routing.target(("multiple_valid_options",)) == "review"
+    assert routing.target(("no_supported_answer", "multiple_valid_options")) == "other"
+    assert routing.target(("no_supported_answer", "conflicting_information")) == "review"
+    assert routing.target(("conflicting_information",)) == "review"
 
 
 async def test_nondecision_review_uses_default_issue_route(tmp_path):
@@ -273,7 +265,7 @@ async def test_nondecision_review_uses_default_issue_route(tmp_path):
     )
 
     async def execute(step, inputs, context):
-        return StepOutcome(None, needs_review=True, unresolved_issues=("no_matching_option",))
+        return StepOutcome(None, needs_review=True, unresolved_issues=("no_supported_answer",))
 
     app = WorkflowApplication({"inbox": runner(plan, Scripted(execute))})
     result = await app.run("inbox", Envelope(payload={}))
@@ -323,8 +315,8 @@ async def test_fallback_never_uses_ordinary_answer_routes(tmp_path):
 def test_yaml_policy_key_preserves_duplicates_and_boolean_values():
     from foliqant.compiler._loader import load_yaml
 
-    assert load_yaml("on: [no_matching_option]\nenabled: true", relative_path="workflow.yaml") == {
-        "on": ["no_matching_option"],
+    assert load_yaml("on: [no_supported_answer]\nenabled: true", relative_path="workflow.yaml") == {
+        "on": ["no_supported_answer"],
         "enabled": True,
     }
     with pytest.raises(CompilationError):
@@ -381,4 +373,25 @@ async def test_concurrent_results_keep_model_and_fallback_selections_isolated(tm
     assert second.decisions["first"].selection.origin == "fallback"
     first.decisions["first"].result["answer"]["optionId"] = "caller mutation"
     assert second.decisions["first"].result["answer"] is None
+    await app.aclose()
+
+
+@pytest.mark.parametrize("legacy_issue", ["missing_information", "no_matching_option"])
+@pytest.mark.parametrize("policy", ["fallback", "routes"])
+def test_legacy_fallback_and_route_keys_are_rejected(tmp_path, legacy_issue, policy):
+    authored = _FALLBACK if policy == "fallback" else _ROUTES
+    with pytest.raises(CompilationError):
+        _compiled(tmp_path, **{policy: authored.replace("no_supported_answer", legacy_issue)})
+
+
+async def test_fallback_allowlist_can_explicitly_accept_all_three_issues(tmp_path):
+    issues = ["no_supported_answer", "conflicting_information", "multiple_valid_options"]
+    fallback = _FALLBACK.replace("[no_supported_answer]", "[" + ", ".join(issues) + "]")
+    raw = _raw(issues=issues)
+    app = _app(_compiled(tmp_path, fallback=fallback), raw)
+    result = await app.run("inbox", Envelope(payload={"ticket": "Unresolved request"}))
+    record = result.decisions["first"]
+    assert record.selection.origin == "fallback"
+    assert record.result["answerability"]["issues"] == issues
+    assert result.decisions["review"].status == "needs_review"
     await app.aclose()

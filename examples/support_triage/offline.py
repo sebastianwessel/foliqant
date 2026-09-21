@@ -96,17 +96,17 @@ def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
             else "I would like to apply for the advertised accountant position."
         )
         status = "not_answerable"
-        issues = ["no_matching_option"]
+        issues = ["no_supported_answer"]
     elif "Please help." in text or "Bitte helfen Sie mir." in text:
         option, quote, extracted = None, None, None
         status = "not_answerable"
-        issues = ["missing_information"]
+        issues = ["no_supported_answer"]
         missing = ["The requested action is missing."]
     else:
         raise ValueError("No scripted response for this synthetic input")
     if '"id":"classify"' in text:
         value = {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "results": [
                 {
                     "questionId": "classify",

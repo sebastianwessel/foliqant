@@ -130,14 +130,14 @@ def _response(info: Any, value: dict[str, object]) -> ModelResponse:
 
 def _valid_multiple_result() -> dict[str, object]:
     return {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "results": [
             {
                 "questionId": "primary",
                 "type": "choice",
                 "answerability": {
                     "status": "not_answerable",
-                    "issues": ["missing_information"],
+                    "issues": ["no_supported_answer"],
                 },
                 "answer": None,
                 "explanation": {
@@ -152,7 +152,7 @@ def _valid_multiple_result() -> dict[str, object]:
                 "type": "multiselect",
                 "answerability": {
                     "status": "partially_answerable",
-                    "issues": ["missing_information"],
+                    "issues": ["no_supported_answer"],
                 },
                 "answer": {"optionIds": ["one"]},
                 "explanation": {
@@ -194,12 +194,17 @@ async def test_multiple_decisions_receive_shared_contract_in_both_modes(
     assert "partially_answerable means a permitted collection" in seen_instructions
     assert "not_answerable means a known insufficiency" in seen_instructions
     assert "undetermined means answerability itself cannot be assessed" in seen_instructions
-    assert "missing_information means a required source" in seen_instructions
+    assert (
+        "no_supported_answer means the allowed sources do not support an answer"
+        in seen_instructions
+    )
     assert "conflicting_information means allowed facts are incompatible" in seen_instructions
     assert "multiple options are positively supported" in seen_instructions
     assert "not merely possible because information is missing" in seen_instructions
-    assert "no_matching_option means the allowed evidence establishes" in seen_instructions
-    assert "not that the underlying fact is unknown" in seen_instructions
+    assert "whether required information is absent" in seen_instructions
+    assert "request cannot be represented" in seen_instructions
+    assert "missing_information" not in seen_instructions
+    assert "no_matching_option" not in seen_instructions
     assert "categoryId null only when allowNoMatch permits it, and report" in seen_instructions
     assert "exact, nonempty quote" in seen_instructions
     assert "Aim for 160 characters or fewer and never exceed 400 characters" in seen_instructions
@@ -221,7 +226,7 @@ async def test_contract_guidance_does_not_weaken_output_rejection(
     else:
         first["answerability"] = {
             "status": "partially_answerable",
-            "issues": ["missing_information"],
+            "issues": ["no_supported_answer"],
         }
         first["answer"] = {"optionId": "alpha"}
         first["explanation"] = {

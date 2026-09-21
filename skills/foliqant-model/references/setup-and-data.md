@@ -21,6 +21,7 @@ sample count or generation limit from an earlier review.
 | Auxiliary curation | `./scripts/curate-data` | Source preparation and configured bounded generation |
 | Native decisions | `./scripts/generate-data` | `--pilot` selects its own recipe; `--prepare-only` makes no inference calls |
 | Frozen source-projection plan | `./scripts/prepare-source-projections --from-run RUN --output NEW` | Entirely offline; existing frozen inputs required |
+| Native V1 contract upgrade | `foliqant-model upgrade-decision-data --from-dataset DATASET --output NEW` | Entirely offline; strict V1 boundary, immutable V2 dataset |
 | Completed-run migration | `./scripts/migrate-data --from-run RUN --output NEW` | Entirely offline; new immutable descendant |
 | Pending migrated tasks | `./scripts/rerun-migrated-data --from-migration DIR` | Inference for saved pending train tasks only |
 
@@ -92,17 +93,32 @@ Only the migration's frozen pending train queue may be rerun with its saved mode
 identity. `--limit` and repeated `--job-id` select a bounded subset; review items
 and held-out families cannot be submitted. Exact reruns reuse immutable outcomes.
 
+Native contract upgrades are separate from source reprojection. Use
+`upgrade-decision-data` for recognized published V1 native datasets with frozen
+splits and the native three-message layout; unknown instruction revisions fail
+for review. Never regenerate all rows
+or rewrite a parent. It maps the old missing/no-match issues to
+`no_supported_answer`, deduplicates, updates native versions/instructions and
+preserves answers, explanations, source content, languages, review status,
+rights and frozen partitions. Verify the new dataset and keep its parent
+available. Run-local quarantines and review items are outside the dataset upgrade and
+remain untouched in the source run; this operation does not promote them or
+update trained weights. Current prepare,
+train and evaluation paths reject legacy native records; generic chat remains
+supported. See the [upgrade procedure](../../../docs/guides/decision-run-maintenance.md#upgrade-native-contract-version-1).
+
 ## Decision semantics
 
 Use the existing validator and [decision contract guide](../../../docs/guides/decision-contracts.md).
 Do not embed domain phrases, record IDs or expected answers in generic validators.
 
 - Explicit evidence of absence may support answerable false; absent evidence is
-  unknown. Missing referents use `missing_information`.
+  unknown. Missing referents and requests outside the catalog use `no_supported_answer`;
+  explain the particular obstacle without a second machine-readable split.
 - `multiple_valid_options` requires multiple positively supported catalog options
   exceeding cardinality. Preserve every applicable issue, including
-  `conflicting_information` and `no_matching_option`.
-- Return every request unit; a null category adds `no_matching_option`. Keep
+  `conflicting_information` and `no_supported_answer`.
+- Return every request unit; a null category adds `no_supported_answer`. Keep
   distinct same-category requests separate. Conditional requests stay conditional;
   extraction records their gate rather than executing it.
 - A subject is a discriminating literal reference in that unit's own evidence,

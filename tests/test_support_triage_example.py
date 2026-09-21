@@ -18,8 +18,21 @@ from foliqant import RuntimePlugins, prepare_application
 from foliqant.adapters.models import ModelBinding
 from foliqant.contracts.models import ModelProfiles
 from foliqant.core.admission import CapacityLimiter
+from foliqant.core.plan import DecisionStepPlan
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_compiled_workflow_has_one_unresolved_review_route() -> None:
+    plan = prepare_application(CONFIG_PATH).plans["support_triage"]
+    classify = plan.step("classify")
+    assert isinstance(classify, DecisionStepPlan)
+    assert classify.fallback is not None
+    assert classify.fallback.on == ("no_supported_answer",)
+    assert classify.on_unresolved is not None
+    assert classify.on_unresolved.default == "review"
+    assert classify.on_unresolved.issues == ()
+    assert {step.name for step in plan.steps} == {"classify", "extract", "done", "review"}
 
 
 async def test_pipeline_and_each_model_step_have_passing_offline_evaluations() -> None:

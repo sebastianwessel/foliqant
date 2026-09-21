@@ -157,7 +157,7 @@ def _mixed_sufficiency(index: int) -> tuple[DecisionInput, DecisionOutput]:
             PredicateResult(
                 questionId="additional_fact_available",
                 type="predicate",
-                answerability=_answerability("not_answerable", "missing_information"),
+                answerability=_answerability("not_answerable", "no_supported_answer"),
                 answer=PredicateAnswer(value="unknown"),
                 explanation=_explanation(
                     "The allowed source says the required fact is unavailable.",
@@ -263,7 +263,7 @@ def _ratio_case(index: int, *, known: bool) -> tuple[DecisionInput, DecisionOutp
         type="predicate",
         answerability=_answerability(
             "answerable" if known else "not_answerable",
-            *(() if known else ("missing_information",)),
+            *(() if known else ("no_supported_answer",)),
         ),
         answer=PredicateAnswer(value="true" if known else "unknown"),
         explanation=_explanation(
@@ -316,7 +316,7 @@ def _applicability_missing(index: int) -> tuple[DecisionInput, DecisionOutput]:
     result = PredicateResult(
         questionId=question.id,
         type="predicate",
-        answerability=_answerability("not_answerable", "missing_information"),
+        answerability=_answerability("not_answerable", "no_supported_answer"),
         answer=PredicateAnswer(value="unknown"),
         explanation=_explanation(
             "At least one required applicability fact is absent from the case.", missing=missing
@@ -366,7 +366,7 @@ def _irrelevant_evidence(index: int) -> tuple[DecisionInput, DecisionOutput]:
     result = PredicateResult(
         questionId=question.id,
         type="predicate",
-        answerability=_answerability("not_answerable", "missing_information"),
+        answerability=_answerability("not_answerable", "no_supported_answer"),
         answer=PredicateAnswer(value="unknown"),
         explanation=_explanation(
             "The supplied source does not address the required comparison.", missing=[missing]
