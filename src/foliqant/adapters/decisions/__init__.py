@@ -1,4 +1,4 @@
-"""Native decision contract projection and validation."""
+"""Runtime decision projection over native inputs and strict output validation."""
 
 from .native import ValidatedDecision, build_decision_input, validate_decision_result
 

@@ -64,7 +64,7 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
     assert "details" not in json.dumps(result)
     reports = json.loads(artifact.read_text())["reports"]
     pipeline, classification, extraction = reports
-    queue, status, effective, origin, issues = pipeline["metrics"]
+    queue, status, effective, origin, issues, evidence = pipeline["metrics"]
     assert queue["support"] == queue["observed"] == 6
     assert queue["excluded"] == 10  # Review gold does not invent a queue label.
     assert queue["confusion_matrix"] == [[2, 0, 0], [0, 2, 0], [0, 0, 2]]
@@ -81,6 +81,9 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
         "multiple_valid_options",
     ]
     assert issues["accuracy"] == 1
+    assert evidence["labels"] == ["limited", "strong", None]
+    assert evidence["support"] == evidence["observed"] == 16
+    assert evidence["confusion_matrix"] == [[0, 0, 0], [0, 6, 0], [0, 0, 10]]
     classify_summary = next(step for step in pipeline["steps"] if step["name"] == "classify")
     assert classify_summary["model_selected_cases"] == 6
     assert classify_summary["fallback_selected_cases"] == 8
@@ -99,10 +102,11 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
         message = details["input"]["payload"]["message"]
         assert details["result"]["metadata"] == details["input"]["metadata"]
         decision = details["result"]["decisions"]["classify"]["result"]
-        citations = (
-            decision["explanation"]["evidence"] + decision["explanation"]["contraryEvidence"]
+        assert decision["reason"].strip() and len(decision["reason"]) <= 400
+        assert "explanation" not in decision
+        assert decision["evidence_strength"] == (
+            "strong" if case["status"] == "completed" else None
         )
-        assert all(item["sourceId"] == "message" and item["quote"] in message for item in citations)
         step_result = details["result"]["decisions"]["classify"]
         if case["id"] in {"multiple_active_intents", "unresolved_contradiction"}:
             assert "selection" not in step_result

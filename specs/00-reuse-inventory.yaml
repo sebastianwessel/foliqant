@@ -1,6 +1,15 @@
 reuse_inventory_version: 1
-discovery_revision: working-tree-6bf0297-evaluation-dx-2026-09-21
+discovery_revision: working-tree-626fecd-runtime-evidence-2026-09-22
 assets:
+- asset_id: package.decision-output
+  kind: schema
+  path: ../src/foliqant/contracts/decisions.py
+  public_export: DecisionOutput, validate_decision_output
+  owner: python-package
+  stability: versioned
+  consumers: [package-native-validation, package-compiler, package-evaluation]
+  extension_policy: Runtime v3 reason and evidence strength; reuse native v2 inputs
+    and answerability semantics without modifying model-tooling output or artifacts.
 - asset_id: package.environment
   kind: module
   path: ../src/foliqant/environment.py
@@ -150,10 +159,10 @@ assets:
   stability: versioned
   consumers:
   - curation
-  - package-native-validation
-  extension_policy: Preserve V1 and existing jobs; specify a new version before adding
-    per-label evidence, trusted thread metadata or extract. Do not duplicate task
-    enums.
+  - package-input-and-question-authoring
+  extension_policy: Preserve native v2 model outputs and existing artifacts/jobs. Runtime v3
+    output lives separately in package.decision-output; share unchanged task input
+    and answer semantics without artifact conversion.
 - asset_id: concept.python-package
   kind: research
   path: research/modular-workflow-service.md

@@ -16,12 +16,23 @@ result. Do not add persistence, queues, background jobs, application login,
 HTTP/Redis transport packages or infrastructure placeholders. A small HTTP host
 belongs under examples. MCP OAuth is outbound tool access, not app authentication.
 
-Native decision contracts live once in `foliqant.decisions`. Native input/output
-use schema version 2 with `no_supported_answer`, `conflicting_information`, and
+Decision inputs and question types stay in `foliqant.decisions` at native v2.
+Runtime output uses `foliqant.contracts.decisions.DecisionOutput` at schema v3:
+required `reason` (nonblank, at most 400 characters) and
+`evidence_strength: limited|strong|null`, with no explanation or citation arrays.
+Keep model tooling's native v2 output unchanged; it is a separate contract.
+The issue codes remain `no_supported_answer`, `conflicting_information`, and
 `multiple_valid_options`. Missing information and catalog gaps share the first
-code; do not recreate that split with extra flags or parse explanations to route. Runtime code never
-imports model training/curation. Importing contracts must not initialize model
-clients or telemetry. Core depends on standard-library values and ports; SDKs and
+code; do not recreate that split with extra flags or parse reasons to route.
+Strength is supplied support, including valid inference, never confidence or an
+automatic route threshold. Limited support must still satisfy the authored
+criteria; essential missing facts remain unresolved. Collections report the
+weakest returned member separately from completeness. Null answers and unknown
+predicates require null strength; substantive false predicates and permitted
+empty collections require non-null strength. Request units have no evidence
+array; non-null subjects must occur verbatim in allowed input text.
+Runtime code never imports model training/curation. Importing contracts must not
+initialize model clients or telemetry. Core depends on standard-library values and ports; SDKs and
 Pydantic adapters stay outside it.
 
 ## Author and run
@@ -43,7 +54,7 @@ Pydantic adapters stay outside it.
 - Single-choice fallback is a category object with an explicit issue allowlist.
   Preserve the native result and separate `selection.origin: model|fallback`.
   Unresolved routes may use an issue map with a required default; disagreement
-  uses the default. Never route a fallback as a successful native answer.
+  uses the default. Never route a fallback as a successful model answer.
 - Missing differs from null. A final output referencing a conditional step needs
   an explicit optional/default binding. Do not bypass compiler dominance checks.
 - Decode untrusted input with `decode_envelope`. Optional `tenant_id` and
@@ -64,8 +75,8 @@ Steps may select an alias, override `{profile, model?, options?}`, or provide a
 full provider configuration. Reuse provider validation and environment resolution;
 derived profiles share source admission. Inline credentials require references.
 Omitted options inherit and explicit null clears optional settings.
-Native decisions append shared contract guidance for answerability, exact
-citations, and concise explanations; keep business criteria in the workflow.
+Decision steps append shared guidance for answerability, short reasons and
+evidence strength; keep business criteria in the workflow.
 Refusals, truncation and invalid values remain failures. Never weaken validation
 or silently fall back to prompted JSON to get an accepted answer.
 
@@ -104,9 +115,10 @@ explicit prompt/model variants. No automatic prompt optimization is implied.
 Diagnose gold/contract mismatches before tuning prompts. Correct independently
 established semantics with a new gold revision and retain the original report;
 never rewrite expectations just to match predictions. Score the required action,
-metadata propagation, and intended review/routing as well as category labels.
+evidence strength, metadata propagation, and intended review/routing as well as
+category labels.
 Use verbatim evidence for extractive contracts; exact substring checks do not
-prove a free-form explanation is semantically correct. Keep repeated attempts
+prove a free-form reason is semantically correct. Keep repeated attempts
 distinct from independent source cases and report unknown usage as unknown.
 
 ## Async safety and verification

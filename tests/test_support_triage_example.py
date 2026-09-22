@@ -46,13 +46,13 @@ async def test_pipeline_and_each_model_step_have_passing_offline_evaluations() -
     assert all(isinstance(item, dict) and item["check_coverage"] == 1.0 for item in reports)
 
 
-async def test_invalid_decision_evidence_fails_without_exposing_output() -> None:
+async def test_invalid_evidence_strength_fails_without_exposing_output() -> None:
     def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         valid = offline.scripted_response(messages, info)
         part = valid.parts[0]
         assert isinstance(part, TextPart)
         value = json.loads(part.content)
-        value["results"][0]["explanation"]["evidence"][0]["quote"] = "PRIVATE absent quote"
+        value["results"][0]["evidence_strength"] = "PRIVATE unsupported strength"
         return ModelResponse(parts=[TextPart(json.dumps(value))])
 
     @asynccontextmanager

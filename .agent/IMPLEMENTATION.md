@@ -9,7 +9,10 @@ standard-library values and ports; provider SDKs and Pydantic stay at boundaries
 
 Library Pydantic contracts in `src/foliqant/contracts/` and
 `src/foliqant/decisions/` generate `schemas/foliqant/`. Model-only contracts
-generate `model/schemas/`. Keep wire spellings and versions stable. Strictly
+generate `model/schemas/`. Decision input and model output retain native v2 in
+`foliqant.decisions`; runtime v3 output is owned by `contracts/decisions.py` with
+reason/evidence strength. Keep these output contracts separate and preserve
+model artifacts. Keep wire spellings and versions stable. Strictly
 validate external JSON/YAML; do not hand-edit generated schemas.
 
 Prepare/compile offline at startup. Execute frozen plans with invocation-local

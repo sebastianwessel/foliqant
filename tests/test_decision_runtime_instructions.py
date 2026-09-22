@@ -130,7 +130,7 @@ def _response(info: Any, value: dict[str, object]) -> ModelResponse:
 
 def _valid_multiple_result() -> dict[str, object]:
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "results": [
             {
                 "questionId": "primary",
@@ -140,12 +140,8 @@ def _valid_multiple_result() -> dict[str, object]:
                     "issues": ["no_supported_answer"],
                 },
                 "answer": None,
-                "explanation": {
-                    "summary": "The record does not establish a route.",
-                    "evidence": [],
-                    "contraryEvidence": [],
-                    "missingFacts": ["An explicit route is absent."],
-                },
+                "reason": "The record does not establish a route.",
+                "evidence_strength": None,
             },
             {
                 "questionId": "labels",
@@ -155,12 +151,8 @@ def _valid_multiple_result() -> dict[str, object]:
                     "issues": ["no_supported_answer"],
                 },
                 "answer": {"optionIds": ["one"]},
-                "explanation": {
-                    "summary": "One label is explicit; another required detail is absent.",
-                    "evidence": [{"sourceId": "record", "quote": "First label"}],
-                    "contraryEvidence": [],
-                    "missingFacts": ["The second label is not established."],
-                },
+                "reason": "One label is explicit; another required detail is absent.",
+                "evidence_strength": "strong",
             },
         ],
     }
@@ -206,7 +198,9 @@ async def test_multiple_decisions_receive_shared_contract_in_both_modes(
     assert "missing_information" not in seen_instructions
     assert "no_matching_option" not in seen_instructions
     assert "categoryId null only when allowNoMatch permits it, and report" in seen_instructions
-    assert "exact, nonempty quote" in seen_instructions
+    assert "evidence_strength assesses support for the returned value" in seen_instructions
+    assert "Use null when answer is null" in seen_instructions
+    assert "For collections assess the weakest returned" in seen_instructions
     assert "Aim for 160 characters or fewer and never exceed 400 characters" in seen_instructions
     assert "hidden/internal reasoning" in seen_instructions
     assert "First label" not in seen_instructions
@@ -222,19 +216,15 @@ async def test_contract_guidance_does_not_weaken_output_rejection(
     invalid = _valid_multiple_result()
     first = cast(dict[str, Any], invalid["results"][0])
     if invalid_case == "oversized_summary":
-        first["explanation"]["summary"] = "x" * 401
+        first["reason"] = "x" * 401
     else:
         first["answerability"] = {
             "status": "partially_answerable",
             "issues": ["no_supported_answer"],
         }
         first["answer"] = {"optionId": "alpha"}
-        first["explanation"] = {
-            "summary": "The supported route leaves another detail unresolved.",
-            "evidence": [{"sourceId": "record", "quote": "First label"}],
-            "contraryEvidence": [],
-            "missingFacts": ["Another required detail is absent."],
-        }
+        first["reason"] = "The supported route leaves another detail unresolved."
+        first["evidence_strength"] = "limited"
     calls = 0
 
     async def model(_messages: Any, info: Any) -> ModelResponse:

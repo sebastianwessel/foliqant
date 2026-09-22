@@ -5,7 +5,9 @@ Contract version: `1`. The canonical Python classes live in
 Schemas outside the repository or, for reviewed copies, under `model/schemas/`.
 The generated schemas, not parallel handwritten DTOs, are the machine-readable
 model-tooling boundary. Shared native-decision schemas are owned by the runtime
-package and generated under `schemas/foliqant/decisions/`.
+package and generated under `schemas/foliqant/decisions/`. Its native v2 output
+remains the model-data format; runtime v3 reason/strength output is separately
+owned by `foliqant.contracts.decisions`.
 
 All objects are closed. Every field is required unless this document says
 **optional** or gives a default. Optional fields are omitted; JSON `null` is used

@@ -14,6 +14,14 @@ outcomes, review/failure rates and measured usage. Variants use the same suite;
 caller-owned holdouts remain separate. Failures and cancellation cannot become
 successful checks or fabricated token/latency measurements.
 
+Runtime decision acceptance covers v3 reasons and evidence strength across all
+question types; null answers/unknown predicates; substantive false predicates;
+allowed empty and partially answerable collections; request-unit subject
+occurrence in allowed inputs; and rejection of native v2 citation output at the
+runtime boundary. Existing native v2 model-data validation remains unchanged.
+Evaluation includes an explicit null classification label alongside limited and
+strong, while preserving string-only null abstention and missing/error outcomes.
+
 Evidence: `tests/test_bootstrap.py`, `tests/test_runner.py`,
 `tests/test_step_execution.py`, `tests/test_evaluation.py`, adapter/protocol tests
 and schema/architecture checks. Archived business-process paths in document 10

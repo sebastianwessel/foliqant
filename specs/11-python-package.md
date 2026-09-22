@@ -19,8 +19,9 @@ deployment. It does not promise recovery after process loss or caller return.
 A small runnable HTTP example may adapt one request to the public in-memory API,
 but that example is not a transport framework or package-level service contract.
 
-Existing native decision contracts ship in `foliqant.decisions` without
-changing their wire shapes or semantic validator. Model training, data curation,
+Native v2 decision inputs and model-tooling outputs ship unchanged in
+`foliqant.decisions`. Runtime decisions use the separate v3 output contract in
+`foliqant.contracts.decisions`. Model training, data curation,
 paid inference, customer data and publishing remain outside the library scope.
 
 ## Architecture and reuse
@@ -149,14 +150,36 @@ there is no parallel validation engine or network preflight.
 
 ### Classification selection and unresolved policy
 
-Native input/output messages use schema version 2. Their issue domain is exactly
-`no_supported_answer`, `conflicting_information`, and `multiple_valid_options`.
-Missing details and requests outside the allowed answers share the first code;
-retain the distinction only in human-readable explanations and missing facts.
-Runtime configuration and model responses reject the old issue names. Do not
-restore them through aliases, another diagnostic flag or parsing explanation
-text. Existing authoring/workflow/envelope versions are independent of this
-native message version change.
+Decision input retains native schema version 2. Runtime `DecisionOutput` in
+`foliqant.contracts.decisions` uses schema version 3 with one result per question.
+The runtime adapter orders validated results in the supplied question order for
+predictable bindings and evaluation paths.
+Each result preserves `questionId`, `type`, `answerability`, and the existing
+answer shape, except request units omit `evidence`. It requires a nonblank
+`reason` of at most 400 characters and `evidence_strength: limited|strong|null`.
+There are no runtime explanation, citation, contrary-evidence or missing-fact
+arrays. A non-null request-unit subject must occur verbatim in an allowed input
+source; source IDs remain part of the input contract.
+
+`strong` means decisive supplied support under the authored criteria, including
+valid inference. `limited` means weaker support for a permissible interpretation
+that still satisfies those criteria. It never licenses inventing an essential
+missing fact. A collection's strength is the weakest returned member; completeness
+is represented independently by answerability. An allowed empty collection and
+a substantive predicate `false` require non-null strength. A null answer or
+`unknown` predicate requires null strength. Reason/strength are qualitative model
+assessments, not confidence, calibrated probability or a correctness guarantee.
+No automatic evidence threshold, fallback or review transition is added.
+
+The issue domain remains exactly `no_supported_answer`, `conflicting_information`,
+and `multiple_valid_options`. Missing details and requests outside the allowed
+answers share the first code; explain the particular obstacle in `reason`.
+Do not restore legacy codes through aliases, another diagnostic flag or parsing
+reason text. Authoring/workflow/envelope versions are independent.
+
+Model lifecycle `foliqant.decisions.DecisionOutput` stays at native v2 with its
+existing explanations/citations. This runtime change does not convert datasets,
+regenerate artifacts, change training, or add a compatibility conversion path.
 
 A single-choice decision can declare `fallback: {category: {id, description?},
 on: [issue, ...]}`. Category IDs use the same deterministic normalization as
@@ -233,13 +256,13 @@ credential references. No `/models` discovery or hidden SDK retry is allowed.
 Bootstrap owns one client lifespan and closes partially opened clients on failure.
 Provider preflight occurs before admission and attempt reservation.
 
-PydanticAI executes native decisions and text/schema LLM steps. Native decisions
-use the shared strict output contract plus independent semantic validation.
-Both native and tool output modes append generic contract guidance to authored
-business instructions: allowed IDs/citations, answerability/null rules, the
-meaning of statuses and issue codes from the native decision contract, and
-concise public explanations (aim 160 characters, hard maximum 400). This does not
-truncate responses, change criteria, retry invalid answers, or weaken validation.
+PydanticAI executes decision and text/schema LLM steps. Decisions use the strict
+runtime v3 output contract plus independent cross-field validation against the
+v2 input. Both native and tool output modes append generic contract guidance to
+authored business instructions: allowed IDs, answerability/null rules, the
+unchanged status/issue meanings, concise reasons (aim 160 characters, hard maximum
+400), and evidence-strength semantics. This does not truncate responses, change
+criteria, retry invalid answers, or weaken validation.
 Authored JSON Schemas are fully inlined from frozen local resources for providers,
 then results are checked against the original host schema. Unsupported recursive
 or dynamic schemas and unsupported provider/mode combinations fail before I/O;
@@ -308,7 +331,7 @@ Acceptance families require success and failure evidence:
 
 | Requirement / capability | Required evidence |
 | --- | --- |
-| `PACKAGE-CONTRACTS` | Strict envelopes/results, independent optional identity, W3C carrier, generated schema drift and no model-tooling import |
+| `PACKAGE-CONTRACTS` | Strict envelopes/results, runtime v3 reason/strength and native v2 isolation, substantive/null/collection boundaries, subject occurrence, independent optional identity, W3C carrier, generated schema drift and no model-tooling import |
 | `PACKAGE-COMPILER` | Safe deterministic bundle compilation, graph/dataflow/schema checks, duplicate/path escape rejection and no endpoint I/O |
 | `PACKAGE-RUNTIME` | End-to-end in-memory decision/LLM/MCP/handler/finish execution, bounded concurrency, cancellation and concurrent state isolation |
 | `PACKAGE-MCP` | Current SDK HTTP/stdio behavior, OAuth isolation, declared catalog/schema checks, budgets, authorization and protected context propagation |
@@ -423,9 +446,9 @@ it never overwrites. Default destination is a unique
 `.foliqant/evaluations/report-TIMESTAMP.json` under the config directory;
 `--output` selects another new file. Stdout contains counts/status/path only.
 Reports contain private input, gold, complete public execution results and
-per-check actual/expected/presence/reason. Public explanations and evidence are
-retained; internal provider reasoning is not collected. Dataset/report files
-remain ignored and must not be uploaded as ordinary CI artifacts. Each dataset
+per-check actual/expected/presence/reason. Public reasons and evidence-strength
+assessments are retained; internal provider reasoning is not collected.
+Dataset/report files remain ignored and must not be uploaded as ordinary CI artifacts. Each dataset
 file is limited to 64 MiB; report publication/replay share a 256 MiB bound.
 Cancellation joins owned tasks and returns no fabricated complete report. Exit
 codes are 0 for passing checks, 1 for disagreement, 2 for invalid config/data,
@@ -449,9 +472,13 @@ and measured latency/usage; never infer groups, rerun scorers or call endpoints.
 Saved artifact loading is not part of this grouping API.
 
 Metrics use explicit label catalogs and gold expectations at their declared
-result pointer. Classification matrices have expected rows and predicted
-columns in catalog order. Multilabel reports include per-label TP/FP/FN/TN and
-exact-set accuracy. Reports distinguish support (matching gold), excluded cases
+result pointer. Classification catalogs contain strings and may explicitly
+include JSON null. If null is declared, null gold is valid and an actual null is
+an observed classification outcome in matrix/per-label counts; otherwise actual
+null is an abstention and null gold is invalid. Missing/skipped/error observations
+never become null. Multilabel catalogs remain string-only. Classification matrices
+have expected rows and predicted columns in catalog order. Multilabel reports
+include per-label TP/FP/FN/TN and exact-set accuracy. Reports distinguish support (matching gold), excluded cases
 (no matching gold), valid observed outputs, null abstention, missing, skipped,
 errors and invalid predictions. Accuracy is correct/support, coverage is
 observed/support; zero support gives null. Confusion and per-label counts cover

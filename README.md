@@ -58,6 +58,7 @@ Continue with [workflow authoring](docs/guides/build-workflows.md).
 
 ## Examples
 
+- [Decision evidence](examples/decision_evidence/README.md): reasons, support strength and focused golden cases.
 - [Support triage](examples/support_triage/README.md): decisions and extraction with a local model.
 - [Public-request lookup](examples/public_request_mcp/README.md): read-only MCP without a model.
 - [Extraction to MCP](examples/extracted_request_mcp/README.md): pass selected model output to a tool.

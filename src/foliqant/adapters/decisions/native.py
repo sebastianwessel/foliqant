@@ -1,4 +1,4 @@
-"""Project native decisions across the Pydantic adapter boundary."""
+"""Project runtime decisions over native input questions across the adapter boundary."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -6,19 +6,19 @@ from typing import Never
 
 from pydantic import ValidationError
 
-from foliqant.core.errors import ErrorCode, ServiceError
-from foliqant.core.execution import Selection
-from foliqant.core.json import FrozenJson, FrozenObject, freeze_json, thaw_json
-from foliqant.core.plan import CategoryPlan, DecisionIssue, DecisionQuestionPlan, DecisionStepPlan
-from foliqant.decisions import (
+from foliqant.contracts.decisions import (
     ChoiceResult,
-    DecisionInput,
     DecisionOutput,
     DecisionResult,
     OrdinalResult,
     PredicateResult,
     validate_decision_output,
 )
+from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.core.execution import Selection
+from foliqant.core.json import FrozenJson, FrozenObject, freeze_json, thaw_json
+from foliqant.core.plan import CategoryPlan, DecisionIssue, DecisionQuestionPlan, DecisionStepPlan
+from foliqant.decisions import DecisionInput
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,12 +134,16 @@ def validate_decision_result(
     task: DecisionInput,
     raw_output: object,
 ) -> ValidatedDecision:
-    """Validate native structure and semantics, then return immutable route facts."""
+    """Validate runtime structure and semantics, then return immutable route facts."""
 
     output = _validate_output(raw_output)
 
     if validate_decision_output(task, output):
         _fail(ErrorCode.INVALID_OUTPUT)
+
+    # Question order belongs to the caller, not the model's generated list order.
+    by_question = {item.questionId: item for item in output.results}
+    output.results = [by_question[question.id] for question in task.questions]
 
     statuses = tuple(item.answerability.status for item in output.results)
     answerable = bool(statuses) and all(status == "answerable" for status in statuses)
@@ -159,7 +163,7 @@ def validate_decision_result(
         _fail(ErrorCode.INVALID_OUTPUT)
     if not isinstance(value, Mapping):
         _fail(ErrorCode.INVALID_OUTPUT)
-    # Facts are projected only after complete native semantic validation. An
+    # Facts are projected only after complete runtime semantic validation. An
     # undetermined question forces the default route even if it reports issues.
     unresolved = [item for item in output.results if item.answerability.status != "answerable"]
     issues: tuple[DecisionIssue, ...] = (

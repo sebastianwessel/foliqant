@@ -419,3 +419,49 @@ def test_invalid_latency_measurements_are_not_summarized(value):
 
     with pytest.raises(ValueError, match="latency"):
         summarize_latency([value])
+
+
+async def test_explicit_null_label_measures_abstention_without_hiding_missing_results():
+    gold = cases(
+        *[
+            (Expectation("support", "/payload/support", value),)
+            for value in [None, "strong", "limited", None, "strong"]
+        ]
+    )
+    predictions = [None, None, "strong", "strong"]
+
+    async def run(envelope):
+        index = envelope.payload["index"]
+        return result({} if index == 4 else {"support": predictions[index]})
+
+    report = await evaluate(
+        gold,
+        EvaluationVariant("support", "1", run, "test-config"),
+        metrics=(
+            MetricSpec(
+                "support", "/payload/support", "classification", ("limited", "strong", None)
+            ),
+        ),
+        include_details=True,
+    )
+    metric = report.metrics[0]
+    assert metric.support == 5
+    assert metric.observed == 4
+    assert metric.missing == 1
+    assert metric.abstained == 0  # Null is an explicit outcome, not an unobserved value.
+    assert metric.confusion_matrix == ((0, 1, 0), (0, 0, 1), (0, 1, 1))
+    assert metric.accuracy == 1 / 5
+    assert metric.coverage == 4 / 5
+    assert report.cases[-1].checks[0].reason_code == "missing"
+
+
+def test_null_label_is_explicit_and_classification_only():
+    from foliqant.evaluation.metrics import validate_metrics
+
+    gold = cases((Expectation("support", "/payload/support", None),))
+    with pytest.raises(ValueError):
+        validate_metrics(
+            gold, (MetricSpec("support", "/payload/support", "classification", ("strong",)),)
+        )
+    with pytest.raises(ValueError):
+        MetricSpec("support", "/payload/support", "multilabel", ("strong", None))

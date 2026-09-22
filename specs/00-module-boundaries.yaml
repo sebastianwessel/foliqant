@@ -1,5 +1,13 @@
 module_boundary_version: 1
 modules:
+- module_id: package-decision-contracts
+  owner: python-package
+  public_entrypoint: src/foliqant/contracts/decisions.py
+  public_symbols: [DecisionOutput, validate_decision_output]
+  owned_concepts: [runtime-v3-results, reason, evidence-strength, allowed-source-subject-validation]
+  allowed_dependencies: [pydantic, shared-decision-contracts]
+  forbidden_dependencies: [model-training-runtime, provider-sdk, persistence-client]
+  architecture_check: tests/test_architecture.py
 - module_id: package-evaluation
   owner: python-package
   public_entrypoint: src/foliqant/evaluation/__init__.py

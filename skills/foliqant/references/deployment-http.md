@@ -53,7 +53,7 @@ case at a time by default. `--max-concurrency` and `--timeout` are explicit boun
 Reports default to unique `.foliqant/evaluations/report-TIMESTAMP.json` files under
 the config directory; `--output` may select a new path, never overwrite one.
 Only a content-free summary goes to stdout. Full artifacts include inputs, gold,
-and public result explanations/evidence, not private model reasoning. Keep them
+and public result reasons/evidence strength, not private model reasoning. Keep them
 ignored and private. See [evaluation setup](evaluation.md) for gold authoring.
 
 Compilation errors expose safe file/field/reason/hint details, never authored

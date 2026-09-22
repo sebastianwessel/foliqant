@@ -20,6 +20,20 @@ applicability:
   - CAP-NATIVE-DATA
   - CAP-PACKAGE-EVALUATION
 shapes:
+- shape_id: package.decision-output
+  representation_class: boundary
+  canonical_source: ../src/foliqant/contracts/decisions.py
+  owner: package-contracts
+  stability: versioned
+  open_policy: closed
+  allowed_consumers:
+  - package-native-validation
+  - embedding-application
+  - package-evaluation
+  source_contract_refs:
+  - CONTRACT-PACKAGE-V1
+  mapping_refs:
+  - MAP-PACKAGE-VALIDATE-DECISION
 - shape_id: package.authored-deployment
   representation_class: command
   canonical_source: ../src/foliqant/contracts/deployment.py
@@ -573,6 +587,24 @@ shapes:
   mapping_refs:
   - MAP-SCOPED-SOURCE-PROJECTION
 mappings:
+- mapping_id: MAP-PACKAGE-VALIDATE-DECISION
+  from_shape: model.decision-input
+  to_shape: package.decision-output
+  direction: custom
+  allowed_differences:
+  - model-produced-answer-reason-and-evidence-strength
+  redaction_or_loss_policy: Runtime v3 validates a generated response against the
+    unchanged native v2 input. This is not conversion of a native v2 output;
+    model lifecycle datasets and artifacts retain their existing representation.
+  field_operations:
+  - questionId-and-type:preserve-and-validate
+  - answerability-and-answer:validate-against-question
+  - reason:require-nonblank-at-most-400-characters
+  - evidence_strength:require-substantive-or-null-consistency
+  - request-unit-subject:require-verbatim-occurrence-in-allowed-source
+  verification:
+  - ../tests/test_native_adapter.py
+  - ../tests/test_example_evaluations.py
 - mapping_id: MAP-PACKAGE-RESOLVE-ENVIRONMENT
   from_shape: package.authored-deployment
   to_shape: package.resolved-deployment

@@ -1,11 +1,11 @@
 version: 1
 workflows:
-  support_triage: .
+  decision_evidence: .
 models:
   local_qwen:
     provider: openai_compatible
-    model: "$FOLIQANT_CURATION_MODEL"
-    base_url: "$FOLIQANT_CURATION_ENDPOINT_URL"
+    model: $FOLIQANT_CURATION_MODEL
+    base_url: $FOLIQANT_CURATION_ENDPOINT_URL
     allow_insecure_http: true
     output_mode: native
     supports_tools: false
@@ -22,4 +22,4 @@ execution:
   model_timeout: 300
   run_timeout: 610
 evaluation:
-  dataset: ../../.foliqant/evaluation/support-triage-r9.json
+  dataset: ../../.foliqant/evaluation/decision-evidence-r2.json

@@ -6,6 +6,10 @@ answer includes a question-specific answerability status and a short explanation
 with source citations. Generation uses your local model endpoint, one request at
 a time. It does not train a model or fit confidence scores.
 
+This model-development workflow uses native v2 answers with explanations and
+citations. Runtime workflows use the separate
+[reason and evidence-strength response](decision-contracts.md).
+
 ## Start a generation run
 
 Install uv and run a local OpenAI-compatible model server. Configure its address

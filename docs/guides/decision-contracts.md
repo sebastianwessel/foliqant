@@ -1,8 +1,8 @@
 # Use decision contracts
 
-Native decisions answer typed questions over supplied state. Each result carries
-an answerability status, stable issue codes, a concise explanation, and source
-citations. Validate the complete result before applying application policy.
+Decision steps answer typed questions over supplied state. Each result carries
+an answerability status, stable issue codes, a short `reason`, and
+`evidence_strength`. Validate the complete result before applying application policy.
 
 ## Define category boundaries
 
@@ -59,7 +59,7 @@ enum values, and issue codes remain English and stable.
 
 ## Handle incomplete evidence
 
-Use stable status and issue codes in code. Explanation text is for people:
+Use stable status and issue codes in code. The reason is for people:
 
 | Status | Meaning |
 | --- | --- |
@@ -77,9 +77,9 @@ Three stable issue codes describe obstacles to answering:
 - `multiple_valid_options`: several positively supported answers exceed the
   question's permitted cardinality. Merely imaginable alternatives do not qualify.
 
-Use the explanation, citations and `missingFacts` to understand the particular
-case. Do not parse explanation text to choose a workflow route or infer that
-asking for more information will always resolve `no_supported_answer`.
+Use `reason` to understand the particular case. Do not parse it to choose a
+workflow route or infer that asking for more information will always resolve
+`no_supported_answer`.
 An overall request collection may still be `answerable` when `allowNoMatch`
 permits a null category: the requests are known, but at least one has no supported
 category, so `no_supported_answer` is still required. Do not assume that every
@@ -90,18 +90,17 @@ Several clear requests are valid when a collection question permits them. A
 predicate uses `unknown` when the evidence establishes neither true nor false;
 an explicit absence can support `false` for a presence predicate.
 
-A partially answerable collection must contain at least one supported item and
-an evidence citation. A missing requested item keeps the collection partial even
-when every returned item is clear. Each returned request unit needs evidence
-from its allowed source; a non-null subject must appear verbatim in that unit's
-evidence. Use `null` when the source contains no identifying reference.
+A partially answerable collection must contain at least one supported item. A
+missing requested item keeps the collection partial even when every returned
+item is clear. A request unit's non-null `subject` must appear verbatim in an
+allowed input source. Use `null` when the source contains no identifying reference.
 
 Validate JSON against the
-[output schema](https://github.com/sebastianwessel/foliqant/blob/main/schemas/foliqant/decisions/decision-output.schema.json),
-then validate its IDs, allowed answers, and citations against the
+[output schema](https://github.com/sebastianwessel/foliqant/blob/main/schemas/foliqant/runtime/decision-output.schema.json),
+then validate its IDs, allowed answers, and subjects against the
 [input contract](https://github.com/sebastianwessel/foliqant/blob/main/schemas/foliqant/decisions/decision-input.schema.json).
-Python callers can use `DecisionInput`, `DecisionOutput`, and
-`validate_decision_output` from `foliqant.decisions.contracts`.
+Python callers use `DecisionInput` from `foliqant.decisions` and `DecisionOutput`
+and `validate_decision_output` from `foliqant.contracts.decisions`.
 
 After validation, apply your own policy:
 
@@ -112,8 +111,8 @@ else:
     send_for_review(result)
 ```
 
-These functions are application policy. Do not branch on the wording of an
-explanation. Authentication, authorization, business prerequisites, and the
+These functions are application policy. Do not branch on the wording of a
+`reason`. Authentication, authorization, business prerequisites, and the
 safety of an external action remain application responsibilities.
 
 ## Keep fallback separate from evidence
@@ -121,43 +120,61 @@ safety of an external action remain application responsibilities.
 A single-choice workflow can map `no_supported_answer` to a configured fallback
 category such as `misc`. Configure the category object and allowed issues as shown
 in [workflow routing](build-workflows.md#classify-with-an-explicit-fallback).
-The native answer stays unresolved; `selection.origin: fallback` records the
+The model answer stays unresolved; `selection.origin: fallback` records the
 policy choice separately. Contradictions or multiple valid options remain
 unresolved unless explicitly covered by that policy. A fallback cannot hide an
 invalid response or turn a request needing review into a successful model answer.
 
-## Treat explanations as evidence summaries
+## Read evidence strength
 
-An explanation summary is a bounded human-readable reason, not a transcript of
-hidden model reasoning. The runtime adds generic contract guidance alongside
-your decision instructions in both native and tool output modes. It preserves
-your criteria and rejects invalid responses instead of truncating or retrying
-them. An explanation may contain at most 400 characters; generation aims
-for 160 or fewer. Put exact quotations in citation fields, where text must match
-the declared source exactly. The validator checks structure and declared
-references; it cannot establish semantic truth or financial accuracy.
+`evidence_strength` describes the supplied support for the returned answer:
 
-All authored, projected, and generated decision records are unreviewed research
-data. Automatic checks are useful filters, but numerical confidence requires
-independently labelled data, held-out calibration, and a separate audit. Never
-relabel generated diagnostic partitions as human-gold evaluation data.
+| Value | Meaning |
+| --- | --- |
+| `strong` | Decisive support under the question's criteria, including a valid inference from supplied facts. |
+| `limited` | Weaker support for a permissible interpretation that still satisfies the criteria. |
+| `null` | No substantive answer: the answer is null, or a predicate is `unknown`. |
 
-## Native contract version
+`limited` never permits inventing an essential missing fact. A substantive
+predicate `false` and an allowed empty collection still need a non-null strength.
+For a collection, strength describes its weakest returned member. Answerability
+separately describes completeness: a partial collection can have strong support
+for every returned item.
 
-Native `DecisionInput` and `DecisionOutput` use `schemaVersion: 2`. Runtime and
-model generation reject version 1 and its old issue values. Outer dataset records,
-artifact manifests and category catalogs retain their independent versions.
+Each result also requires a nonblank `reason` of at most 400 characters. Aim for
+one concise sentence explaining the applied criterion, relevant facts, and any
+decisive limitation. For example:
 
-Recognized published V1 decision datasets can be upgraded offline without regeneration; see
-[decision data maintenance](decision-run-maintenance.md). The explicit upgrade
-merges the former missing-information and no-matching-option codes into
-`no_supported_answer` and removes duplicates. It publishes a new artifact and
-preserves source evidence, business answers, explanations, citations, language
-and splits. Only contract-bearing fields are transformed.
-A contract upgrade is not a new model verification or a quality improvement.
+```json
+{
+  "questionId": "request_kind",
+  "type": "choice",
+  "answerability": {"status": "answerable", "issues": []},
+  "answer": {"optionId": "incident"},
+  "reason": "The message reports a failed payment that needs resolution.",
+  "evidence_strength": "strong"
+}
+```
 
-Update workflow fallback allowlists and unresolved route maps to the new issue
-name. Two old routes need one explicit shared policy; do not infer a route from
-the reason text. Re-export example evaluation datasets under their documented V2
-paths. Keep old evaluation reports as historical evidence and run fresh
-evaluations against the new contract.
+The runtime adds the same contract guidance in native and tool output modes and
+rejects invalid responses. It does not truncate reasons or automatically retry.
+Strength is a qualitative model assessment, not a calibrated probability or a
+guarantee of correctness. It does not change routing or trigger an automatic
+threshold; keep application policy explicit.
+
+## Contract versions
+
+Workflow input uses the existing `DecisionInput` with `schemaVersion: 2`.
+Runtime `DecisionOutput` uses `schemaVersion: 3` and a `results` array. The
+single-question step result exposes the result object illustrated above. For
+multiple questions, the runtime returns results in supplied question order.
+Runtime results and request units contain no citation arrays.
+
+The separate model-development format in `foliqant.decisions` retains native
+v2 output with explanations and citations for existing datasets and lifecycle
+tools. See [native decision data](native-decision-data.md) for that format.
+
+Try the focused [decision evidence example](https://github.com/sebastianwessel/foliqant/blob/main/examples/decision_evidence/README.md)
+for choice versus multiselect, limited interpretations, substantive false,
+empty collections, and request units. Its default evaluation checks authored
+gold and configuration offline; `--live` executes the configured model.

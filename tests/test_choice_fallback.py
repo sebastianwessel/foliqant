@@ -52,7 +52,7 @@ on_unresolved:
 def _raw(status="not_answerable", issues=None, *, option=None):
     result = _choice_result(question_id="first", status=status, option_id=option)
     result["answerability"]["issues"] = issues if issues is not None else ["no_supported_answer"]
-    return {"schemaVersion": 2, "results": [result]}
+    return {"schemaVersion": 3, "results": [result]}
 
 
 def _compiled(tmp_path, *, fallback=_FALLBACK, routes=_ROUTES, extra=""):
@@ -136,7 +136,7 @@ async def test_policy_and_routes_share_full_and_isolated_execution(
     await app.aclose()
 
 
-@pytest.mark.parametrize("kind", ["empty_issues", "invalid_option", "invalid_citation"])
+@pytest.mark.parametrize("kind", ["empty_issues", "invalid_option", "invalid_strength"])
 async def test_invalid_native_results_never_receive_fallback(tmp_path, kind):
     raw = _raw()
     if kind == "empty_issues":
@@ -144,9 +144,7 @@ async def test_invalid_native_results_never_receive_fallback(tmp_path, kind):
     elif kind == "invalid_option":
         raw = _raw("answerable", [], option="misc_queue")
     else:
-        raw["results"][0]["explanation"]["evidence"] = [
-            {"sourceId": "ticket", "quote": "not in source"}
-        ]
+        raw["results"][0]["evidence_strength"] = "strong"
     app = _app(_compiled(tmp_path), raw)
     result = await app.run("inbox", Envelope(payload={"ticket": "Billing failed"}))
     assert result.execution.status == "failed"
@@ -180,7 +178,7 @@ async def test_selection_projection_and_cli_policy_description(tmp_path):
 
 def test_normal_selection_preserves_exact_native_option_id():
     step = _step(_choice())
-    raw = {"schemaVersion": 2, "results": [_choice_result()]}
+    raw = {"schemaVersion": 3, "results": [_choice_result()]}
     validated = validate_decision_result(step, build_decision_input(step, _sources()), raw)
     assert validated.selection.category.id == "billing.queue-v2"
     assert validated.selection.origin == "model"
@@ -194,7 +192,7 @@ def test_conflict_requires_explicit_policy_and_optional_description_is_omitted()
     raw = _choice_result(status="not_answerable", option_id=None)
     raw["answerability"]["issues"] = ["conflicting_information"]
     validated = validate_decision_result(
-        step, build_decision_input(step, _sources()), {"schemaVersion": 2, "results": [raw]}
+        step, build_decision_input(step, _sources()), {"schemaVersion": 3, "results": [raw]}
     )
     assert dict(validated.selection.as_json()["category"]) == {"id": "misc"}
     assert validated.selection.origin == "fallback"

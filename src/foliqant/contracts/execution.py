@@ -16,6 +16,7 @@ from pydantic import (
 from pydantic.config import JsonDict
 from pydantic.json_schema import SkipJsonSchema
 
+from foliqant.contracts.decisions import ChoiceResult
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import (
     Failure,
@@ -29,7 +30,6 @@ from foliqant.core.execution import (
     Usage as CoreUsage,
 )
 from foliqant.core.json import JsonValue, thaw_json
-from foliqant.decisions import ChoiceResult
 
 from .base import BoundaryModel
 from .envelope import Metadata

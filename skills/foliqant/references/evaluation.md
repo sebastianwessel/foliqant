@@ -57,9 +57,13 @@ conditions. Both use normal runtime validation and execution limits.
 
 Metrics are optional named entries with `path`, `kind: classification|multilabel`,
 and explicit ordered `labels`. Match the path to authored case expectations.
-Classification uses string labels; multilabel uses arrays. Gold must satisfy the
-catalog. Missing predictions, explicit null abstentions, invalid predictions,
-and execution failures remain distinct. Accuracy uses all cases with matching
+Classification uses string labels and may explicitly declare JSON null as a
+label; multilabel uses string-only labels and arrays. Gold must satisfy the
+catalog. For `evidence_strength`, use `["limited", "strong", null]` and independent
+gold for all outcomes. Declared null is observed in the confusion matrix;
+otherwise actual null remains an abstention and null gold is invalid. Missing
+predictions, invalid predictions and execution failures remain distinct and are
+never converted into null labels. Accuracy uses all cases with matching
 gold; confusion/per-label counts cover valid observed predictions. Read coverage
 and support alongside quality counts. Metrics add no numeric threshold policy.
 Multilabel accuracy compares sets independently of assertion comparison: an exact
@@ -70,7 +74,7 @@ Per-label precision/recall/F1 and micro/macro summaries use valid observed
 predictions. Undefined denominators yield null. Macro uses the whole declared
 catalog; do not drop unsupported labels to produce a better number. Read these
 scores alongside all-gold accuracy, coverage, and unavailable counts. Prefer
-small explicit checks for actions, review outcomes, evidence, and preserved
+small explicit checks for actions, review outcomes, evidence strength, and preserved
 metadata over one aggregate label score. Exact spans validate extractive outputs;
 they cannot establish that a free paraphrase is faithful.
 
@@ -102,7 +106,7 @@ cannot import code. No heavy evaluation framework is required.
 Reports default to unique `.foliqant/evaluations/report-TIMESTAMP.json` files
 under the config directory. `--output` selects a new destination; no overwrites.
 Stdout is content-free. Artifacts contain full input, gold, and public execution
-results, including public explanation/evidence, but no private model reasoning.
+results, including public reason/evidence strength, but no private model reasoning.
 Keep artifacts ignored and private; do not publish their business values. Report
 writing and replay share a 256 MiB limit. Replay validates saved workflow/step
 targets even for invocation failures and preserves input numeric types (`1` and

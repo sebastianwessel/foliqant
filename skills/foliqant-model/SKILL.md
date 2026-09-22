@@ -10,6 +10,10 @@ Use installed `foliqant-model --help` or
 command authority. The separate `model/` project owns these operations.
 [Public model setup](../../docs/getting-started/setup.md) provides the first run.
 
+Native model data retains `foliqant.decisions.DecisionOutput` schema v2 with
+explanations and citations. Runtime `foliqant.contracts.decisions.DecisionOutput`
+v3 uses reason/evidence strength; do not apply that shape to lifecycle artifacts.
+
 ## Workflow
 
 1. Identify the requested stage and its exact configuration, workspace and parent

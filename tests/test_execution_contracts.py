@@ -201,6 +201,44 @@ def test_existing_mutated_metadata_instance_is_revalidated() -> None:
         ExecutionResult.model_validate(raw, strict=True)
 
 
+@pytest.mark.parametrize("origin", ["model", "fallback"])
+def test_selected_choice_support_consistency_is_revalidated_at_public_boundaries(origin) -> None:
+    answered = origin == "model"
+    status = "completed" if answered else "needs_review"
+    raw = {
+        "status": status,
+        "result": {
+            "questionId": "classify",
+            "type": "choice",
+            "answerability": {
+                "status": "answerable" if answered else "not_answerable",
+                "issues": [] if answered else ["no_supported_answer"],
+            },
+            "answer": {"optionId": "billing"} if answered else None,
+            "reason": "The supplied facts establish the answer or its absence.",
+            "evidence_strength": "strong" if answered else None,
+        },
+        "selection": {
+            "category": {"id": "billing" if answered else "misc"},
+            "origin": origin,
+        },
+    }
+    StepResult.model_validate(raw, strict=True)
+    raw["result"]["evidence_strength"] = None if answered else "limited"
+    with pytest.raises(ValidationError, match="evidence-strength"):
+        StepResult.model_validate(raw, strict=True)
+    with pytest.raises(ValidationError, match="evidence-strength"):
+        ExecutionResult.model_validate(
+            {
+                "payload": None,
+                "metadata": {},
+                "decisions": {"classify": raw},
+                "execution": _info(status=status),
+            },
+            strict=True,
+        )
+
+
 @pytest.mark.parametrize("status", ["failed", "cancelled"])
 def test_failed_and_cancelled_execution_require_error(status: str) -> None:
     with pytest.raises(ValidationError):

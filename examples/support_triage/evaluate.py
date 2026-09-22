@@ -94,7 +94,7 @@ def _gold_suite() -> EvaluationSuite:
     """Independent gold for clear, incomplete, competing, and corrected requests."""
     original = EvaluationSuite(
         name="support_triage",
-        revision="8",
+        revision="9",
         cases=(
             EvaluationCase(
                 "explicit_cancellation",
@@ -110,11 +110,6 @@ def _gold_suite() -> EvaluationSuite:
                     Expectation("language", "/metadata/language", "en"),
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "cancellation"
-                    ),
-                    Expectation(
-                        "evidence_source",
-                        "/decisions/classify/result/explanation/evidence/0/sourceId",
-                        "message",
                     ),
                     _action(
                         "explicit_cancellation",
@@ -139,11 +134,6 @@ def _gold_suite() -> EvaluationSuite:
                     Expectation("language", "/metadata/language", "en"),
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "billing_dispute"
-                    ),
-                    Expectation(
-                        "evidence_source",
-                        "/decisions/classify/result/explanation/evidence/0/sourceId",
-                        "message",
                     ),
                     _action(
                         "billing_dispute",
@@ -196,11 +186,6 @@ def _gold_suite() -> EvaluationSuite:
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "service_change"
                     ),
-                    Expectation(
-                        "evidence_source",
-                        "/decisions/classify/result/explanation/evidence/0/sourceId",
-                        "message",
-                    ),
                     _action(
                         "service_change",
                         "Add priority support",
@@ -225,11 +210,6 @@ def _gold_suite() -> EvaluationSuite:
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "cancellation"
                     ),
-                    Expectation(
-                        "evidence_source",
-                        "/decisions/classify/result/explanation/evidence/0/sourceId",
-                        "message",
-                    ),
                     _action(
                         "german_cancellation",
                         "stoppen Sie die automatische Verlängerung",
@@ -253,11 +233,6 @@ def _gold_suite() -> EvaluationSuite:
                     Expectation("language", "/metadata/language", "de"),
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "billing_dispute"
-                    ),
-                    Expectation(
-                        "evidence_source",
-                        "/decisions/classify/result/explanation/evidence/0/sourceId",
-                        "message",
                     ),
                     _action(
                         "german_billing_dispute",
@@ -336,11 +311,6 @@ def _gold_suite() -> EvaluationSuite:
                     Expectation("language", "/metadata/language", "en"),
                     Expectation(
                         "queue", "/decisions/classify/result/answer/optionId", "service_change"
-                    ),
-                    Expectation(
-                        "evidence_source",
-                        "/decisions/classify/result/explanation/evidence/0/sourceId",
-                        "message",
                     ),
                     _action(
                         "explicit_correction",
@@ -431,7 +401,12 @@ def _with_selection_gold(case: EvaluationCase) -> EvaluationCase:
         )
     else:
         extra = (Expectation("unresolved_route", "/decisions/review/status", "needs_review"),)
-    return EvaluationCase(case.id, case.envelope(), case.expectations + extra)
+    support = Expectation(
+        "evidence_strength",
+        "/decisions/classify/result/evidence_strength",
+        "strong" if category is not None else None,
+    )
+    return EvaluationCase(case.id, case.envelope(), case.expectations + extra + (support,))
 
 
 def _gold_step_suite(step: str) -> EvaluationSuite:
@@ -463,7 +438,7 @@ def _gold_step_suite(step: str) -> EvaluationSuite:
                 checks,
             )
         )
-    return EvaluationSuite(name=f"support_{step}", revision="8", cases=tuple(cases))
+    return EvaluationSuite(name=f"support_{step}", revision="9", cases=tuple(cases))
 
 
 def dataset() -> EvaluationDataset:
@@ -496,6 +471,12 @@ def dataset() -> EvaluationDataset:
             "multiple_valid_options",
         ],
     }
+    evidence: dict[str, JsonValue] = {
+        "name": "evidence_strength",
+        "path": "/decisions/classify/result/evidence_strength",
+        "kind": "classification",
+        "labels": ["limited", "strong", None],
+    }
     status: dict[str, JsonValue] = {
         "name": "execution_status",
         "path": "/execution/status",
@@ -506,18 +487,18 @@ def dataset() -> EvaluationDataset:
         {
             "version": 1,
             "name": "support_triage_examples",
-            "revision": "8",
+            "revision": "9",
             "suites": [
                 suite_document(
                     _gold_suite(),
                     workflow="support_triage",
-                    metrics=[queue, status, selection, origin, issues],
+                    metrics=[queue, status, selection, origin, issues, evidence],
                 ),
                 suite_document(
                     _gold_step_suite("classify"),
                     workflow="support_triage",
                     step="classify",
-                    metrics=[queue, selection, origin, issues],
+                    metrics=[queue, selection, origin, issues, evidence],
                 ),
                 suite_document(
                     _gold_step_suite("extract"), workflow="support_triage", step="extract"

@@ -156,9 +156,16 @@
         },
         "labels": {
           "items": {
-            "minLength": 1,
-            "pattern": ".*\\S.*",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": ".*\\S.*",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "maxItems": 1024,
           "minItems": 1,

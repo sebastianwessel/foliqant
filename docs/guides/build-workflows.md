@@ -144,7 +144,7 @@ option, does not make the answer valid, and does not take an `on_answer` route.
 The category ID uses the same normalization as the category catalog and cannot
 collide with a normal option. This feature is limited to single-choice decisions.
 
-The native answer, issues, explanation and evidence stay unchanged. The public
+The answer, issues, reason and evidence strength stay unchanged. The public
 step record adds a separate selection when there is a resolved choice or an
 applicable fallback:
 

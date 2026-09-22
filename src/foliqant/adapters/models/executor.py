@@ -21,11 +21,11 @@ from pydantic_ai.settings import ModelSettings
 from foliqant.adapters.decisions import build_decision_input, validate_decision_result
 from foliqant.adapters.decisions.instructions import decision_instructions
 from foliqant.adapters.validation import WorkflowSchemas
+from foliqant.contracts.decisions import DecisionOutput
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import StepOutcome
 from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import DecisionStepPlan, HandlerStepPlan, LlmStepPlan, McpStepPlan
-from foliqant.decisions import DecisionOutput
 from foliqant.ports.execution import OperationStep, StepContext
 from foliqant.ports.tools import ToolInputRequired, ToolRuntime
 

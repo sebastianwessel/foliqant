@@ -188,6 +188,19 @@ it is never a verified weights checksum. See
 [automated curation](../08-automated-data-curation.md) for split, cache and
 publication rules. Published output still uses the canonical dataset artifact.
 
+## Runtime decision representation
+
+`foliqant.contracts.decisions.DecisionOutput` owns runtime schema version 3.
+It retains typed answers and answerability, requires a nonblank `reason` of at
+most 400 characters and nullable `evidence_strength` (`limited` or `strong`), and
+has no explanation/citation arrays. Runtime request units omit evidence; their
+non-null subjects must occur in allowed input text. Native v2 input and category
+contracts are reused. The runtime output is generated under
+`schemas/foliqant/runtime/decision-output.schema.json`; see the
+[package generation map](package-generation-map.yaml) and
+[package semantics](../11-python-package.md#classification-selection-and-unresolved-policy).
+No mapping converts a native model-data output to this runtime response.
+
 ## Native decision-data representations
 
 `DecisionDataSettings` is the optional closed `CurationConfig.decisionData`

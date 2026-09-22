@@ -3,6 +3,15 @@ default_allowed_classes:
   - D0
   - D1
 decisions:
+  - decision_id: DEC-RUNTIME-REASON-STRENGTH
+    class: D2
+    authority: project-owner request to replace runtime explanation/citation output
+      with a short reason and nullable limited/strong evidence strength, retaining
+      native v2 model tooling, existing answerability and routing, and measuring
+      strength including null outcomes without confidence guarantees or thresholds
+    scope_refs: [CAP-PACKAGE-CONTRACTS, CAP-PACKAGE-RUNTIME, CAP-PACKAGE-EVALUATION, CAP-PACKAGE-DX]
+    source_refs: [11-python-package.md]
+    status: implementation mandate; no model generation, training or artifact conversion
   - decision_id: DEC-CONFIGURED-EVALUATION
     class: D2
     authority: project-owner request for regular-config ground-truth paths, offline/local/CI

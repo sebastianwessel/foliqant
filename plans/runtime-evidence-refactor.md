@@ -1,9 +1,10 @@
 # Runtime evidence assessment refactor
 
-Status: in progress. Authority: the user's request to refactor the package,
+Status: implementation and verification complete; local-model quality limitations
+are recorded in [the acceptance review](reviews/runtime-evidence-v3.md). Authority: the user's request to refactor the package,
 examples, prompts, public interfaces, docs and skills while continuing to use
 ordinary Qwen inference. Existing data generation and fine-tuning are out of scope.
-Inspected baseline: `626fecd`.
+Preparation baseline: `626fecd`; runtime implementation baseline: `c05c241`.
 
 ## Boundary and reuse
 
@@ -20,27 +21,26 @@ Inspected baseline: `626fecd`.
   A model rating is not a probability, a calibrated guarantee, or permission to
   invent a route. Do not introduce extra model passes, infrastructure or retries.
 
-## Response decision awaiting clarification
+## Approved response decision
 
-Replace public citation/missing-fact arrays with a concise reason and an ordinal
-support assessment. The user has been asked to confirm this replacement and the
-abstention representation. No new output contract has been implemented yet.
+The user approved replacing runtime citation/missing-fact arrays with `reason`
+and `evidence_strength: limited | strong | null`. This is runtime output version 3;
+native version 2 input and model-toolchain artifacts remain unchanged.
 
-Recommended interpretation: assess support for the returned value under the
-supplied criteria, not the quantity of signals anywhere in the input. For
-collections use the weakest returned constituent; completeness remains in
-answerability. Empty allowed collections and predicate false are substantive
-answers. Null answers and unknown predicates have no substantive value to rate.
+Assess support for the returned value under the supplied criteria, not the
+quantity of signals anywhere in the input. For collections use the weakest
+returned constituent; completeness remains in answerability. Empty allowed
+collections and predicate false are substantive answers. Null answers and unknown
+predicates require null strength. Limited never permits missing essential facts.
 
-The unresolved choice is whether abstention uses null or the `none` enum value.
-With null, successful values use `limited | strong`; `none` would have no useful
-valid case. Do not silently assign strong to an abstention because competing
-options individually have strong support. Do not define limited as permission to
-supply a value that requires an essential unsupported assumption.
+Implementation is in place across runtime contracts, adapters, schemas,
+evaluations, examples, documentation and skills. Offline regression and live
+verification are recorded in the acceptance review, including rejected Qwen
+responses. Historical preparation results below do not validate the new format.
 
-## Remaining implementation and acceptance
+## Implemented scope and acceptance checklist
 
-1. Settle and document the exact response rubric, null semantics and collection
+1. Document the exact response rubric, null semantics and collection
    semantics. Update the active package spec and relevant registries.
 2. Implement the runtime types, generated schemas, provider structured-output
    boundary, independent validation, selection validation and runtime prompts.

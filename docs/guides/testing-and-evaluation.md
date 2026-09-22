@@ -154,6 +154,11 @@ code or calls an implicit model judge.
 For verbatim extraction with flexible boundaries, use
 [`source_span` gold](evaluation-results.md#score-verbatim-extraction).
 
+The [decision evidence example](https://github.com/sebastianwessel/foliqant/blob/main/examples/decision_evidence/README.md)
+provides focused gold for reason/strength responses across the question types.
+Its default evaluator validates configuration and gold offline; `--live` runs
+the real configured model and retains a private report.
+
 ## Keep cases together or split them by step
 
 Keep small datasets inline, as in the cookbook. For larger suites, `cases` may
@@ -241,7 +246,7 @@ still address the public result, for example
 `/decisions/classify/result/answer/optionId`.
 
 For a native decision step, assertions can check the selected option, public
-explanation/evidence, and review status independently.
+`reason`, `evidence_strength`, and review status independently.
 
 A suite without `step` runs the full workflow. Checking the same intermediate
 path there measures the step with the inputs produced by the real upstream
@@ -274,7 +279,7 @@ Metric reports expose the following counts:
 | `excluded` | Attempts without gold at this metric path |
 | `source_support` / `source_excluded` | Corresponding distinct authored case counts |
 | `observed` | Valid predictions in the declared label vocabulary |
-| `abstained` | Explicit JSON `null` prediction |
+| `abstained` | Explicit JSON `null` prediction when null is not a declared classification label |
 | `missing` / `skipped` | Unavailable pointer / target step skipped |
 | `errors` | Failed execution, even if an earlier output exists |
 | `invalid` | Wrong output type or labels outside the vocabulary |
@@ -293,11 +298,29 @@ Multilabel metric accuracy always compares sets, independently of the assertion'
 `comparison`. An exact array assertion can fail on order while its multilabel
 metric is correct; use `comparison: "set"` when assertion order should not matter.
 
-Metric gold must be a catalog label or label array, never `null`. If a case's gold
-is an abstention/review rather than a category, assert its status or surrounding
-result object and omit a categorical expectation at the metric path. It is then
-reported as excluded from that metric, while its business assertions still count.
-A `null` prediction for a case with categorical gold counts as an abstention.
+Classification labels may include explicit JSON `null`. For example, measure
+support on a decision step with:
+
+```json
+{
+  "name": "evidence_strength",
+  "path": "/decisions/classify/result/evidence_strength",
+  "kind": "classification",
+  "labels": ["limited", "strong", null]
+}
+```
+
+Author an expectation at that path for every case, including `expected: null`
+when no substantive answer is supported. A declared null is an observed label
+in the confusion matrix, so unsupported `strong` predictions can be compared
+with legitimate unresolved answers. Missing paths, skipped steps, and errors
+remain separate; they never become null labels.
+
+Without null in the catalog, a null prediction remains an abstention and null
+gold is invalid. Assert review status separately when it has no categorical
+gold; cases without an expectation at the metric path are excluded only from
+that metric. All authored checks remain in the check denominator. Multilabel
+catalogs and gold arrays contain strings only.
 
 For the cookbook, read the confusion matrix with expected labels as rows and
 predicted labels as columns. In declared order `[billing, cancellation]`, a
@@ -343,7 +366,7 @@ It reuses each saved repetition once and never fabricates extra repetitions.
 Use the original execution reports for performance comparisons.
 
 Stdout contains a content-free summary. The saved artifact contains full case
-inputs, gold, and public results, including public explanation/evidence fields.
+inputs, gold, and public results, including public reason and evidence-strength fields.
 It does not capture private model reasoning. Treat the report as sensitive data:
 keep `.foliqant/` ignored by Git and restrict access to exported reports. The
 library's default Python report omits business values; the CLI deliberately

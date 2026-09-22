@@ -1,14 +1,13 @@
-"""Runtime instructions shared by native decision output modes."""
+"""Runtime instructions shared by native-schema and tool output modes."""
 
 _DECISION_OUTPUT_CONTRACT = (
-    "Native decision output contract:\n"
+    "Runtime decision output contract (schemaVersion 3):\n"
     "- Return exactly one result for every supplied question and no other results. "
     "Preserve each questionId and type. Use only input-defined option, level, category, "
     "predicate-question, and source IDs; relations may reference only request units returned "
     "in the same answer.\n"
     "- Decide only from each question's criteria and allowed sources. Do not guess missing "
-    "facts. Every citation must use an allowed sourceId and an exact, nonempty quote from that "
-    "source. Answerable and partially_answerable results require supporting evidence.\n"
+    "facts. Return reason and evidence_strength, not citation or missing-fact arrays.\n"
     "- Use partially_answerable only for multiselect or request_units, with at least one "
     "supported item plus an unresolved part. For choice, multiselect, ordinal, and request_units, "
     "set answer to null when status is not_answerable or undetermined, and return a non-null "
@@ -26,14 +25,26 @@ _DECISION_OUTPUT_CONTRACT = (
     "rule resolves them; multiple_valid_options means multiple options are positively supported "
     "beyond the question's maximum cardinality, not merely possible because information is "
     "missing. Use categoryId null only when allowNoMatch permits it, and report "
-    "no_supported_answer. Report unresolved gaps in missingFacts instead of inventing an answer.\n"
-    "- Write explanation.summary as a public, grounded, concise rationale, never hidden/internal "
+    "no_supported_answer. Explain unresolved gaps in reason instead of inventing an answer.\n"
+    "- evidence_strength assesses support for the returned value, not confidence or correctness. "
+    "Use strong for decisive supplied support, including valid inference; use limited for "
+    "weaker support for a permissible interpretation satisfying the criteria. "
+    "Limited never licenses missing essential facts. Use null when answer is null or a "
+    "predicate is unknown. A false predicate and an allowed empty collection are substantive "
+    "answers and require limited or strong. For collections assess the weakest returned "
+    "constituent; completeness remains separate in answerability. Do not invent item ratings. "
+    "A non-null request subject must occur exactly in an allowed source.\n"
+    "- Write reason as a public, grounded, concise rationale, never hidden/internal "
     "reasoning. Aim for 160 characters or fewer and never exceed 400 characters. Do not truncate "
-    "a summary; keep exact quotations in citation fields."
+    "a reason; explain the decisive support or gap without reproducing source passages.\n"
+    "- Several supported categories exceeding a single-choice limit are multiple_valid_options; "
+    "the cardinality limit alone does not also mean no_supported_answer. "
+    "Keep all IDs and enum values exactly as defined, regardless of source language. "
+    "The reason may follow the source language."
 )
 
 
 def decision_instructions(business_instructions: str) -> str:
-    """Append the fixed native-output contract to authored business instructions."""
+    """Append the fixed runtime-output contract to authored business instructions."""
 
     return f"{business_instructions}\n\n{_DECISION_OUTPUT_CONTRACT}"

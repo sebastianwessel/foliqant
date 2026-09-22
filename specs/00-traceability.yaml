@@ -771,6 +771,7 @@ acceptance:
   - PATH-PACKAGE-CONTRACTS-FAILURE
   verification_refs:
   - 11-python-package.md#entry-points-example-and-acceptance
+  - ../tests/test_native_adapter.py
 - acceptance_id: ACCEPT-PACKAGE-COMPILER
   requirement_ids:
   - REQ-PACKAGE-COMPILER

@@ -197,7 +197,7 @@ def _decision_result(
 ) -> dict[str, object]:
     answerable = status == "answerable"
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "results": [
             {
                 "questionId": "classify",
@@ -207,16 +207,10 @@ def _decision_result(
                     "issues": [] if answerable else ["no_supported_answer"],
                 },
                 "answer": None if option_id is None else {"optionId": option_id},
-                "explanation": {
-                    "summary": "The ticket explicitly identifies billing."
-                    if answerable
-                    else "The queue cannot be established.",
-                    "evidence": (
-                        [{"sourceId": "ticket", "quote": "Billing failed"}] if answerable else []
-                    ),
-                    "contraryEvidence": [],
-                    "missingFacts": [] if answerable else ["The affected service is missing."],
-                },
+                "reason": "The ticket explicitly identifies billing."
+                if answerable
+                else "The queue cannot be established.",
+                "evidence_strength": None if option_id is None else "strong",
             }
         ],
     }

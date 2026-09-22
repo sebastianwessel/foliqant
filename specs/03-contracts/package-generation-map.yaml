@@ -57,6 +57,17 @@ entries:
       - core-to-boundary mapping preserves omitted fields versus explicit null
       - canonical error messages and token subset validation use shared core rules
     verification: [../../tests/test_execution_contracts.py, ../../tests/test_bootstrap.py, ../../tests/test_step_execution.py]
+  - id: GEN-PACKAGE-DECISION-OUTPUT
+    canonical_source: ../../src/foliqant/contracts/decisions.py
+    generated_outputs: [../../schemas/foliqant/runtime/decision-output.schema.json]
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
+    handwritten_remainder:
+      - runtime v3 reason and evidence-strength output validates against unchanged native v2 inputs
+      - answerability, answer cardinality, relations and allowed-source subject occurrence
+      - validated runtime results use supplied question order
+      - no model-tooling output conversion or artifact changes
+    verification: [../../tests/test_native_adapter.py, ../../tests/test_example_evaluations.py]
   - id: GEN-NATIVE-DECISION-REUSE
     canonical_source: ../../src/foliqant/decisions/contracts.py
     generated_outputs:
@@ -66,7 +77,7 @@ entries:
     command: uv run --no-sync python scripts/generate_schemas.py
     drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
-      - native cross-field semantic validation and category normalization remain shared code
+      - native v2 model-output validation and shared input/category normalization remain unchanged
     verification: [../../model/tests/test_decision_contracts.py, ../../model/tests/test_category_catalog.py]
   - id: GEN-PACKAGE-AUTHORING
     canonical_source: ../../src/foliqant/contracts/workflow.py

@@ -25,101 +25,83 @@ def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
     These values prove example wiring and validation, never model quality.
     """
     text = repr(messages)
-    extracted: dict[str, str | None] | None
+    extracted: dict[str, str | None] | None = None
+    option: str | None = None
     status = "answerable"
     issues: list[str] = []
-    contrary: list[dict[str, str]] = []
-    missing: list[str] = []
-    if any(
-        marker in text
-        for marker in (
-            "Your help page lists cancellation and priority support.",
-            "Ihre Hilfeseite nennt Kündigung und Premium-Support.",
-            "I withdraw that request.",
-            "I have not specified what",
-        )
-    ):
-        option, quote, extracted = None, None, None
-        status = "not_answerable"
-        issues = ["no_supported_answer"]
-        missing = ["No current action in the category catalog is established."]
+    reason = "No current action in the category catalog is established."
+    if "Your help page lists cancellation" in text or "Ihre Hilfeseite nennt" in text:
+        reason = "The writer mentions categories but explicitly requests no action."
+    elif "I withdraw that request." in text:
+        reason = "The only request was withdrawn; there is no current action."
+    elif "I have not specified what" in text:
+        reason = "The object of the stop request is unspecified."
     elif "Cancel renewal for account C-1049 by 30 September 2026." in text:
-        option, quote = "cancellation", "Cancel renewal"
+        option = "cancellation"
+        reason = "The writer explicitly asks to cancel renewal."
         extracted = {
             "requested_action": "Cancel renewal",
             "deadline": "by 30 September 2026",
             "account_reference": "C-1049",
         }
     elif "I dispute invoice INV-882." in text:
-        option, quote = "billing_dispute", "I dispute invoice INV-882."
+        option = "billing_dispute"
+        reason = "The writer disputes an invoice and requests a duplicate-charge review."
         extracted = {
             "requested_action": "review the duplicate charge",
             "deadline": None,
             "account_reference": None,
         }
     elif "Add priority support to account A-2205" in text:
-        option, quote = "service_change", "Add priority support"
+        option = "service_change"
+        reason = "The writer requests an addition to their subscribed support service."
         extracted = {
             "requested_action": "Add priority support",
             "deadline": "by 15 October 2026",
             "account_reference": "A-2205",
         }
     elif "K-771" in text:
-        option, quote = "cancellation", "automatische Verlängerung"
+        option = "cancellation"
+        reason = "Die automatische Verlängerung soll ausdrücklich gestoppt werden."
         extracted = {
             "requested_action": "stoppen Sie die automatische Verlängerung",
             "deadline": "bis 31. Dezember 2026",
             "account_reference": "K-771",
         }
     elif "RE-550" in text:
-        option, quote = "billing_dispute", "doppelten Belastung"
+        option = "billing_dispute"
+        reason = "Die doppelte Belastung wird beanstandet und soll geprüft werden."
         extracted = {
             "requested_action": "prüfen Sie die doppelte Belastung",
             "deadline": "bis 15. Oktober 2026",
             "account_reference": None,
         }
     elif "Both requests are current." in text:
-        option, quote, extracted = None, None, None
-        status = "not_answerable"
         issues = ["multiple_valid_options"]
-        contrary = [
-            {"sourceId": "message", "quote": "cancel renewal"},
-            {"sourceId": "message", "quote": "add priority support"},
-        ]
+        reason = "Two current requests belong to different queues; one queue cannot represent both."
     elif "Neither instruction supersedes the other." in text:
-        option, quote, extracted = None, None, None
-        status = "not_answerable"
         issues = ["conflicting_information"]
-        contrary = [
-            {"sourceId": "message", "quote": "cancel renewal"},
-            {"sourceId": "message", "quote": "keep the renewal active"},
-        ]
+        reason = "Cancel and keep-renewal instructions conflict without a precedence rule."
     elif "Correction: do not cancel it." in text:
-        option, quote = "service_change", "Please add priority support"
+        option = "service_change"
+        reason = "The correction withdraws cancellation and asks for priority support."
         extracted = {
             "requested_action": "add priority support",
             "deadline": "by 1 November 2026",
             "account_reference": "A-3100",
         }
     elif "advertised accountant position" in text or "Stelle als Buchhalter" in text:
-        option, extracted = None, None
-        quote = (
-            "Ich möchte mich auf die ausgeschriebene Stelle als Buchhalter bewerben."
-            if "Stelle als Buchhalter" in text
-            else "I would like to apply for the advertised accountant position."
-        )
-        status = "not_answerable"
-        issues = ["no_supported_answer"]
+        reason = "A job application does not match any configured support category."
     elif "Please help." in text or "Bitte helfen Sie mir." in text:
-        option, quote, extracted = None, None, None
-        status = "not_answerable"
-        issues = ["no_supported_answer"]
-        missing = ["The requested action is missing."]
+        reason = "The message does not establish the requested action."
     else:
         raise ValueError("No scripted response for this synthetic input")
+    if option is None:
+        status = "not_answerable"
+        issues = issues or ["no_supported_answer"]
     if '"id":"classify"' in text:
         value = {
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "results": [
                 {
                     "questionId": "classify",
@@ -129,16 +111,8 @@ def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
                         "issues": issues,
                     },
                     "answer": {"optionId": option} if option else None,
-                    "explanation": {
-                        "summary": (
-                            "The supplied message supports one current queue."
-                            if option
-                            else "The supplied message does not support one queue."
-                        ),
-                        "evidence": [{"sourceId": "message", "quote": quote}] if quote else [],
-                        "contraryEvidence": contrary,
-                        "missingFacts": missing,
-                    },
+                    "reason": reason,
+                    "evidence_strength": "strong" if option else None,
                 }
             ],
         }

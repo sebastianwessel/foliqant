@@ -54,7 +54,12 @@
     {
       "id": 11,
       "prompt": "Route missing facts to clarification and out-of-catalog requests to a different branch by reading their explanation text.",
-      "expected_output": "Explains both use no_supported_answer in native schemaVersion 2 and chooses an explicitly configured shared unresolved policy. Does not parse explanations, restore legacy issue aliases, or invent a second diagnostic flag. Keeps contradictions and multiple supported options distinct and preserves original answerability when a fallback category is configured."
+      "expected_output": "Explains both use no_supported_answer in runtime schemaVersion 3 and chooses an explicitly configured shared unresolved policy. Does not parse reasons, restore legacy issue aliases, or invent a second diagnostic flag. Keeps contradictions and multiple supported options distinct and preserves original answerability when a fallback category is configured."
+    },
+    {
+      "id": 12,
+      "prompt": "Add evidence strength to our workflow result and evaluate limited, strong, and no-answer cases. Will strong bypass review?",
+      "expected_output": "Uses runtime DecisionOutput v3 reason and evidence_strength with unchanged DecisionInput v2; preserves model tooling native v2. Explains supplied support including inference, weakest-member collection strength versus completeness, and null for null answers/unknown predicates. Does not introduce citation arrays, confidence claims, automatic thresholds, or routing changes. Uses independent gold with explicit classification labels [limited, strong, null] so actual null is an observed outcome; missing and failures remain distinct. A string-only catalog retains null-as-abstention behavior."
     }
   ]
 }

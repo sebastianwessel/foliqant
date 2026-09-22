@@ -196,7 +196,7 @@ def _metric_specs(report: dict[str, Any]) -> list[MetricSpec]:
             or metric.get("kind") not in {"classification", "multilabel"}
             or not isinstance(labels, list)
             or not labels
-            or not all(type(label) is str for label in labels)
+            or not all(type(label) is str or label is None for label in labels)
             or len(set(labels)) != len(labels)
         ):
             raise ValueError("report metric contract is invalid")
@@ -205,7 +205,7 @@ def _metric_specs(report: dict[str, Any]) -> list[MetricSpec]:
                 metric["name"],
                 metric["path"],
                 metric["kind"],
-                tuple(cast(list[str], labels)),
+                tuple(cast(list[str | None], labels)),
             )
         )
     if len({item.name for item in specifications}) != len(specifications):

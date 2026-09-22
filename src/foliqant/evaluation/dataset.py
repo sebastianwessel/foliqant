@@ -62,7 +62,7 @@ class MetricConfig(BoundaryModel):
     name: NonBlank
     path: str
     kind: Literal["classification", "multilabel"]
-    labels: Annotated[list[NonBlank], Field(min_length=1, max_length=1024)]
+    labels: Annotated[list[NonBlank | None], Field(min_length=1, max_length=1024)]
 
     @model_validator(mode="after")
     def validate_metric(self) -> Self:
@@ -104,7 +104,7 @@ class SuiteSpec(BoundaryModel):
                 matched += 1
                 value = gold[0].expected
                 if metric.kind == "classification":
-                    if type(value) is not str or value not in metric.labels:
+                    if (value is not None and type(value) is not str) or value not in metric.labels:
                         raise ValueError("classification gold must be a declared label")
                 elif (
                     not isinstance(value, list)

@@ -1,7 +1,7 @@
 # Support triage with local Qwen
 
 This example turns a synthetic customer email into two bounded operations. A
-native decision selects the queue from quoted evidence, then a schema-output
+runtime decision selects the queue from the supplied message, then a schema-output
 step extracts the current requested action as a concise verbatim source span,
 the full deadline wording, and the account reference. The
 workflow keeps unresolved classifications in review and can attach an explicit
@@ -35,7 +35,7 @@ PYDANTIC_AI_NO_BANNER=1 \
 ```
 
 Success prints one execution result. The extracted fields are in `payload`; the
-validated queue answer and its evidence are in `decisions.classify`. This is an
+validated queue answer, concise reason, and evidence strength are in `decisions.classify`. This is an
 in-process, in-memory run. It provides no HTTP server, authentication, storage,
 retry queue, or model-quality guarantee. The default test uses a local
 `FunctionModel` and never contacts the configured endpoint.
@@ -81,7 +81,7 @@ that file without opening a model client:
 
 ```sh
 uv run --no-sync python -m examples.support_triage.evaluate \
-  --write-dataset .foliqant/evaluation/support-triage-r8.json
+  --write-dataset .foliqant/evaluation/support-triage-r9.json
 uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yaml --check
 ```
 
@@ -98,11 +98,18 @@ uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yam
 Both exports require a new path. `--write-dataset` performs no inference. The
 configured dataset is loaded only for evaluation; ordinary workflow startup does
 not require the file. Console reports omit case/check details. The private
-artifact retains inputs, expected and actual values, model explanations within
+artifact retains inputs, expected and actual values, model reasons within
 returned results, and safe mismatch reasons. Queue classification reports include
-an ordered confusion matrix; the six review cases have no queue gold and are
+an ordered confusion matrix; the ten review cases have no queue gold and are
 counted as excluded. Separate effective-category and origin metrics check six
-model selections and four `misc` fallbacks; conflict/multiple-intent cases have no
+model selections and eight `misc` fallbacks; conflict/multiple-intent cases have no
 selection. Missing-action and known out-of-catalog cases remain separate English
 and German gold scenarios, but both use `no_supported_answer` and the same review
 route. Isolated reports identify `classify` or `extract` explicitly.
+
+The evidence-strength metric includes explicit `null` alongside `limited` and
+`strong`. All supported classifications in this example have explicit requests
+and strong support; this suite does not test a limited classification. See
+[typed decisions and evidence](../decision_evidence/README.md) for a permissible
+limited interpretation, multiple labels, false predicates, and empty collections.
+A strength rating is a model assessment, not a correctness guarantee.

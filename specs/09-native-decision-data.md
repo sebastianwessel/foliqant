@@ -425,6 +425,10 @@ output; identifying one missing fact does not excuse an omitted request.
 
 ### Result, answerability, issues and evidence
 
+The model-data contracts in `foliqant.decisions` are independent of the runtime
+v3 output in [specification 11](11-python-package.md). No runtime response change
+alters these dataset targets or artifact identities.
+
 `DecisionInput` and `DecisionOutput` use native `schemaVersion: 2`; unrelated
 outer records, catalogs and artifacts retain their own versions. Old issue codes
 and native version 1 are rejected outside the explicit offline upgrade boundary.

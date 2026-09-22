@@ -27,7 +27,8 @@ class MetricSpec:
     """Measure a result pointer against matching authored gold and ordered labels.
 
     Each included case must have exactly one expectation at ``path``. Cases with
-    none are excluded explicitly. Classification gold is a catalog string;
+    none are excluded explicitly. Classification gold is a catalog string or
+    explicitly declared null;
     multilabel gold is an array of catalog strings (duplicates have set semantics).
     Invalid or ambiguous gold fails validation before any pipeline is called.
     """
@@ -35,7 +36,7 @@ class MetricSpec:
     name: str
     path: str
     kind: MetricKind
-    labels: tuple[str, ...]
+    labels: tuple[str | None, ...]
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip() or len(self.name) > 512:
@@ -54,10 +55,16 @@ class MetricSpec:
         labels = tuple(self.labels)
         if (
             not labels
-            or any(type(label) is not str or not label.strip() for label in labels)
+            or any(
+                not (label is None and self.kind == "classification")
+                and (type(label) is not str or not label.strip())
+                for label in labels
+            )
             or len(set(labels)) != len(labels)
         ):
-            raise ValueError("metric labels must be a nonempty unique string catalog")
+            raise ValueError(
+                "metric labels must be unique nonblank strings, with null only for classification"
+            )
         object.__setattr__(self, "labels", labels)
 
 
@@ -92,7 +99,7 @@ class LabelCounts:
     TP + FP + FN + TN equals the metric's ``observed`` count, not its support.
     """
 
-    label: str
+    label: str | None
     true_positive: int
     false_positive: int
     false_negative: int
@@ -125,7 +132,7 @@ class MetricReport:
     name: str
     path: str
     kind: MetricKind
-    labels: tuple[str, ...]
+    labels: tuple[str | None, ...]
     support: int
     excluded: int
     observed: int
@@ -149,13 +156,15 @@ class MetricReport:
 @dataclass(frozen=True, slots=True)
 class MetricObservation:
     state: ObservationState
-    expected: frozenset[str] = frozenset()
-    actual: frozenset[str] = frozenset()
+    expected: frozenset[str | None] = frozenset()
+    actual: frozenset[str | None] = frozenset()
 
 
-def _labels(spec: MetricSpec, value: FrozenJson) -> frozenset[str] | None:
+def _labels(spec: MetricSpec, value: FrozenJson) -> frozenset[str | None] | None:
     if spec.kind == "classification":
-        return frozenset((value,)) if type(value) is str and value in spec.labels else None
+        if (isinstance(value, str) or value is None) and value in spec.labels:
+            return frozenset((value,))
+        return None
     if isinstance(value, tuple) and all(
         type(label) is str and label in spec.labels for label in value
     ):
@@ -209,7 +218,7 @@ def observe_metrics(
             observations.append(MetricObservation(state, expected))
             continue
         parsed = _labels(spec, actual)
-        if actual is None:
+        if actual is None and parsed is None:
             observations.append(MetricObservation("abstained", expected))
         elif parsed is None:
             observations.append(MetricObservation("invalid", expected))

@@ -7,9 +7,9 @@ without confusing a schema check, an assertion score, and business accuracy.
 ## Keep the evidence
 
 An evaluation report contains the input, authored expectations, complete public
-result, and each check's actual value and outcome. It retains public explanations
-and citations, not the provider's private reasoning. Suite fingerprints and
-configuration revisions identify what was measured.
+result, and each check's actual value and outcome. It retains public reasons
+and evidence-strength assessments, not the provider's private reasoning. Suite
+fingerprints and configuration revisions identify what was measured.
 
 Reports are private files, not application persistence. Keep them in an ignored
 directory and do not publish them as ordinary CI artifacts. Evaluation writes a
@@ -38,6 +38,13 @@ coverage and the counts of abstained, invalid, missing, skipped, and failed
 outputs. Undefined scores are `null`, not invented zeroes or perfect scores.
 Do not interpret an unsupported label's score as evidence of quality.
 
+A classification catalog can explicitly include `null`, for example
+`["limited", "strong", null]` for `evidence_strength`. Then null is an observed
+answer category in the confusion matrix, not an abstention. With string-only
+labels, a null prediction retains its abstention meaning. Missing, skipped and
+failed observations always stay separate. Assess reason correctness with an
+explicit reviewed rubric; strength labels alone do not score the reason.
+
 Per-label `precision` is `TP / (TP + FP)`, `recall` is `TP / (TP + FN)`, and
 `f1` is `2TP / (2TP + FP + FN)`. Each is null when its denominator is zero.
 The metric's `micro` rates pool counts across labels. `macro` averages the entire
@@ -58,7 +65,7 @@ total, and a completely unobserved field has no numeric total.
 
 ## Measure model choices and fallback policy separately
 
-For a single-choice step, score its native answer at
+For a single-choice step, score its model answer at
 `/decisions/classify/result/answer/optionId`. Independently score the effective
 category at `/decisions/classify/selection/category/id` and its origin at
 `/decisions/classify/selection/origin`. Supply reviewed expected values for each
@@ -105,7 +112,7 @@ agreement_by_case = {
 
 Inspect both agreement and the returned decisions. Two attempts can both fail
 an assertion for different reasons, or pass selected fields while differing in
-an unscored explanation. Preserve the full reports to investigate those cases.
+an unscored reason. Preserve the full reports to investigate those cases.
 
 ## Inspect language or other input groups
 
@@ -156,7 +163,7 @@ text must match at a permitted location, not merely elsewhere in the document.
 
 Author these ranges from the intended extraction contract before inspecting
 predictions. This checks a verbatim action or evidence span; it cannot establish
-whether a free-form explanation is semantically correct.
+whether a free-form reason is semantically correct.
 
 ## Compare saved experiments offline
 
@@ -201,9 +208,9 @@ alongside the rescored one and identify which gold revision each uses.
 2. Compare the isolated step with the full pipeline. Correct isolated output but
    incorrect pipeline output points to upstream data, bindings, metadata, or
    routing. Test the transport separately when it carries the same envelope.
-3. Inspect the complete result, including requested actions, evidence, and skipped
-   steps. An exact citation establishes where text occurs; it does not prove that
-   a paraphrase preserves its meaning.
+3. Inspect the complete result, including requested actions, reasons, evidence
+   strength, and skipped steps. Compare the reason and strength with the supplied
+   facts; a valid response shape does not establish semantic correctness.
 4. Test one deliberate change against unchanged development gold. Keep all
    regressions visible, including a faster result that makes more mistakes.
 5. Confirm the selected change against a separate untouched holdout. Repeated
