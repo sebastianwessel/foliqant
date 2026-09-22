@@ -2,7 +2,25 @@
 
 Use this field index for setup and customization. Confirm the installed release
 with current CLI help, the public `foliqant.contracts` modules, and
-`foliqant.contracts.schemas.runtime_schemas()`.
+`foliqant.contracts.schemas.runtime_schemas()` or `decision_schemas()`.
+For editor tooling, installed JSON files are available through
+`importlib.resources.files("foliqant").joinpath("schemas", NAME)`. Python
+boundary models remain authoritative; runtime execution does not read the
+generated files.
+
+## Contents
+
+- [Set up a downstream project](#set-up-a-downstream-project)
+- [Deployment root](#deployment-root)
+- [Common model fields](#common-model-fields)
+- [Execution limits](#execution-limits)
+- [Provider retry policy](#provider-retry-policy)
+- [Environment handling](#environment-handling)
+- [MCP](#mcp)
+- [Trusted handlers](#trusted-handlers)
+- [Telemetry](#telemetry)
+- [Application lifecycle and context](#application-lifecycle-and-context)
+- [Evaluation and CLI](#evaluation-and-cli)
 
 ## Set up a downstream project
 
@@ -48,10 +66,18 @@ Every model profile has:
 - `supports_text` (default true), `supports_json_schema` (true), and
   `supports_tools` (true);
 - `concurrency` (4), `queue_limit` (16), and `request_timeout` (60);
+- `retry` (one attempt by default);
 - provider-specific `options`.
 
 `output_mode: tool` requires tool support. At least text or JSON Schema output
-must be supported.
+must be supported. `model` is nonblank. `concurrency` is 1–1024,
+`queue_limit` is 0–10,000, and `request_timeout` is positive and at most
+3600 seconds.
+
+Common generation options are `max_tokens` (default 4096, 1–1,048,576),
+optional `temperature` (0–2), and optional `top_p` (greater than 0 and at
+most 1). OpenAI-family profiles also accept an optional strict-integer `seed`
+and `reasoning_effort: none|minimal|low|medium|high|xhigh`.
 
 ### OpenAI
 
@@ -80,7 +106,8 @@ api_key: $MODEL_API_KEY      # optional reference
 allow_insecure_http: false
 max_tokens_field: max_tokens # or max_completion_tokens
 output_mode: native
-options: {max_tokens: 4096}
+options:
+  max_tokens: 4096
 ```
 
 HTTP requires explicit `allow_insecure_http: true`; prefer HTTPS outside local
@@ -118,11 +145,21 @@ options:
 Alternatively set `thinking_budget` (at least 1024 and below `max_tokens`);
 do not combine a fixed budget with `thinking`, `temperature`, or `top_p`.
 
-An operation may select a profile ID, supply
-`{profile, model?, options?}`, or supply a complete provider profile. Option
-overrides are `max_tokens`, `temperature`, `top_p`, `seed`,
-`reasoning_effort`, `thinking`, `effort`, and `thinking_budget`; the
-compiler rejects options unsupported by the selected provider.
+An operation may select a profile ID, supply a profile override, or supply a
+complete provider profile. A profile override has this shape:
+
+```yaml
+model:
+  profile: local
+  model: alternate-model
+  options:
+    max_tokens: 800
+```
+
+The `model` and `options` overrides are optional. Option overrides are
+`max_tokens`, `temperature`, `top_p`, `seed`, `reasoning_effort`,
+`thinking`, `effort`, and `thinking_budget`; the compiler rejects options
+unsupported by the selected provider.
 
 ## Execution limits
 
@@ -138,8 +175,41 @@ execution:
   tool_calls_per_step: 3
 ```
 
-Durations are positive seconds. Admission is per process and does not provide
-durability.
+`concurrency` is 1–1024 and `queue_limit` is 0–65,536. Durations are
+positive and at most 3600 seconds. `max_steps`,
+`model_requests_per_step`, and `tool_calls_per_step` are each 1–1024.
+Admission is per process and does not provide durability.
+
+## Provider retry policy
+
+Model and MCP profiles accept:
+
+```yaml
+retry:
+  max_attempts: 1
+  initial_delay_seconds: 0.25
+  max_delay_seconds: 5
+```
+
+`max_attempts` is a strict integer from 1 through 8 and includes the initial
+request. Both delays are finite; the initial delay is 0–60 seconds, the maximum
+is 0–300 seconds, and the maximum cannot be lower than the initial value.
+Defaults therefore make exactly one request.
+
+When more attempts are enabled, the runtime retries only safely observed
+completed HTTP responses with status 429, 500, 502, 503, or 529. Backoff is
+capped exponential full jitter. A valid `Retry-After` delta or date is a
+minimum delay bounded by the configured maximum and remaining absolute deadline.
+If it cannot fit, return the final transient failure.
+
+Never retry a connection or stream interruption, timeout including 408/504,
+cancellation, authentication failure, schema/output failure, or whole
+step/flow/workflow. Provider SDK retries remain zero. Every request reserves and
+accounts against `model_requests_per_step` or `tool_calls_per_step`; failed
+attempt token usage remains unknown. Release and reacquire model request
+admission during backoff. Keep an MCP server's admitted authenticated session
+held across tool-call backoff, and keep every attempt within the original
+logical deadline.
 
 ## Environment handling
 
@@ -158,7 +228,10 @@ references fail before clients open.
 Each profile contains `transport`, optional `auth`, optional
 `identity_meta_key`, a nonempty `catalog.tools`, `concurrency` (4),
 `queue_limit` (16), `request_timeout` (30), and
-`output_limit_bytes` (1 MiB).
+`retry` (one attempt), and `output_limit_bytes` (1 MiB).
+`concurrency` is 1–1024, `queue_limit` is 0–10,000,
+`request_timeout` is positive and at most 3600 seconds, and
+`output_limit_bytes` is 1 byte–64 MiB.
 
 Streamable HTTP:
 
@@ -175,9 +248,11 @@ Stdio:
 transport:
   type: stdio
   command: $MCP_COMMAND
-  args: [--serve]
+  args:
+    - --serve
   cwd: $MCP_CWD             # optional absolute path
-  env: {TOKEN: $MCP_TOKEN}
+  env:
+    TOKEN: $MCP_TOKEN
 ```
 
 Stdio cannot use an HTTP auth hook. Each tool declaration has
@@ -240,10 +315,19 @@ runtime validation. Exceptions become safe service errors.
 - `metric_export_interval` (60), `metric_export_batch_size` (512);
 - `export_timeout` (10), `shutdown_timeout` (10).
 
-An empty endpoint disables that signal. Telemetry exports allowlisted identity,
-status, timing, and usage labels, never payloads, prompts, model output,
+An empty endpoint disables that signal. Telemetry exports allowlisted configured
+component labels, trace identifiers, statuses, timings, attempt numbers, and
+usage, never tenant/principal identity, payloads, prompts, model output,
 credentials, or raw exceptions. `open_application(...,
 install_global_telemetry=True)` is an explicit host choice.
+Foliqant does not replace host logging; configure a reviewed safe sink and
+filters for SDK and third-party logs.
+
+Queue capacity is 1–65,536; span batch size is 1–4096 and cannot exceed that
+capacity. Metric batch size is 1–65,536. Schedule delay and metric interval are
+positive and at most 3600 seconds. Export and shutdown timeouts are positive and
+at most 30 seconds. Endpoints use HTTPS unless
+`allow_insecure_http: true` is explicit.
 
 ## Application lifecycle and context
 
@@ -271,7 +355,9 @@ from business metadata.
 
 Keep the application context open while calls run. Shutdown stops new admission,
 drains cooperative work, and cannot prove an already-started remote operation
-stopped.
+stopped. Telemetry shutdown is also bounded and may report an incomplete drain
+while an exporter socket worker is still finishing; it does not hard-kill that
+worker.
 
 ## Evaluation and CLI
 

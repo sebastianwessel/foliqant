@@ -193,6 +193,90 @@ async def test_one_safe_client_span_preserves_parent_and_uses_private_settings()
     assert all(point.attributes["gen_ai.operation.name"] == "chat" for point in token_points)
 
 
+async def test_embedded_bootstrap_parent_chain_for_each_model_attempt(
+    tmp_path, monkeypatch
+) -> None:
+    from contextlib import asynccontextmanager
+
+    from opentelemetry import trace
+    from pydantic_ai.exceptions import ModelHTTPError
+    from pydantic_ai.messages import TextPart
+    from test_bootstrap import settings
+
+    from foliqant.adapters.telemetry.observation import trace_carrier
+    from foliqant.bootstrap import RuntimePlugins, open_application, prepare_application
+    from foliqant.contracts.envelope import Envelope
+    from foliqant.core.retry import RetryPolicy
+    from foliqant.ports.observation import TraceContext
+
+    path = settings(
+        tmp_path,
+        "type: llm\nmodel: local\ninstructions: 'PRIVATE_PROMPT'\ninput: {}\noutput: text\n",
+        "models:\n  local:\n    provider: openai_compatible\n    model: reviewed-test-model\n"
+        "    base_url: https://provider.example/v1\n    output_mode: tool\n"
+        "telemetry:\n  service_name: test\n"
+        "  traces_endpoint: https://collector.example/v1/traces\n"
+        "  span_schedule_delay: 3600.0\n",
+    )
+    captured = InMemorySpanExporter()
+    monkeypatch.setattr(
+        "foliqant.adapters.telemetry.runtime.OTLPSpanExporter", lambda **kwargs: captured
+    )
+    seen = []
+    closed = False
+
+    async def request(messages, info):
+        seen.append(trace_carrier())
+        if len(seen) == 1:
+            raise ModelHTTPError(503, _MODEL, body="PRIVATE_PROVIDER_ERROR")
+        return ModelResponse(parts=[TextPart("PRIVATE_RESPONSE")])
+
+    @asynccontextmanager
+    async def factory(profiles, *, environment):
+        nonlocal closed
+        try:
+            yield {
+                "local": ModelBinding(
+                    model=FunctionModel(request, model_name=_MODEL),
+                    settings={},
+                    admission=CapacityLimiter(concurrency=1, queue_limit=0),
+                    output_mode="tool",
+                    retry=RetryPolicy(max_attempts=2, initial_delay_seconds=0, max_delay_seconds=0),
+                )
+            }
+        finally:
+            closed = True
+
+    previous_global = trace.get_tracer_provider()
+    async with open_application(
+        prepare_application(path), environment={}, plugins=RuntimePlugins(model_factory=factory)
+    ) as application:
+        result = await application.run(
+            "demo",
+            Envelope(payload={}),
+            transport_trace=TraceContext("00-" + "a" * 32 + "-" + "b" * 16 + "-01"),
+        )
+        assert result.execution.status == "completed"
+        assert result.execution.usage.model_requests == 2
+    assert closed
+    assert trace.get_tracer_provider() is previous_global
+    spans = captured.get_finished_spans()
+    workflow = next(span for span in spans if span.name == "foliqant.workflow")
+    flow = next(span for span in spans if span.name == "foliqant.flow")
+    step = next(span for span in spans if span.name == "foliqant.step")
+    calls = [span for span in spans if span.kind is SpanKind.CLIENT]
+    assert len(calls) == len(seen) == 2
+    assert workflow.parent.span_id == int("b" * 16, 16)
+    assert flow.parent.span_id == workflow.context.span_id
+    assert step.parent.span_id == flow.context.span_id
+    assert all(call.parent.span_id == step.context.span_id for call in calls)
+    assert {call.context.span_id for call in calls} == {
+        int(carrier["traceparent"].split("-")[2], 16) for carrier in seen
+    }
+    assert all(span.context.trace_id == int("a" * 32, 16) for span in spans)
+    assert "PRIVATE" not in "".join(span.to_json() for span in spans)
+
+
 @pytest.mark.parametrize(
     ("usage", "expected"),
     [

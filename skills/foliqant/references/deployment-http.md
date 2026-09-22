@@ -30,7 +30,8 @@ definitions are supported for intentional customization.
 
 ## CLI
 
-`foliqant init DEST` creates a local-model project without overwriting a path.
+`foliqant init DEST` creates a runtime workflow project without overwriting a
+path.
 `validate`, `explain`, `doctor`, `run`, and configured `evaluate`
 default to `config/settings.yaml`; `--config PATH` selects an exact
 alternative without parent-directory search.

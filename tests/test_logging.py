@@ -262,3 +262,32 @@ async def test_blocked_writer_does_not_retain_record_or_block_event_loop(
 def test_invalid_queue_capacity_rejected_before_thread_creation(capacity: int) -> None:
     with pytest.raises(ValueError, match="invalid logging configuration"):
         configure_logging(queue_capacity=capacity)
+
+
+@pytest.mark.usefixtures("restore_logging")
+def test_current_trace_correlates_internal_and_external_logs_without_content() -> None:
+    from opentelemetry.sdk.trace import TracerProvider
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(SafeJsonFormatter(LogLabels(flows=frozenset({"triage"}))))
+    logger = logging.getLogger("test.trace.correlation")
+    logger.handlers = [handler]
+    logger.propagate = False
+    logger.setLevel(logging.INFO)
+    provider = TracerProvider(shutdown_on_exit=False)
+    try:
+        with provider.get_tracer("test").start_as_current_span("PRIVATE_SPAN") as span:
+            emit_event(logger, LogEvent.STEP_COMPLETED, flow="triage")
+            logger.error("PRIVATE_EXCEPTION", exc_info=RuntimeError("PRIVATE_TOKEN"))
+            expected = span.get_span_context()
+        emit_event(logger, LogEvent.RUN_COMPLETED)
+        rows = [json.loads(row) for row in stream.getvalue().splitlines()]
+        for row in rows[:2]:
+            assert row["trace_id"] == f"{expected.trace_id:032x}"
+            assert row["span_id"] == f"{expected.span_id:016x}"
+        assert rows[0]["flow"] == "triage"
+        assert "trace_id" not in rows[2]
+        assert "PRIVATE" not in stream.getvalue()
+    finally:
+        provider.shutdown()

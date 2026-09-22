@@ -1,0 +1,456 @@
+{
+  "$defs": {
+    "ChoiceQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 1024,
+          "minItems": 2,
+          "title": "Options",
+          "type": "array"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "choice",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "options"
+      ],
+      "title": "ChoiceQuestion",
+      "type": "object"
+    },
+    "DecisionOption": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "description"
+      ],
+      "title": "DecisionOption",
+      "type": "object"
+    },
+    "DecisionQuestion": {
+      "discriminator": {
+        "mapping": {
+          "choice": "#/$defs/ChoiceQuestion",
+          "multiselect": "#/$defs/MultiselectQuestion",
+          "ordinal": "#/$defs/OrdinalQuestion",
+          "predicate": "#/$defs/PredicateQuestion",
+          "request_units": "#/$defs/RequestUnitsQuestion"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ChoiceQuestion"
+        },
+        {
+          "$ref": "#/$defs/MultiselectQuestion"
+        },
+        {
+          "$ref": "#/$defs/PredicateQuestion"
+        },
+        {
+          "$ref": "#/$defs/OrdinalQuestion"
+        },
+        {
+          "$ref": "#/$defs/RequestUnitsQuestion"
+        }
+      ]
+    },
+    "DecisionSource": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "message",
+            "document",
+            "table",
+            "policy",
+            "metadata"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "text"
+      ],
+      "title": "DecisionSource",
+      "type": "object"
+    },
+    "DecisionState": {
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/DecisionSource"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "title": "DecisionState",
+      "type": "object"
+    },
+    "MultiselectQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "maxSelections": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Maxselections",
+          "type": "integer"
+        },
+        "minSelections": {
+          "maximum": 1024,
+          "minimum": 0,
+          "title": "Minselections",
+          "type": "integer"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "title": "Options",
+          "type": "array"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "multiselect",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "options",
+        "minSelections",
+        "maxSelections"
+      ],
+      "title": "MultiselectQuestion",
+      "type": "object"
+    },
+    "OrdinalQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "levels": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 128,
+          "minItems": 2,
+          "title": "Levels",
+          "type": "array"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "ordinal",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "levels"
+      ],
+      "title": "OrdinalQuestion",
+      "type": "object"
+    },
+    "PredicateQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "predicate",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type"
+      ],
+      "title": "PredicateQuestion",
+      "type": "object"
+    },
+    "RequestUnitsQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowNoMatch": {
+          "title": "Allownomatch",
+          "type": "boolean"
+        },
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "catalog": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 1024,
+          "title": "Catalog",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "request_units",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "catalog",
+        "allowNoMatch"
+      ],
+      "title": "RequestUnitsQuestion",
+      "type": "object"
+    }
+  },
+  "$id": "urn:foliqant:schema:decision-input.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "questions": {
+      "items": {
+        "$ref": "#/$defs/DecisionQuestion"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Questions",
+      "type": "array"
+    },
+    "state": {
+      "$ref": "#/$defs/DecisionState"
+    }
+  },
+  "required": [
+    "state",
+    "questions"
+  ],
+  "title": "DecisionInput",
+  "type": "object"
+}

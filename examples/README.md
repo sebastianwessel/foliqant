@@ -8,6 +8,8 @@
   integration without a model call.
 - [Extract then look up](extracted_request_mcp/README.md): local Qwen extracts a
   reference and passes only selected fields to a read-only MCP tool.
+- [Prompt-security evaluation](security_evaluation/README.md): paired English/German
+  cases for instruction boundaries and selected context between steps.
 - [HTTP wrapper](http_workflow/README.md): a thin transport around support triage.
 
 All records are synthetic. Model-backed commands require an explicit `--live`

@@ -1,71 +1,52 @@
-# Foliqant contributor guide
+# Contributor guide
 
-Read [specs/README.md](specs/README.md), then the relevant active specification
-and implementation. [docs/index.md](docs/index.md) is the user guide;
-[.agent/IMPLEMENTATION.md](.agent/IMPLEMENTATION.md) contains contributor checks.
+Read [specs/README.md](specs/README.md), the relevant implementation contract,
+and the current code. [docs/index.md](docs/index.md) is the public user guide.
 
-## Authority and scope
+## Scope and authority
 
-1. The current user request defines the authorized change. Preserve unrelated edits.
-2. Active specs define intended behavior. Public Python types, validators, CLI
-   help and tests establish what exists today. Resolve disagreement explicitly;
-   do not silently implement a research proposal or redefine a contract in prose.
-3. Research, old reviews and plans are evidence, not an implementation backlog.
-   Historical action records alone do not authorize a new run. Explicit user
-   authorization remains valid within its scope until revoked.
+The current user request authorizes work. Preserve unrelated edits and private
+artifacts. Implement only the in-memory Python package: configured workflows,
+sequential flows, bounded steps, model/MCP/handler integrations and evaluations.
+Hosts own incoming transports, authentication, persistence and durable processing.
+Runnable business examples belong in `examples/`.
 
-The root uv project builds the in-memory `foliqant` library in `src/foliqant/`:
-compile configured workflows, run bounded steps, return a result, evaluate explicit
-ground truth. `model/` is the separate training/curation uv project. It reuses
-`foliqant.decisions`; the library never imports model tooling. Runnable hosts and
-business workflows belong in `examples/`. No persistence, queue workers, incoming
-transport package, application authentication, PURISTA, Harness or Voyage is in scope.
+Mechanical fixes and private implementation choices within the request need no
+extra approval. Do not invent public behavior, fallbacks or infrastructure to fill
+an unapproved gap. Resolve contradictions between specs and implementation rather
+than documenting imaginary APIs. There is one current format; do not add version
+fields, migration code or compatibility aliases.
 
-## Decisions and changes
+## Keeping surfaces aligned
 
-Use existing public APIs and defaults. Mechanical fixes, documentation alignment
-and private reversible implementation choices within the request do not need an
-extra approval step. If a missing decision changes public behavior, data meaning,
-security boundaries or scope, report the exact gap and ask one focused question;
-continue independent authorized work. Do not invent APIs, compatibility shims,
-fallbacks, future infrastructure, guarantees or approval ceremonies.
+Change types, generated schemas, tests, examples, public guides and the runtime
+skill together. Skills must be usable without internal specs. They teach setup,
+business-use-case mapping, conventions, options and customization. Public docs
+teach current usage, not implementation history. Author YAML examples and scaffold
+files with block-style mappings and lists; reserve `{}` and `[]` for empty values.
+JSON Schema resources remain JSON. Do not restrict valid user YAML merely for style.
 
-Update contract types, generated schemas, tests, examples, public guides and the
-relevant skill together when a public surface changes. Runtime fields are
-snake_case; existing native decision/model wire fields retain their camelCase
-names. Do not rename immutable artifacts or change old recipe identities.
+Conventional, explicit-file and inline configuration share one compiler.
+File discovery finds definitions; authored order and routes determine execution.
+Use the shared environment resolver only for explicitly marked deployment fields.
+Never interpolate secrets into prompts or input data.
 
-Reuse the same compiler for conventional, explicit, and inline definitions and
-schemas. Conventional lookup resolves files only; authored step order and flow
-routes determine execution. Reuse the marked deployment-field environment
-resolver; never expand prompts or input data. Every runnable example needs
-explicit golden pipeline/flow/step evaluations, with offline wiring checks
-distinguished from opt-in live model measurements.
+Core mechanics use standard-library values and ports. Pydantic and provider SDKs
+stay at boundaries. Preserve async cancellation and owned client lifetimes. Never
+retry ambiguous remote timeouts automatically or report unavailable usage as zero.
 
-## Execution and data
+## Verification and privacy
 
-Default verification is offline. Live inference, native training, downloads and
-publishing follow existing user authorization within its scope; old plans alone
-are not authorization. Never
-contact a model endpoint just to check docs or change shared environments during
-an active run. Real lifecycle acceptance needs real execution evidence; unit
-doubles and small synthetic examples cannot establish model quality.
+Run checks in [.agent/IMPLEMENTATION.md](.agent/IMPLEMENTATION.md). Default tests
+are offline. Do not call model endpoints to check docs or configuration. Live
+inference, external publication and paid services follow current user authorization;
+old records do not grant permission. Do not mutate another active run's environment.
 
-Keep customer data, private golden corpora, generated datasets, weights,
-adapters, checkpoints, predictions, reports, secrets, and logs outside Git.
-Small authored synthetic evaluation fixtures for public examples belong under
-`examples/<name>/evaluation/` and remain reviewable source. Tests create other
-minimal records in code. Preserve source rights, split isolation, lineage, and
-artifact immutability. Research/noncommercial data is usable only within its
-terms; private hosting is not permission. Do not accept gated terms, upload data,
-or use paid services unless authorized.
-The default model workspace is the ignored `.foliqant/` directory in this
-checkout; installed commands use their current directory. Use the shared
-workspace selector/Git policy. Relocation must not rewrite immutable records.
+Commit small authored synthetic gold under each example's `evaluation/` folder.
+Keep real customer data, private gold, responses, reports, secrets and logs out of
+Git. Never log payloads, prompts, identifiers, credentials or raw exceptions.
+Evaluation reports deliberately contain private business data and require explicit
+local writing. Synthetic tests establish wiring and invariants, not model accuracy.
 
-## Verification
-
-Run the affected checks in [.agent/IMPLEMENTATION.md](.agent/IMPLEMENTATION.md).
-Run docs and tracked-data audits for guidance/skill changes and a strict MkDocs
-build for published documentation. Report exact outcomes and skipped live checks;
-do not convert previous test counts into current evidence.
+Report actual checks and any limitations. Do not claim previously observed test
+counts or model outcomes as current evidence.

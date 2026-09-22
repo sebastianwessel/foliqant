@@ -1,6 +1,6 @@
 ---
 name: foliqant
-description: "Build, test, and evaluate Foliqant in-memory Python workflows. Use for runtime configuration, workflow/flow/step authoring, model or MCP adapters, golden evaluations, and runnable examples; do not use for model training or data curation."
+description: "Build, test, and evaluate Foliqant in-memory Python workflows. Use when mapping business processes, configuring the runtime, authoring workflows/flows/steps, integrating model or MCP adapters, or creating golden evaluations."
 ---
 
 # Foliqant runtime
@@ -19,9 +19,11 @@ Start with this skill's bundled references:
 These references are sufficient for configuring a downstream application. Check
 the installed version with `foliqant --help`, subcommand help,
 `foliqant.contracts` boundary models, and
-`foliqant.contracts.schemas.runtime_schemas()`. Do not assume the Foliqant
-source repository or its internal specifications are available. Model training
-and data curation are a separate concern.
+`foliqant.contracts.schemas.runtime_schemas()` and `decision_schemas()`.
+Generated JSON resources are available through
+`importlib.resources.files("foliqant").joinpath("schemas", NAME)` for
+editor tooling. The Python models remain authoritative. Do not assume the
+Foliqant source repository or its internal specifications are available.
 
 ## Preserve the runtime boundary
 
@@ -41,35 +43,19 @@ bindings, or customer input from environment variables.
 For business-process decomposition and the complete workflow/flow/operation
 field map, read [workflow design](references/workflow-design.md).
 
-The default file is `config/settings.yaml`. With no `workflows` map, discover
-only immediate nonhidden `config/*/workflow.yaml` files; the directory name is
-the workflow name. Explicit maps and names remain available for customization.
+Use `config/settings.yaml` and the conventional workflow, flow, and step files
+unless explicit paths improve the application. Keep ordered steps and routes
+authored; filesystem order never determines execution. Supported operations are
+`decision`, `llm`, `mcp`, and trusted `handler`.
 
-A workflow declares flows and their input bindings, transitions, and unresolved
-routes. One flow may omit `start`; multiple flows require it. A flow whose
-`definition` is omitted resolves `<flow>/flow.yaml`.
+Write authored YAML mappings and sequences in block style. Reserve `{}` and
+`[]` for intentional empty values, and quote the `"on"` key so YAML 1.1
+compatibility parsers do not coerce it to a boolean.
 
-A flow declares an ordered nonempty `steps` list. A shorthand step ID resolves
-exactly one of `<id>.step.md`, `<id>.step.yaml`,
-`<id>/step.md`, or `<id>/step.yaml`. Reject missing or ambiguous candidates.
-Filesystem order never determines execution. Inline definitions and explicit
-paths remain valid customization.
-
-Supported operations are `decision`, `llm`, `mcp`, and trusted
-`handler`. Operations execute in list order; flow boundaries own routing and
-terminal `completed|needs_review` outcomes.
-
-Keep operation schemas beside their operation and boundary schemas beside their
-flow or workflow. Bind only selected context. Within a flow use
-`/steps/{step}/...`; workflow routing and output use `/flows/{flow}/...`.
-Public results use `/flows/{flow}/steps/{step}/...`.
-
-Each model operation starts a fresh conversation with only declared inputs. An
-LLM prompt may use exact `{{ name }}` placeholders. They serialize the named
-input as compact JSON once; content inside a value is never evaluated as a
-template. An omitted prompt sends the declared input object. Decision sources
-default to nonempty text; use `format: json` to preserve selected JSON
-structure.
+Bind only selected context. Each model step starts a fresh conversation. Use
+exact `{{ name }}` JSON substitutions for LLM prompts and `format: json` for
+structured decision evidence. Within flows use `/steps/{step}/...`; routing
+and public results use `/flows/{flow}/...`.
 
 ## Maintain instruction authority
 
@@ -113,16 +99,9 @@ configuration, application lifecycle, CLI, or the HTTP example.
 
 Read [evaluation setup](references/evaluation.md) before creating or changing
 gold. The conventional file is `evaluation/dataset.json` beside `config/`;
-configure a path only when customizing it. Use the shared evaluator. A dataset
-suite targets:
-
-- a pipeline with `workflow`;
-- one flow with `workflow` plus `flow`;
-- one operation with `workflow`, `flow`, and `step`.
-
-Step cases contain resolved operation input. Flow cases contain resolved flow
-input. Pipeline cases contain the workflow envelope. Use public expectation paths
-under `/flows/{flow}/steps/{step}`.
+configure a path only when customizing it. Pipeline cases contain workflow
+envelopes; flow and step cases contain already-resolved boundary input. Use
+public expectation paths under `/flows/{flow}/steps/{step}`.
 
 Keep failed, skipped, missing, review, and error observations in denominators.
 Use `evaluate --check` and replay for offline work. Normal evaluation uses the
@@ -135,9 +114,6 @@ or cache efficiency from them.
 For a downstream application, run `foliqant validate`, `foliqant doctor`,
 `foliqant evaluate --check` when gold is present, and focused application
 tests. Use `foliqant explain` to inspect the compiled plan. Query
-`runtime_schemas()` when tooling needs the installed contract; do not hand-edit
-generated schemas or copy assumptions from another release.
-
-Only when maintaining the Foliqant repository itself, also follow that checkout's
-contributor guidance and align implementation, generated schemas, examples,
-public documentation, and this skill.
+`runtime_schemas()` or `decision_schemas()` when tooling needs the installed
+contract; do not hand-edit generated schemas or copy assumptions from another
+release.

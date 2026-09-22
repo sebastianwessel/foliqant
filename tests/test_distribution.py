@@ -139,7 +139,14 @@ def test_wheel_contains_and_runs_the_public_package(tmp_path):
     assert "foliqant/decisions/py.typed" in members
     assert "foliqant/core/runner.py" in members
     assert "foliqant/evaluation/runner.py" in members
-    assert not any(name.startswith(("foliqant_model/", "foliqant_decisions/")) for name in members)
+    from foliqant.contracts.schemas import decision_schemas, runtime_schemas
+
+    expected_resources = set(runtime_schemas()) | set(decision_schemas())
+    assert {
+        member.removeprefix("foliqant/schemas/")
+        for member in members
+        if member.startswith("foliqant/schemas/")
+    } == expected_resources
 
     environment_path = tmp_path / "wheel-environment"
     subprocess.run(
@@ -229,6 +236,11 @@ from pathlib import Path
 from foliqant import Envelope, open_application, prepare_application
 from foliqant.adapters.handlers import HandlerRegistration
 from foliqant.core.execution import StepOutcome
+from importlib.resources import files
+import json
+schema = json.loads(files("foliqant").joinpath("schemas", "deployment.schema.json").read_text())
+assert schema["additionalProperties"] is False
+assert "workflows" in schema["properties"]
 
 async def echo(inputs, context):
     assert context.flow_id == 'main'

@@ -1,4 +1,4 @@
-"""Evaluation-only composition for the CLI; no imports from model training tooling."""
+"""Evaluation-only composition for the CLI."""
 
 import asyncio
 import json

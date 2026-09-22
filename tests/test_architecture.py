@@ -1,4 +1,4 @@
-"""Keep engine mechanics free of concrete I/O, validation and training packages."""
+"""Keep engine mechanics free of concrete I/O and validation packages."""
 
 import ast
 import sys

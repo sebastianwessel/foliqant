@@ -387,7 +387,7 @@ async def test_structurally_invalid_native_decision_is_not_repaired() -> None:
     async def invalid(_messages: Any, _info: Any) -> ModelResponse:
         nonlocal calls
         calls += 1
-        return ModelResponse(parts=[TextPart('{"schemaVersion":2}')], usage=_USAGE)
+        return ModelResponse(parts=[TextPart('{"unexpected":2}')], usage=_USAGE)
 
     with pytest.raises(ServiceError) as error:
         await _executor(step, _binding(invalid)).execute(

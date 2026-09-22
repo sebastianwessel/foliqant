@@ -6,6 +6,18 @@ Confirm the result with the installed `foliqant validate` and
 installed `foliqant.contracts.workflow` models or
 `foliqant.contracts.schemas.runtime_schemas()`.
 
+## Contents
+
+- [Choose boundaries](#choose-boundaries)
+- [Worked mapping](#worked-mapping-support-intake)
+- [File conventions](#file-conventions-and-customization)
+- [Workflow fields](#workflow-fields)
+- [Bindings and scope](#bindings-and-scope)
+- [Routing and unresolved outcomes](#routing-and-unresolved-outcomes)
+- [Operation fields](#operation-fields)
+- [Schemas and Markdown](#schemas-and-markdown)
+- [Trust and evaluation](#trust-and-evaluation)
+
 ## Choose boundaries
 
 Use one **workflow** for one externally invoked business capability with one
@@ -26,6 +38,76 @@ Work through the process in this order:
 
 Do not create a flow merely to wrap every step. A flow should express a business
 boundary, reusable sequence, or independently testable responsibility.
+
+## Worked mapping: support intake
+
+Suppose an application accepts one support message, assigns exactly one queue,
+extracts a customer reference, and looks up the account only for a supported
+billing request. Map the process before writing files:
+
+| Requirement | Runtime boundary | Reason |
+| --- | --- | --- |
+| Accept and finish one support request | `support_intake` workflow | This is the capability invoked by the host and the final result it returns. |
+| Classify and extract from the same message | `triage` flow with `classify`, then `extract` steps | Both operations share one sequential boundary; extraction can consume only explicitly bound context. |
+| Read an account from a remote system | `account_lookup` flow with one MCP step | This is a separate capability and failure/review boundary with its own resolved input. |
+| Unsupported, conflicting, or multi-queue request | `triage.on_unresolved -> needs_review` | Review is explicit and cannot fall through to account access. |
+| Billing route with an account reference | `triage.transition -> account_lookup` | The flow route, rather than a model step, controls whether the tool may run. |
+| Other supported queues | terminal `completed` or another authored flow | Every case and default is visible in the workflow graph. |
+
+The workflow file owns that graph:
+
+```yaml
+name: support_intake
+start: triage
+defaults:
+  model: local
+input_schema: input.schema.json
+output:
+  pointer: /flows/triage/result
+  optional: true
+  default:
+    status: needs_review
+flows:
+  triage:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      binding:
+        pointer: /flows/triage/result/queue
+      cases:
+        billing:
+          flow: account_lookup
+        cancellation:
+          outcome: completed
+      default:
+        outcome: needs_review
+    on_unresolved:
+      outcome: needs_review
+  account_lookup:
+    input:
+      account_id:
+        pointer: /flows/triage/result/account_id
+    transition:
+      outcome: completed
+    on_unresolved:
+      outcome: needs_review
+```
+
+The `triage` flow declares its order explicitly:
+
+```yaml
+steps:
+  - classify
+  - extract
+```
+
+The filesystem does not infer this list. Give the choice question at least two
+described categories and criteria that distinguish billing from cancellation.
+Bind the lookup step only to the extracted account ID. Add a pipeline case
+proving the tool flow is skipped for cancellation, a triage-flow case for review
+handling, and a classify-step case for each category. Gold comes from business
+review, not from a previous model response.
 
 ## File conventions and customization
 
@@ -77,12 +159,18 @@ nonempty ordered `steps` list. Step IDs are unique within the flow.
 
 ## Bindings and scope
 
-A binding is exactly one of:
+A binding contains either `literal` or `pointer`. Optional pointers also
+declare their default:
 
 ```yaml
-{literal: <any JSON>}
-{pointer: /payload/value}
-{pointer: /payload/value, optional: true, default: <any JSON>}
+fixed_value:
+  literal: <any JSON>
+required_value:
+  pointer: /payload/value
+optional_value:
+  pointer: /payload/value
+  optional: true
+  default: <any JSON>
 ```
 
 Optional pointers require an explicit default. Required pointers cannot have a
@@ -98,27 +186,41 @@ full-envelope forwarding.
 
 ## Routing and unresolved outcomes
 
-A direct target is `{flow: <id>}` or
-`{outcome: completed|needs_review}`.
+A direct target names a flow or terminal outcome:
+
+```yaml
+transition:
+  flow: next_flow
+# or
+transition:
+  outcome: completed
+```
 
 Exact match routing uses:
 
 ```yaml
 transition:
-  binding: {pointer: /flows/triage/result/queue}
+  binding:
+    pointer: /flows/triage/result/queue
   cases:
-    billing: {flow: billing}
-  default: {outcome: needs_review}
+    billing:
+      flow: billing
+  default:
+    outcome: needs_review
 ```
 
 An unresolved route can be one target or:
 
 ```yaml
 on_unresolved:
-  no_supported_answer: {flow: clarify}
-  conflicting_information: {outcome: needs_review}
-  multiple_valid_options: {outcome: needs_review}
-  default: {outcome: needs_review}
+  no_supported_answer:
+    flow: clarify
+  conflicting_information:
+    outcome: needs_review
+  multiple_valid_options:
+    outcome: needs_review
+  default:
+    outcome: needs_review
 ```
 
 Unresolved routes cannot directly complete a workflow. Do not parse public
@@ -132,12 +234,16 @@ reason text to route.
 type: decision
 model: local                   # optional profile/override/inline profile
 sources:
-  message: {pointer: /payload/message}
-  account: {pointer: /payload/account, format: json}
+  message:
+    pointer: /payload/message
+  account:
+    pointer: /payload/account
+    format: json
 instructions: Apply the question to the supplied evidence.
-question:                      # or questions: [full DecisionQuestion, ...]
+question: # use questions for two or more full DecisionQuestion objects
   type: choice
-  criteria: [Choose exactly one supported category.]
+  criteria:
+    - Choose exactly one supported category.
   catalog:
     categories:
       - id: billing
@@ -145,8 +251,10 @@ question:                      # or questions: [full DecisionQuestion, ...]
       - id: cancellation
         description: A request to cancel an active service.
 fallback:                      # single choice only
-  category: {id: review}
-  on: [no_supported_answer]
+  category:
+    id: review
+  "on":
+    - no_supported_answer
 ```
 
 Single-question shorthand supports:
@@ -165,22 +273,27 @@ Source values are pointer or literal bindings plus optional `format`:
 
 ```yaml
 sources:
-  message: {pointer: /payload/message}
-  account: {pointer: /payload/account, format: json}
-  channel: {literal: email}
+  message:
+    pointer: /payload/message
+  account:
+    pointer: /payload/account
+    format: json
+  channel:
+    literal: email
 ```
 
 `text` requires a nonempty string. `json` renders any selected JSON value
 canonically. Source IDs are unique map keys.
 
-Shorthand catalogs use
-`catalog: {categories: [{id, description}, ...]}`. A choice requires at least
-two categories. A multiselect requires a nonempty catalog,
+Shorthand catalogs contain a `categories` sequence whose entries each have
+`id` and `description`. A choice requires at least two categories. A
+multiselect requires a nonempty catalog,
 `minSelections >= 0`, and
 `1 <= maxSelections <= category count`, with minimum no greater than maximum.
 Category IDs normalize to lowercase ASCII snake case, must begin with a letter,
 and must be unique; descriptions are nonempty authored semantics. Ordinal
-`levels` contain at least two ordered `{id, description}` objects. The
+`levels` contain at least two ordered objects with `id` and `description`.
+The
 shorthand question receives the operation's question identity and all declared
 sources.
 
@@ -198,18 +311,19 @@ Type-specific full-question fields are:
 
 | Type | Additional fields |
 | --- | --- |
-| `choice` | `options`: at least two unique `{id, description}` values |
+| `choice` | `options`: at least two unique values with `id` and `description` |
 | `multiselect` | nonempty `options`, `minSelections`, `maxSelections` |
 | `predicate` | none |
 | `ordinal` | at least two ordered unique `levels` |
-| `request_units` | `catalog`: unique `{id, description}` values; `allowNoMatch` |
+| `request_units` | `catalog`: unique values with `id` and `description`; `allowNoMatch` |
 
 For multiselect, `0 <= minSelections <= maxSelections <= option count`.
 `questions` requires at least two entries in runtime authoring; use
 `question` for the single-question shorthand.
 
 A fallback is supported only with shorthand `choice`. It contains a category
-`{id, description?}` outside the normal catalog and a unique nonempty `on`
+with required `id` and optional `description` outside the normal catalog,
+plus a unique nonempty `on`
 list drawn from `no_supported_answer`, `conflicting_information`, and
 `multiple_valid_options`. It selects a process category only when the validated
 unresolved issues are all covered; it does not rewrite the native answer.
@@ -220,17 +334,21 @@ unresolved issues are all covered; it does not rewrite the native answer.
 type: llm
 model:
   profile: local
-  options: {max_tokens: 800, temperature: 0}
+  options:
+    max_tokens: 800
+    temperature: 0
 input:
-  message: {pointer: /payload/message}
+  message:
+    pointer: /payload/message
 instructions: Return a concise structured extraction.
 prompt: Extract from {{ message }}.   # optional
 output:
   schema: output.schema.json         # or output: text
 tools:                               # optional
   server: records
-  allow: [lookup]
-  choice: auto                       # required or {name: lookup}
+  allow:
+    - lookup
+  choice: auto # also accepts a mapping with name: lookup
 ```
 
 Prompt placeholders must exactly name declared inputs. Values render as compact
@@ -244,11 +362,23 @@ type: mcp
 server: records
 tool: lookup
 arguments:
-  reference: {pointer: /payload/reference}
+  reference:
+    pointer: /payload/reference
 ```
 
 The server, tool, argument schema, result schema, and read effect must be
-declared in deployment settings.
+declared in deployment settings:
+
+```yaml
+input_schema:
+  type: object
+output_schema:
+  type: object
+effect: read
+```
+
+`output_schema` may be omitted, while `input_schema` and `effect` are
+required. The current runner rejects `effect: write`.
 
 ### Trusted handler
 
@@ -256,7 +386,8 @@ declared in deployment settings.
 type: handler
 handler: normalize
 input:
-  value: {pointer: /payload/value}
+  value:
+    pointer: /payload/value
 ```
 
 YAML selects only a host-registered handler name. Register an async callable with

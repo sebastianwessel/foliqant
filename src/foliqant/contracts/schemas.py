@@ -5,10 +5,10 @@ from typing import cast
 from pydantic import TypeAdapter
 
 from foliqant.core.json import JsonValue
-from foliqant.decisions import CategoryCatalog, DecisionInput, DecisionOutput
+from foliqant.decisions import CategoryCatalog, DecisionInput
 from foliqant.evaluation.dataset import EvaluationDataset
 
-from .decisions import DecisionOutput as RuntimeDecisionOutput
+from .decisions import DecisionOutput
 from .deployment import DeploymentConfig
 from .envelope import Envelope
 from .execution import ExecutionResult
@@ -24,7 +24,7 @@ def runtime_schemas() -> dict[str, dict[str, JsonValue]]:
         dict[str, dict[str, JsonValue]],
         {
             "deployment.schema.json": DeploymentConfig.model_json_schema(),
-            "decision-output.schema.json": RuntimeDecisionOutput.model_json_schema(),
+            "decision-output.schema.json": DecisionOutput.model_json_schema(),
             "evaluation-dataset.schema.json": EvaluationDataset.model_json_schema(),
             "envelope.schema.json": Envelope.model_json_schema(),
             "execution-result.schema.json": ExecutionResult.model_json_schema(),
@@ -43,13 +43,12 @@ def runtime_schemas() -> dict[str, dict[str, JsonValue]]:
 
 
 def decision_schemas() -> dict[str, dict[str, JsonValue]]:
-    """Return versioned decision schemas shared by runtime and model tooling."""
+    """Return decision input and category schemas."""
     schemas = cast(
         dict[str, dict[str, JsonValue]],
         {
             "category-catalog.schema.json": CategoryCatalog.model_json_schema(),
             "decision-input.schema.json": DecisionInput.model_json_schema(),
-            "decision-output.schema.json": DecisionOutput.model_json_schema(),
         },
     )
     for schema in schemas.values():

@@ -371,6 +371,64 @@ async def test_shutdown_is_off_loop_reuses_one_owned_worker_and_reports_timeout(
     assert exporter.shutdown_calls == 1
 
 
+async def test_exporter_shutdown_failure_is_reported_without_raw_error() -> None:
+    class BrokenClose(CapturingSpanExporter):
+        def shutdown(self) -> None:
+            raise RuntimeError("PRIVATE_CLEANUP_FAILURE")
+
+    runtime = TelemetryRuntime.build(
+        config(traces_endpoint="https://collector.example/v1/traces"),
+        environment={},
+        _span_exporter_factory=lambda **kwargs: BrokenClose(),
+    )
+    assert not await runtime.aclose(timeout=1)
+
+
+async def test_flow_and_step_metric_views_preserve_flow_scope() -> None:
+    from foliqant.adapters.telemetry.observation import WorkflowTelemetry
+    from foliqant.core.observation import observe
+
+    exporter = CapturingMetricExporter()
+    allowed = TelemetryLabels(
+        workflows=frozenset({"inbox"}),
+        flows=frozenset({"triage", "followup"}),
+        steps=frozenset({"classify"}),
+    )
+    runtime = TelemetryRuntime.build(
+        config(
+            metrics_endpoint="https://collector.example/v1/metrics", metric_export_interval=3600.0
+        ),
+        labels=allowed,
+        environment={},
+        _metric_exporter_factory=lambda **kwargs: exporter,
+    )
+    observer = WorkflowTelemetry(
+        runtime.tracer_provider, labels=allowed, meter_provider=runtime.meter_provider
+    )
+    try:
+        with observe(observer, "inbox"):
+            for flow in ("triage", "followup"):
+                with observe(observer, "inbox", flow=flow):
+                    with observe(observer, "inbox", flow=flow, step="classify"):
+                        pass
+        runtime.meter_provider.force_flush(timeout_millis=500)
+        metrics = {
+            metric.name: metric
+            for batch in exporter.batches
+            for resource in batch.resource_metrics
+            for scope in resource.scope_metrics
+            for metric in scope.metrics
+        }
+        for name in ("foliqant.flow.duration", "foliqant.step.duration"):
+            points = metrics[name].data.data_points
+            assert {point.attributes["foliqant.flow.name"] for point in points} == {
+                "triage",
+                "followup",
+            }
+    finally:
+        assert await runtime.aclose(timeout=1)
+
+
 def test_global_install_rejects_ambient_provider_without_loading_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

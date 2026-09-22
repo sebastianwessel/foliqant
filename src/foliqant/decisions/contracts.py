@@ -1,4 +1,4 @@
-"""Strict message-content contracts for native typed decision training data."""
+"""Strict inputs and shared values for typed business decisions."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, StrictBool, StrictInt, field_validator, model_validator
 
-from .base import ContractModel, DecisionSchemaVersion, Id, NonEmptyStr
+from .base import ContractModel, Id, NonEmptyStr
 
 
 class DecisionSource(ContractModel):
@@ -112,7 +112,6 @@ type DecisionQuestion = Annotated[
 
 
 class DecisionInput(ContractModel):
-    schemaVersion: DecisionSchemaVersion = 2
     state: DecisionState
     questions: Annotated[list[DecisionQuestion], Field(min_length=1, max_length=256)]
 
@@ -124,18 +123,6 @@ class DecisionInput(ContractModel):
         if any(not set(question.allowedSourceIds) <= source_ids for question in self.questions):
             raise ValueError("allowedSourceIds must reference state sources")
         return self
-
-
-class Citation(ContractModel):
-    sourceId: Id
-    quote: NonEmptyStr
-
-
-class Explanation(ContractModel):
-    summary: Annotated[NonEmptyStr, Field(max_length=400)]
-    evidence: Annotated[list[Citation], Field(max_length=256)]
-    contraryEvidence: Annotated[list[Citation], Field(max_length=256)]
-    missingFacts: Annotated[list[NonEmptyStr], Field(max_length=256)]
 
 
 type AnswerabilityStatus = Literal[
@@ -183,15 +170,6 @@ class OrdinalAnswer(ContractModel):
     levelId: Id
 
 
-class RequestUnit(ContractModel):
-    id: Id
-    status: Literal["active", "withdrawn", "conditional", "quoted"]
-    categoryId: Id | None
-    subject: NonEmptyStr | None
-    description: NonEmptyStr
-    evidence: Annotated[list[Citation], Field(min_length=1, max_length=64)]
-
-
 class ConditionalRelation(ContractModel):
     type: Literal["conditional_on"]
     requestId: Id
@@ -227,73 +205,6 @@ type RequestRelation = Annotated[
     ConditionalRelation | RequiresRelation | PrecedesRelation | MutuallyExclusiveRelation,
     Field(discriminator="type"),
 ]
-
-
-class RequestUnitsAnswer(ContractModel):
-    units: Annotated[list[RequestUnit], Field(max_length=256)]
-    relations: Annotated[list[RequestRelation], Field(max_length=256)]
-
-
-class _Result(ContractModel):
-    questionId: Id
-    answerability: Answerability
-    explanation: Explanation
-
-
-class ChoiceResult(_Result):
-    type: Literal["choice"]
-    answer: ChoiceAnswer | None
-
-
-class MultiselectResult(_Result):
-    type: Literal["multiselect"]
-    answer: MultiselectAnswer | None
-
-
-class PredicateResult(_Result):
-    type: Literal["predicate"]
-    answer: PredicateAnswer
-
-
-class OrdinalResult(_Result):
-    type: Literal["ordinal"]
-    answer: OrdinalAnswer | None
-
-
-class RequestUnitsResult(_Result):
-    type: Literal["request_units"]
-    answer: RequestUnitsAnswer | None
-
-
-type DecisionResult = Annotated[
-    ChoiceResult | MultiselectResult | PredicateResult | OrdinalResult | RequestUnitsResult,
-    Field(discriminator="type"),
-]
-
-
-class DecisionOutput(ContractModel):
-    schemaVersion: DecisionSchemaVersion = 2
-    results: Annotated[list[DecisionResult], Field(min_length=1, max_length=256)]
-
-
-def _citation_problems(
-    *,
-    prefix: str,
-    citations: list[Citation],
-    sources: dict[str, DecisionSource],
-    allowed: set[str],
-) -> list[str]:
-    problems: list[str] = []
-    for index, citation in enumerate(citations):
-        location = f"{prefix}:citation:{index}"
-        source = sources.get(citation.sourceId)
-        if source is None:
-            problems.append(f"{location}:unknown-source")
-        elif citation.sourceId not in allowed:
-            problems.append(f"{location}:source-not-allowed")
-        elif citation.quote not in source.text:
-            problems.append(f"{location}:quote-not-found")
-    return problems
 
 
 def _has_directed_cycle(edges: list[tuple[str, str]]) -> bool:
@@ -378,134 +289,6 @@ def validate_answerability(
     return problems
 
 
-def validate_decision_output(task: DecisionInput, result: DecisionOutput) -> list[str]:
-    """Check cross-field consistency and exact evidence references, not prose entailment."""
-
-    problems: list[str] = []
-    questions = {question.id: question for question in task.questions}
-    sources = {source.id: source for source in task.state.sources}
-    seen: set[str] = set()
-    for item in result.results:
-        prefix = f"question:{item.questionId}"
-        if item.questionId in seen:
-            problems.append(f"{prefix}:duplicate-result")
-        seen.add(item.questionId)
-        question = questions.get(item.questionId)
-        if question is None:
-            problems.append(f"{prefix}:unknown-question")
-            continue
-        if item.type != question.type:
-            problems.append(f"{prefix}:type-mismatch")
-            continue
-        status = item.answerability.status
-        problems.extend(
-            validate_answerability(
-                prefix=prefix,
-                task_type=item.type,
-                answerability=item.answerability,
-                has_answer=item.answer is not None,
-                predicate_value=item.answer.value if isinstance(item, PredicateResult) else None,
-            )
-        )
-        explanation_citations = item.explanation.evidence + item.explanation.contraryEvidence
-        problems.extend(
-            _citation_problems(
-                prefix=f"{prefix}:explanation",
-                citations=explanation_citations,
-                sources=sources,
-                allowed=set(question.allowedSourceIds),
-            )
-        )
-        if status in {"answerable", "partially_answerable"} and not item.explanation.evidence:
-            problems.append(f"{prefix}:evidence-required")
-
-        if isinstance(question, ChoiceQuestion) and isinstance(item, ChoiceResult):
-            if item.answer is not None and item.answer.optionId not in {
-                option.id for option in question.options
-            }:
-                problems.append(f"{prefix}:unknown-option")
-        elif isinstance(question, MultiselectQuestion) and isinstance(item, MultiselectResult):
-            if item.answer is not None:
-                option_ids = {option.id for option in question.options}
-                if not set(item.answer.optionIds) <= option_ids:
-                    problems.append(f"{prefix}:unknown-option")
-                count = len(item.answer.optionIds)
-                if status == "partially_answerable" and count == 0:
-                    problems.append(f"{prefix}:partial-answer-empty")
-                if not question.minSelections <= count <= question.maxSelections:
-                    problems.append(f"{prefix}:selection-cardinality")
-        elif isinstance(question, OrdinalQuestion) and isinstance(item, OrdinalResult):
-            if item.answer is not None and item.answer.levelId not in {
-                level.id for level in question.levels
-            }:
-                problems.append(f"{prefix}:unknown-level")
-        elif isinstance(question, RequestUnitsQuestion) and isinstance(item, RequestUnitsResult):
-            if item.answer is not None:
-                if status == "partially_answerable" and not item.answer.units:
-                    problems.append(f"{prefix}:partial-answer-empty")
-                if (
-                    any(unit.categoryId is None for unit in item.answer.units)
-                    and "no_supported_answer" not in item.answerability.issues
-                ):
-                    problems.append(f"{prefix}:null-category-without-no-supported-answer-issue")
-                problems.extend(
-                    _request_answer_problems(
-                        prefix=prefix,
-                        task=task,
-                        question=question,
-                        answer=item.answer,
-                        sources=sources,
-                    )
-                )
-    for question_id in questions.keys() - seen:
-        problems.append(f"question:{question_id}:missing-result")
-    return sorted(set(problems))
-
-
-def _request_answer_problems(
-    *,
-    prefix: str,
-    task: DecisionInput,
-    question: RequestUnitsQuestion,
-    answer: RequestUnitsAnswer,
-    sources: dict[str, DecisionSource],
-) -> list[str]:
-    problems: list[str] = []
-    units = {unit.id: unit for unit in answer.units}
-    if len(units) != len(answer.units):
-        problems.append(f"{prefix}:duplicate-request-unit")
-    catalog_ids = {option.id for option in question.catalog}
-    for unit in answer.units:
-        unit_prefix = f"{prefix}:request:{unit.id}"
-        if unit.categoryId is None and not question.allowNoMatch:
-            problems.append(f"{unit_prefix}:no-match-forbidden")
-        elif unit.categoryId is not None and unit.categoryId not in catalog_ids:
-            problems.append(f"{unit_prefix}:unknown-category")
-        problems.extend(
-            _citation_problems(
-                prefix=unit_prefix,
-                citations=unit.evidence,
-                sources=sources,
-                allowed=set(question.allowedSourceIds),
-            )
-        )
-        if unit.subject is not None and not any(
-            unit.subject in citation.quote for citation in unit.evidence
-        ):
-            problems.append(f"{unit_prefix}:subject-not-in-evidence")
-    problems.extend(
-        validate_request_relations(
-            prefix=prefix,
-            unit_ids=set(units),
-            predicate_ids={
-                item.id for item in task.questions if isinstance(item, PredicateQuestion)
-            },
-            relations=answer.relations,
-        )
-    )
-    return problems
-
-
 def validate_request_relations(
     *,
     prefix: str,
@@ -515,7 +298,7 @@ def validate_request_relations(
 ) -> list[str]:
     """Validate request graph references and consistency without evidence formatting.
 
-    This check is shared by artifact and runtime boundaries. It does not establish
+    This check does not establish
     whether the input text supports a relation.
     """
     problems: list[str] = []
@@ -567,45 +350,3 @@ def validate_request_relations(
     ):
         problems.append(f"{prefix}:relation-exclusive-dependency")
     return problems
-
-
-def semantic_signature(output: DecisionOutput) -> object:
-    """Return answer semantics while ignoring generated explanation and citation prose."""
-
-    results: list[object] = []
-    for item in sorted(output.results, key=lambda value: value.questionId):
-        answer: object
-        if isinstance(item, RequestUnitsResult) and item.answer is not None:
-            answer = {
-                "units": [
-                    {
-                        "id": unit.id,
-                        "status": unit.status,
-                        "categoryId": unit.categoryId,
-                        "subject": unit.subject,
-                    }
-                    for unit in sorted(item.answer.units, key=lambda value: value.id)
-                ],
-                "relations": sorted(
-                    (_relation_key(relation) for relation in item.answer.relations),
-                    key=repr,
-                ),
-            }
-        elif isinstance(item, MultiselectResult) and item.answer is not None:
-            answer = {"optionIds": sorted(item.answer.optionIds)}
-        elif item.answer is None:
-            answer = None
-        else:
-            answer = item.answer.model_dump(mode="json")
-        results.append(
-            {
-                "questionId": item.questionId,
-                "type": item.type,
-                "answerability": {
-                    "status": item.answerability.status,
-                    "issues": sorted(item.answerability.issues),
-                },
-                "answer": answer,
-            }
-        )
-    return {"schemaVersion": output.schemaVersion, "results": results}

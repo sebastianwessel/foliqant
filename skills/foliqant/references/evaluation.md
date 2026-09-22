@@ -8,6 +8,14 @@ Place conventional gold at `evaluation/dataset.json` beside `config/`.
 Foliqant looks it up only for an explicit evaluation command. Configure
 `evaluation.dataset` only for an intentional alternate path.
 
+## Contents
+
+- [Dataset shape](#dataset-shape)
+- [Select the measured boundary](#select-the-measured-boundary)
+- [Author independent expectations](#author-independent-expectations)
+- [Choose the execution mode](#choose-the-execution-mode)
+- [Interpret honestly](#interpret-honestly)
+
 ## Dataset shape
 
 The root has `name`, caller-maintained `revision`, and a nonempty unique
@@ -130,8 +138,9 @@ selection. Score answerability/issues and selection origin independently.
 - `foliqant evaluate` executes the configured pipeline, flow, or operation.
 
 Normal evaluation may make model and tool calls. Keep default concurrency
-conservative and use explicit `--repeat` only for variability. Do not add
-hidden retries, judge calls, endpoint discovery, or automatic prompt
+conservative and use explicit `--repeat` only for variability. The evaluator
+adds no retry; explicitly configured provider retries still apply within each
+operation. Do not add judge calls, endpoint discovery, or automatic prompt
 optimization.
 
 Invocation controls are:

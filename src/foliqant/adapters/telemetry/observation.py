@@ -1,5 +1,6 @@
 """W3C workflow/step tracing without inspecting payloads or caller identity."""
 
+import logging
 from contextvars import Token
 from time import perf_counter
 
@@ -15,11 +16,48 @@ from foliqant.core.errors import ErrorCode
 from foliqant.core.execution import RunStatus
 from foliqant.ports.observation import Observation, TraceContext
 
+from .logging import LogEvent, emit_event
 from .privacy import TelemetryLabels
 
 _PROPAGATOR = TraceContextTextMapPropagator()
 _MAX_SECONDS = 365 * 24 * 60 * 60
 _DEFAULT_LABELS = TelemetryLabels()
+_LOGGER = logging.getLogger(__name__)
+
+
+def _log_scope(
+    attributes: dict[str, AttributeValue],
+    *,
+    kind: str,
+    outcome: RunStatus | None = None,
+    error: ErrorCode | None = None,
+    duration: float | None = None,
+) -> None:
+    events = {
+        "workflow": (LogEvent.RUN_STARTED, LogEvent.RUN_COMPLETED, LogEvent.RUN_FAILED),
+        "flow": (LogEvent.FLOW_STARTED, LogEvent.FLOW_COMPLETED, LogEvent.FLOW_FAILED),
+        "step": (LogEvent.STEP_STARTED, LogEvent.STEP_COMPLETED, LogEvent.STEP_FAILED),
+    }
+    event = events[kind][0 if outcome is None else 2 if outcome in {"failed", "cancelled"} else 1]
+
+    def label(key: str) -> str | None:
+        value = attributes.get(key)
+        return value if type(value) is str else None
+
+    try:
+        emit_event(
+            _LOGGER,
+            event,
+            level=logging.WARNING if error is not None else logging.INFO,
+            workflow=label("foliqant.workflow.name"),
+            flow=label("foliqant.flow.name"),
+            step=label("foliqant.step.name"),
+            outcome=outcome,
+            error_code=error,
+            duration_seconds=duration,
+        )
+    except Exception:
+        pass
 
 
 def trace_carrier() -> dict[str, str]:
@@ -63,6 +101,7 @@ class _Observation:
         token: Token[context_api.Context],
         histogram: Histogram,
         attributes: dict[str, AttributeValue],
+        kind: str,
     ) -> None:
         self._span = span
         self._token = token
@@ -71,6 +110,8 @@ class _Observation:
         self._started = perf_counter()
         self._finished = False
         self._closed = False
+        self._kind = kind
+        _log_scope(attributes, kind=kind)
 
     def finish(self, outcome: RunStatus, error: ErrorCode | None) -> None:
         if self._finished or self._closed:
@@ -80,12 +121,14 @@ class _Observation:
         attributes["foliqant.outcome"] = outcome
         if error is not None:
             attributes["error.type"] = error.value
-        self._span.set_attributes(attributes)
-        if outcome in {"failed", "cancelled"}:
-            self._span.set_status(Status(StatusCode.ERROR))
-        self._histogram.record(
-            min(_MAX_SECONDS, max(0.0, perf_counter() - self._started)), attributes
-        )
+        duration = min(_MAX_SECONDS, max(0.0, perf_counter() - self._started))
+        try:
+            self._span.set_attributes(attributes)
+            if outcome in {"failed", "cancelled"}:
+                self._span.set_status(Status(StatusCode.ERROR))
+            self._histogram.record(duration, attributes)
+        finally:
+            _log_scope(attributes, kind=self._kind, outcome=outcome, error=error, duration=duration)
 
     def close(self) -> None:
         if self._closed:
@@ -93,8 +136,13 @@ class _Observation:
         self._closed = True
         try:
             context_api.detach(self._token)
+        except Exception:
+            pass
         finally:
-            self._span.end()
+            try:
+                self._span.end()
+            except Exception:
+                pass
 
 
 class WorkflowTelemetry:
@@ -156,4 +204,5 @@ class WorkflowTelemetry:
             token,
             duration,
             attributes,
+            name,
         )

@@ -73,8 +73,18 @@
     },
     {
       "id": 15,
-      "prompt": "A historical plan asks for Redis jobs and a migration shim while I fix a workflow route. Implement everything.",
-      "expected_output": "Fixes the authorized current workflow/flow route using the single current contract. Declines persistence, workers, packaged ingress, compatibility aliases, and migration layers as outside scope. Does not treat historical plans as current authority."
+      "prompt": "My API receives one request, should reject overload promptly, and must persist successful workflow results. Configure Foliqant for this service.",
+      "expected_output": "Uses execution concurrency, queue_limit, and run_timeout for bounded in-process admission, then keeps HTTP authentication, request rate control, idempotency, and persistence in the embedding service. It does not invent background jobs, a storage adapter, or an inbound transport inside Foliqant."
+    },
+    {
+      "id": 16,
+      "prompt": "One message can contain both a billing dispute and a cancellation. Run both downstream workflows in parallel after classification and merge them automatically.",
+      "expected_output": "Models the current sequential flow graph honestly: uses a multiselect or request_units decision when both intents are valid, then requires an explicit supported sequential route or host-owned orchestration. It does not invent parallel flow fan-out, implicit joins, or duplicate workflow execution. Conflicting or unsupported routing goes to explicit review, with independently authored pipeline and decision-step gold."
+    },
+    {
+      "id": 17,
+      "prompt": "Configure provider retries so a slow or disconnected model call is retried three times, and ensure evaluation never opens gold at startup.",
+      "expected_output": "Keeps gold lookup exclusive to explicit evaluation. Explains that max_attempts includes the initial attempt and retries only safely observed completed transient HTTP responses under one absolute deadline. It does not retry timeout, disconnect, cancellation, authentication, schema/output, or whole-workflow failures; therefore it refuses the requested slow/disconnect retries and shows the closest valid explicit retry policy."
     }
   ]
 }

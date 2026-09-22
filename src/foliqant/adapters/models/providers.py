@@ -204,6 +204,7 @@ def _binding(
         supports_json_schema=config.supports_json_schema,
         supports_tools=config.supports_tools,
         timeout_errors=timeout_errors,
+        retry=config.retry.policy(),
     )
 
 
@@ -320,6 +321,7 @@ def _build_anthropic(
 ) -> ModelBinding:
     from anthropic import APITimeoutError, AsyncAnthropic
     from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.profiles.anthropic import AnthropicModelProfile
     from pydantic_ai.providers.anthropic import AnthropicProvider
 
     _reject_ambient_request_configuration(_ANTHROPIC_AMBIENT_REQUEST_ENV)
@@ -333,7 +335,14 @@ def _build_anthropic(
     model = AnthropicModel(
         config.model,
         provider=AnthropicProvider(anthropic_client=client),
-        profile=_profile(config),
+        # Disable SDK-level stale-thinking recovery: every retry must be visible
+        # to our attempt budget, and HTTP 400 remains terminal.
+        profile=merge_profile(
+            _profile(config),
+            AnthropicModelProfile(
+                anthropic_binds_thinking_blocks=False,
+            ),
+        ),
     )
     _validate_anthropic_settings(config, cast(ModelProfile, model.profile))
     settings = _common_settings(config)

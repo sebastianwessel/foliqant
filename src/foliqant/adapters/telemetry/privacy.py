@@ -44,6 +44,7 @@ _USAGE_ATTRIBUTES = frozenset(
         "foliqant.usage.output_tokens",
         "foliqant.usage.reasoning_output_tokens",
         "foliqant.usage.tool_calls",
+        "foliqant.request.attempt",
         "gen_ai.aggregated_usage.cache_creation.input_tokens",
         "gen_ai.aggregated_usage.cache_read.input_tokens",
         "gen_ai.aggregated_usage.input_tokens",
@@ -110,6 +111,7 @@ def _safe_scope_name(span: ReadableSpan) -> str:
         "foliqant.workflow",
         "foliqant.flow",
         "foliqant.step",
+        "foliqant.tool",
         "mcp-python-sdk",
         "pydantic-ai",
     }:
@@ -125,6 +127,9 @@ def _safe_span_name(span: ReadableSpan, attributes: Mapping[str, AttributeValue]
         return "foliqant.step"
     if scope == "foliqant.flow":
         return "foliqant.flow"
+    if scope == "foliqant.tool":
+        tool = attributes.get("gen_ai.tool.name")
+        return f"execute_tool {tool}" if type(tool) is str else "execute_tool"
     if scope == "pydantic-ai":
         operation = attributes.get("gen_ai.operation.name")
         if type(operation) is str and operation in _GEN_AI_OPERATIONS:
@@ -245,11 +250,11 @@ class SafeSpanProcessor(SpanProcessor):
             return
 
     def shutdown(self) -> None:
-        """Shut down the delegate without surfacing telemetry failures."""
+        """Let the runtime report incomplete cleanup without exposing raw errors."""
         try:
             self._delegate.shutdown()
         except Exception:
-            return
+            raise RuntimeError("telemetry shutdown failed") from None
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
         """Flush the delegate; failures are reported as False, never raised."""

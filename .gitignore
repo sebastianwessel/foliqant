@@ -28,7 +28,7 @@ coverage/
 *.pth
 *.ckpt
 
-# Local model setup assets and generated data must never enter version control.
+# Private evaluation artifacts and local workspace files.
 .foliqant/
 *.jsonl
 *.ndjson

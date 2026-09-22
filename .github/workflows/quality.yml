@@ -15,28 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Python quality gate
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - run: uv sync --project model --locked --group dev
-      - run: uv run --project model --no-sync python -m pytest -c model/pyproject.toml model/tests -q
-      - run: uv run --project model --no-sync mypy --config-file model/pyproject.toml model/src
-      - run: uv run --project model --no-sync ruff format --check --config model/pyproject.toml model/src model/tests
-      - run: uv run --project model --no-sync ruff check --config model/pyproject.toml model/src model/tests
-      - run: uv run --project model --no-sync python scripts/generate_model_schemas.py --check model/schemas
-      - run: uv run --project model --no-sync python scripts/check_docs.py
-      - run: uv run --project model --no-sync python scripts/check_tracked_data.py --git git
-      - run: git diff --check
-
   runtime:
     name: Runtime package quality gate
     runs-on: ubuntu-24.04
@@ -54,9 +32,11 @@ jobs:
       # Runtime tests never require model inference or endpoint discovery.
       - run: uv run --no-sync python -m pytest tests -q
       - run: uv run --no-sync mypy src examples
-      - run: uv run --no-sync ruff check src tests scripts examples
-      - run: uv run --no-sync ruff format --check src tests scripts examples
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
       - run: uv run --no-sync python scripts/generate_schemas.py --check
+      - run: uv run --no-sync python scripts/check_docs.py
+      - run: uv run --no-sync python scripts/check_tracked_data.py --git git
       - run: git diff --check
 
   documentation:
@@ -80,8 +60,8 @@ jobs:
     # required build and artifact checks green everywhere; deploy only after an
     # administrator has enabled Pages and deliberately set this repository
     # variable to true.
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.FOLIQANT_PUBLISH_PAGES == 'true'
-    needs: [quality, runtime, documentation]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PUBLISH_DOCS == 'true'
+    needs: [runtime, documentation]
     runs-on: ubuntu-24.04
     permissions:
       pages: write

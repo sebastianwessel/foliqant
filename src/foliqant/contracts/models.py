@@ -14,6 +14,7 @@ from .environment import (
     is_environment_reference,
 )
 from .identifiers import Id
+from .retry import RetryConfig
 
 Duration = Annotated[float, Field(gt=0, le=3600)]
 
@@ -65,6 +66,7 @@ class _ModelConfig(BoundaryModel):
     concurrency: Annotated[int, Field(strict=True, ge=1, le=1024)] = 4
     queue_limit: Annotated[int, Field(strict=True, ge=0, le=10_000)] = 16
     request_timeout: Duration = 60.0
+    retry: RetryConfig = Field(default_factory=RetryConfig)
 
     @model_validator(mode="after")
     def at_least_one_output(self) -> Self:

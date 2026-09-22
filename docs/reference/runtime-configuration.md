@@ -21,6 +21,23 @@ when needed. Explicit paths are relative to the configuration file and must
 remain below its directory. An explicit mapping key must equal the compiled
 workflow name.
 
+## Installed schemas
+
+The public Python boundary models are the runtime authority. The wheel also
+ships generated JSON Schema files under `foliqant/schemas/` for editors,
+validators, and code-generation tools; the runtime does not read those copies.
+Access a packaged file without assuming a checkout layout:
+
+```python
+from importlib.resources import files
+
+deployment_schema = files("foliqant").joinpath("schemas", "deployment.schema.json")
+```
+
+`foliqant.contracts.schemas.runtime_schemas()` and `decision_schemas()`
+generate the same public schemas from the installed Python models. Do not edit
+the packaged JSON by hand.
+
 ## Execution limits
 
 | Setting | Default | Meaning |
@@ -58,6 +75,10 @@ models:
     concurrency: 1
     queue_limit: 0
     request_timeout: 300
+    retry:
+      max_attempts: 1
+      initial_delay_seconds: 0.25
+      max_delay_seconds: 5
     options:
       max_tokens: 4096
       temperature: 0.1
@@ -74,6 +95,32 @@ complete compatible profile.
 `output_mode: tool` uses a generated output tool and therefore requires tool
 support. The configured capabilities must cover every operation that selects
 the profile.
+
+### Provider retries
+
+Model and MCP profiles accept the same optional `retry` object:
+
+| Setting | Default | Bounds | Meaning |
+| --- | ---: | ---: | --- |
+| `max_attempts` | `1` | 1–8 | Total attempts, including the initial request |
+| `initial_delay_seconds` | `0.25` | 0–60 | Initial exponential-backoff cap |
+| `max_delay_seconds` | `5` | 0–300 | Maximum backoff cap; at least the initial delay |
+
+The default makes one request and performs no retry. When enabled, the runtime
+retries only a safely observed completed HTTP response with status 429, 500,
+502, 503, or 529. It uses capped exponential full jitter. A valid
+`Retry-After` delta or date is a minimum delay, still bounded by the configured
+maximum and the remaining logical deadline. If that delay cannot fit, the final
+transient failure is returned.
+
+Timeouts, 408/504 responses, connection or stream interruption, cancellation,
+authentication failure, invalid schema/output, and other dependency errors are
+terminal. Provider SDK retries remain disabled. Each attempt consumes the
+operation's model/tool request budget, and usage for a failed attempt is unknown.
+Model request admission is released and reacquired between attempts. An MCP
+server's admitted authenticated session remains held across tool-call backoff.
+All attempts share the original operation deadline; the runtime does not retry a
+whole step, flow, or workflow.
 
 ## Environment references
 
@@ -109,14 +156,18 @@ mcp:
           input_schema:
             type: object
             properties:
-              reference: {type: string}
-            required: [reference]
+              reference:
+                type: string
+            required:
+              - reference
             additionalProperties: false
           output_schema:
             type: object
             properties:
-              status: {type: string}
-            required: [status]
+              status:
+                type: string
+            required:
+              - status
             additionalProperties: false
 ```
 
@@ -147,11 +198,46 @@ caller authentication and application permission.
 
 ## Telemetry
 
-`telemetry` can export traces and metrics over OTLP/HTTP. Endpoints, protected
-headers, batching, intervals, and timeouts are explicit. Empty endpoint values
-disable that signal. Telemetry records safe identifiers, timings, statuses, and
-usage; it does not record payloads, metadata, prompts, model output, credentials,
-or raw exceptions.
+`telemetry` can export traces and metrics over OTLP/HTTP:
+
+```yaml
+telemetry:
+  service_name: support_runtime
+  traces_endpoint: $OTLP_TRACES_ENDPOINT
+  metrics_endpoint: $OTLP_METRICS_ENDPOINT
+  traces_headers:
+    authorization: $OTLP_TRACES_AUTH
+  metrics_headers:
+    authorization: $OTLP_METRICS_AUTH
+  allow_insecure_http: false
+  span_queue_capacity: 2048
+  span_batch_size: 512
+  span_schedule_delay: 5
+  metric_export_interval: 60
+  metric_export_batch_size: 512
+  export_timeout: 10
+  shutdown_timeout: 10
+```
+
+`service_name` is required. Endpoints and protected headers are optional
+environment fields; an empty endpoint disables that signal. Batch sizes and
+capacities are positive integers, and `span_batch_size` cannot exceed
+`span_queue_capacity`. Schedule and metric intervals are positive and at most
+3600 seconds. Export and shutdown timeouts are positive and at most 30 seconds.
+HTTP endpoints require `allow_insecure_http: true`; use HTTPS in deployed
+environments.
+
+Telemetry records allowlisted configured component labels, trace identifiers,
+timings, statuses, retry attempt numbers, and usage. It does not record
+tenant/principal identity, payloads, metadata, prompts, model output,
+credentials, or raw exceptions. Application embedding does not replace the
+process-global OpenTelemetry provider unless the host explicitly passes
+`install_global_telemetry=True`. Foliqant also does not replace host logging;
+configure a reviewed log sink and filters for SDK and third-party logs.
+
+Shutdown stops intake and waits only for the configured bounded telemetry drain.
+It can report an incomplete drain while an exporter socket worker is still
+finishing; it does not claim to terminate that worker or a remote operation.
 
 ## Evaluation dataset
 

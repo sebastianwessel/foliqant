@@ -65,7 +65,7 @@ src = ["src"]
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["foliqant", "foliqant_model"]
+known-first-party = ["foliqant"]
 
 [tool.mypy]
 python_version = "3.12"

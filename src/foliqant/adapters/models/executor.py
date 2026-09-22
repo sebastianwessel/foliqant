@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Never
 
 from pydantic import ValidationError
 from pydantic_ai import Agent, NativeOutput, ToolOutput, UnexpectedModelBehavior, UserError
-from pydantic_ai.exceptions import ModelAPIError
+from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.models.wrapper import WrapperModel
@@ -20,6 +20,7 @@ from pydantic_ai.settings import ModelSettings
 
 from foliqant.adapters.decisions import build_decision_input, validate_decision_result
 from foliqant.adapters.decisions.instructions import decision_instructions
+from foliqant.adapters.execution.retry import transient_response
 from foliqant.adapters.validation import WorkflowSchemas
 from foliqant.contracts.decisions import DecisionOutput
 from foliqant.core.errors import ErrorCode, ServiceError
@@ -27,6 +28,7 @@ from foliqant.core.execution import StepOutcome
 from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import DecisionStepPlan, HandlerStepPlan, LlmStepPlan, McpStepPlan
 from foliqant.core.prompt import render_prompt
+from foliqant.core.retry import retry
 from foliqant.decisions.contracts import DecisionInput
 from foliqant.ports.execution import OperationStep, StepContext
 from foliqant.ports.tools import ToolInputRequired, ToolRuntime
@@ -77,61 +79,91 @@ class _InvocationModel(WrapperModel):
         # Provider preparation performs offline capability/schema validation.
         # Discard its result: the SDK request prepares its own inputs once.
         self.wrapped.prepare_request(model_settings, model_request_parameters)
-        async with self._binding.admission.slot(deadline=self._context.deadline):
-            deadline = min(self._context.deadline, loop.time() + self._context.model_timeout)
-            if deadline <= loop.time():
-                _fail(ErrorCode.TIMEOUT)
-            ticket = await self._context.budget.start_model_request()
-            started_at = self._telemetry.start_request() if self._telemetry is not None else None
-            response: ModelResponse | None = None
-            usage = None
-            telemetry_error: ErrorCode | None = None
-            try:
-                async with asyncio.timeout_at(deadline):
-                    response = await self.wrapped.request(
-                        messages,
-                        model_settings,
-                        model_request_parameters,
-                    )
-                # Snapshot and validate the mutable SDK value once. Re-reading it
-                # for metrics and budget accounting could observe different data.
-                usage = request_token_usage(response.usage)
-            except TimeoutError:
-                telemetry_error = ErrorCode.TIMEOUT
-                raise ServiceError(ErrorCode.TIMEOUT) from None
-            except ModelAPIError as error:
-                # PydanticAI wraps SDK connection errors; only a configured,
-                # typed timeout cause establishes a provider request timeout.
-                if isinstance(error.__cause__, self._binding.timeout_errors):
+        deadline = self._context.deadline
+        first_attempt = True
+
+        async def request_once(_attempt: int) -> ModelResponse:
+            nonlocal deadline, first_attempt
+            async with self._binding.admission.slot(deadline=deadline):
+                if first_attempt:
+                    deadline = min(deadline, loop.time() + self._context.model_timeout)
+                    first_attempt = False
+                if deadline <= loop.time():
+                    _fail(ErrorCode.TIMEOUT)
+                ticket = await self._context.budget.start_model_request()
+                started_at = (
+                    self._telemetry.start_request() if self._telemetry is not None else None
+                )
+                response: ModelResponse | None = None
+                usage = None
+                telemetry_error: ErrorCode | None = None
+                try:
+                    async with asyncio.timeout_at(deadline):
+                        response = await self.wrapped.request(
+                            messages,
+                            model_settings,
+                            model_request_parameters,
+                        )
+                    # Snapshot and validate the mutable SDK value once. Re-reading it
+                    # for metrics and budget accounting could observe different data.
+                    usage = request_token_usage(response.usage)
+                    await self._context.budget.finish_model_request(ticket, usage)
+                    if deadline <= loop.time():
+                        _fail(ErrorCode.TIMEOUT)
+                except asyncio.CancelledError:
+                    telemetry_error = ErrorCode.CANCELLED
+                    raise
+                except TimeoutError:
                     telemetry_error = ErrorCode.TIMEOUT
                     raise ServiceError(ErrorCode.TIMEOUT) from None
-                telemetry_error = ErrorCode.DEPENDENCY_FAILURE
-                raise
-            except ServiceError as error:
-                telemetry_error = error.code
-                raise
-            except Exception:
-                telemetry_error = ErrorCode.DEPENDENCY_FAILURE
-                raise
-            finally:
-                if self._telemetry is not None and started_at is not None:
-                    self._telemetry.record_request(
-                        self._request_model,
-                        started_at,
-                        usage,
-                        telemetry_error,
-                    )
-            assert usage is not None
-            await self._context.budget.finish_model_request(ticket, usage)
-            if response.finish_reason in {"length", "content_filter", "error"}:
-                _fail(ErrorCode.INVALID_OUTPUT)
-            if (
-                response.provider_details is not None
-                and "refusal" in response.provider_details
-                and response.provider_details["refusal"] is not None
-            ):
-                _fail(ErrorCode.INVALID_OUTPUT)
-            return response
+                except ModelHTTPError as error:
+                    terminal = {
+                        401: ErrorCode.UNAUTHENTICATED,
+                        403: ErrorCode.FORBIDDEN,
+                        408: ErrorCode.TIMEOUT,
+                        504: ErrorCode.TIMEOUT,
+                    }.get(error.status_code)
+                    telemetry_error = terminal or ErrorCode.DEPENDENCY_FAILURE
+                    if terminal is not None:
+                        raise ServiceError(terminal) from None
+                    transient = transient_response(error.status_code, error.headers or {})
+                    if transient is not None:
+                        raise transient from None
+                    raise
+                except ModelAPIError as error:
+                    # PydanticAI wraps SDK connection errors; only a configured,
+                    # typed timeout cause establishes a provider request timeout.
+                    if isinstance(error.__cause__, self._binding.timeout_errors):
+                        telemetry_error = ErrorCode.TIMEOUT
+                        raise ServiceError(ErrorCode.TIMEOUT) from None
+                    telemetry_error = ErrorCode.DEPENDENCY_FAILURE
+                    raise
+                except ServiceError as error:
+                    telemetry_error = error.code
+                    raise
+                except Exception:
+                    telemetry_error = ErrorCode.DEPENDENCY_FAILURE
+                    raise
+                finally:
+                    if self._telemetry is not None and started_at is not None:
+                        self._telemetry.record_request(
+                            self._request_model,
+                            started_at,
+                            usage,
+                            telemetry_error,
+                        )
+                assert usage is not None
+                if response.finish_reason in {"length", "content_filter", "error"}:
+                    _fail(ErrorCode.INVALID_OUTPUT)
+                if (
+                    response.provider_details is not None
+                    and "refusal" in response.provider_details
+                    and response.provider_details["refusal"] is not None
+                ):
+                    _fail(ErrorCode.INVALID_OUTPUT)
+                return response
+
+        return await retry(request_once, policy=self._binding.retry, deadline=lambda: deadline)
 
 
 def _prompt(value: object) -> str:
@@ -143,7 +175,7 @@ def _prompt(value: object) -> str:
 
 def _decision_prompt(task: DecisionInput) -> str:
     """Render the runtime request without changing native contract serialization."""
-    return task.model_dump_json(by_alias=True, exclude={"schemaVersion"})
+    return task.model_dump_json(by_alias=True)
 
 
 def _structured_output(

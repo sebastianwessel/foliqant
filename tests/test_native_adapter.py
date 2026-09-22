@@ -119,7 +119,6 @@ def test_builds_canonical_input_from_actual_nonblank_sources() -> None:
     task = build_decision_input(step, _sources())
 
     assert task.model_dump(mode="json") == {
-        "schemaVersion": 2,
         "state": {
             "sources": [
                 {"id": "ticket", "kind": "document", "text": "Billing failed for invoice 17."}
@@ -355,7 +354,7 @@ def test_mutated_or_constructed_model_cannot_bypass_validation_without_warning(
     step = _step(_choice())
     task = build_decision_input(step, _sources())
     if constructed:
-        output = DecisionOutput.model_construct(schemaVersion=3, results=[])
+        output = DecisionOutput.model_construct(results=[])
     else:
         output = DecisionOutput.model_validate({"results": [_choice_result()]}, strict=True)
         output.results[0].questionId = "PRIVATE INVALID MUTATION"
@@ -399,8 +398,7 @@ def test_raw_schema_and_semantic_failures_are_safe_invalid_output(raw: object) -
     assert error.value.__suppress_context__
 
 
-@pytest.mark.parametrize("version", [1, True, 2.0, "2", 4])
-def test_native_decision_boundaries_reject_legacy_and_noninteger_versions(version) -> None:
+def test_decision_boundaries_reject_undeclared_fields() -> None:
     from pydantic import ValidationError
 
     from foliqant.decisions import DecisionInput
@@ -408,13 +406,11 @@ def test_native_decision_boundaries_reject_legacy_and_noninteger_versions(versio
     step = _step(_choice())
     task = build_decision_input(step, _sources())
     raw_input = task.model_dump(mode="json")
-    raw_input["schemaVersion"] = version
+    raw_input["unexpected"] = "value"
     with pytest.raises(ValidationError):
         DecisionInput.model_validate(raw_input)
     with pytest.raises(ServiceError) as error:
-        validate_decision_result(
-            step, task, {"schemaVersion": version, "results": [_choice_result()]}
-        )
+        validate_decision_result(step, task, {"unexpected": "value", "results": [_choice_result()]})
     assert error.value.code == ErrorCode.INVALID_OUTPUT
 
 

@@ -29,6 +29,7 @@ from foliqant.environment import EnvironmentResolver
 from foliqant.ports.execution import StepContext
 
 from .auth import McpCredentialProvider, McpCredentialScope, McpHttpAuthorization
+from .retry import record_http_response
 
 _SESSION_CLEANUP_TIMEOUT_SECONDS = 10.0
 
@@ -71,7 +72,7 @@ def _connection_error(error: BaseException) -> ServiceError:
         return ServiceError(ErrorCode.UNAUTHENTICATED)
     if isinstance(error, _OriginDenied):
         return ServiceError(ErrorCode.FORBIDDEN)
-    return ServiceError(ErrorCode.DEPENDENCY_FAILURE, retryable=True)
+    return ServiceError(ErrorCode.DEPENDENCY_FAILURE)
 
 
 def _default_http_client_factory(
@@ -218,6 +219,7 @@ class McpClientSessionFactory:
                 timeout=httpx2.Timeout(request_timeout),
                 request_hooks=[enforce_origin],
             )
+            http_client.event_hooks.setdefault("response", []).append(record_http_response)
             await stack.enter_async_context(http_client)
             sdk_transport = streamable_http_client(
                 transport.endpoint,

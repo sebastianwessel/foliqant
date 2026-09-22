@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "CategoryDefinition": {
+      "additionalProperties": false,
+      "description": "One stable machine key with caller-authored category semantics.",
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "description": "Printable ASCII authoring key. The Python CategoryCatalog parser serializes its deterministic lowercase snake_case normalization.",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[\\x20-\\x7e]+$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "description"
+      ],
+      "title": "CategoryDefinition",
+      "type": "object"
+    }
+  },
+  "$id": "urn:foliqant:schema:category-catalog.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A bounded classification catalog prepared before model inference.\n\nCategory keys are normalized deterministically and descriptions are\npreserved exactly. Unsupported external taxonomies require an explicit\nmapping before they enter this contract.",
+  "properties": {
+    "categories": {
+      "items": {
+        "$ref": "#/$defs/CategoryDefinition"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "title": "Categories",
+      "type": "array"
+    }
+  },
+  "required": [
+    "categories"
+  ],
+  "title": "CategoryCatalog",
+  "type": "object"
+}

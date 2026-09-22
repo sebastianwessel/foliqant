@@ -1,12 +1,13 @@
 """Immutable runtime binding for one configured PydanticAI model alias."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
 from foliqant.core.admission import CapacityLimiter
+from foliqant.core.retry import RetryPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,3 +23,4 @@ class ModelBinding:
     supports_tools: bool = True
     # Populated by the provider factory without importing optional SDKs here.
     timeout_errors: tuple[type[Exception], ...] = ()
+    retry: RetryPolicy = field(default_factory=RetryPolicy)

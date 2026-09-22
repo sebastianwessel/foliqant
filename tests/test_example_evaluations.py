@@ -219,9 +219,7 @@ def test_export_dataset_is_explicit_valid_private_and_never_runs(
     exported = json.loads(path.read_text())
     loaded = EvaluationDataset.model_validate(exported, strict=True)
     assert loaded == module.dataset()
-    schema = json.loads(
-        (ROOT / "schemas/foliqant/runtime/evaluation-dataset.schema.json").read_text()
-    )
+    schema = json.loads((ROOT / "src/foliqant/schemas/evaluation-dataset.schema.json").read_text())
     jsonschema.Draft202012Validator(schema).validate(exported)
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     before = path.read_bytes()

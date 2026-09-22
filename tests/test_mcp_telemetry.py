@@ -11,8 +11,10 @@ import tempfile
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 import httpx2
+import pytest
 from mcp import Client, types
 from mcp.server import MCPServer
 from opentelemetry import baggage
@@ -32,6 +34,7 @@ from foliqant.adapters.telemetry.logging import configure_logging
 from foliqant.adapters.telemetry.observation import WorkflowTelemetry, trace_carrier
 from foliqant.adapters.telemetry.privacy import SafeSpanProcessor, TelemetryLabels
 from foliqant.adapters.validation import WorkflowSchemas
+from foliqant.bootstrap import RuntimePlugins, open_application
 from foliqant.compiler import compile_workflow
 from foliqant.contracts.envelope import Envelope, accept_envelope
 from foliqant.contracts.mcp import McpProfiles
@@ -40,6 +43,7 @@ from foliqant.core.identity import Identity
 from foliqant.core.json import FrozenObject
 from foliqant.core.runner import ExecutionLimits, WorkflowRunner
 from foliqant.ports.execution import StepContext
+from foliqant.settings import prepare_application
 
 _ROOT = Path(__file__).resolve().parents[1]
 _ARGUMENT = "PRIVATE_ARGUMENT"
@@ -130,7 +134,7 @@ def _write_workflow(directory: Path) -> None:
     )
 
 
-async def _child() -> None:
+async def _child(*, embedded: bool = False) -> None:
     logging_runtime = configure_logging()
     server = MCPServer("private-server-name")
     both_tools_entered = asyncio.Event()
@@ -167,8 +171,10 @@ async def _child() -> None:
         shutdown_on_exit=False,
     )
     provider.add_span_processor(SafeSpanProcessor(SimpleSpanProcessor(exporter), labels))
-    trace_api.set_tracer_provider(provider)
-    set_global_textmap(TraceContextTextMapPropagator())
+    previous_global = trace_api.get_tracer_provider()
+    if not embedded:
+        trace_api.set_tracer_provider(provider)
+        set_global_textmap(TraceContextTextMapPropagator())
 
     app = server.streamable_http_app(stateless_http=True, host="tools.example.test")
     captured_calls: list[dict[str, object]] = []
@@ -249,6 +255,8 @@ async def _child() -> None:
             Identity("tenant-two", "principal-two"),
         )
 
+        application = None
+
         async def run_one(index: int) -> object:
             identity = identities[index]
             key = f"{_ARGUMENT}-{'ok' if index == 0 else 'fail'}"
@@ -271,16 +279,68 @@ async def _child() -> None:
                 baggage.set_baggage("private-caller", f"PRIVATE_BAGGAGE_{index}")
             )
             try:
+                if application is not None:
+                    return await application.run(
+                        "mcp_privacy",
+                        Envelope.model_validate(
+                            {
+                                "payload": dict(envelope.payload),
+                                "metadata": {
+                                    "telemetry": {
+                                        "traceparent": parents[index],
+                                        "tracestate": f"vendor=state-{index}",
+                                    }
+                                },
+                            }
+                        ),
+                        identity=identity,
+                    )
                 return await runner.run(envelope, identity=identity)
             finally:
                 context_api.detach(token)
 
         async with app.router.lifespan_context(app):
-            results = await asyncio.gather(run_one(0), run_one(1))
+            if embedded:
+                settings_path = directory / "settings.yaml"
+                settings_path.write_text(
+                    json.dumps(
+                        {
+                            "workflows": {"mcp_privacy": "."},
+                            "mcp": profiles.model_dump(mode="json")["servers"],
+                            "telemetry": {
+                                "service_name": "foliqant",
+                                "traces_endpoint": "https://collector.example/v1/traces",
+                                "span_schedule_delay": 3600.0,
+                            },
+                            "execution": {"concurrency": 2, "queue_limit": 0},
+                        }
+                    )
+                )
+                prepared = prepare_application(settings_path)
+                # Exercise real bootstrap/provider ownership. Only transport seams
+                # are replaced: MCP uses its real HTTP protocol against local ASGI,
+                # and already-sanitized spans go to an in-memory exporter.
+                with (
+                    patch(
+                        "foliqant.adapters.mcp.transport.McpClientSessionFactory",
+                        return_value=factory,
+                    ),
+                    patch(
+                        "foliqant.adapters.telemetry.runtime.OTLPSpanExporter",
+                        return_value=exporter,
+                    ),
+                ):
+                    async with open_application(
+                        prepared, environment={}, plugins=RuntimePlugins(tool_authorizer=authorizer)
+                    ) as application:
+                        results = await asyncio.gather(run_one(0), run_one(1))
+                assert trace_api.get_tracer_provider() is previous_global
+            else:
+                results = await asyncio.gather(run_one(0), run_one(1))
 
-    assert results[0].status == "completed"
+    assert (results[0].execution.status if embedded else results[0].status) == "completed"
     assert results[0].payload == {"value": f"{_RESULT}:{_ARGUMENT}-ok"}
-    assert results[1].status == "failed"
+    assert (results[1].execution.status if embedded else results[1].status) == "failed"
     assert len(captured_calls) == 2
     assert set(authorizer.identities) == set(identities)
     assert len(clients) == 2 and all(client.is_closed for client in clients)
@@ -337,6 +397,12 @@ async def _child() -> None:
             and span.context.span_id == request_parent_id
             and span.kind is SpanKind.CLIENT
         )
+        if embedded:
+            assert client.name == "execute_tool lookup"
+            assert client.parent is not None and client.parent.span_id == step.context.span_id
+            assert client.attributes["foliqant.request.attempt"] == 1
+            assert request_parent_id != step.context.span_id
+            continue
         server_span = next(
             span
             for span in spans
@@ -374,11 +440,12 @@ async def _child() -> None:
     print(json.dumps({"spans": len(spans), "traces": len(trace_ids)}))
 
 
-def test_real_mcp_trace_continuity_and_privacy_in_isolated_process() -> None:
+@pytest.mark.parametrize("embedded", [False, True])
+def test_real_mcp_trace_continuity_and_privacy_in_isolated_process(embedded: bool) -> None:
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(_ROOT / "src")
     completed = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), "--child"],
+        [sys.executable, str(Path(__file__).resolve()), "--embedded" if embedded else "--child"],
         cwd=_ROOT,
         env=environment,
         capture_output=True,
@@ -395,13 +462,26 @@ def test_real_mcp_trace_continuity_and_privacy_in_isolated_process() -> None:
         "PRIVATE_TOOL_DESCRIPTION",
     ):
         assert private not in completed.stderr
-    assert all(
-        json.loads(line)["event"] == "external_event" for line in completed.stderr.splitlines()
-    )
+    log_rows = [json.loads(line) for line in completed.stderr.splitlines()]
+    assert {row["event"] for row in log_rows} <= {
+        "external_event",
+        "run_started",
+        "run_completed",
+        "flow_started",
+        "flow_completed",
+        "step_started",
+        "step_completed",
+        "step_failed",
+        "flow_failed",
+        "run_failed",
+    }
+    scope_rows = [row for row in log_rows if row["event"] != "external_event"]
+    assert len(scope_rows) == 12
+    assert all("trace_id" in row and "span_id" in row for row in scope_rows)
     report = json.loads(completed.stdout)
     assert report["traces"] == 2
-    assert report["spans"] >= 14
+    assert report["spans"] >= (8 if embedded else 14)
 
 
-if __name__ == "__main__" and sys.argv[1:] == ["--child"]:
-    asyncio.run(_child())
+if __name__ == "__main__" and sys.argv[1:] in (["--child"], ["--embedded"]):
+    asyncio.run(_child(embedded=sys.argv[1:] == ["--embedded"]))

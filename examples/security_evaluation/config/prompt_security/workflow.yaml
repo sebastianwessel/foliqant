@@ -6,8 +6,13 @@ output:
 flows:
   security:
     input:
-      original_message: {pointer: /payload/original_message}
-      attachment: {pointer: /payload/attachment}
-      prior_assessment: {pointer: /payload/prior_assessment}
-    transition: {outcome: completed}
-    on_unresolved: {outcome: needs_review}
+      original_message:
+        pointer: /payload/original_message
+      attachment:
+        pointer: /payload/attachment
+      prior_assessment:
+        pointer: /payload/prior_assessment
+    transition:
+      outcome: completed
+    on_unresolved:
+      outcome: needs_review

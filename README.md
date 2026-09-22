@@ -1,75 +1,71 @@
 # Foliqant
 
-Foliqant is a Python library for typed, in-memory workflows around models, MCP,
-and application code. A workflow connects explicit flows; each flow runs a
-reviewed sequence of operations and returns one result to the caller. Inputs,
-bindings, schemas, routes, and external capabilities are validated before use.
-
-The separate `model/` project prepares data and develops model artifacts. The
-runtime package does not train, download, discover, or serve models.
-
-## Documentation
-
-| Goal | Start here |
-| --- | --- |
-| Add a workflow to an application | [Runtime setup](docs/getting-started/runtime.md) |
-| Author flows, operations, bindings, and prompts | [Build a workflow](docs/guides/build-workflows.md) |
-| Configure models, MCP, limits, or telemetry | [Runtime configuration](docs/reference/runtime-configuration.md) |
-| Measure pipelines, flows, and operations against gold | [Workflow evaluation](docs/guides/testing-and-evaluation.md) |
-| Prepare or review training data | [Data workflows](docs/data.md) |
-| Train, evaluate, or export a model | [Model development](docs/model-development.md) |
-
-Browse the [documentation overview](docs/index.md) for all guides.
+Foliqant is a Python runtime for typed, in-memory workflows that combine model,
+MCP, and application operations. It compiles local configuration before opening
+clients, passes only explicitly bound context, validates operation results, and
+returns one structured result to the caller.
 
 ## Install
 
-Foliqant requires CPython 3.12 and [uv](https://docs.astral.sh/uv/). This
-repository does not claim a package-index release.
+Foliqant supports CPython 3.12. The source-checkout instructions below use
+[uv](https://docs.astral.sh/uv/); the project does not currently claim a
+package-index release. Install the locked environment from a reviewed checkout
+and select the adapters your application needs:
 
 ```sh
 git clone https://github.com/sebastianwessel/foliqant.git
 cd foliqant
 uv sync --locked --no-dev --extra openai
+source .venv/bin/activate
 ```
+
+Available extras include `openai`, `azure`, `anthropic`, `mcp`, and
+`telemetry`.
 
 ## Quick start
 
-Create a small local-model project:
+Create a project and copy its environment template:
 
 ```sh
-uv run --no-sync foliqant init /tmp/foliqant-demo
+foliqant init /tmp/foliqant-demo
 cp /tmp/foliqant-demo/config/.env.example /tmp/foliqant-demo/config/.env
 ```
 
-Set `MODEL_ID` and `MODEL_BASE_URL` in `config/.env`, then validate and run:
+Set the explicitly served model in `/tmp/foliqant-demo/config/.env`:
 
-```sh
-uv run --no-sync foliqant validate \
-  --config /tmp/foliqant-demo/config/settings.yaml
-uv run --no-sync foliqant run \
-  --config /tmp/foliqant-demo/config/settings.yaml \
-  --workflow demo \
-  --input /tmp/foliqant-demo/envelope.json
+```dotenv
+MODEL_ID=your-served-model-id
+MODEL_BASE_URL=http://127.0.0.1:8000/v1
 ```
 
-Installed commands run from a workflow project use `config/settings.yaml` by
-default. `validate`, `explain`, and `doctor` are offline; `run` contacts
-only the model and tool endpoints explicitly configured by the project.
+Compile offline, inspect the plan, then run one envelope:
 
-## Examples
+```sh
+cd /tmp/foliqant-demo
+foliqant validate
+foliqant explain --workflow demo
+foliqant run \
+  --workflow demo \
+  --input envelope.json
+```
 
-- [Decision evidence](examples/decision_evidence/README.md): reasons, support strength, and focused gold.
-- [Support triage](examples/support_triage/README.md): a decision followed by structured extraction.
-- [Public-request lookup](examples/public_request_mcp/README.md): a read-only MCP operation without a model.
-- [Extraction to MCP](examples/extracted_request_mcp/README.md): selected model output passed to a tool.
-- [Prompt security](examples/security_evaluation/README.md): paired English/German inputs and scoped trust checks.
-- [HTTP wrapper](examples/http_workflow/README.md): a thin transport around the in-memory API.
+Commands run from a workflow project use `config/settings.yaml` by default.
+`validate`, `explain`, and `doctor` compile offline. `run` opens only the
+model and tool clients declared by that project and prints one JSON result.
 
-The example evaluators distinguish deterministic wiring checks from opt-in live
-model measurements. Neither synthetic cases nor a successful smoke run establish
-model quality or security effectiveness.
+## Learn the runtime
 
-## Development
+| Goal | Guide |
+| --- | --- |
+| Install, scaffold, and embed Foliqant | [Install and run](docs/getting-started/runtime.md) |
+| Understand workflows, flows, steps, and results | [Runtime concepts](docs/concepts/runtime.md) |
+| Author files, bindings, prompts, routes, and schemas | [Build a workflow](docs/guides/build-workflows.md) |
+| Author typed evidence-backed decisions | [Decision contracts](docs/guides/decision-contracts.md) |
+| Configure providers, MCP, limits, telemetry, and CLI behavior | [Runtime configuration](docs/reference/runtime-configuration.md) |
+| Test pipelines, flows, and steps against reviewed gold | [Testing and evaluation](docs/guides/testing-and-evaluation.md) |
+| Help a coding agent configure an application | [Foliqant skill](skills/foliqant/SKILL.md) |
 
-Use the [development guide](docs/development.md) for repository checks and the
-separate environments. Keep private and generated data outside Git.
+Browse the [documentation home](docs/index.md) or the runnable
+[`examples/`](examples/) directory. Live model measurements are opt-in; small
+synthetic fixtures and successful smoke runs establish wiring, not general
+quality, security, latency, or cost.

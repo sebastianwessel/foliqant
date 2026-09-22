@@ -400,9 +400,14 @@ async def open_application(
                 authorizer = selected.tool_authorizer or _DeclaredReadAuthorizer(prepared)
                 if telemetry is not None:
                     from foliqant.adapters.telemetry.observation import trace_carrier
+                    from foliqant.adapters.telemetry.tools import ToolTelemetry
 
                     mcp_runtime = McpRuntime(
-                        profiles, factory, authorizer, trace_carrier=trace_carrier
+                        profiles,
+                        factory,
+                        authorizer,
+                        trace_carrier=trace_carrier,
+                        telemetry=ToolTelemetry(telemetry.tracer_provider, labels=labels),
                     )
                 else:
                     mcp_runtime = McpRuntime(profiles, factory, authorizer)

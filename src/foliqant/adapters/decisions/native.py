@@ -102,7 +102,6 @@ def build_decision_input(step: DecisionStepPlan, sources: FrozenObject) -> Decis
     try:
         task = DecisionInput.model_validate(
             {
-                "schemaVersion": 2,
                 "state": {"sources": native_sources},
                 "questions": [_question_value(question) for question in step.questions],
             },

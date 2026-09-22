@@ -1,12 +1,13 @@
 # Install and run the Python package
 
-Use this path to execute workflows in an application. Model training has a
-separate environment described in [model setup](setup.md).
+Use this path to create a workflow project, compile it offline, run one
+envelope, and embed the runtime in an application.
 
 ## Install the runtime
 
-Foliqant requires CPython 3.12 and [uv](https://docs.astral.sh/uv/). Install the
-locked runtime environment from the repository root:
+Foliqant supports CPython 3.12. These source-checkout instructions use
+[uv](https://docs.astral.sh/uv/). Install the locked runtime environment from
+the repository root:
 
 ```sh
 uv sync --locked --no-dev

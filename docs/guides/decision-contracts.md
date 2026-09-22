@@ -17,18 +17,20 @@ Validate a new catalog before building questions:
 from foliqant.decisions.category_catalog import CategoryCatalog
 from foliqant.decisions.contracts import ChoiceQuestion
 
-catalog = CategoryCatalog.model_validate({
-    "categories": [
-        {
-            "id": "incident",
-            "description": "A reported malfunction that needs resolution.",
-        },
-        {
-            "id": "information request",
-            "description": "A request for facts, documents, or instructions.",
-        },
-    ],
-})
+catalog = CategoryCatalog.model_validate(
+    {
+        "categories": [
+            {
+                "id": "incident",
+                "description": "A reported malfunction that needs resolution.",
+            },
+            {
+                "id": "information request",
+                "description": "A request for facts, documents, or instructions.",
+            },
+        ],
+    }
+)
 question = ChoiceQuestion(
     id="request_kind",
     type="choice",
@@ -43,7 +45,7 @@ question = ChoiceQuestion(
 `Information Request` and `information-request` both become
 `information_request`, so that pair is rejected as a collision. Canonical IDs
 match `[a-z][a-z0-9]*(?:_[a-z0-9]+)*`. Unicode IDs need an explicit caller-owned
-mapping. See the [catalog schema](https://github.com/sebastianwessel/foliqant/blob/main/schemas/foliqant/decisions/category-catalog.schema.json).
+mapping. See the [catalog schema](https://github.com/sebastianwessel/foliqant/blob/main/src/foliqant/schemas/category-catalog.schema.json).
 
 Keep topic, request kind, priority, and other dimensions in separate questions.
 Several labels for one request belong in a `multiselect`; repeated requests
@@ -99,9 +101,9 @@ item is clear. A request unit's non-null `subject` must appear verbatim in an
 allowed input source. Use `null` when the source contains no identifying reference.
 
 Validate JSON against the
-[output schema](https://github.com/sebastianwessel/foliqant/blob/main/schemas/foliqant/runtime/decision-output.schema.json),
+[output schema](https://github.com/sebastianwessel/foliqant/blob/main/src/foliqant/schemas/decision-output.schema.json),
 then validate its IDs, allowed answers, and subjects against the
-[input contract](https://github.com/sebastianwessel/foliqant/blob/main/schemas/foliqant/decisions/decision-input.schema.json).
+[input contract](https://github.com/sebastianwessel/foliqant/blob/main/src/foliqant/schemas/decision-input.schema.json).
 Python callers use `DecisionInput` from `foliqant.decisions` and `DecisionOutput`
 and `validate_decision_output` from `foliqant.contracts.decisions`.
 
@@ -178,22 +180,17 @@ decisive limitation. For example:
 ```
 
 The runtime adds the same contract guidance in native and tool output modes and
-rejects invalid responses. It does not truncate reasons or automatically retry.
+rejects invalid responses. It does not truncate reasons.
 Strength is a qualitative model assessment, not a calibrated probability or a
 guarantee of correctness. It does not change routing or trigger an automatic
 threshold; keep application policy explicit.
 
-## Runtime and model-development contracts
+## Inspect the runtime contract
 
 Runtime `DecisionOutput` contains a `results` array. A single-question
 operation exposes the result object illustrated above. For multiple questions,
 the runtime returns results in supplied question order. Runtime results and
 request units contain no citation arrays.
-
-The separate model-development format in `foliqant.decisions` retains its
-existing native artifact contract with explanations and citations for datasets
-and lifecycle tools. See [native decision data](native-decision-data.md) for
-that format.
 
 Try the focused [decision evidence example](https://github.com/sebastianwessel/foliqant/blob/main/examples/decision_evidence/README.md)
 for choice versus multiselect, limited interpretations, substantive false,

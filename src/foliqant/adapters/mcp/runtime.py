@@ -1,8 +1,10 @@
 """Per-caller MCP sessions, declared tool enforcement and bounded invocation."""
 
+from __future__ import annotations
+
 import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -14,13 +16,17 @@ from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import StepOutcome
 from foliqant.core.json import FrozenJson, FrozenObject, JsonValue, freeze_json, thaw_json
 from foliqant.core.plan import McpStepPlan
+from foliqant.core.retry import RetryPolicy, retry
 from foliqant.environment import EnvironmentResolver
 from foliqant.ports.execution import OperationStep, StepContext
 from foliqant.ports.tools import ToolInputRequired
 
 from .catalog import ToolCatalog
+from .retry import observe_http_attempt
 
 if TYPE_CHECKING:
+    from foliqant.adapters.telemetry.tools import ToolTelemetry
+
     from .transport import McpSessionFactory
 
 _MAX_CATALOG_PAGES = 128
@@ -54,6 +60,8 @@ class McpTools:
         timeout: float,
         identity_meta_key: str | None,
         trace_carrier: Callable[[], Mapping[str, str]],
+        retry_policy: RetryPolicy,
+        telemetry: ToolTelemetry | None = None,
     ) -> None:
         self._client = client
         self._server = server
@@ -64,6 +72,8 @@ class McpTools:
         self._timeout = timeout
         self._identity_meta_key = identity_meta_key
         self._trace_carrier = trace_carrier
+        self._retry = retry_policy
+        self._telemetry = telemetry
         self.successful: set[str] = set()
         self._active = True
 
@@ -115,47 +125,77 @@ class McpTools:
         deadline = min(self._context.deadline, asyncio.get_running_loop().time() + self._timeout)
         if deadline <= asyncio.get_running_loop().time():
             raise ServiceError(ErrorCode.TIMEOUT)
-        try:
-            async with asyncio.timeout_at(deadline):
-                await self._authorizer.authorize(self._server, name, arguments, self._context)
+
+        async def call_once(attempt: int) -> FrozenJson:
+            if not self._active:
+                raise ServiceError(ErrorCode.FORBIDDEN)
+            try:
+                async with asyncio.timeout_at(deadline):
+                    await self._authorizer.authorize(self._server, name, arguments, self._context)
                 if asyncio.get_running_loop().time() >= deadline:
                     raise ServiceError(ErrorCode.TIMEOUT)
-                metadata = self._metadata()
                 await self._context.budget.start_tool_call()
-                result = await self._client.session.send_request(
-                    types.CallToolRequest(
-                        params=types.CallToolRequestParams(
-                            name=name,
-                            arguments=cast(dict[str, object], thaw_json(arguments)),
-                            meta=metadata,
-                        )
-                    ),
-                    _TOOL_RESULT,
-                    request_read_timeout_seconds=max(
-                        0.001, deadline - asyncio.get_running_loop().time()
-                    ),
-                )
-                if isinstance(result, types.InputRequiredResult):
-                    raise ToolInputRequired()
-                value = self._catalog.validate_result(name, result)
-                self.successful.add(name)
-                return value
-        except (asyncio.CancelledError, ServiceError, ToolInputRequired):
-            raise
-        except TimeoutError:
-            raise ServiceError(ErrorCode.TIMEOUT) from None
-        except MCPError as error:
-            code = (
-                ErrorCode.TIMEOUT
-                if error.code == types.REQUEST_TIMEOUT
-                else ErrorCode.DEPENDENCY_FAILURE
-            )
-            raise ServiceError(code) from None
-        except ValidationError:
-            # The SDK validates the negotiated protocol; host validates tool output.
-            raise ServiceError(ErrorCode.INVALID_OUTPUT) from None
-        except Exception:
-            raise ServiceError(ErrorCode.DEPENDENCY_FAILURE) from None
+                with (
+                    self._telemetry.observe(name, attempt=attempt)
+                    if self._telemetry is not None
+                    else nullcontext()
+                ):
+                    try:
+                        async with asyncio.timeout_at(deadline):
+                            metadata = self._metadata()
+                            with observe_http_attempt() as observation:
+                                try:
+                                    result = await self._client.session.send_request(
+                                        types.CallToolRequest(
+                                            params=types.CallToolRequestParams(
+                                                name=name,
+                                                arguments=cast(
+                                                    dict[str, object], thaw_json(arguments)
+                                                ),
+                                                meta=metadata,
+                                            )
+                                        ),
+                                        _TOOL_RESULT,
+                                        request_read_timeout_seconds=max(
+                                            0.001, deadline - asyncio.get_running_loop().time()
+                                        ),
+                                    )
+                                except MCPError as error:
+                                    if error.code == types.REQUEST_TIMEOUT:
+                                        raise ServiceError(ErrorCode.TIMEOUT) from None
+                                    terminal = {
+                                        401: ErrorCode.UNAUTHENTICATED,
+                                        403: ErrorCode.FORBIDDEN,
+                                        408: ErrorCode.TIMEOUT,
+                                        504: ErrorCode.TIMEOUT,
+                                    }.get(observation.status or 0)
+                                    if terminal is not None:
+                                        raise ServiceError(terminal) from None
+                                    if (
+                                        error.code == types.INTERNAL_ERROR
+                                        and observation.transient is not None
+                                    ):
+                                        raise observation.transient from None
+                                    raise ServiceError(ErrorCode.DEPENDENCY_FAILURE) from None
+                            if asyncio.get_running_loop().time() >= deadline:
+                                raise ServiceError(ErrorCode.TIMEOUT)
+                            if isinstance(result, types.InputRequiredResult):
+                                raise ToolInputRequired()
+                            value = self._catalog.validate_result(name, result)
+                            self.successful.add(name)
+                            return value
+                    except TimeoutError:
+                        raise ServiceError(ErrorCode.TIMEOUT) from None
+                    except ValidationError:
+                        raise ServiceError(ErrorCode.INVALID_OUTPUT) from None
+            except (asyncio.CancelledError, ServiceError, ToolInputRequired):
+                raise
+            except TimeoutError:
+                raise ServiceError(ErrorCode.TIMEOUT) from None
+            except Exception:
+                raise ServiceError(ErrorCode.DEPENDENCY_FAILURE) from None
+
+        return await retry(call_once, policy=self._retry, deadline=lambda: deadline)
 
 
 class McpRuntime:
@@ -164,10 +204,11 @@ class McpRuntime:
     def __init__(
         self,
         profiles: McpProfiles,
-        factory: "McpSessionFactory",
+        factory: McpSessionFactory,
         authorizer: ToolAuthorizer,
         *,
         trace_carrier: Callable[[], Mapping[str, str]] | None = None,
+        telemetry: ToolTelemetry | None = None,
     ) -> None:
         try:
             self._profiles = EnvironmentResolver({}).resolve(profiles).model_copy(deep=True)
@@ -182,6 +223,7 @@ class McpRuntime:
         self._factory = factory
         self._authorizer = authorizer
         self._trace_carrier = trace_carrier or (lambda: {})
+        self._telemetry = telemetry
 
     @staticmethod
     async def _discover(
@@ -234,6 +276,8 @@ class McpRuntime:
                         timeout=timeout,
                         identity_meta_key=profile.identity_meta_key,
                         trace_carrier=self._trace_carrier,
+                        retry_policy=profile.retry.policy(),
+                        telemetry=self._telemetry,
                     )
                     deadline = min(context.deadline, asyncio.get_running_loop().time() + timeout)
                     async with asyncio.timeout_at(deadline):

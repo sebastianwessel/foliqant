@@ -1,109 +1,49 @@
 # Implementation conventions
 
-[AGENTS.md](../AGENTS.md) and [spec authority](../specs/README.md) define scope.
-Use Python 3.12, each project's committed uv lock, strict mypy, typed public APIs
-and concise docstrings. The runtime never imports model tooling. Core uses
-standard-library values and ports; provider SDKs and Pydantic stay at boundaries.
+Follow [AGENTS.md](../AGENTS.md) and [specs](../specs/README.md). Use Python 3.12,
+the committed uv lock, strict typing and concise public API docstrings.
 
-## Contracts and runtime
+## Boundaries
 
-Library Pydantic contracts in `src/foliqant/contracts/` and
-`src/foliqant/decisions/` generate `schemas/foliqant/`. Model-only contracts
-generate `model/schemas/`. The runtime decision output is owned by
-`contracts/decisions.py`; model-development artifacts keep their existing
-native contract. Keep these output contracts separate and preserve immutable
-model artifacts. Strictly validate external JSON/YAML; do not hand-edit
-generated schemas.
+The compiler reads and freezes configuration before adapters open. Request-time
+execution uses immutable plans and invocation-local state, without configuration
+filesystem reads or endpoint discovery. Pydantic contracts generate packaged `src/foliqant/schemas/`;
+never hand-edit generated JSON. The core depends only on standard-library values
+and ports. Integrations remain optional installation extras.
 
-Prepare/compile offline at startup. Execute frozen plans with invocation-local
-state. Prefer async I/O; blocking SDKs use the owned `BlockingExecutor` and
-network timeouts. Cancellation does not free running blocking-call capacity or
-prove a remote operation stopped. Shutdown drains owned work before dependencies.
+Hosts register trusted handlers and tool authorizers directly. Configuration
+cannot import arbitrary Python code. External tools are read-only. Cancellation
+does not prove that a remote request or blocking worker stopped. Preserve owned
+capacity until work actually ends, and drain owned work during shutdown.
 
-Hosts inject trusted handlers and tool authorizers. Current integrations are
-read-only. Optional identity metadata is context, never authentication. MCP OAuth
-is outbound tool support. HTTP hosting is an example or embedding concern.
+Only canonical errors and allowlisted sanitized labels enter logs or telemetry.
+Evaluation reuses public run/run_flow/run_step paths. Failed or skipped outcomes
+remain in metric denominators. Gold is not read at application startup.
 
-Only fixed safe errors and allowlisted sanitized values enter logs/telemetry.
-Do not log payloads, identities, prompts, credentials or raw exceptions.
-Evaluation reuses `run`, `run_flow`, and `run_step` with the same validators; failed/skipped expectations
-remain in denominators. Golden data, results and holdout selection belong to the
-caller. Schema validity and confidence are not accuracy.
-Use conventional `evaluation/dataset.json` or an explicit
-`evaluation.dataset` override with the shared JSON suite loader. Cases may be
-inline or separate files per pipeline/flow/step; never read them at runtime
-startup. Reuse `evaluate`/`write_report`, retain honest missing
-and failure denominators, and keep full private reports out of console logs/Git.
-Public examples commit only small authored synthetic fixtures under
-`examples/<name>/evaluation/`; generated reports and real evaluation data stay
-ignored.
-Use `evaluate --check` or saved-result replay for offline verification; do not
-substitute either for live model quality evidence.
-Examples use the public application lifecycle and existing evaluation module,
-not a copied runner. Include an evaluation command and independent expected
-values; a failing expectation must fail that command. Default scripted examples
-exercise wiring only; live evaluation must be explicit.
+Examples use public lifecycle APIs and commit independent synthetic golden cases.
+Scripted runs verify wiring; explicit live runs measure a model. Generated reports
+remain private. Skills and docs describe supported usage without development history.
 
-## Model operations
+## Offline checks
 
-Keep MLX imports inside the isolated backend. Parent orchestration verifies
-worker outputs independently before immutable artifact publication. Use
-`ArtifactTransaction`; retain recursive ancestry, rights, precision history
-and leakage indexes. Never overwrite outputs, silently repair hashes, delete
-locks automatically or kill a process from a stale PID alone.
-
-Setup/fetch/curation acquire explicitly configured sources. Generation uses the
-configured loopback or explicitly allowed private endpoint; training/evaluation
-use local verified assets. Setup never starts training. Keep data and outputs
-outside Git; minimal test records are constructed in temporary directories.
-Default to ignored `.foliqant/` inside the checkout, through the shared
-`model_workspace` selector. Preserve historic absolute references when moving
-existing assets; never alter completed artifact hashes to disguise relocation.
-Live execution follows the user's authorization and must not disturb active runs.
-
-## Offline verification
-
-Run relevant checks from the repository root; use `--no-sync` against the
-prepared environment to avoid changing dependencies during another run.
+From the repository root after `uv sync --locked --all-extras --group dev --group docs`:
 
 ```sh
 uv run --no-sync pytest tests
 uv run --no-sync mypy src examples
-uv run --no-sync ruff check src tests examples scripts
-uv run --no-sync ruff format --check src tests examples scripts
+uv run --no-sync ruff check .
+uv run --no-sync ruff format --check .
 uv run --no-sync python scripts/generate_schemas.py --check
-uv run --project model --no-sync python -m pytest -c model/pyproject.toml model/tests
-uv run --project model --no-sync mypy --config-file model/pyproject.toml model/src
-uv run --project model --no-sync ruff check model/src model/tests
-uv run --project model --no-sync python scripts/generate_model_schemas.py --check model/schemas
-uv run --project model --no-sync python scripts/check_docs.py
-uv run --project model --no-sync python scripts/check_tracked_data.py
-uv run --group docs mkdocs build --strict
+uv run --no-sync python scripts/check_docs.py
+uv run --no-sync python scripts/check_tracked_data.py
+uv run --no-sync mkdocs build --strict
 git diff --check
 ```
 
-For an intentional model schema update use
-`scripts/generate_model_schemas.py --maintenance-output model/schemas`, then
-check drift. This is repository maintenance, not permission to overwrite model
-artifacts. Preview public docs with `uv run --group docs mkdocs serve --dev-addr 127.0.0.1:8001`;
-`docs/index.md` is the homepage. CI builds strictly; a GitHub Actions workflow is configured for GitHub Pages
-publishing when Pages is enabled and available for the repository.
+Use `python scripts/generate_schemas.py` through the same uv environment to
+regenerate schemas deliberately. Default tests exclude `live_model`; no model
+endpoint or downloads are needed. Installed-wheel tests use cached dependencies.
 
-## Live acceptance
-
-Default runtime tests exclude `live_model`; model tests exclude `integration`.
-Do not call endpoints or download models to verify documentation changes.
-When native acceptance is authorized, use a completed local setup and an explicit
-model in a permitted native Metal environment:
-
-```sh
-FOLIQANT_TEST_SETUP=/absolute/path/to/completed/setup \
-FOLIQANT_TEST_MODEL=/absolute/path/to/completed/setup/downloads/model \
-  uv run --project model --no-sync python -m pytest -c model/pyproject.toml model/tests -m integration
-```
-
-No test downloads a model implicitly. A native sandbox failure does not prove
-the host lacks hardware support. Record real CLI, lineage, held-out evaluation,
-policy/audit and independent export-inference evidence in `plans/reviews/`.
-Mocks only test isolated boundaries; previous counts and tiny-model success do
-not establish current financial quality.
+Preview docs with `uv run --group docs mkdocs serve --dev-addr 127.0.0.1:8001`.
+CI builds them strictly. GitHub Pages publishing is opt-in via `PUBLISH_DOCS=true`
+after the repository's Pages source is configured as GitHub Actions.

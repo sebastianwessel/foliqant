@@ -27,33 +27,15 @@ validation:
     unrecognized_links: warn
 nav:
   - Home: index.md
-  - Runtime:
-      - Install and quickstart: getting-started/runtime.md
-      - Runtime and model development: concepts/runtime-and-model-development.md
+  - Getting started:
+      - Install and run: getting-started/runtime.md
+  - Concepts:
+      - Runtime model: concepts/runtime.md
+  - Guides:
       - Build workflows: guides/build-workflows.md
+      - Decision contracts: guides/decision-contracts.md
       - Test and evaluate: guides/testing-and-evaluation.md
       - Understand evaluation results: guides/evaluation-results.md
+  - Reference:
       - Configuration and CLI: reference/runtime-configuration.md
-  - Model development:
-      - Overview: model-development.md
-      - Concepts: getting-started/concepts.md
-      - Setup: getting-started/setup.md
-      - First local model: getting-started/first-model.md
-      - Check and fetch models: guides/check-and-fetch.md
-      - Train and customize: guides/train-and-customize.md
-      - Evaluate and audit: guides/evaluate-and-audit.md
-      - Export and run: guides/export-and-run.md
-      - Artifact operations: operations/artifacts.md
-      - Configuration: reference/configuration.md
-  - Data:
-      - Overview: data.md
-      - Prepare your data: guides/prepare-data.md
-      - Curate sources: guides/automated-curation.md
-      - Generate decision data: guides/native-decision-data.md
-      - Extend and migrate runs: guides/decision-run-maintenance.md
-      - Decision contracts: guides/decision-contracts.md
-      - Source licenses: guides/data-licenses.md
-  - Development: development.md
-  - Agent skills:
-      - Runtime: skills/foliqant.md
-      - Model operations: skills/foliqant-model.md
+  - Agent skill: skills/foliqant.md

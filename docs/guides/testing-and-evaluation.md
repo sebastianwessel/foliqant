@@ -180,7 +180,8 @@ foliqant evaluate --max-concurrency 1 --timeout 300
 ```
 
 Model-backed suites make real model calls; MCP-backed suites open their declared
-clients. No hidden retries, endpoint discovery, or judge calls are added. A
+clients. The evaluator adds no retry, endpoint discovery, or judge calls.
+Explicit model or MCP profile retries still apply to each runtime operation. A
 model-free or scripted example checks wiring, not model quality.
 
 ## Use pipeline, flow, and operation suites together
@@ -248,9 +249,7 @@ variant = EvaluationVariant(
     workflow="support_triage",
     flow="triage",
     step="classify",
-    run=lambda envelope: application.run_step(
-        "support_triage", "triage", "classify", envelope
-    ),
+    run=lambda envelope: application.run_step("support_triage", "triage", "classify", envelope),
 )
 
 report = await evaluate(suite, variant, include_details=True)

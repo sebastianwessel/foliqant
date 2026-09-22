@@ -1,4 +1,4 @@
-"""Runtime support assessments validate independently of model-training annotations."""
+"""Runtime support assessments preserve typed answers and evidence semantics."""
 
 from copy import deepcopy
 
@@ -17,8 +17,6 @@ from foliqant.contracts.decisions import (
     validate_decision_output,
 )
 from foliqant.decisions import DecisionInput
-from foliqant.decisions import DecisionOutput as NativeOutput
-from foliqant.decisions import validate_decision_output as validate_native_output
 
 
 def _task():
@@ -43,7 +41,6 @@ def _task():
         questions.append(question)
     return DecisionInput.model_validate(
         {
-            "schemaVersion": 2,
             "state": {
                 "sources": [
                     {"id": "message", "kind": "message", "text": "Send January and March."},
@@ -334,20 +331,3 @@ def test_valid_conditional_relation_and_repeated_category_units_remain_supported
         }
     ]
     assert validate_decision_output(_task(), DecisionOutput.model_validate(raw)) == []
-
-
-def test_model_training_annotations_remain_separate_from_runtime_assessments():
-    task = _task().model_copy(update={"questions": [_task().questions[0]]})
-    result = deepcopy(_output()["results"][0])
-    del result["reason"]
-    del result["evidence_strength"]
-    result["explanation"] = {
-        "summary": "The original artifact rationale.",
-        "evidence": [{"sourceId": "message", "quote": "Send January"}],
-        "contraryEvidence": [],
-        "missingFacts": [],
-    }
-    raw = {"schemaVersion": 2, "results": [result]}
-    assert validate_native_output(task, NativeOutput.model_validate(raw)) == []
-    with pytest.raises(ValidationError):
-        DecisionOutput.model_validate(raw)

@@ -15,6 +15,7 @@ from .environment import (
     is_environment_reference,
 )
 from .models import Duration
+from .retry import RetryConfig
 from .workflow import DeclaredToolCatalog, Id
 
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
@@ -124,6 +125,7 @@ class McpServerProfile(BoundaryModel):
     concurrency: Annotated[int, Field(strict=True, ge=1, le=1024)] = 4
     queue_limit: Annotated[int, Field(strict=True, ge=0, le=10_000)] = 16
     request_timeout: Duration = 30.0
+    retry: RetryConfig = Field(default_factory=RetryConfig)
     output_limit_bytes: Annotated[int, Field(strict=True, ge=1, le=_MAX_OUTPUT_BYTES)] = 1_048_576
 
     @model_validator(mode="after")

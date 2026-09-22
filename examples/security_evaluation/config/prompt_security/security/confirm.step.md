@@ -1,10 +1,14 @@
 ---
 type: llm
 input:
-  original_message: {pointer: /payload/original_message}
-  assessment: {pointer: /steps/assess/result}
-  attachment: {pointer: /payload/attachment}
-  prior_assessment: {pointer: /payload/prior_assessment}
+  original_message:
+    pointer: /payload/original_message
+  assessment:
+    pointer: /steps/assess/result
+  attachment:
+    pointer: /payload/attachment
+  prior_assessment:
+    pointer: /payload/prior_assessment
 prompt: |
   {
     "original_message": {{ original_message }},

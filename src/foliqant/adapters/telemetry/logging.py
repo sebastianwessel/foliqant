@@ -12,6 +12,7 @@ from enum import StrEnum
 from typing import TextIO, cast
 
 from foliqant.core.errors import ErrorCode
+from foliqant.core.execution import RunStatus
 
 _MAX_COUNT = 2**53 - 1
 _MAX_DURATION_SECONDS = 365 * 24 * 60 * 60
@@ -23,6 +24,7 @@ _LEVELS = {
     logging.ERROR: "ERROR",
     logging.CRITICAL: "CRITICAL",
 }
+_OUTCOMES = frozenset({"cancelled", "completed", "failed", "needs_review", "skipped"})
 
 
 class LogEvent(StrEnum):
@@ -35,6 +37,9 @@ class LogEvent(StrEnum):
     STEP_STARTED = "step_started"
     STEP_COMPLETED = "step_completed"
     STEP_FAILED = "step_failed"
+    FLOW_STARTED = "flow_started"
+    FLOW_COMPLETED = "flow_completed"
+    FLOW_FAILED = "flow_failed"
     DEPENDENCY_REJECTED = "dependency_rejected"
     EXTERNAL_EVENT = "external_event"
 
@@ -46,9 +51,10 @@ class LogLabels:
     services: frozenset[str] = frozenset()
     workflows: frozenset[str] = frozenset()
     steps: frozenset[str] = frozenset()
+    flows: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
-        for values in (self.services, self.workflows, self.steps):
+        for values in (self.services, self.workflows, self.steps, self.flows):
             if type(values) is not frozenset or len(values) > 1024:
                 raise ValueError("invalid logging label allowlist")
             for value in values:
@@ -62,7 +68,7 @@ _DEFAULT_LABELS = LogLabels()
 class SafeJsonFormatter(logging.Formatter):
     """Inspect only fixed fields; arbitrary messages, extras and exceptions are ignored.
 
-    At most ten scalar fields are emitted. No record is retained or modified.
+    At most twelve scalar fields are emitted. No record is retained or modified.
     Unknown/third-party records become a generic event even at DEBUG severity.
     """
 
@@ -85,6 +91,18 @@ class SafeJsonFormatter(logging.Formatter):
             and type(fields) is dict
         ):
             self._add_fields(output, cast(dict[str, object], fields))
+        # Resolve synchronously in the emitting task, before a queue worker loses
+        # its context. The current SDK context overrides manually supplied IDs.
+        # The API is optional for hosts that install no telemetry extra.
+        try:
+            from opentelemetry.trace import get_current_span
+
+            context = get_current_span().get_span_context()
+            if context.is_valid:
+                output["trace_id"] = f"{context.trace_id:032x}"
+                output["span_id"] = f"{context.span_id:016x}"
+        except Exception:
+            pass
         return json.dumps(output, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
 
     def _add_fields(self, output: dict[str, str | int | float], fields: dict[str, object]) -> None:
@@ -92,6 +110,7 @@ class SafeJsonFormatter(logging.Formatter):
             ("service", self._labels.services),
             ("workflow", self._labels.workflows),
             ("step", self._labels.steps),
+            ("flow", self._labels.flows),
         ):
             label = fields.get(key)
             if type(label) is str and len(label) <= 64 and label in allowed:
@@ -107,6 +126,9 @@ class SafeJsonFormatter(logging.Formatter):
         error = fields.get("error_code")
         if isinstance(error, ErrorCode):
             output["error_code"] = error.value
+        outcome = fields.get("outcome")
+        if type(outcome) is str and outcome in _OUTCOMES:
+            output["outcome"] = outcome
         for key, length in (("trace_id", 32), ("span_id", 16)):
             value = fields.get(key)
             if (
@@ -193,7 +215,11 @@ class _SafeQueueHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         # Sanitize synchronously BEFORE queueing; do not use QueueHandler.prepare,
         # which interpolates raw messages and may format exception content.
-        self.runtime._enqueue(self.format(record))
+        try:
+            self.runtime._enqueue(self.format(record))
+        except Exception:
+            with self.runtime._state_lock:
+                self.runtime._dropped += 1
 
     def close(self) -> None:
         self.runtime.close(timeout=0)
@@ -208,11 +234,13 @@ def emit_event(
     service: str | None = None,
     workflow: str | None = None,
     step: str | None = None,
+    flow: str | None = None,
     duration_seconds: float | None = None,
     count: int | None = None,
     error_code: ErrorCode | None = None,
     trace_id: str | None = None,
     span_id: str | None = None,
+    outcome: RunStatus | None = None,
 ) -> None:
     """Emit a typed event; the sink enforces field validity and startup labels."""
     if not isinstance(event, LogEvent) or type(level) is not int or level not in _LEVELS:
@@ -225,11 +253,13 @@ def emit_event(
                 "service": service,
                 "workflow": workflow,
                 "step": step,
+                "flow": flow,
                 "duration_seconds": duration_seconds,
                 "count": count,
                 "error_code": error_code,
                 "trace_id": trace_id,
                 "span_id": span_id,
+                "outcome": outcome,
             }
         },
     )

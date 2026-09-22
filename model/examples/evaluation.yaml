@@ -1,6 +1,0 @@
-schemaVersion: 1
-seed: 7
-maxTokens: 32
-maxExamples: 4
-timeoutSeconds: 3600
-fieldPointers: []

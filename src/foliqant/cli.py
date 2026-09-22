@@ -79,21 +79,28 @@ execution:
   model_timeout: 300
   run_timeout: 310
 """,
-    "config/demo/workflow.yaml": """defaults: {model: local}
-output: {pointer: /flows/summarize/result}
+    "config/demo/workflow.yaml": """defaults:
+  model: local
+output:
+  pointer: /flows/summarize/result
 flows:
   summarize:
     input:
-      message: {pointer: /payload/message}
-    transition: {outcome: completed}
+      message:
+        pointer: /payload/message
+    transition:
+      outcome: completed
 """,
-    "config/demo/summarize/flow.yaml": """output: {pointer: /steps/summarize/result}
-steps: [summarize]
+    "config/demo/summarize/flow.yaml": """output:
+  pointer: /steps/summarize/result
+steps:
+  - summarize
 """,
     "config/demo/summarize/summarize.step.md": """---
 type: llm
 input:
-  message: {pointer: /payload/message}
+  message:
+    pointer: /payload/message
 output: text
 ---
 Summarize the supplied message in one sentence, preserving its language.
@@ -476,6 +483,7 @@ def _logging_labels(prepared: PreparedApplication) -> LogLabels:
     return LogLabels(
         services=frozenset({"foliqant"}),
         workflows=frozenset(prepared.plans),
+        flows=frozenset(flow.name for plan in prepared.plans.values() for flow in plan.flows),
         steps=frozenset(
             step.name
             for plan in prepared.plans.values()

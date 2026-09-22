@@ -41,9 +41,14 @@ models:
 
 When `workflows` is absent, Foliqant discovers only immediate nonhidden
 `config/*/workflow.yaml` files. The directory name becomes the workflow name.
-Use an explicit mapping such as `workflows: {public_name: another_directory}`
-when the public name or location must differ. Paths are relative to the settings
-file and must remain below its directory.
+Use an explicit mapping when the public name or location must differ:
+
+```yaml
+workflows:
+  public_name: another_directory
+```
+
+Paths are relative to the settings file and must remain below its directory.
 
 Names use lowercase snake case and begin with a letter. YAML duplicate keys,
 aliases, custom tags, and unknown fields are rejected.
@@ -54,14 +59,18 @@ aliases, custom tags, and unknown fields are rejected.
 instances, routing, and the public payload projection:
 
 ```yaml
-defaults: {model: local}
+defaults:
+  model: local
 input_schema: input.schema.json
-output: {pointer: /flows/summarize/result}
+output:
+  pointer: /flows/summarize/result
 flows:
   summarize:
     input:
-      message: {pointer: /payload/message}
-    transition: {outcome: completed}
+      message:
+        pointer: /payload/message
+    transition:
+      outcome: completed
 ```
 
 `name` defaults to the workflow directory. A workflow with one flow may omit
@@ -73,7 +82,8 @@ and an optional output projection:
 ```yaml
 # config/demo/summarize/flow.yaml
 input_schema: input.schema.json
-output: {pointer: /steps/summarize/result}
+output:
+  pointer: /steps/summarize/result
 steps:
   - summarize
 ```
@@ -92,9 +102,11 @@ A flow's successful `transition` names either another flow or a terminal
 outcome:
 
 ```yaml
-transition: {flow: publish}
+transition:
+  flow: publish
 # or
-transition: {outcome: completed}
+transition:
+  outcome: completed
 ```
 
 Route on an exact scalar flow result with `binding`, `cases`, and a required
@@ -102,11 +114,15 @@ Route on an exact scalar flow result with `binding`, `cases`, and a required
 
 ```yaml
 transition:
-  binding: {pointer: /flows/classify/result/queue}
+  binding:
+    pointer: /flows/classify/result/queue
   cases:
-    billing: {flow: billing}
-    cancel: {flow: cancellation}
-  default: {outcome: needs_review}
+    billing:
+      flow: billing
+    cancel:
+      flow: cancellation
+  default:
+    outcome: needs_review
 ```
 
 Unresolved operations stop with `needs_review` unless the flow instance defines
@@ -133,7 +149,8 @@ An LLM operation with a colocated output schema can be written as Markdown:
 ---
 type: llm
 input:
-  message: {pointer: /payload/message}
+  message:
+    pointer: /payload/message
 output:
   schema: output.schema.json
 ---
@@ -155,7 +172,8 @@ fallback:
   category:
     id: review
     description: Requests awaiting human review.
-  on: [no_supported_answer]
+  "on":
+    - no_supported_answer
 ```
 
 The fallback category is not presented to the model and must not duplicate a
@@ -172,14 +190,26 @@ through `on_unresolved`.
 
 Bindings are explicitly tagged JSON values:
 
-| Binding | Meaning |
-| --- | --- |
-| `{literal: "email"}` | A fixed JSON value |
-| `{pointer: /payload/message}` | The current boundary's accepted input |
-| `{pointer: /metadata/source}` | Accepted metadata |
-| `{pointer: /steps/extract/result/reference}` | A prior operation in the current flow |
-| `{pointer: /flows/classify/result/queue}` | A completed flow result at workflow scope |
-| `{pointer: /payload/language, optional: true, default: "en"}` | A fallback only when the pointer is missing |
+```yaml
+fixed_channel:
+  literal: email
+current_message:
+  pointer: /payload/message
+accepted_metadata:
+  pointer: /metadata/source
+prior_step:
+  pointer: /steps/extract/result/reference
+completed_flow:
+  pointer: /flows/classify/result/queue
+optional_language:
+  pointer: /payload/language
+  optional: true
+  default: en
+```
+
+The example shows a fixed value, current boundary input, accepted metadata, a
+prior step, a completed flow, and a fallback used only when a pointer is
+missing.
 
 Pointers use RFC 6901: `~1` escapes `/` and `~0` escapes `~`. JSON
 `null` is present, so it does not activate a missing-value default. Optional
@@ -194,7 +224,8 @@ For a decision source, choose how its selected JSON value becomes evidence:
 
 ```yaml
 sources:
-  message: {pointer: /payload/message}
+  message:
+    pointer: /payload/message
   account:
     pointer: /payload/account
     format: json
@@ -213,8 +244,10 @@ object. To place selected inputs into a user prompt, use exact
 ```yaml
 type: llm
 input:
-  message: {pointer: /payload/message}
-  language: {pointer: /payload/language}
+  message:
+    pointer: /payload/message
+  language:
+    pointer: /payload/language
 instructions: Return one concise sentence.
 prompt: |
   Summarize {{ message }} in {{ language }}.

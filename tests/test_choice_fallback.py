@@ -416,12 +416,12 @@ async def test_concurrent_results_keep_model_and_fallback_selections_isolated(tm
     await app.aclose()
 
 
-@pytest.mark.parametrize("legacy_issue", ["missing_information", "no_matching_option"])
+@pytest.mark.parametrize("unknown_issue", ["missing_information", "no_matching_option"])
 @pytest.mark.parametrize("policy", ["fallback", "routes"])
-def test_legacy_fallback_and_route_keys_are_rejected(tmp_path, legacy_issue, policy):
+def test_unknown_fallback_and_route_keys_are_rejected(tmp_path, unknown_issue, policy):
     authored = _FALLBACK if policy == "fallback" else _ROUTES
     with pytest.raises(CompilationError):
-        _compiled(tmp_path, **{policy: authored.replace("no_supported_answer", legacy_issue)})
+        _compiled(tmp_path, **{policy: authored.replace("no_supported_answer", unknown_issue)})
 
 
 async def test_fallback_allowlist_can_explicitly_accept_all_three_issues(tmp_path):

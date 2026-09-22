@@ -241,7 +241,8 @@ def test_sanitizer_and_delegate_failures_are_nonfatal() -> None:
     processor = SafeSpanProcessor(FailingProcessor())
     processor.on_end(ReadableSpan(name=_SECRET))
     assert processor.force_flush(timeout_millis=1) is False
-    processor.shutdown()
+    with pytest.raises(RuntimeError, match="^telemetry shutdown failed$"):
+        processor.shutdown()
 
 
 def test_on_start_never_exposes_mutable_raw_span() -> None:

@@ -7,7 +7,7 @@ import os
 import threading
 from collections.abc import Callable, Mapping
 from functools import partial
-from typing import Protocol
+from typing import Any, Protocol
 
 import requests
 from opentelemetry import propagate
@@ -85,8 +85,40 @@ class _MetricExporterFactory(Protocol):
     ) -> MetricExporter: ...
 
 
+class _ExporterSession(requests.Session):
+    """Send only to the configured collector, without consuming response bodies.
+
+    OTLP exporters use only status codes. Do not retain collector-controlled body,
+    headers or reason phrases, or pass transport exceptions containing URLs to
+    SDK loggers. Redirects are failures, never authorization to forward headers.
+    """
+
+    def get_redirect_target(self, resp: requests.Response) -> None:
+        # requests prepares redirects even with allow_redirects=False; that path
+        # eagerly consumes response.content. Disable discovery as well as following.
+        return None
+
+    def send(self, request: requests.PreparedRequest, **kwargs: Any) -> requests.Response:
+        kwargs["allow_redirects"] = False
+        kwargs["stream"] = True
+        try:
+            response = super().send(request, **kwargs)
+        except requests.RequestException:
+            # Fail this best-effort export without SDK immediate connection retries
+            # or exception strings containing endpoint/credential details.
+            raise requests.RequestException("telemetry transport failed") from None
+        try:
+            safe = requests.Response()
+            safe.status_code = 400 if 300 <= response.status_code < 400 else response.status_code
+            safe.reason = "telemetry export response"
+            safe._content = b""
+            return safe
+        finally:
+            response.close()
+
+
 def _session() -> requests.Session:
-    session = requests.Session()
+    session = _ExporterSession()
     session.trust_env = False
     return session
 
@@ -160,11 +192,24 @@ def _metric_views() -> tuple[View, ...]:
         ),
         View(
             instrument_type=Histogram,
+            instrument_name="foliqant.flow.duration",
+            instrument_unit="s",
+            meter_name=_METRIC_SCOPE,
+            attribute_keys={
+                "foliqant.workflow.name",
+                "foliqant.flow.name",
+                "foliqant.outcome",
+                "error.type",
+            },
+        ),
+        View(
+            instrument_type=Histogram,
             instrument_name="foliqant.step.duration",
             instrument_unit="s",
             meter_name=_METRIC_SCOPE,
             attribute_keys={
                 "foliqant.workflow.name",
+                "foliqant.flow.name",
                 "foliqant.step.name",
                 "foliqant.outcome",
                 "error.type",
