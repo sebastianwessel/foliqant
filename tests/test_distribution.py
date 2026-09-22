@@ -161,7 +161,6 @@ def test_wheel_contains_and_runs_the_public_package(tmp_path):
             uv,
             "pip",
             "install",
-            "--offline",
             "--python",
             str(binary / "python"),
             str(wheel),
