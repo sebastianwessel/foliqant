@@ -735,12 +735,8 @@ from pathlib import Path
 from foliqant.contracts.decisions import DecisionOutput, validate_decision_output
 from foliqant.decisions import DecisionInput
 
-task = DecisionInput.model_validate_json(
-    Path("decision-input.json").read_text(), strict=True
-)
-result = DecisionOutput.model_validate_json(
-    Path("decision-output.json").read_text(), strict=True
-)
+task = DecisionInput.model_validate_json(Path("decision-input.json").read_text(), strict=True)
+result = DecisionOutput.model_validate_json(Path("decision-output.json").read_text(), strict=True)
 problems = validate_decision_output(task, result)
 if problems:
     raise ValueError(problems)
