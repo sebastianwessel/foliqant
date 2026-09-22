@@ -1,0 +1,16 @@
+defaults:
+  model: local
+input_schema: input.schema.json
+output:
+  pointer: /flows/classify/result
+  optional: true
+  default: null
+flows:
+  classify:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      outcome: completed
+    on_unresolved:
+      outcome: needs_review

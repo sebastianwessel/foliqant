@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "language": {
+      "enum": [
+        "en",
+        "de"
+      ]
+    }
+  },
+  "required": [
+    "language"
+  ],
+  "additionalProperties": false
+}

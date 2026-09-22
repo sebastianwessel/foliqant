@@ -1,0 +1,33 @@
+defaults:
+  model: local
+start: classify
+input_schema: input.schema.json
+flows:
+  classify:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      binding:
+        pointer: /flows/classify/result
+      cases:
+        billing:
+          flow: billing
+        cancellation:
+          flow: cancellation
+      default:
+        outcome: needs_review
+    on_unresolved:
+      outcome: needs_review
+  billing:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      outcome: completed
+  cancellation:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      outcome: completed

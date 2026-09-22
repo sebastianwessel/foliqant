@@ -29,7 +29,12 @@ _HINTS = {
     "invalid_schema_reference": "Point each reference to an existing local schema node.",
     "missing_start": "Set start to the ID of a declared flow instance.",
     "missing_flow": "Declare every flow targeted by a transition or unresolved route.",
-    "workflow_cycle": "Remove cycles so every reachable flow route terminates.",
+    "invalid_routed_flow": "Route only to noncallable flows; invoke callable flows in collections.",
+    "invalid_callable_flow": "Allowlist only declared callable flows in a collection step.",
+    "invalid_collection_items": "Use bounded unique item IDs, allowed flows and object inputs.",
+    "invalid_collection_input": "Match each collection item's input to its callable flow schema.",
+    "collection_depth_exceeded": "Keep callable-flow nesting within sixteen collection levels.",
+    "workflow_cycle": "Remove route and callable-flow cycles so every invocation terminates.",
     "unreachable_flow": "Connect the flow from start or remove it.",
 }
 

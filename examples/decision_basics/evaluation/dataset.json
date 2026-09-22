@@ -1,0 +1,32 @@
+{
+  "name": "decision_basics_gold",
+  "revision": "1",
+  "suites": [
+    {
+      "name": "pipeline",
+      "workflow": "decision_basics",
+      "cases": "cases/requests.json",
+      "metrics": [
+        {
+          "name": "category",
+          "path": "/flows/classify/steps/classify/result/answer/optionId",
+          "kind": "classification",
+          "labels": ["billing", "cancellation", null]
+        }
+      ]
+    },
+    {
+      "name": "classify_flow",
+      "workflow": "decision_basics",
+      "flow": "classify",
+      "cases": "cases/requests.json"
+    },
+    {
+      "name": "classify_step",
+      "workflow": "decision_basics",
+      "flow": "classify",
+      "step": "classify",
+      "cases": "cases/requests.json"
+    }
+  ]
+}

@@ -226,8 +226,28 @@ class HandlerStepAuthoring(_CommonStep):
     input: dict[Id, Binding]
 
 
+class FlowCollectionStepAuthoring(_CommonStep):
+    """Invoke allowlisted callable flows sequentially from explicit item inputs."""
+
+    type: Literal["flow_collection"]
+    items: Binding
+    flows: Annotated[list[Id], Field(min_length=1)]
+    max_items: Annotated[int, Field(strict=True, ge=1, le=1024)] = 32
+
+    @field_validator("flows")
+    @classmethod
+    def unique_flows(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("callable flow IDs must be unique")
+        return value
+
+
 StepAuthoring = Annotated[
-    DecisionStepAuthoring | LlmStepAuthoring | McpStepAuthoring | HandlerStepAuthoring,
+    DecisionStepAuthoring
+    | LlmStepAuthoring
+    | McpStepAuthoring
+    | HandlerStepAuthoring
+    | FlowCollectionStepAuthoring,
     Field(discriminator="type"),
 ]
 
@@ -311,6 +331,20 @@ class FlowInstance(BoundaryModel):
         return self
 
 
+class CallableFlow(BoundaryModel):
+    """A flow available only to explicit collection calls, without boundary routes."""
+
+    callable: Literal[True]
+    definition: FlowDefinition | NonBlank | None = None
+
+    @field_validator("callable", mode="before")
+    @classmethod
+    def explicit_true(cls, value: object) -> object:
+        if value is not True:
+            raise ValueError("callable must be true")
+        return value
+
+
 class WorkflowAuthoring(BoundaryModel):
     """A finite graph of explicit, sequential flow instances."""
 
@@ -319,7 +353,7 @@ class WorkflowAuthoring(BoundaryModel):
     defaults: WorkflowDefaults = Field(default_factory=WorkflowDefaults)
     input_schema: NonBlank | dict[str, JsonValue] | None = None
     output: Binding | None = None
-    flows: Annotated[dict[Id, FlowInstance], Field(min_length=1)]
+    flows: Annotated[dict[Id, FlowInstance | CallableFlow], Field(min_length=1)]
 
 
 class DeclaredTool(BoundaryModel):

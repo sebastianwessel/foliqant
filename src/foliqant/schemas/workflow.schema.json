@@ -289,6 +289,39 @@
       "title": "AzureModelConfig",
       "type": "object"
     },
+    "CallableFlow": {
+      "additionalProperties": false,
+      "description": "A flow available only to explicit collection calls, without boundary routes.",
+      "properties": {
+        "callable": {
+          "const": true,
+          "title": "Callable",
+          "type": "boolean"
+        },
+        "definition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowDefinition"
+            },
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition"
+        }
+      },
+      "required": [
+        "callable"
+      ],
+      "title": "CallableFlow",
+      "type": "object"
+    },
     "CategoryCatalog": {
       "additionalProperties": false,
       "description": "A bounded classification catalog prepared before model inference.\n\nCategory keys are normalized deterministically and descriptions are\npreserved exactly. Unsupported external taxonomies require an explicit\nmapping before they enter this contract.",
@@ -802,6 +835,51 @@
         "id"
       ],
       "title": "FallbackCategory",
+      "type": "object"
+    },
+    "FlowCollectionStepAuthoring": {
+      "additionalProperties": false,
+      "description": "Invoke allowlisted callable flows sequentially from explicit item inputs.",
+      "properties": {
+        "flows": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Flows",
+          "type": "array"
+        },
+        "items": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PointerBinding"
+            },
+            {
+              "$ref": "#/$defs/LiteralBinding"
+            }
+          ],
+          "title": "Items"
+        },
+        "max_items": {
+          "default": 32,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Max Items",
+          "type": "integer"
+        },
+        "type": {
+          "const": "flow_collection",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "items",
+        "flows"
+      ],
+      "title": "FlowCollectionStepAuthoring",
       "type": "object"
     },
     "FlowDefinition": {
@@ -1552,6 +1630,7 @@
               "discriminator": {
                 "mapping": {
                   "decision": "#/$defs/DecisionStepAuthoring",
+                  "flow_collection": "#/$defs/FlowCollectionStepAuthoring",
                   "handler": "#/$defs/HandlerStepAuthoring",
                   "llm": "#/$defs/LlmStepAuthoring",
                   "mcp": "#/$defs/McpStepAuthoring"
@@ -1570,6 +1649,9 @@
                 },
                 {
                   "$ref": "#/$defs/HandlerStepAuthoring"
+                },
+                {
+                  "$ref": "#/$defs/FlowCollectionStepAuthoring"
                 }
               ]
             },
@@ -2369,7 +2451,14 @@
       "minProperties": 1,
       "patternProperties": {
         "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
-          "$ref": "#/$defs/FlowInstance"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowInstance"
+            },
+            {
+              "$ref": "#/$defs/CallableFlow"
+            }
+          ]
         }
       },
       "title": "Flows",

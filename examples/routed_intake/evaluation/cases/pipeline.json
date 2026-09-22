@@ -1,0 +1,58 @@
+[
+  {
+    "id": "billing_en",
+    "input": {
+      "payload": {"message": "Please send a copy of invoice INV-42."},
+      "metadata": {"language": "en"}
+    },
+    "expectations": [
+      {"name": "completed", "path": "/execution/status", "expected": "completed"},
+      {"name": "category", "path": "/flows/classify/result", "expected": "billing"},
+      {"name": "route", "path": "/transitions/0/flow", "expected": "billing"},
+      {"name": "queue", "path": "/flows/billing/result/queue", "expected": "billing"},
+      {"name": "action", "path": "/flows/billing/result/action", "expected": "request_invoice_review"}
+    ]
+  },
+  {
+    "id": "cancellation_en",
+    "input": {
+      "payload": {"message": "Cancel my subscription at renewal."},
+      "metadata": {"language": "en"}
+    },
+    "expectations": [
+      {"name": "completed", "path": "/execution/status", "expected": "completed"},
+      {"name": "category", "path": "/flows/classify/result", "expected": "cancellation"},
+      {"name": "route", "path": "/transitions/0/flow", "expected": "cancellation"},
+      {"name": "queue", "path": "/flows/cancellation/result/queue", "expected": "cancellation"},
+      {"name": "action", "path": "/flows/cancellation/result/action", "expected": "prepare_cancellation"}
+    ]
+  },
+  {
+    "id": "billing_de",
+    "input": {
+      "payload": {"message": "Bitte senden Sie mir eine Kopie der Rechnung R-17."},
+      "metadata": {"language": "de"}
+    },
+    "expectations": [
+      {"name": "completed", "path": "/execution/status", "expected": "completed"},
+      {"name": "category", "path": "/flows/classify/result", "expected": "billing"},
+      {"name": "route", "path": "/transitions/0/flow", "expected": "billing"},
+      {"name": "queue", "path": "/flows/billing/result/queue", "expected": "billing"},
+      {"name": "action", "path": "/flows/billing/result/action", "expected": "request_invoice_review"}
+    ]
+  },
+  {
+    "id": "cancellation_de",
+    "input": {
+      "payload": {"message": "Bitte kündigen Sie mein Abonnement zum Laufzeitende."},
+      "metadata": {"language": "de"}
+    },
+    "expectations": [
+      {"name": "completed", "path": "/execution/status", "expected": "completed"},
+      {"name": "category", "path": "/flows/classify/result", "expected": "cancellation"},
+      {"name": "route", "path": "/transitions/0/flow", "expected": "cancellation"},
+      {"name": "queue", "path": "/flows/cancellation/result/queue", "expected": "cancellation"},
+      {"name": "action", "path": "/flows/cancellation/result/action", "expected": "prepare_cancellation"}
+    ]
+  }
+]

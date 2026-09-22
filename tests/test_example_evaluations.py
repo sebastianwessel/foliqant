@@ -88,8 +88,8 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
     assert evidence["support"] == evidence["observed"] == 16
     assert evidence["confusion_matrix"] == [[0, 0, 0], [0, 16, 0], [0, 0, 0]]
     classify_summary = next(step for step in pipeline["steps"] if step["name"] == "classify")
-    assert classify_summary["model_selected_cases"] == 6
-    assert classify_summary["fallback_selected_cases"] == 8
+    assert classify_summary["model_selected_invocations"] == 6
+    assert classify_summary["fallback_selected_invocations"] == 8
     assert classify_summary["fallback_rate"] == pytest.approx(8 / 16)
     for report, step in ((classification, "classify"), (extraction, "extract")):
         assert report["target_step"] == step
@@ -312,8 +312,8 @@ async def test_exported_dataset_and_report_replay_through_shared_cli(
                 == before["details"]["result"]["flows"]["triage"]["steps"]
             )
     classify = next(step for step in replay_reports[0]["steps"] if step["name"] == "classify")
-    assert classify["model_selected_cases"] == 12
-    assert classify["fallback_selected_cases"] == 16
-    assert classify["observed_cases"] == 32
+    assert classify["model_selected_invocations"] == 12
+    assert classify["fallback_selected_invocations"] == 16
+    assert classify["observed_invocations"] == 32
     assert classify["fallback_rate"] == pytest.approx(16 / 32)
     capsys.readouterr()

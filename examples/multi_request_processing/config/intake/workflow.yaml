@@ -1,0 +1,46 @@
+defaults:
+  model: local_qwen
+start: assess
+input_schema: input.schema.json
+output:
+  pointer: /flows/finalize/result
+  optional: true
+  default:
+    disposition: review
+flows:
+  assess:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      flow: plan
+    on_unresolved:
+      flow: plan
+  plan:
+    input:
+      assessment:
+        pointer: /flows/assess/result
+      language:
+        pointer: /payload/language
+    transition:
+      flow: process
+  process:
+    input:
+      items:
+        pointer: /flows/plan/result/items
+    transition:
+      flow: finalize
+    on_unresolved:
+      flow: finalize
+  finalize:
+    input:
+      plan:
+        pointer: /flows/plan/result
+      collection:
+        pointer: /flows/process/result
+    transition:
+      outcome: completed
+  lookup_status:
+    callable: true
+  prepare_guidance:
+    callable: true

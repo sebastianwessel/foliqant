@@ -131,7 +131,7 @@ Unresolved operations stop with `needs_review` unless the flow instance defines
 
 ## Choose an operation
 
-Flows run their operations in list order. There are four operation types:
+Flows run their operations in list order. There are five operation types:
 
 | Type | Purpose |
 | --- | --- |
@@ -139,9 +139,52 @@ Flows run their operations in list order. There are four operation types:
 | `llm` | Produce text or JSON matching an authored schema |
 | `mcp` | Call one declared and allowed MCP tool |
 | `handler` | Call a trusted async Python handler registered by the host |
+| `flow_collection` | Invoke a bounded ordered list of allowlisted callable flows |
 
 Operations do not route or terminate a workflow. Flow boundaries own routing
 and outcomes.
+
+### Collect callable flow results
+
+Use a callable flow for a reusable operation invoked only by a
+`flow_collection` step. It has a definition but no workflow input binding or
+transition:
+
+```yaml
+flows:
+  lookup_status:
+    callable: true
+```
+
+A collection step selects an array of `{id, flow, input}` items, allowlists the
+callable flow IDs, and applies a compiled item limit:
+
+```yaml
+type: flow_collection
+items:
+  pointer: /payload/items
+flows:
+  - lookup_status
+  - prepare_guidance
+max_items: 8
+```
+
+`max_items` defaults to 32 and accepts 1 through 1024. Item IDs must be unique;
+every selected flow must be in the step allowlist. Items execute sequentially
+under the root deadline and budgets. Collection nesting is bounded to 16 levels.
+Callable flows cannot be route targets or the workflow start.
+
+The runtime validates all item identities, selected flows, and child inputs
+before child I/O begins. An empty list completes. A child review remains in the
+ledger and execution continues; a technical child failure stops the collection
+and marks remaining items skipped. `run_flow` is always a fresh isolated call,
+so use a collection step when child calls must share one root execution.
+
+The public step record has `kind: flow_collection`. Successful and review
+results expose an ordered `result.items` ledger. On failure, the records produced
+through failure remain in `partial_result.items`, including failed and skipped
+items. Each item identifies its `id` and `flow` and contains the normal flow
+status, steps, result when present, usage, and timing.
 
 An LLM operation with a colocated output schema can be written as Markdown:
 
@@ -154,7 +197,7 @@ input:
 output:
   schema: output.schema.json
 ---
-Extract the account reference from {{ message }}.
+Extract the account reference from the supplied message.
 ```
 
 Only `decision` and `llm` definitions accept Markdown bodies. Use the body or

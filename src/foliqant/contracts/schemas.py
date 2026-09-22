@@ -11,7 +11,7 @@ from foliqant.evaluation.dataset import EvaluationDataset
 from .decisions import DecisionOutput
 from .deployment import DeploymentConfig
 from .envelope import Envelope
-from .execution import ExecutionResult
+from .execution import ExecutionResult, FlowCollectionItem, FlowCollectionResult
 from .mcp import McpProfiles
 from .models import ModelProfiles
 from .telemetry import TelemetryConfig
@@ -28,6 +28,8 @@ def runtime_schemas() -> dict[str, dict[str, JsonValue]]:
             "evaluation-dataset.schema.json": EvaluationDataset.model_json_schema(),
             "envelope.schema.json": Envelope.model_json_schema(),
             "execution-result.schema.json": ExecutionResult.model_json_schema(),
+            "flow-collection-item.schema.json": FlowCollectionItem.model_json_schema(),
+            "flow-collection-result.schema.json": FlowCollectionResult.model_json_schema(),
             "model-profiles.schema.json": ModelProfiles.model_json_schema(),
             "mcp-profiles.schema.json": McpProfiles.model_json_schema(),
             "telemetry.schema.json": TelemetryConfig.model_json_schema(),

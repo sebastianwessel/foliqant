@@ -1,0 +1,4 @@
+steps:
+- plan
+output:
+  pointer: /steps/plan/result

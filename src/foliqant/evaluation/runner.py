@@ -39,6 +39,7 @@ from .metrics import (
     summarize_metrics,
     validate_metrics,
 )
+from .records import FlowObservation, StepObservation, path_observation, snapshot_execution
 from .spans import matches_source_span
 from .summaries import summarize_latency, summarize_usage
 
@@ -64,10 +65,18 @@ async def _check(
     target_flow: str | None,
     target_step: str | None,
     case_input: FrozenJson,
+    flow_records: tuple[FlowObservation, ...],
+    step_records: tuple[StepObservation, ...],
 ) -> CheckReport:
     path_flow, path_step = _scope(expected.path)
     flow = path_flow or target_flow
     step = path_step or target_step
+    owner = path_observation(expected.path, flow_records, step_records)
+    if isinstance(owner, StepObservation):
+        flow, step = owner.flow, owner.name
+    elif isinstance(owner, FlowObservation):
+        flow, step = owner.name, None
+    invocation_path = owner.path if owner is not None else None
     outcome: CheckOutcome
     try:
         actual = resolve_binding(BindingPlan(kind="pointer", pointer=expected.path), document)
@@ -77,7 +86,13 @@ async def _check(
             flow_record.steps.get(step) if flow_record is not None and step is not None else None
         )
         status = (
-            record.status if record is not None else flow_record.status if flow_record else None
+            owner.record.status
+            if owner is not None
+            else record.status
+            if record is not None
+            else flow_record.status
+            if flow_record
+            else None
         )
         outcome = (
             "skipped"
@@ -94,6 +109,7 @@ async def _check(
             step,
             outcome,
             CheckDetails(False, None, expected.expected) if include_details else None,
+            invocation_path,
         )
     try:
         if expected.comparison == "custom":
@@ -124,6 +140,7 @@ async def _check(
         step,
         "match" if outcome == "passed" else "mismatch" if outcome == "failed" else "scorer_error",
         CheckDetails(True, actual, expected.expected) if include_details else None,
+        invocation_path,
     )
 
 
@@ -148,16 +165,7 @@ async def _case(
             raise ServiceError(ErrorCode.INVALID_OUTPUT)
         # Revalidate and detach any nested mutable dictionaries before scoring.
         result = ExecutionResult.model_validate(returned.model_dump(mode="json"), strict=True)
-        # Payload and each step result retain their business-value depth bound.
-        # The public result adds flow and step containers around those values.
-        freeze_json(result.payload)
-        for flow in result.flows.values():
-            if "result" in flow.model_fields_set:
-                freeze_json(flow.result)
-            for record in flow.steps.values():
-                if "result" in record.model_fields_set:
-                    freeze_json(record.result)
-        document = freeze_json(result.model_dump(mode="json"), max_depth=MAX_JSON_DEPTH + 5)
+        document, flow_records, step_records = snapshot_execution(result)
     except Exception as error:
         code = (
             "timeout"
@@ -204,25 +212,29 @@ async def _case(
                 variant.flow,
                 variant.step,
                 case_input,
+                flow_records,
+                step_records,
             )
             for check in case.expectations
         ]
     )
     flows = tuple(
-        FlowReport(name, flow.status, flow.elapsed_seconds, flow.usage)
-        for name, flow in result.flows.items()
+        FlowReport(
+            item.name, item.record.status, item.record.elapsed_seconds, item.record.usage, item.path
+        )
+        for item in flow_records
     )
     steps = tuple(
         StepReport(
-            flow_name,
-            name,
-            step.status,
-            step.elapsed_seconds,
-            step.usage,
-            step.selection.origin if step.selection is not None else None,
+            item.flow,
+            item.name,
+            item.record.status,
+            item.record.elapsed_seconds,
+            item.record.usage,
+            item.record.selection.origin if item.record.selection is not None else None,
+            item.path,
         )
-        for flow_name, flow in result.flows.items()
-        for name, step in flow.steps.items()
+        for item in step_records
     )
     report = CaseReport(
         case.id,
@@ -283,29 +295,33 @@ def _step_summaries(cases: tuple[CaseReport, ...]) -> tuple[StepSummary, ...]:
                 sum(step.status in {"failed", "cancelled"} for step in records),
                 sum(step.status == "needs_review" for step in records),
                 summarize_latency(
-                    next(
-                        (
+                    value
+                    for case in cases
+                    for value in (
+                        [
                             step.elapsed_seconds
                             for step in case.steps
                             if (step.flow, step.name) == (flow, name)
-                        ),
-                        None,
+                        ]
+                        or [None]
                     )
-                    for case in cases
                 ),
                 summarize_usage(
-                    next(
-                        (
+                    value
+                    for case in cases
+                    for value in (
+                        [
                             step.usage
                             for step in case.steps
                             if (step.flow, step.name) == (flow, name)
-                        ),
-                        None,
+                        ]
+                        or [None]
                     )
-                    for case in cases
                 ),
-                model_selected_cases=sum(step.selection_origin == "model" for step in records),
-                fallback_selected_cases=sum(
+                model_selected_invocations=sum(
+                    step.selection_origin == "model" for step in records
+                ),
+                fallback_selected_invocations=sum(
                     step.selection_origin == "fallback" for step in records
                 ),
                 fallback_rate=(
@@ -328,12 +344,16 @@ def _flow_summaries(cases: tuple[CaseReport, ...]) -> tuple[FlowSummary, ...]:
             sum(flow.status in {"failed", "cancelled"} for flow in records),
             sum(flow.status == "needs_review" for flow in records),
             summarize_latency(
-                next((flow.elapsed_seconds for flow in case.flows if flow.name == name), None)
+                value
                 for case in cases
+                for value in (
+                    [flow.elapsed_seconds for flow in case.flows if flow.name == name] or [None]
+                )
             ),
             summarize_usage(
-                next((flow.usage for flow in case.flows if flow.name == name), None)
+                value
                 for case in cases
+                for value in ([flow.usage for flow in case.flows if flow.name == name] or [None])
             ),
         )
         for name in names

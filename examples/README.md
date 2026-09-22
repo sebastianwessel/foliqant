@@ -1,41 +1,45 @@
 # Examples
 
-- [Typed decisions and evidence](decision_evidence/README.md): compare single-choice
-  triage, labels, predicates, priority, and request units with explicit support gold.
-- [Support triage](support_triage/README.md): local Qwen decision and structured
-  extraction, plus editable synthetic JSON evaluation cases.
-- [Public-request lookup](public_request_mcp/README.md): read-only local MCP
-  integration without a model call.
-- [Extract then look up](extracted_request_mcp/README.md): local Qwen extracts a
-  reference and passes only selected fields to a read-only MCP tool.
-- [Prompt-security evaluation](security_evaluation/README.md): paired English/German
-  cases for instruction boundaries and selected context between steps.
-- [HTTP wrapper](http_workflow/README.md): a thin transport around support triage.
+## Learning sequence
 
-All records are synthetic. Model-backed commands require an explicit `--live`
-flag; offline tests use local fakes or explicit configuration/gold checks.
+Work through these in order. Each stage adds one runtime capability and keeps
+model-backed commands offline unless `--live` is explicit.
 
-Each example has a runnable `evaluate` module using `foliqant.evaluation`.
-Support and HTTP checks are offline by default; add `--live` for local Qwen.
-The evidence example checks configuration/gold by default and uses real Qwen
-only with `--live`. The MCP evaluation uses its bundled stdio server. Synthetic wiring checks are
-not model-quality measurements. See each example’s README for exact commands.
+1. [Classify one request](decision_basics/README.md): one typed decision and a
+   review outcome.
+2. [Add structured extraction](support_triage/README.md): selected prior-step
+   context and a validated JSON result.
+3. [Route between flows](routed_intake/README.md): exact deterministic routing
+   to trusted handlers.
+4. [Call a read-only MCP tool](public_request_mcp/README.md): one direct,
+   declared tool call without a model.
+5. [Let a model use a tool](model_tool_loop/README.md): a complete
+   model-to-MCP-to-model loop.
+6. [Process several requests](multi_request_processing/README.md): typed request
+   assessment, trusted planning, bounded callable flows, and disposition.
+
+## Focused examples
+
+- [Typed decisions and evidence](decision_evidence/README.md) compares all
+  decision question forms, evidence strength, and application fallback.
+- [Extract then look up](extracted_request_mcp/README.md) passes only selected
+  extraction fields to a direct MCP operation.
+- [Prompt-security evaluation](security_evaluation/README.md) contains paired
+  English and German cases for instruction boundaries and selected context.
+- [HTTP wrapper](http_workflow/README.md) embeds the runtime in a thin transport.
+
+All records are synthetic. Each learning example keeps editable reviewed gold
+under its own `evaluation/` directory and observes pipeline, flow, and step
+scopes. Reusing one source case across scopes does not create additional
+independent business examples.
 
 Evaluation commands save a new private report under ignored `.foliqant/` by
-default; `--output` selects a new path. `--repeat` measures each authored case
-several times without treating repetitions as new independent inputs. Full
-reports contain inputs, gold, public reasons/results, metrics, and usage.
-Ordinary workflow execution never writes evaluation data.
+default. Full reports can contain inputs, gold, public results, reasons, metrics,
+and usage; keep generated reports and real customer data out of Git. The tracked
+synthetic fixtures establish wiring and authored policy behavior, not general
+model quality, security, latency, cost, or cache efficiency.
 
-Workflow examples keep their entry point in `config/settings.yaml`, workflow directories
-at `config/<workflow-id>/workflow.yaml`, flow definitions at `<flow-id>/flow.yaml`,
-and ordered step IDs resolving to `<step-id>.step.yaml`/`.md` or
-`<step-id>/step.yaml`/`.md`. Schemas live beside their definitions.
-Settings can omit the workflow registry; file lookup rejects ambiguous candidates
-and never determines step order. Explicit references remain available. Evaluation targets cover the pipeline, flows and individual steps.
-Returned records are scoped as `/flows/{flow}/steps/{step}`; input bindings
-inside a flow use only that flow’s payload and earlier local step results.
-
-Each example’s `evaluation/dataset.json` is tracked, editable synthetic ground
-truth. Python runners read those files directly; model test doubles are authored
-independently. Only generated reports and real/private datasets remain ignored.
+Workflow examples use `config/settings.yaml`, conventional
+`config/<workflow>/workflow.yaml`, `<flow>/flow.yaml`, and colocated step and
+schema files. Ordered step IDs and routes remain explicit; filesystem order
+never controls execution.

@@ -29,6 +29,14 @@ nav:
   - Home: index.md
   - Getting started:
       - Install and run: getting-started/runtime.md
+  - Tutorials:
+      - Learning path: tutorials/index.md
+      - 1. Classify one request: tutorials/decision-basics.md
+      - 2. Add structured extraction: tutorials/structured-extraction.md
+      - 3. Route between flows: tutorials/multiflow-routing.md
+      - 4. Call a read-only MCP tool: tutorials/read-only-mcp.md
+      - 5. Let a model use a tool: tutorials/model-tool-loop.md
+      - 6. Process several requests: tutorials/multi-request-processing.md
   - Concepts:
       - Runtime model: concepts/runtime.md
   - Guides:

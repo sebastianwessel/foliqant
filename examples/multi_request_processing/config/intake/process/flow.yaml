@@ -1,0 +1,4 @@
+steps:
+- requests
+output:
+  pointer: /steps/requests/result

@@ -79,12 +79,22 @@
     {
       "id": 16,
       "prompt": "One message can contain both a billing dispute and a cancellation. Run both downstream workflows in parallel after classification and merge them automatically.",
-      "expected_output": "Models the current sequential flow graph honestly: uses a multiselect or request_units decision when both intents are valid, then requires an explicit supported sequential route or host-owned orchestration. It does not invent parallel flow fan-out, implicit joins, or duplicate workflow execution. Conflicting or unsupported routing goes to explicit review, with independently authored pipeline and decision-step gold."
+      "expected_output": "Uses a request_units decision for multi-intent assessment, trusted planning policy, and a flow_collection step that sequentially invokes only allowlisted callable flows with unique task IDs and bounded item count. The final disposition consumes the plan plus complete ledger. It refuses parallel fan-out and an implicit join, keeps conditional, related, unsupported, or incomplete work in review, and adds independently authored pipeline, collection-step, callable-flow, and child-step gold."
     },
     {
       "id": 17,
       "prompt": "Configure provider retries so a slow or disconnected model call is retried three times, and ensure evaluation never opens gold at startup.",
       "expected_output": "Keeps gold lookup exclusive to explicit evaluation. Explains that max_attempts includes the initial attempt and retries only safely observed completed transient HTTP responses under one absolute deadline. It does not retry timeout, disconnect, cancellation, authentication, schema/output, or whole-workflow failures; therefore it refuses the requested slow/disconnect retries and shows the closest valid explicit retry policy."
+    },
+    {
+      "id": 18,
+      "prompt": "Evaluate a collection that calls the same status flow twice and fails on a third child. Explain the report and usage without double counting.",
+      "expected_output": "Checks nested public paths under the collection result, or partial_result after failure, and uses invocation_path to distinguish repeated callable-flow and child-step observations. It explains observed/skipped/failed/review invocation counters, preserves failed and skipped ledger records, counts root usage once, and treats grouped child usage as diagnostic rather than additive."
+    },
+    {
+      "id": 19,
+      "prompt": "An email has two labels for one request, another request in the same category, and a conditional request. Create a reusable process without turning every label into a job.",
+      "expected_output": "Separates tags from request units, retains native assessment and relationships, and uses explicit host planning policy to group or deduplicate and hold unresolved work. Plans stable framework task IDs correlated to original IDs, not copied arbitrary native IDs. Uses allowlisted sequential callable flows under parent budgets, and a disposition handler that accounts for held, completed and review work without declaring external work completed. Technical failure stops before disposition and exposes the partial ledger to the caller, including skipped work. Related requests need an authored coordinated flow or review; no inferred scheduler, queues or persistence."
     }
   ]
 }

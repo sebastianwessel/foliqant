@@ -13,9 +13,11 @@ from pydantic import TypeAdapter, ValidationError
 from foliqant.contracts.models import ModelConfig
 from foliqant.contracts.workflow import (
     Binding,
+    CallableFlow,
     ChoiceQuestionShorthand,
     DecisionStepAuthoring,
     DeclaredToolCatalog,
+    FlowCollectionStepAuthoring,
     FlowDefinition,
     FlowInstance,
     FlowTarget,
@@ -37,6 +39,7 @@ from foliqant.contracts.workflow import (
 from foliqant.core.errors import ServiceError
 from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import (
+    MAX_COLLECTION_DEPTH,
     BindingPlan,
     CategoryPlan,
     CompiledStep,
@@ -44,6 +47,7 @@ from foliqant.core.plan import (
     DecisionQuestionPlan,
     DecisionStepPlan,
     FallbackPlan,
+    FlowCollectionStepPlan,
     FlowPlan,
     HandlerStepPlan,
     LlmStepPlan,
@@ -66,6 +70,7 @@ from foliqant.decisions import (
 )
 
 from ._loader import load_step, load_yaml
+from .collections import validate_collection_literals
 from .errors import CompilationError
 from .models import ModelRegistry
 from .schema_helpers import (
@@ -121,6 +126,9 @@ def _validate[T](adapter: TypeAdapter[T], value: object, location: SourceLocatio
             "steps",
             "flows",
             "id",
+            "callable",
+            "items",
+            "max_items",
             "definition",
             "transition",
             "binding",
@@ -638,6 +646,15 @@ def _compile_step(
                 (key, _binding(value, location)) for key, value in sorted(authored.input.items())
             ),
         )
+    if isinstance(authored, FlowCollectionStepAuthoring):
+        return FlowCollectionStepPlan(
+            name=step_id,
+            type=authored.type,
+            location=location,
+            items=_binding(authored.items, location),
+            flows=tuple(authored.flows),
+            max_items=authored.max_items,
+        )
     raise AssertionError("closed step union")
 
 
@@ -648,7 +665,7 @@ def _bindings(step: CompiledStep) -> tuple[BindingPlan, ...]:
         return tuple(value for _, value in step.input)
     if isinstance(step, McpStepPlan):
         return tuple(value for _, value in step.arguments)
-    if isinstance(step, HandlerStepPlan):
+    if isinstance(step, (HandlerStepPlan, FlowCollectionStepPlan)):
         return tuple(value for _, value in step.input)
     return ()
 
@@ -725,6 +742,34 @@ def _validate_model_capabilities(
             _fail("unsupported_model_capability", step.location, "model")
 
 
+def _collection_result_schema() -> dict[str, object]:
+    """Known ledger structure; child business results keep their authored types."""
+    return {
+        "type": "object",
+        "required": ["items"],
+        "additionalProperties": False,
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "flow": {"type": "string"},
+                        "status": {"type": "string"},
+                        "steps": {"type": "object"},
+                        "result": {},
+                        "usage": {"type": "object"},
+                        "elapsed_seconds": {"type": "number"},
+                        "error": {"type": "object"},
+                    },
+                    "additionalProperties": False,
+                },
+            }
+        },
+    }
+
+
 def _validate_schema_bindings(
     steps: Mapping[str, CompiledStep],
     input_path: str | None,
@@ -741,6 +786,8 @@ def _validate_schema_bindings(
         return view(cast(dict[str, object], thaw_json(schema)))
 
     def result_schema(step: CompiledStep) -> SchemaView:
+        if isinstance(step, FlowCollectionStepPlan):
+            return view(_collection_result_schema())
         if isinstance(step, LlmStepPlan):
             if step.output_schema_path is not None:
                 return view(schemas[step.output_schema_path], step.output_schema_path)
@@ -781,7 +828,9 @@ def _validate_schema_bindings(
                         "type": "object",
                         "properties": {
                             "status": {"type": "string"},
+                            "kind": {"const": "flow_collection"},
                             "result": {},
+                            "partial_result": _collection_result_schema(),
                             "selection": {
                                 "type": "object",
                                 "properties": {
@@ -833,6 +882,9 @@ def _validate_schema_bindings(
             expected = view(
                 cast(dict[str, object], catalogs[step.server].tools[step.tool].input_schema)
             )
+        elif isinstance(step, FlowCollectionStepPlan):
+            pairs = step.input
+            expected = view({"type": "object", "properties": {"items": {"type": "array"}}})
         elif isinstance(step, HandlerStepPlan):
             pairs = step.input
             if step.handler in handlers:
@@ -993,7 +1045,7 @@ def _read(path: Path, root: Path, cache: dict[Path, bytes]) -> bytes:
 
 def _compile_flow(
     name: str,
-    instance: FlowInstance,
+    instance: FlowInstance | CallableFlow,
     *,
     workflow: WorkflowAuthoring,
     workflow_path: Path,
@@ -1137,7 +1189,7 @@ def _compile_flow(
         else step
         for step in compiled.values()
     )
-    route = instance.transition
+    route = instance.transition if isinstance(instance, FlowInstance) else None
     transition = (
         MatchRoutingPlan(
             _binding(route.binding, location),
@@ -1146,12 +1198,16 @@ def _compile_flow(
         )
         if isinstance(route, MatchRouting)
         else _target(route)
+        if route is not None
+        else None
     )
     return FlowPlan(
         name=name,
         input=tuple(
             (key, _binding(binding, location)) for key, binding in sorted(instance.input.items())
-        ),
+        )
+        if isinstance(instance, FlowInstance)
+        else (),
         steps=steps,
         input_schema_path=resource_path(input_schema_path)
         if input_schema_path is not None
@@ -1159,7 +1215,10 @@ def _compile_flow(
         input_schema=input_schema,
         output=output,
         transition=transition,
-        on_unresolved=_unresolved(instance.on_unresolved),
+        on_unresolved=_unresolved(instance.on_unresolved)
+        if isinstance(instance, FlowInstance)
+        else None,
+        callable=isinstance(instance, CallableFlow),
         location=location,
     ), {resource_path(key): value for key, value in schemas.items()}
 
@@ -1169,6 +1228,8 @@ def _flow_targets(flow: FlowPlan) -> tuple[TransitionTargetPlan, ...]:
         [flow.transition.default, *(target for _, target in flow.transition.cases)]
         if isinstance(flow.transition, MatchRoutingPlan)
         else [flow.transition]
+        if flow.transition is not None
+        else []
     )
     unresolved = flow.on_unresolved
     if isinstance(unresolved, UnresolvedRoutingPlan):
@@ -1181,23 +1242,43 @@ def _flow_targets(flow: FlowPlan) -> tuple[TransitionTargetPlan, ...]:
 def _validate_graph(
     flows: Mapping[str, FlowPlan], start: str, location: SourceLocation
 ) -> dict[str, set[str]]:
-    if start not in flows:
+    if start not in flows or flows[start].callable:
         _fail("missing_start", location)
-    graph = {
+    routed = {
         name: tuple(
             dict.fromkeys(target.flow for target in _flow_targets(flow) if target.flow is not None)
         )
         for name, flow in flows.items()
     }
-    for name, targets in graph.items():
-        if any(target not in flows for target in targets):
-            _fail("missing_flow", flows[name].location)
+    graph: dict[str, tuple[str, ...]] = {}
+    for name, flow in flows.items():
+        for target in routed[name]:
+            if target not in flows:
+                _fail("missing_flow", flow.location)
+            if flows[target].callable:
+                _fail("invalid_routed_flow", flow.location)
+        calls = []
+        for step in flow.steps:
+            if not isinstance(step, FlowCollectionStepPlan):
+                continue
+            for target in step.flows:
+                if target not in flows or not flows[target].callable:
+                    _fail("invalid_callable_flow", step.location, "flows")
+                calls.append(target)
+        graph[name] = tuple(dict.fromkeys((*routed[name], *calls)))
     visited: set[str] = set()
     active: set[str] = set()
+    call_depths: dict[str, int] = {}
     pending = [(start, False)]
     while pending:
         name, exiting = pending.pop()
         if exiting:
+            call_depths[name] = max(
+                (call_depths[target] + int(flows[target].callable) for target in graph[name]),
+                default=0,
+            )
+            if call_depths[name] > MAX_COLLECTION_DEPTH:
+                _fail("collection_depth_exceeded", flows[name].location)
             active.remove(name)
             visited.add(name)
             continue
@@ -1210,15 +1291,16 @@ def _validate_graph(
         pending.extend((target, False) for target in reversed(graph[name]))
     if visited != set(flows):
         _fail("unreachable_flow", flows[sorted(set(flows) - visited)[0]].location)
-    predecessors = {name: set[str]() for name in flows}
-    for name, targets in graph.items():
+    routed_flows = {name for name, flow in flows.items() if not flow.callable}
+    predecessors = {name: set[str]() for name in routed_flows}
+    for name, targets in routed.items():
         for target in targets:
             predecessors[target].add(name)
-    dominators = {name: ({name} if name == start else set(flows)) for name in flows}
+    dominators = {name: ({name} if name == start else set(routed_flows)) for name in routed_flows}
     changed = True
     while changed:
         changed = False
-        for name in flows:
+        for name in routed_flows:
             if name == start:
                 continue
             parents = predecessors[name]
@@ -1247,7 +1329,12 @@ def _boundary_binding(
         _fail("dangling_pointer", location)
     if tokens[0] != "flows":
         return
-    if len(tokens) < 3 or tokens[2] != "result" or tokens[1] not in flows:
+    if (
+        len(tokens) < 3
+        or tokens[2] != "result"
+        or tokens[1] not in flows
+        or flows[tokens[1]].callable
+    ):
         _fail("invalid_flow_reference", location)
     if tokens[1] not in available and not binding.optional:
         _fail("unavailable_flow_reference", location)
@@ -1309,6 +1396,8 @@ def _boundary_schema(
                         if step.output_schema_path
                         else view({"type": "string"})
                     )
+                elif isinstance(step, FlowCollectionStepPlan):
+                    result = view(_collection_result_schema())
                 elif isinstance(step, HandlerStepPlan) and step.handler in handlers:
                     result = view(
                         cast(dict[str, object], thaw_json(handlers[step.handler].output_schema))
@@ -1361,6 +1450,13 @@ def _validate_boundaries(
         return result
 
     for name, flow in flows.items():
+        if flow.callable:
+            if flow.input_schema_path is not None:
+                schema = dict(schemas[flow.input_schema_path])
+                view = SchemaView(schema, schema, flow.input_schema_path, schemas)
+                if incompatible_types({"object"}, schema_types(view)):
+                    _fail("incompatible_binding_type", flow.location, "input_schema")
+            continue
         expected = (
             SchemaView(
                 dict(schemas[flow.input_schema_path]),
@@ -1406,8 +1502,11 @@ def _validate_boundaries(
         terminals = [
             name
             for name, flow in flows.items()
-            if flow.on_unresolved is None
-            or any(target.outcome is not None for target in _flow_targets(flow))
+            if not flow.callable
+            and (
+                flow.on_unresolved is None
+                or any(target.outcome is not None for target in _flow_targets(flow))
+            )
         ]
         available = (
             set.intersection(*(dominators[name] for name in terminals)) if terminals else set()
@@ -1455,12 +1554,14 @@ def compile_workflow(
     if isinstance(raw_workflow, dict):
         raw_workflow.setdefault("name", bundle.name)
         declared_flows = raw_workflow.get("flows")
-        if (
-            "start" not in raw_workflow
-            and isinstance(declared_flows, dict)
-            and len(declared_flows) == 1
-        ):
-            raw_workflow["start"] = next(iter(declared_flows))
+        if "start" not in raw_workflow and isinstance(declared_flows, dict):
+            routed_names = [
+                name
+                for name, flow in declared_flows.items()
+                if not isinstance(flow, dict) or flow.get("callable") is not True
+            ]
+            if len(routed_names) == 1:
+                raw_workflow["start"] = routed_names[0]
     workflow = _validate(_WORKFLOW_ADAPTER, raw_workflow, location)
     if workflow.name is None or workflow.start is None:
         _fail("missing_start", location)
@@ -1508,6 +1609,7 @@ def compile_workflow(
         flows[name] = flow
         schemas.update(resources)
     dominators = _validate_graph(flows, workflow.start, location)
+    validate_collection_literals(flows, schemas)
     output = _binding(workflow.output, location) if workflow.output is not None else None
     _validate_boundaries(
         flows,

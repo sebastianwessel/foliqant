@@ -1,0 +1,4 @@
+steps:
+- identify
+output:
+  pointer: /steps/identify/result

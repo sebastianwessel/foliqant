@@ -2,18 +2,20 @@
 
 Foliqant compiles and runs typed workflows in a Python process. A workflow
 connects explicit flows; each flow executes an ordered sequence of decision,
-LLM, MCP, or trusted handler steps. The host awaits one call and receives one
+LLM, MCP, trusted handler, or bounded flow-collection steps. The host awaits one call and receives one
 validated `ExecutionResult`.
 
 ## Start here
 
 1. [Install and run](getting-started/runtime.md) to create, validate, inspect,
    and execute a minimal project.
-2. Read [runtime concepts](concepts/runtime.md) to choose workflow, flow, and
+2. Follow the [six-stage tutorial](tutorials/index.md) to add decisions,
+   extraction, routing, MCP, tool loops, and bounded multi-request processing.
+3. Read [runtime concepts](concepts/runtime.md) to choose workflow, flow, and
    step boundaries.
-3. Use [workflow authoring](guides/build-workflows.md) for file conventions,
+4. Use [workflow authoring](guides/build-workflows.md) for file conventions,
    bindings, prompts, schemas, routes, and result paths.
-4. Use [runtime configuration](reference/runtime-configuration.md) for model
+5. Use [runtime configuration](reference/runtime-configuration.md) for model
    providers, MCP, handlers, limits, environment values, telemetry, and CLI
    behavior.
 
@@ -27,12 +29,9 @@ validated `ExecutionResult`.
 - [Evaluation results](guides/evaluation-results.md) explains denominators,
   usage, confusion matrices, comparisons, and operational failures.
 
-Runnable examples include
-[support triage](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/README.md),
-[a read-only MCP lookup](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/README.md),
-[extraction passed to MCP](https://github.com/sebastianwessel/foliqant/blob/main/examples/extracted_request_mcp/README.md),
-[prompt-security cases](https://github.com/sebastianwessel/foliqant/blob/main/examples/security_evaluation/README.md),
-and [a thin HTTP host](https://github.com/sebastianwessel/foliqant/blob/main/examples/http_workflow/README.md).
+The tutorial links each runnable learning example. Additional examples cover
+decision evidence, selected extraction passed to MCP, prompt-security cases,
+and a thin HTTP host.
 
 Foliqant does not provide inbound HTTP, application authentication, persistent
 jobs, or result storage. The embedding service owns those concerns. The

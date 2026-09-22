@@ -6,6 +6,10 @@ from typing import Literal
 from .json import FrozenJson, FrozenObject
 from .prompt import PromptTemplate
 
+# Keep composed ledgers below recursive public-boundary limits while preserving
+# the full business-value depth allowance at every leaf.
+MAX_COLLECTION_DEPTH = 16
+
 
 @dataclass(frozen=True, slots=True)
 class SourceLocation:
@@ -151,7 +155,21 @@ class HandlerStepPlan(StepPlan):
     input: tuple[tuple[str, BindingPlan], ...] = ()
 
 
-type CompiledStep = DecisionStepPlan | LlmStepPlan | McpStepPlan | HandlerStepPlan
+@dataclass(frozen=True, slots=True)
+class FlowCollectionStepPlan(StepPlan):
+    items: BindingPlan
+    flows: tuple[str, ...]
+    max_items: int = 32
+
+    @property
+    def input(self) -> tuple[tuple[str, BindingPlan], ...]:
+        """Expose the one explicit binding through the common step input interface."""
+        return (("items", self.items),)
+
+
+type CompiledStep = (
+    DecisionStepPlan | LlmStepPlan | McpStepPlan | HandlerStepPlan | FlowCollectionStepPlan
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,9 +190,10 @@ class FlowPlan:
     input_schema_path: str | None
     input_schema: FrozenObject | None
     output: BindingPlan | None
-    transition: TransitionTargetPlan | MatchRoutingPlan
+    transition: TransitionTargetPlan | MatchRoutingPlan | None
     on_unresolved: TransitionTargetPlan | UnresolvedRoutingPlan | None
     location: SourceLocation
+    callable: bool = False
 
     def step(self, name: str) -> CompiledStep:
         """Return an exact flow-local step ID or raise ``KeyError``."""

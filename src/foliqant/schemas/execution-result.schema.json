@@ -93,6 +93,169 @@
       "title": "ExecutionInfo",
       "type": "object"
     },
+    "FlowCollectionItemResult": {
+      "additionalProperties": false,
+      "description": "One collection item's complete flow record, including skipped local steps.",
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "needs_review"
+            }
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          }
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "result"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "skipped"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "error": {
+          "$ref": "#/$defs/SafeError",
+          "title": "Error"
+        },
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "steps": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "$ref": "#/$defs/StepResult"
+            }
+          },
+          "title": "Steps",
+          "type": "object"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "status",
+        "steps",
+        "id",
+        "flow"
+      ],
+      "title": "FlowCollectionItemResult",
+      "type": "object"
+    },
+    "FlowCollectionResult": {
+      "additionalProperties": false,
+      "description": "Ordered child invocation ledger; each item identity occurs exactly once.",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/FlowCollectionItemResult"
+          },
+          "maxItems": 1024,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "FlowCollectionResult",
+      "type": "object"
+    },
     "FlowResult": {
       "additionalProperties": false,
       "description": "A flow's scoped step records and explicitly present projected result.",
@@ -355,6 +518,52 @@
         {
           "if": {
             "required": [
+              "partial_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "kind": {
+                "const": "flow_collection"
+              },
+              "status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "completed",
+                  "needs_review"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/FlowCollectionResult",
+                "title": "Partial Result"
+              }
+            },
+            "required": [
+              "result"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
               "selection"
             ]
           },
@@ -467,6 +676,15 @@
         "error": {
           "$ref": "#/$defs/SafeError",
           "title": "Error"
+        },
+        "kind": {
+          "const": "flow_collection",
+          "title": "Kind",
+          "type": "string"
+        },
+        "partial_result": {
+          "$ref": "#/$defs/FlowCollectionResult",
+          "title": "Partial Result"
         },
         "result": {
           "$ref": "#/$defs/JsonValue"

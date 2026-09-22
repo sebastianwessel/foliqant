@@ -1,0 +1,83 @@
+models:
+  local_qwen:
+    provider: openai_compatible
+    model: $MODEL_ID
+    base_url: $MODEL_BASE_URL
+    allow_insecure_http: true
+    output_mode: native
+    supports_tools: true
+    concurrency: 1
+    queue_limit: 0
+    request_timeout: 300
+    options:
+      max_tokens: 2048
+      temperature: 0.1
+      reasoning_effort: low
+mcp:
+  records_office:
+    transport:
+      type: stdio
+      command: $FOLIQANT_EXAMPLE_PYTHON
+      args:
+      - -m
+      - examples.extracted_request_mcp.server
+      cwd: $FOLIQANT_EXAMPLE_ROOT
+      env:
+        PYTHONUNBUFFERED: '1'
+    catalog:
+      tools:
+        lookup_request:
+          input_schema:
+            properties:
+              reference:
+                title: Reference
+                type: string
+              language:
+                enum:
+                - en
+                - de
+                title: Language
+                type: string
+            required:
+            - reference
+            - language
+            title: lookup_requestArguments
+            type: object
+          output_schema:
+            additionalProperties: false
+            description: Status returned for a synthetic public-record request.
+            properties:
+              reference:
+                title: Reference
+                type: string
+              language:
+                enum:
+                - en
+                - de
+                title: Language
+                type: string
+              status:
+                const: in_review
+                title: Status
+                type: string
+              due_date:
+                title: Due Date
+                type: string
+            required:
+            - reference
+            - language
+            - status
+            - due_date
+            title: RequestStatus
+            type: object
+          effect: read
+    concurrency: 1
+    queue_limit: 0
+    request_timeout: 3
+    output_limit_bytes: 4096
+execution:
+  concurrency: 1
+  queue_limit: 0
+  run_timeout: 900
+  model_timeout: 300
+  tool_timeout: 3

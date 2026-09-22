@@ -1,0 +1,7 @@
+type: flow_collection
+items:
+  pointer: /payload/items
+flows:
+- lookup_status
+- prepare_guidance
+max_items: 8

@@ -1,0 +1,5 @@
+steps:
+- lookup
+output:
+  pointer: /steps/lookup/result
+input_schema: input.schema.json

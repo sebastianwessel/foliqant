@@ -10,12 +10,13 @@ from typing import Any, Literal, cast
 
 from foliqant.contracts.envelope import Envelope
 from foliqant.contracts.execution import ExecutionResult
-from foliqant.core.json import MAX_JSON_DEPTH, JsonValue, freeze_json
+from foliqant.core.json import JsonValue
 
 from .artifact import MAX_REPORT_BYTES, report_document
 from .contracts import EvaluationCase, Expectation
 from .dataset import read_json
 from .metrics import MetricObservation, MetricSpec, observe_metrics, summarize_metrics
+from .records import snapshot_execution
 
 type CaseChange = Literal["improved", "regressed", "mixed", "unchanged"]
 
@@ -251,7 +252,7 @@ def _metric_summary(cases: list[dict[str, Any]], specification: MetricSpec) -> d
         if result is None:
             document = None
         else:
-            document = freeze_json(result.model_dump(mode="json"), max_depth=MAX_JSON_DEPTH + 3)
+            document = snapshot_execution(result)[0]
         status = cast(str, case["status"])
         observations.append(observe_metrics((specification,), typed_case, document, status))
     report = summarize_metrics((specification,), observations)[0]
@@ -398,8 +399,8 @@ def _compare_suite(
         before_checks = _check_semantics(before)
         after_checks = _check_semantics(after)
         _same(
-            [(name, path, flow, step) for name, path, flow, step, _ in after_checks],
-            [(name, path, flow, step) for name, path, flow, step, _ in before_checks],
+            [(name, path) for name, path, _, _, _ in after_checks],
+            [(name, path) for name, path, _, _, _ in before_checks],
             "case check semantics differ",
         )
         if not before_checks:

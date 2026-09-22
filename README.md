@@ -58,6 +58,7 @@ model and tool clients declared by that project and prints one JSON result.
 | Goal | Guide |
 | --- | --- |
 | Install, scaffold, and embed Foliqant | [Install and run](docs/getting-started/runtime.md) |
+| Learn by adding one capability at a time | [Six-stage tutorial](docs/tutorials/index.md) |
 | Understand workflows, flows, steps, and results | [Runtime concepts](docs/concepts/runtime.md) |
 | Author files, bindings, prompts, routes, and schemas | [Build a workflow](docs/guides/build-workflows.md) |
 | Author typed evidence-backed decisions | [Decision contracts](docs/guides/decision-contracts.md) |

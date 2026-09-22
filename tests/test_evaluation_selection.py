@@ -47,10 +47,10 @@ async def test_grouped_origins_keep_repetition_missing_selection_and_execution_e
     classify = next(
         step for step in report.steps if (step.flow, step.name) == ("triage", "classify")
     )
-    assert classify.observed_cases == 31
-    assert classify.model_selected_cases == 11
-    assert classify.fallback_selected_cases == 16
-    assert classify.review_cases == 20
+    assert classify.observed_invocations == 31
+    assert classify.model_selected_invocations == 11
+    assert classify.fallback_selected_invocations == 16
+    assert classify.review_invocations == 20
     assert classify.fallback_rate == pytest.approx(16 / 31)
 
     groups = {

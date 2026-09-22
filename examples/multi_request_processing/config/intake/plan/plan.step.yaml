@@ -1,0 +1,7 @@
+type: handler
+handler: plan_requests
+input:
+  assessment:
+    pointer: /payload/assessment
+  language:
+    pointer: /payload/language

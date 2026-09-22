@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "reference": {
+      "type": "string",
+      "pattern": "^FOI-[0-9]{4}-[0-9]{4}$"
+    },
+    "language": {
+      "enum": [
+        "en",
+        "de"
+      ]
+    }
+  },
+  "required": [
+    "reference",
+    "language"
+  ],
+  "additionalProperties": false
+}

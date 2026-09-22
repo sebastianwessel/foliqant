@@ -13,6 +13,8 @@ from foliqant.core.errors import ServiceError
 from foliqant.core.json import MAX_JSON_DEPTH, FrozenJson
 from foliqant.core.plan import BindingPlan
 
+from .records import document_path_status
+
 if TYPE_CHECKING:
     from .contracts import EvaluationCase, EvaluationSuite
 
@@ -195,29 +197,17 @@ def observe_metrics(
             continue
         expected = _labels(spec, matches[0].expected)
         assert expected is not None  # Validated before execution.
-        if status in {"failed", "cancelled", "error"}:
+        owner_status = document_path_status(spec.path, document)
+        if owner_status == "skipped":
+            observations.append(MetricObservation("skipped", expected))
+            continue
+        if status in {"failed", "cancelled", "error"} or owner_status in {"failed", "cancelled"}:
             observations.append(MetricObservation("error", expected))
             continue
         try:
             actual = resolve_binding(BindingPlan(kind="pointer", pointer=spec.path), document)
         except ServiceError:
             state: ObservationState = "missing"
-            parts = spec.path.split("/")
-            if len(parts) >= 5 and parts[1] == "flows" and parts[3] == "steps":
-                try:
-                    step_status = resolve_binding(
-                        BindingPlan(
-                            kind="pointer",
-                            pointer=f"/flows/{parts[2]}/steps/{parts[4]}/status",
-                        ),
-                        document,
-                    )
-                    if step_status == "skipped":
-                        state = "skipped"
-                    elif step_status in ("failed", "cancelled"):
-                        state = "error"
-                except ServiceError:
-                    pass
             observations.append(MetricObservation(state, expected))
             continue
         parsed = _labels(spec, actual)

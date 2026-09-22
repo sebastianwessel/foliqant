@@ -26,6 +26,8 @@ from foliqant.core.execution import (
     StepRecord,
     StepStatus,
     TokenUsage,
+    flow_record_value,
+    step_record_value,
 )
 from foliqant.core.execution import (
     Usage as CoreUsage,
@@ -34,7 +36,7 @@ from foliqant.core.json import JsonValue, thaw_json
 
 from .base import BoundaryModel
 from .envelope import Metadata
-from .workflow import Id
+from .identifiers import Id
 
 _NonBlank = Annotated[
     str,
@@ -187,17 +189,38 @@ class StepSelection(_ExecutionBoundary):
     origin: Literal["model", "fallback"]
 
 
-class StepResult(_ExecutionBoundary):
-    model_config = ConfigDict(
-        json_schema_extra={
+def _step_schema_extra(schema: JsonDict) -> None:
+    """Attach presence rules using Pydantic's actual recursive definition reference."""
+    schema.update(
+        {
             "allOf": [
+                {
+                    "if": {"required": ["partial_result"]},
+                    "then": {
+                        "required": ["kind"],
+                        "properties": {
+                            "status": {"const": "failed"},
+                            "kind": {"const": "flow_collection"},
+                        },
+                    },
+                },
+                {
+                    "if": {
+                        "required": ["kind"],
+                        "properties": {"status": {"enum": ["completed", "needs_review"]}},
+                    },
+                    "then": {
+                        "required": ["result"],
+                        "properties": {"result": {"$ref": "#/$defs/FlowCollectionResult"}},
+                    },
+                },
                 {
                     "if": {"required": ["selection"]},
                     "then": {
                         "required": ["result"],
                         "properties": {"status": {"enum": ["completed", "needs_review"]}},
                     },
-                }
+                },
             ],
             "oneOf": [
                 {
@@ -214,10 +237,7 @@ class StepResult(_ExecutionBoundary):
                     "required": ["error"],
                     "not": {"required": ["result"]},
                 },
-                {
-                    "properties": {"status": {"const": "cancelled"}},
-                    "not": {"required": ["result"]},
-                },
+                {"properties": {"status": {"const": "cancelled"}}, "not": {"required": ["result"]}},
                 {
                     "properties": {"status": {"const": "skipped"}},
                     "not": {"anyOf": [{"required": ["result"]}, {"required": ["error"]}]},
@@ -225,6 +245,15 @@ class StepResult(_ExecutionBoundary):
             ],
         }
     )
+    rules = cast(list[JsonDict], schema["allOf"])
+    then = cast(JsonDict, rules[1]["then"])
+    properties = cast(JsonDict, then["properties"])
+    fields = cast(JsonDict, schema["properties"])
+    properties["result"] = dict(cast(JsonDict, fields["partial_result"]))
+
+
+class StepResult(_ExecutionBoundary):
+    model_config = ConfigDict(json_schema_extra=_step_schema_extra)
 
     status: StepStatus
     elapsed_seconds: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
@@ -234,9 +263,23 @@ class StepResult(_ExecutionBoundary):
         default=None, json_schema_extra=_omit_default
     )
     error: SafeError | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+    partial_result: "FlowCollectionResult | SkipJsonSchema[None]" = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+    kind: Literal["flow_collection"] | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
 
     @model_validator(mode="after")
     def status_matches_optional_fields(self) -> Self:
+        if "partial_result" in self.model_fields_set and (
+            self.status != "failed" or self.partial_result is None or self.kind != "flow_collection"
+        ):
+            raise ValueError("partial result requires a failed step and cannot be null")
+        if "kind" in self.model_fields_set and self.kind is None:
+            raise ValueError("kind must be omitted rather than null")
+        if self.kind == "flow_collection" and self.status in {"completed", "needs_review"}:
+            FlowCollectionResult.model_validate(self.result, strict=True)
         has_result = "result" in self.model_fields_set
         if "selection" in self.model_fields_set:
             if self.selection is None or not has_result:
@@ -296,6 +339,10 @@ class StepResult(_ExecutionBoundary):
             values.pop("selection", None)
         if "error" not in self.model_fields_set:
             values.pop("error", None)
+        if "partial_result" not in self.model_fields_set:
+            values.pop("partial_result", None)
+        if "kind" not in self.model_fields_set:
+            values.pop("kind", None)
         if self.elapsed_seconds is None:
             values.pop("elapsed_seconds", None)
         if self.usage is None:
@@ -346,7 +393,11 @@ class FlowResult(_ExecutionBoundary):
     def status_matches_optional_fields(self) -> Self:
         # Reuse the step presence and measurement rules without admitting selection.
         StepResult.model_validate(
-            {name: getattr(self, name) for name in self.model_fields_set if name != "steps"},
+            {
+                name: getattr(self, name)
+                for name in self.model_fields_set
+                if name in StepResult.model_fields
+            },
             strict=True,
         )
         return self
@@ -361,6 +412,38 @@ class FlowResult(_ExecutionBoundary):
             if getattr(self, name) is None:
                 values.pop(name, None)
         return values
+
+
+class FlowCollectionItem(_ExecutionBoundary):
+    """One explicit invocation request; the selected step restricts its flow target."""
+
+    id: Id
+    flow: Id
+    input: dict[str, JsonValue]
+
+
+class FlowCollectionItemResult(FlowResult):
+    """One collection item's complete flow record, including skipped local steps."""
+
+    id: Id
+    flow: Id
+
+
+class FlowCollectionResult(_ExecutionBoundary):
+    """Ordered child invocation ledger; each item identity occurs exactly once."""
+
+    items: Annotated[list[FlowCollectionItemResult], Field(max_length=1024)]
+
+    @model_validator(mode="after")
+    def unique_item_ids(self) -> Self:
+        if len({item.id for item in self.items}) != len(self.items):
+            raise ValueError("collection item IDs must be unique")
+        return self
+
+
+StepResult.model_rebuild()
+FlowResult.model_rebuild()
+FlowCollectionItemResult.model_rebuild()
 
 
 class TransitionResult(_ExecutionBoundary):
@@ -442,40 +525,11 @@ def _usage(value: CoreUsage) -> dict[str, JsonValue]:
 
 
 def _step_result(record: StepRecord) -> dict[str, JsonValue]:
-    if not record.has_result and record.result is not None:
-        raise ServiceError(ErrorCode.INVALID_OUTPUT)
-    value: dict[str, JsonValue] = {"status": record.status}
-    if record.elapsed_seconds is not None:
-        value["elapsed_seconds"] = record.elapsed_seconds
-    if record.usage is not None:
-        value["usage"] = _usage(record.usage)
-    if record.has_result:
-        value["result"] = thaw_json(record.result)
-    if record.selection is not None:
-        value["selection"] = thaw_json(record.selection.as_json())
-    if record.error is not None:
-        value["error"] = _safe_error(record.error)
-    return value
+    return cast(dict[str, JsonValue], thaw_json(step_record_value(record)))
 
 
 def _flow_result(record: FlowRecord) -> dict[str, JsonValue]:
-    if not record.has_result and record.result is not None:
-        raise ServiceError(ErrorCode.INVALID_OUTPUT)
-    steps: dict[str, JsonValue] = {}
-    for step_id, step in record.steps:
-        if step_id in steps:
-            raise ServiceError(ErrorCode.INVALID_OUTPUT)
-        steps[step_id] = _step_result(step)
-    value: dict[str, JsonValue] = {"status": record.status, "steps": steps}
-    if record.has_result:
-        value["result"] = thaw_json(record.result)
-    if record.usage is not None:
-        value["usage"] = _usage(record.usage)
-    if record.elapsed_seconds is not None:
-        value["elapsed_seconds"] = record.elapsed_seconds
-    if record.error is not None:
-        value["error"] = _safe_error(record.error)
-    return value
+    return cast(dict[str, JsonValue], thaw_json(flow_record_value(record)))
 
 
 def to_execution_result(value: RunResult) -> ExecutionResult:

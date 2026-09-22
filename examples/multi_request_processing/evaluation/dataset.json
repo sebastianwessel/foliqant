@@ -1,0 +1,1422 @@
+{
+  "name": "multi_request_processing",
+  "revision": "authored",
+  "suites": [
+    {
+      "name": "intake_pipeline",
+      "workflow": "intake",
+      "cases": [
+        {
+          "id": "two_independent",
+          "input": {
+            "payload": {
+              "message": "Check FOI-2026-0142 and explain how to apply.",
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/payload/disposition",
+              "expected": "ready"
+            },
+            {
+              "name": "review",
+              "path": "/payload/review",
+              "expected": []
+            },
+            {
+              "name": "first_target",
+              "path": "/flows/process/steps/requests/result/items/0/flow",
+              "expected": "lookup_status"
+            },
+            {
+              "name": "second_target",
+              "path": "/flows/process/steps/requests/result/items/1/flow",
+              "expected": "prepare_guidance"
+            },
+            {
+              "name": "language",
+              "path": "/flows/process/steps/requests/result/items/0/result/language",
+              "expected": "en"
+            }
+          ]
+        },
+        {
+          "id": "two_independent_de",
+          "input": {
+            "payload": {
+              "message": "Bitte FOI-2026-0310 prüfen und das Antragsverfahren erklären.",
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/payload/disposition",
+              "expected": "ready"
+            },
+            {
+              "name": "review",
+              "path": "/payload/review",
+              "expected": []
+            },
+            {
+              "name": "first_target",
+              "path": "/flows/process/steps/requests/result/items/0/flow",
+              "expected": "lookup_status"
+            },
+            {
+              "name": "second_target",
+              "path": "/flows/process/steps/requests/result/items/1/flow",
+              "expected": "prepare_guidance"
+            },
+            {
+              "name": "language",
+              "path": "/flows/process/steps/requests/result/items/0/result/language",
+              "expected": "de"
+            }
+          ]
+        },
+        {
+          "id": "same_category_twice",
+          "input": {
+            "payload": {
+              "message": "Check FOI-2026-0142 and FOI-2026-0310.",
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/payload/disposition",
+              "expected": "ready"
+            },
+            {
+              "name": "review",
+              "path": "/payload/review",
+              "expected": []
+            },
+            {
+              "name": "target_0",
+              "path": "/flows/process/steps/requests/result/items/0/flow",
+              "expected": "lookup_status"
+            },
+            {
+              "name": "reference_0",
+              "path": "/flows/process/steps/requests/result/items/0/result/reference",
+              "expected": "FOI-2026-0142"
+            },
+            {
+              "name": "child_status_0",
+              "path": "/flows/process/steps/requests/result/items/0/status",
+              "expected": "completed"
+            },
+            {
+              "name": "target_1",
+              "path": "/flows/process/steps/requests/result/items/1/flow",
+              "expected": "lookup_status"
+            },
+            {
+              "name": "reference_1",
+              "path": "/flows/process/steps/requests/result/items/1/result/reference",
+              "expected": "FOI-2026-0310"
+            },
+            {
+              "name": "child_status_1",
+              "path": "/flows/process/steps/requests/result/items/1/status",
+              "expected": "completed"
+            }
+          ]
+        },
+        {
+          "id": "no_action",
+          "input": {
+            "payload": {
+              "message": "No action needed.",
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/payload/disposition",
+              "expected": "no_action"
+            },
+            {
+              "name": "prepared",
+              "path": "/payload/prepared",
+              "expected": []
+            },
+            {
+              "name": "review",
+              "path": "/payload/review",
+              "expected": []
+            }
+          ]
+        },
+        {
+          "id": "no_action_de",
+          "input": {
+            "payload": {
+              "message": "Keine Aktion erforderlich.",
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/payload/disposition",
+              "expected": "no_action"
+            },
+            {
+              "name": "prepared",
+              "path": "/payload/prepared",
+              "expected": []
+            },
+            {
+              "name": "review",
+              "path": "/payload/review",
+              "expected": []
+            }
+          ]
+        },
+        {
+          "id": "unclear",
+          "input": {
+            "payload": {
+              "message": "Please help.",
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "needs_review"
+            },
+            {
+              "name": "disposition",
+              "path": "/payload/disposition",
+              "expected": "review"
+            },
+            {
+              "name": "prepared",
+              "path": "/payload/prepared",
+              "expected": []
+            },
+            {
+              "name": "held_reason",
+              "path": "/flows/plan/result/held/0/reason",
+              "expected": "incomplete_assessment"
+            },
+            {
+              "name": "no_children",
+              "path": "/flows/process/steps/requests/result/items",
+              "expected": []
+            }
+          ]
+        },
+        {
+          "id": "unclear_de",
+          "input": {
+            "payload": {
+              "message": "Bitte helfen.",
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "needs_review"
+            },
+            {
+              "name": "disposition",
+              "path": "/payload/disposition",
+              "expected": "review"
+            },
+            {
+              "name": "prepared",
+              "path": "/payload/prepared",
+              "expected": []
+            },
+            {
+              "name": "held_reason",
+              "path": "/flows/plan/result/held/0/reason",
+              "expected": "incomplete_assessment"
+            },
+            {
+              "name": "no_children",
+              "path": "/flows/process/steps/requests/result/items",
+              "expected": []
+            }
+          ]
+        },
+        {
+          "id": "missing_reference",
+          "input": {
+            "payload": {
+              "message": "Check my request and explain how to apply.",
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "needs_review"
+            },
+            {
+              "name": "disposition",
+              "path": "/payload/disposition",
+              "expected": "partial_review"
+            },
+            {
+              "name": "held_reason",
+              "path": "/flows/plan/result/held/0/reason",
+              "expected": "missing_reference"
+            },
+            {
+              "name": "guidance_prepared",
+              "path": "/flows/process/steps/requests/result/items/0/flow",
+              "expected": "prepare_guidance"
+            }
+          ]
+        },
+        {
+          "id": "withdrawal",
+          "input": {
+            "payload": {
+              "message": "I withdraw my FOI-2026-0142 lookup. Explain how to apply.",
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/payload/disposition",
+              "expected": "ready"
+            },
+            {
+              "name": "review",
+              "path": "/payload/review",
+              "expected": []
+            },
+            {
+              "name": "ignored_reason",
+              "path": "/flows/plan/result/ignored/0/reason",
+              "expected": "withdrawn"
+            },
+            {
+              "name": "guidance_prepared",
+              "path": "/flows/process/steps/requests/result/items/0/flow",
+              "expected": "prepare_guidance"
+            }
+          ]
+        }
+      ],
+      "metrics": [
+        {
+          "name": "disposition",
+          "path": "/payload/disposition",
+          "kind": "classification",
+          "labels": [
+            "ready",
+            "partial_review",
+            "review",
+            "no_action"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "assess_flow",
+      "workflow": "intake",
+      "flow": "assess",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "message": "No action needed."
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "empty",
+              "path": "/flows/assess/result/answer/units",
+              "expected": []
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "message": "Keine Aktion erforderlich."
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "empty",
+              "path": "/flows/assess/result/answer/units",
+              "expected": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "assess_step",
+      "workflow": "intake",
+      "flow": "assess",
+      "step": "identify",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "message": "No action needed."
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "empty",
+              "path": "/flows/assess/steps/identify/result/answer/units",
+              "expected": []
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "message": "Keine Aktion erforderlich."
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "empty",
+              "path": "/flows/assess/steps/identify/result/answer/units",
+              "expected": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "plan_flow",
+      "workflow": "intake",
+      "flow": "plan",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "assessment": {
+                "questionId": "identify",
+                "type": "request_units",
+                "answerability": {
+                  "status": "answerable",
+                  "issues": []
+                },
+                "answer": {
+                  "units": [
+                    {
+                      "id": "guide",
+                      "status": "active",
+                      "categoryId": "guidance",
+                      "subject": null,
+                      "description": "Explain how to apply."
+                    }
+                  ],
+                  "relations": []
+                },
+                "reason": "An application guide is explicitly requested.",
+                "evidence_strength": "strong"
+              },
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "target",
+              "path": "/flows/plan/result/items/0/flow",
+              "expected": "prepare_guidance"
+            },
+            {
+              "name": "language",
+              "path": "/flows/plan/result/items/0/input/language",
+              "expected": "en"
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "assessment": {
+                "questionId": "identify",
+                "type": "request_units",
+                "answerability": {
+                  "status": "answerable",
+                  "issues": []
+                },
+                "answer": {
+                  "units": [
+                    {
+                      "id": "guide",
+                      "status": "active",
+                      "categoryId": "guidance",
+                      "subject": null,
+                      "description": "Explain how to apply."
+                    }
+                  ],
+                  "relations": []
+                },
+                "reason": "An application guide is explicitly requested.",
+                "evidence_strength": "strong"
+              },
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "target",
+              "path": "/flows/plan/result/items/0/flow",
+              "expected": "prepare_guidance"
+            },
+            {
+              "name": "language",
+              "path": "/flows/plan/result/items/0/input/language",
+              "expected": "de"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "plan_step",
+      "workflow": "intake",
+      "flow": "plan",
+      "step": "plan",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "assessment": {
+                "questionId": "identify",
+                "type": "request_units",
+                "answerability": {
+                  "status": "answerable",
+                  "issues": []
+                },
+                "answer": {
+                  "units": [
+                    {
+                      "id": "guide",
+                      "status": "active",
+                      "categoryId": "guidance",
+                      "subject": null,
+                      "description": "Explain how to apply."
+                    }
+                  ],
+                  "relations": []
+                },
+                "reason": "An application guide is explicitly requested.",
+                "evidence_strength": "strong"
+              },
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "target",
+              "path": "/flows/plan/steps/plan/result/items/0/flow",
+              "expected": "prepare_guidance"
+            },
+            {
+              "name": "language",
+              "path": "/flows/plan/steps/plan/result/items/0/input/language",
+              "expected": "en"
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "assessment": {
+                "questionId": "identify",
+                "type": "request_units",
+                "answerability": {
+                  "status": "answerable",
+                  "issues": []
+                },
+                "answer": {
+                  "units": [
+                    {
+                      "id": "guide",
+                      "status": "active",
+                      "categoryId": "guidance",
+                      "subject": null,
+                      "description": "Explain how to apply."
+                    }
+                  ],
+                  "relations": []
+                },
+                "reason": "An application guide is explicitly requested.",
+                "evidence_strength": "strong"
+              },
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "target",
+              "path": "/flows/plan/steps/plan/result/items/0/flow",
+              "expected": "prepare_guidance"
+            },
+            {
+              "name": "language",
+              "path": "/flows/plan/steps/plan/result/items/0/input/language",
+              "expected": "de"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "process_flow",
+      "workflow": "intake",
+      "flow": "process",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "items": [
+                {
+                  "id": "guide",
+                  "flow": "prepare_guidance",
+                  "input": {
+                    "language": "en"
+                  }
+                }
+              ]
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "prepared",
+              "path": "/flows/process/result/items/0/status",
+              "expected": "completed"
+            },
+            {
+              "name": "language",
+              "path": "/flows/process/result/items/0/result/language",
+              "expected": "en"
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "items": [
+                {
+                  "id": "guide",
+                  "flow": "prepare_guidance",
+                  "input": {
+                    "language": "de"
+                  }
+                }
+              ]
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "prepared",
+              "path": "/flows/process/result/items/0/status",
+              "expected": "completed"
+            },
+            {
+              "name": "language",
+              "path": "/flows/process/result/items/0/result/language",
+              "expected": "de"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "process_step",
+      "workflow": "intake",
+      "flow": "process",
+      "step": "requests",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "items": [
+                {
+                  "id": "guide",
+                  "flow": "prepare_guidance",
+                  "input": {
+                    "language": "en"
+                  }
+                }
+              ]
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "prepared",
+              "path": "/flows/process/steps/requests/result/items/0/status",
+              "expected": "completed"
+            },
+            {
+              "name": "language",
+              "path": "/flows/process/steps/requests/result/items/0/result/language",
+              "expected": "en"
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "items": [
+                {
+                  "id": "guide",
+                  "flow": "prepare_guidance",
+                  "input": {
+                    "language": "de"
+                  }
+                }
+              ]
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "prepared",
+              "path": "/flows/process/steps/requests/result/items/0/status",
+              "expected": "completed"
+            },
+            {
+              "name": "language",
+              "path": "/flows/process/steps/requests/result/items/0/result/language",
+              "expected": "de"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "finalize_flow",
+      "workflow": "intake",
+      "flow": "finalize",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "plan": {
+                "assessment": {
+                  "questionId": "identify",
+                  "type": "request_units",
+                  "answerability": {
+                    "status": "answerable",
+                    "issues": []
+                  },
+                  "answer": {
+                    "units": [
+                      {
+                        "id": "guide",
+                        "status": "active",
+                        "categoryId": "guidance",
+                        "subject": null,
+                        "description": "Explain how to apply."
+                      }
+                    ],
+                    "relations": []
+                  },
+                  "reason": "An application guide is explicitly requested.",
+                  "evidence_strength": "strong"
+                },
+                "items": [
+                  {
+                    "id": "guide",
+                    "flow": "prepare_guidance",
+                    "input": {
+                      "language": "en"
+                    }
+                  }
+                ],
+                "held": [],
+                "ignored": [],
+                "request_ids": {
+                  "guide": "guide"
+                }
+              },
+              "collection": {
+                "items": [
+                  {
+                    "id": "guide",
+                    "flow": "prepare_guidance",
+                    "status": "completed",
+                    "steps": {
+                      "prepare": {
+                        "status": "completed",
+                        "result": {
+                          "language": "en",
+                          "next_step": "Authored guidance."
+                        }
+                      }
+                    },
+                    "result": {
+                      "language": "en",
+                      "next_step": "Authored guidance."
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/flows/finalize/result/disposition",
+              "expected": "ready"
+            },
+            {
+              "name": "prepared",
+              "path": "/flows/finalize/result/prepared",
+              "expected": [
+                "guide"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "plan": {
+                "assessment": {
+                  "questionId": "identify",
+                  "type": "request_units",
+                  "answerability": {
+                    "status": "answerable",
+                    "issues": []
+                  },
+                  "answer": {
+                    "units": [
+                      {
+                        "id": "guide",
+                        "status": "active",
+                        "categoryId": "guidance",
+                        "subject": null,
+                        "description": "Explain how to apply."
+                      }
+                    ],
+                    "relations": []
+                  },
+                  "reason": "An application guide is explicitly requested.",
+                  "evidence_strength": "strong"
+                },
+                "items": [
+                  {
+                    "id": "guide",
+                    "flow": "prepare_guidance",
+                    "input": {
+                      "language": "de"
+                    }
+                  }
+                ],
+                "held": [],
+                "ignored": [],
+                "request_ids": {
+                  "guide": "guide"
+                }
+              },
+              "collection": {
+                "items": [
+                  {
+                    "id": "guide",
+                    "flow": "prepare_guidance",
+                    "status": "completed",
+                    "steps": {
+                      "prepare": {
+                        "status": "completed",
+                        "result": {
+                          "language": "de",
+                          "next_step": "Authored guidance."
+                        }
+                      }
+                    },
+                    "result": {
+                      "language": "de",
+                      "next_step": "Authored guidance."
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/flows/finalize/result/disposition",
+              "expected": "ready"
+            },
+            {
+              "name": "prepared",
+              "path": "/flows/finalize/result/prepared",
+              "expected": [
+                "guide"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "finalize_step",
+      "workflow": "intake",
+      "flow": "finalize",
+      "step": "disposition",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "plan": {
+                "assessment": {
+                  "questionId": "identify",
+                  "type": "request_units",
+                  "answerability": {
+                    "status": "answerable",
+                    "issues": []
+                  },
+                  "answer": {
+                    "units": [
+                      {
+                        "id": "guide",
+                        "status": "active",
+                        "categoryId": "guidance",
+                        "subject": null,
+                        "description": "Explain how to apply."
+                      }
+                    ],
+                    "relations": []
+                  },
+                  "reason": "An application guide is explicitly requested.",
+                  "evidence_strength": "strong"
+                },
+                "items": [
+                  {
+                    "id": "guide",
+                    "flow": "prepare_guidance",
+                    "input": {
+                      "language": "en"
+                    }
+                  }
+                ],
+                "held": [],
+                "ignored": [],
+                "request_ids": {
+                  "guide": "guide"
+                }
+              },
+              "collection": {
+                "items": [
+                  {
+                    "id": "guide",
+                    "flow": "prepare_guidance",
+                    "status": "completed",
+                    "steps": {
+                      "prepare": {
+                        "status": "completed",
+                        "result": {
+                          "language": "en",
+                          "next_step": "Authored guidance."
+                        }
+                      }
+                    },
+                    "result": {
+                      "language": "en",
+                      "next_step": "Authored guidance."
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/flows/finalize/steps/disposition/result/disposition",
+              "expected": "ready"
+            },
+            {
+              "name": "prepared",
+              "path": "/flows/finalize/steps/disposition/result/prepared",
+              "expected": [
+                "guide"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "plan": {
+                "assessment": {
+                  "questionId": "identify",
+                  "type": "request_units",
+                  "answerability": {
+                    "status": "answerable",
+                    "issues": []
+                  },
+                  "answer": {
+                    "units": [
+                      {
+                        "id": "guide",
+                        "status": "active",
+                        "categoryId": "guidance",
+                        "subject": null,
+                        "description": "Explain how to apply."
+                      }
+                    ],
+                    "relations": []
+                  },
+                  "reason": "An application guide is explicitly requested.",
+                  "evidence_strength": "strong"
+                },
+                "items": [
+                  {
+                    "id": "guide",
+                    "flow": "prepare_guidance",
+                    "input": {
+                      "language": "de"
+                    }
+                  }
+                ],
+                "held": [],
+                "ignored": [],
+                "request_ids": {
+                  "guide": "guide"
+                }
+              },
+              "collection": {
+                "items": [
+                  {
+                    "id": "guide",
+                    "flow": "prepare_guidance",
+                    "status": "completed",
+                    "steps": {
+                      "prepare": {
+                        "status": "completed",
+                        "result": {
+                          "language": "de",
+                          "next_step": "Authored guidance."
+                        }
+                      }
+                    },
+                    "result": {
+                      "language": "de",
+                      "next_step": "Authored guidance."
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "disposition",
+              "path": "/flows/finalize/steps/disposition/result/disposition",
+              "expected": "ready"
+            },
+            {
+              "name": "prepared",
+              "path": "/flows/finalize/steps/disposition/result/prepared",
+              "expected": [
+                "guide"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lookup_status_flow",
+      "workflow": "intake",
+      "flow": "lookup_status",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "reference": "FOI-2026-0142",
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/flows/lookup_status/result/reference",
+              "expected": "FOI-2026-0142"
+            },
+            {
+              "name": "language",
+              "path": "/flows/lookup_status/result/language",
+              "expected": "en"
+            },
+            {
+              "name": "due_date",
+              "path": "/flows/lookup_status/result/due_date",
+              "expected": "2026-10-05"
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "reference": "FOI-2026-0310",
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/flows/lookup_status/result/reference",
+              "expected": "FOI-2026-0310"
+            },
+            {
+              "name": "language",
+              "path": "/flows/lookup_status/result/language",
+              "expected": "de"
+            },
+            {
+              "name": "due_date",
+              "path": "/flows/lookup_status/result/due_date",
+              "expected": "05.10.2026"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lookup_status_step",
+      "workflow": "intake",
+      "flow": "lookup_status",
+      "step": "lookup",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "reference": "FOI-2026-0142",
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/flows/lookup_status/steps/lookup/result/reference",
+              "expected": "FOI-2026-0142"
+            },
+            {
+              "name": "language",
+              "path": "/flows/lookup_status/steps/lookup/result/language",
+              "expected": "en"
+            },
+            {
+              "name": "due_date",
+              "path": "/flows/lookup_status/steps/lookup/result/due_date",
+              "expected": "2026-10-05"
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "reference": "FOI-2026-0310",
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/flows/lookup_status/steps/lookup/result/reference",
+              "expected": "FOI-2026-0310"
+            },
+            {
+              "name": "language",
+              "path": "/flows/lookup_status/steps/lookup/result/language",
+              "expected": "de"
+            },
+            {
+              "name": "due_date",
+              "path": "/flows/lookup_status/steps/lookup/result/due_date",
+              "expected": "05.10.2026"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prepare_guidance_flow",
+      "workflow": "intake",
+      "flow": "prepare_guidance",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "language",
+              "path": "/flows/prepare_guidance/result/language",
+              "expected": "en"
+            },
+            {
+              "name": "guidance",
+              "path": "/flows/prepare_guidance/result/next_step",
+              "expected": "Describe the records you need and submit the public-record form."
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "language",
+              "path": "/flows/prepare_guidance/result/language",
+              "expected": "de"
+            },
+            {
+              "name": "guidance",
+              "path": "/flows/prepare_guidance/result/next_step",
+              "expected": "Beschreiben Sie die benötigten Unterlagen und reichen Sie das Auskunftsformular ein."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prepare_guidance_step",
+      "workflow": "intake",
+      "flow": "prepare_guidance",
+      "step": "prepare",
+      "cases": [
+        {
+          "id": "en",
+          "input": {
+            "payload": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "language",
+              "path": "/flows/prepare_guidance/steps/prepare/result/language",
+              "expected": "en"
+            },
+            {
+              "name": "guidance",
+              "path": "/flows/prepare_guidance/steps/prepare/result/next_step",
+              "expected": "Describe the records you need and submit the public-record form."
+            }
+          ]
+        },
+        {
+          "id": "de",
+          "input": {
+            "payload": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "language",
+              "path": "/flows/prepare_guidance/steps/prepare/result/language",
+              "expected": "de"
+            },
+            {
+              "name": "guidance",
+              "path": "/flows/prepare_guidance/steps/prepare/result/next_step",
+              "expected": "Beschreiben Sie die benötigten Unterlagen und reichen Sie das Auskunftsformular ein."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

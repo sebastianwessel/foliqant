@@ -1,0 +1,5 @@
+type: handler
+handler: prepare_cancellation
+input:
+  message:
+    pointer: /payload/message

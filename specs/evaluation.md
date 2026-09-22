@@ -15,7 +15,10 @@ revision. Unknown step names and missing/extra inputs fail before model I/O.
 input and validates the flow input schema. It applies that flow's output projection,
 but no upstream input bindings, workflow projections or boundary transitions.
 Both isolation APIs retain original workflow identity and revision, caller/tool
-policy and finite limits; they never silently run dependencies.
+policy and finite limits; they never silently run dependencies. Callable flows
+and their steps may be selected directly. Isolating a `flow_collection` step
+supplies its already-resolved `items` input; the step intentionally invokes its
+allowlisted callable flows under the same run limits.
 
 Each executed step returns measured monotonic `elapsed_seconds` and its own
 attempt/token `usage`; skipped or unmeasured steps have no measurements. Failed
@@ -159,7 +162,36 @@ Reports identify flow and local step separately; aggregate step measurements by
 are attributed to the flow, not invented step records. Workflow, flow and step
 usage are separate views of the same calls, not additive across levels.
 
-Step summaries also count `model_selected_cases` and `fallback_selected_cases`.
+Collection execution records carry `kind: flow_collection`. Evaluation traverses
+only marked step ledgers (`result.items`, or `partial_result.items` after failure),
+never an ordinary business object that resembles a ledger. Child invocations stay
+in array order and retain repeated calls to the same flow, failures and skipped
+items. Projections of a ledger do not create duplicate observations. Each per-case
+flow, step and scoped check report carries its exact `invocation_path` JSON pointer;
+nested checks identify the innermost recorded flow and step. For example,
+`/flows/main/steps/collect/result/items/0/steps/work/result` checks the first child
+invocation's `work` result. The analogous failed-step ledger uses `partial_result`.
+
+Flow and step summary `observed_invocations` counts execution records, including repeated
+child invocations within one case. Every measured child observation contributes
+to its flow/step latency and usage summary; skipped/unmeasured records remain
+unavailable. A case with no matching record also retains an unavailable observation.
+Case/root usage is read once from the execution result, never summed across
+inclusive parent and child levels. Missing assertions in failed child records are
+errors; missing assertions in skipped child records are skipped. Metrics preserve
+failed-case error denominators, while explicit skipped records remain skipped.
+Replay preserves the complete nested records, markers, measurements and paths.
+Generated collection containers do not consume a child business value's depth
+allowance. Every ordinary step result keeps the existing 64-level business bound;
+flow/root projections and the complete snapshot receive only the extra structural
+depth established by actual marked invocation records. Unmarked operation results are never
+granted that collection allowance. The evaluator rejects more than sixteen
+collection levels and caps generated documents at the shared execution bound.
+Offline target checking follows declared collection allowlists and rejects
+impossible item indices or child step names; dynamic business fields and which
+allowlisted flow an item will actually select remain runtime observations.
+
+Step summaries also count `model_selected_invocations` and `fallback_selected_invocations`.
 `fallback_rate` is fallback selections divided by all observed step records,
 including skipped/error records, or null with no records. Repeated attempts
 count separately. These are policy-use measurements, not accuracy. Replay and

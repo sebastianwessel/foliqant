@@ -241,6 +241,7 @@ class CheckReport:
     step: str | None
     reason_code: str | None = None
     details: CheckDetails | None = None
+    invocation_path: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +265,7 @@ class StepReport:
     elapsed_seconds: float | None
     usage: Usage | None
     selection_origin: Literal["model", "fallback"] | None = None
+    invocation_path: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -272,6 +274,7 @@ class FlowReport:
     status: str
     elapsed_seconds: float | None
     usage: Usage | None
+    invocation_path: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,28 +327,32 @@ class CheckSummary:
 
 @dataclass(frozen=True, slots=True)
 class StepSummary:
+    """Scoped record totals; repeated child invocations are separate observations."""
+
     flow: str
     name: str
     checks: CheckSummary
-    observed_cases: int
-    skipped_cases: int
-    failed_cases: int
-    review_cases: int
+    observed_invocations: int
+    skipped_invocations: int
+    failed_invocations: int
+    review_invocations: int
     latency: LatencySummary = field(default_factory=lambda: summarize_latency(()))
     usage: UsageSummary = field(default_factory=lambda: summarize_usage(()))
 
-    model_selected_cases: int = 0
-    fallback_selected_cases: int = 0
+    model_selected_invocations: int = 0
+    fallback_selected_invocations: int = 0
     fallback_rate: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class FlowSummary:
+    """Scoped record totals, including every repeated callable-flow invocation."""
+
     name: str
-    observed_cases: int
-    skipped_cases: int
-    failed_cases: int
-    review_cases: int
+    observed_invocations: int
+    skipped_invocations: int
+    failed_invocations: int
+    review_invocations: int
     latency: LatencySummary = field(default_factory=lambda: summarize_latency(()))
     usage: UsageSummary = field(default_factory=lambda: summarize_usage(()))
 

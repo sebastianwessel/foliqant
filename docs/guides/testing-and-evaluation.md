@@ -104,9 +104,16 @@ Use public result paths:
 | Operation result | `/flows/{flow}/steps/{step}/result/...` |
 | Effective decision selection | `/flows/{flow}/steps/{step}/selection/category/id` |
 | Usage | `/execution/usage/model_requests` |
+| Collection item step | `/flows/{flow}/steps/{collection}/result/items/{index}/steps/{step}/result/...` |
 
 The dataset never uses authored local binding paths such as
 `/steps/{step}/...`; those exist only while a flow executes.
+
+For a failed collection, replace `result` with `partial_result`. Nested flow and
+step observations record `invocation_path`, so repeated calls to the same
+callable flow remain distinct. Grouped summaries count all observed child
+invocations. Root case usage remains the workflow total; child summaries are
+diagnostic views and must not be added to it.
 
 ## Split larger gold files
 
@@ -189,7 +196,9 @@ model-free or scripted example checks wiring, not model quality.
 Pipeline evaluation is the business-facing measurement because it exercises
 boundary validation, flow routing, and context bindings. Flow evaluation isolates
 one reusable flow. Operation evaluation isolates a single prompt, decision, tool,
-or handler with its final input shape.
+handler, or flow collection with its final input shape. A collection-step case
+supplies a payload whose `items` array already contains item IDs, callable flow
+IDs, and child inputs.
 
 Use scoped suites to diagnose a pipeline result, but do not count repeated
 pipeline, flow, and operation cases as additional independent business gold.

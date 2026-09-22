@@ -103,7 +103,7 @@ least one matching expectation at its path.
 1. Use a pipeline suite (`workflow`) for business behavior and routing.
 2. Add a flow suite (`workflow`, `flow`) to isolate a reusable flow.
 3. Add an operation suite (`workflow`, `flow`, `step`) to isolate one
-   decision, LLM, MCP, or handler operation.
+   decision, LLM, MCP, handler, or flow-collection operation.
 
 A step without a flow is invalid. Scoped cases supply already-resolved boundary
 input; they do not execute upstream bindings. Do not treat the same examples at
@@ -119,7 +119,14 @@ Use stable case IDs and reviewed JSON-pointer expectations over public results:
 /flows/{flow}/result/...
 /flows/{flow}/steps/{step}/result/...
 /flows/{flow}/steps/{step}/selection/category/id
+/flows/{flow}/steps/{collection}/result/items/{index}/steps/{step}/result/...
 ```
+
+Use `partial_result.items` for a failed collection ledger. Nested child flow and
+step observations include `invocation_path`; use it to distinguish repeated
+calls to the same definition. Grouped summaries count every observed child
+invocation, while `source_case_count` remains the number of authored cases.
+Parent usage is already the root total, so never add child summaries to it.
 
 Use `exact` for type- and order-sensitive values, `set` for top-level arrays,
 and `source_span` for bounded verbatim extraction. Declare classification or
@@ -169,6 +176,12 @@ Agreement with gold, operational failure, and intended review are separate.
 Missing, skipped, and error observations remain in denominators. Unknown usage
 is not zero. Flow and operation summaries are views of the same execution; do
 not add their usage to workflow totals.
+
+Flow and step summaries count `observed_invocations`, `skipped_invocations`,
+`failed_invocations`, and `review_invocations`. Decision steps additionally
+count `model_selected_invocations` and `fallback_selected_invocations`.
+Repeated callable-flow executions increase these observations, not the authored
+source-case count.
 
 Replay can measure changed gold or scorer logic, not a changed prompt or model.
 Comparison requires matching workflow/flow/step targets, cases, gold, scorers,

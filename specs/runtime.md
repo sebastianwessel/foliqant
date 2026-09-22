@@ -8,11 +8,11 @@ its configuration, deterministic execution and public integration boundaries.
 Foliqant is an installable Python 3.12 package built with PydanticAI, Pydantic,
 the maintained MCP SDK and uv. It compiles local workflow bundles and runs one
 bounded asynchronous invocation in memory. A workflow owns a graph of named sequential flows. Each flow contains decision,
-LLM, read-only MCP or trusted handler steps. The graph, routes,
+LLM, read-only MCP, trusted handler or bounded flow collection steps. The graph, routes,
 model aliases, tool allowlists and output bindings come from reviewed local
 configuration; model output cannot invent executable structure or authority.
 
-The package does **not** own persistence, queues, background workers, child jobs,
+The package does **not** own persistence, queues, background workers, durable child jobs,
 application authentication, HTTP/Redis transports, admin APIs or cloud
 deployment. It does not promise recovery after process loss or caller return.
 A small runnable HTTP example may adapt one request to the public in-memory API,
@@ -138,8 +138,10 @@ package/import/CLI identity remains `foliqant` until a replacement is chosen.
 
 A workflow declares a `flows` mapping, optional `name`, `start`, `defaults.model`,
 input schema and output binding. Omitted name derives from its directory. Start
-is inferred only for one flow; multiple flows require an explicit start.
-A flow instance declares named `input` bindings, required `transition`, optional
+is inferred only for one routed flow; multiple routed flows require an explicit start.
+Callable flows are explicitly declared with `callable: true` and have no transition,
+input bindings or unresolved route. See [collections](collections.md).
+A routed flow instance declares named `input` bindings, required `transition`, optional
 `on_unresolved`, and optional `definition` (inline or file). Omitted definition
 resolves `<flow-id>/flow.yaml` beside workflow.yaml. A flow definition declares
 an optional input schema, output binding and a nonempty ordered `steps` list.
@@ -151,7 +153,7 @@ no extension precedence. Explicit inline definitions and file references use
 the same compiler and support reuse. Unlisted step files are not executed or
 loaded. File discovery never determines business order, routes or data access.
 
-The four step kinds are:
+The step kinds are:
 
 - `decision`: one or several native questions and named sources, using an
   inherited or explicitly configured model; semantic validation is mandatory.
@@ -159,6 +161,8 @@ The four step kinds are:
   output and an optional allowlist of MCP tools.
 - `mcp`: one configured server/tool with explicit literal or pointer arguments.
 - `handler`: one trusted host registration with frozen input/output schemas.
+- `flow_collection`: a bounded sequential list of explicitly planned callable-flow
+  invocations, sharing the parent execution and retaining individual records.
 
 Steps advance in list order; they declare no routes or terminal operations.
 A flow transition is `{flow: id}`, `{outcome: completed|needs_review}`, or a
@@ -171,8 +175,9 @@ exist and the reachable graph must be acyclic; unused definitions are rejected.
 Within a flow, pointers see `/payload` (that flow's bound input), `/metadata`,
 and `/steps/<id>` (only local records). At workflow boundaries they see the
 original `/payload`, `/metadata`, and `/flows/<id>/result`, not another flow's
-internal step records. Flow input bindings provide the sole cross-flow data
-transfer. IDs are stable lowercase snake case. Missing differs from explicit null.
+internal step records. Routed flow input bindings and explicit collection item
+inputs provide cross-flow data transfer. Callable results remain nested in their
+collection ledger. IDs are stable lowercase snake case. Missing differs from explicit null.
 The compiler validates earlier-step order, flow dominance, optional projections
 on early review, known closed-schema paths and type compatibility. Open/complex
 schemas remain runtime-checked. These checks do not prove business correctness.
@@ -220,9 +225,7 @@ No automatic evidence threshold, fallback or review transition is added.
 The issue domain remains exactly `no_supported_answer`, `conflicting_information`,
 and `multiple_valid_options`. Missing details and requests outside the allowed
 answers share the first code; explain the particular obstacle in `reason`.
-Do not derive machine-readable issues by parsing rationale text. Training
-annotation contracts and previously generated artifacts are outside runtime
-execution and remain deferred; runtime needs no format-version negotiation.
+Do not derive machine-readable issues by parsing rationale text.
 
 A single-choice decision can declare `fallback: {category: {id, description?},
 on: [issue, ...]}`. Category IDs use the same deterministic normalization as

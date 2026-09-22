@@ -1,0 +1,4 @@
+output:
+  pointer: /steps/prepare/result
+steps:
+  - prepare

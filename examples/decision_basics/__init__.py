@@ -1,0 +1,1 @@
+"""Minimal single-decision example."""

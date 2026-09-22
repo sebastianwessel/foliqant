@@ -35,6 +35,18 @@ Each case contains flow observations and operation observations. Aggregate
 `steps` summaries use the pair `flow` plus `name`, so repeated step names in
 different flows remain distinct.
 
+Nested callable-flow observations also contain `invocation_path`. This path
+identifies the collection item that invoked a flow or step, so repeated calls to
+the same definition remain separate while grouped summaries include them all.
+For a collection step, completed and review ledgers are under `result.items`;
+failed ledgers are under `partial_result.items`.
+
+Flow and step summary fields count runtime observations:
+`observed_invocations`, `skipped_invocations`, `failed_invocations`, and
+`review_invocations`. Decision-step summaries additionally count
+`model_selected_invocations` and `fallback_selected_invocations`. Repeated child
+calls increase these counters; they do not increase `source_case_count`.
+
 Workflow usage is already the run total. Flow and operation usage summaries are
 diagnostic views of the same execution and must not be added to the workflow
 total.

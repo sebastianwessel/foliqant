@@ -1,6 +1,7 @@
 """Immutable execution values shared by the engine and adapter ports."""
 
 from dataclasses import dataclass, fields
+from types import MappingProxyType
 from typing import Literal, cast
 
 from .errors import ErrorCode, ServiceError
@@ -103,6 +104,8 @@ class StepRecord:
     elapsed_seconds: float | None = None
     usage: Usage | None = None
     selection: Selection | None = None
+    partial_result: FrozenObject | None = None
+    kind: Literal["flow_collection"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,3 +162,61 @@ class CallerContext:
 
     identity: Identity
     metadata: FrozenObject
+
+
+def usage_value(value: Usage) -> FrozenObject:
+    """Project measured usage once, without adding parent and child totals."""
+    return MappingProxyType(
+        {
+            "model_requests": value.model_requests,
+            "tool_calls": value.tool_calls,
+            **{field.name: getattr(value.tokens, field.name) for field in fields(value.tokens)},
+        }
+    )
+
+
+def step_record_value(record: StepRecord) -> FrozenObject:
+    """One canonical projection shared by nested ledgers and the public boundary."""
+    value = _record_value(record)
+    if record.selection is not None:
+        value["selection"] = record.selection.as_json()
+    if record.partial_result is not None:
+        value["partial_result"] = record.partial_result
+    if record.kind is not None:
+        value["kind"] = record.kind
+    return MappingProxyType(value)
+
+
+def flow_record_value(record: FlowRecord) -> FrozenObject:
+    """Include every local step exactly once in a flow's public ledger record."""
+    value = _record_value(record)
+    steps: dict[str, FrozenJson] = {}
+    for name, step in record.steps:
+        if name in steps:
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+        steps[name] = step_record_value(step)
+    value["steps"] = MappingProxyType(steps)
+    return MappingProxyType(value)
+
+
+def _record_value(record: StepRecord | FlowRecord) -> dict[str, FrozenJson]:
+    if not record.has_result and record.result is not None:
+        raise ServiceError(ErrorCode.INVALID_OUTPUT)
+    value: dict[str, FrozenJson] = {"status": record.status}
+    if record.has_result:
+        value["result"] = record.result
+    if record.usage is not None:
+        value["usage"] = usage_value(record.usage)
+    if record.elapsed_seconds is not None:
+        value["elapsed_seconds"] = record.elapsed_seconds
+    if record.error is not None:
+        if not isinstance(record.error.code, ErrorCode) or type(record.error.retryable) is not bool:
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+        value["error"] = MappingProxyType(
+            {
+                "code": record.error.code.value,
+                "message": record.error.message,
+                "retryable": record.error.retryable,
+            }
+        )
+    return value

@@ -1,0 +1,32 @@
+{
+  "name": "routed_intake_gold",
+  "revision": "1",
+  "suites": [
+    {
+      "name": "pipeline",
+      "workflow": "routed_intake",
+      "cases": "cases/pipeline.json",
+      "metrics": [
+        {
+          "name": "category",
+          "path": "/flows/classify/result",
+          "kind": "classification",
+          "labels": ["billing", "cancellation", null]
+        }
+      ]
+    },
+    {
+      "name": "classify_flow",
+      "workflow": "routed_intake",
+      "flow": "classify",
+      "cases": "cases/classification.json"
+    },
+    {
+      "name": "classify_step",
+      "workflow": "routed_intake",
+      "flow": "classify",
+      "step": "classify",
+      "cases": "cases/step.json"
+    }
+  ]
+}

@@ -46,7 +46,7 @@ field map, read [workflow design](references/workflow-design.md).
 Use `config/settings.yaml` and the conventional workflow, flow, and step files
 unless explicit paths improve the application. Keep ordered steps and routes
 authored; filesystem order never determines execution. Supported operations are
-`decision`, `llm`, `mcp`, and trusted `handler`.
+`decision`, `llm`, `mcp`, trusted `handler`, and bounded `flow_collection`.
 
 Write authored YAML mappings and sequences in block style. Reserve `{}` and
 `[]` for intentional empty values, and quote the `"on"` key so YAML 1.1

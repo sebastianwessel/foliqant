@@ -1,0 +1,17 @@
+models:
+  local:
+    provider: openai_compatible
+    api: chat
+    model: $MODEL_ID
+    base_url: $MODEL_BASE_URL
+    allow_insecure_http: true
+    output_mode: native
+    supports_tools: false
+    concurrency: 1
+    queue_limit: 0
+    request_timeout: 60
+execution:
+  concurrency: 1
+  queue_limit: 0
+  model_timeout: 60
+  run_timeout: 70

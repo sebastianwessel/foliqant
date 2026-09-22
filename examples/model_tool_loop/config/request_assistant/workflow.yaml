@@ -1,0 +1,11 @@
+defaults:
+  model: local_qwen
+flows:
+  answer:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      outcome: completed
+output:
+  pointer: /flows/answer/result

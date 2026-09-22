@@ -1,0 +1,4 @@
+steps:
+- answer
+output:
+  pointer: /steps/answer/result

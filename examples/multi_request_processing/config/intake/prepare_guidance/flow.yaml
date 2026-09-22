@@ -1,0 +1,5 @@
+steps:
+- prepare
+output:
+  pointer: /steps/prepare/result
+input_schema: input.schema.json

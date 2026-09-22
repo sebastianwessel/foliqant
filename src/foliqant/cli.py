@@ -22,6 +22,7 @@ from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.identity import Identity
 from foliqant.core.plan import (
     DecisionStepPlan,
+    FlowCollectionStepPlan,
     HandlerStepPlan,
     LlmStepPlan,
     MatchRoutingPlan,
@@ -366,6 +367,9 @@ def _plan_report(
                 item["server"], item["tool"] = step.server, step.tool
             elif isinstance(step, HandlerStepPlan):
                 item["handler"] = step.handler
+            elif isinstance(step, FlowCollectionStepPlan):
+                item["flows"] = list(step.flows)
+                item["max_items"] = step.max_items
             steps.append(item)
         transition = flow.transition
         if isinstance(transition, MatchRoutingPlan):
@@ -374,9 +378,15 @@ def _plan_report(
                 "cases": {key: _target_report(target) for key, target in transition.cases},
                 "default": _target_report(transition.default),
             }
-        else:
+        elif transition is not None:
             route = _target_report(transition)
-        entry: dict[str, object] = {"name": flow.name, "steps": steps, "transition": route}
+        else:
+            route = {}
+        entry: dict[str, object] = {"name": flow.name, "steps": steps}
+        if flow.callable:
+            entry["callable"] = True
+        else:
+            entry["transition"] = route
         if isinstance(flow.on_unresolved, UnresolvedRoutingPlan):
             unresolved: dict[str, object] = {
                 "default": _target_report(flow.on_unresolved.default),

@@ -13,6 +13,7 @@ from foliqant.contracts.base import BoundaryModel
 from foliqant.contracts.envelope import Envelope
 from foliqant.contracts.workflow import Id, NonBlank
 from foliqant.core.json import JsonValue, freeze_json
+from foliqant.core.plan import FlowCollectionStepPlan, FlowPlan
 from foliqant.settings import PreparedApplication
 
 from .contracts import EvaluationCase, EvaluationSuite, Expectation
@@ -188,6 +189,37 @@ def read_json(path: Path, *, max_bytes: int = MAX_DATASET_BYTES) -> object:
     )
 
 
+def _nested_target(
+    parts: list[str], candidates: list[FlowPlan], flows: dict[str, FlowPlan]
+) -> None:
+    """Follow only compiler-known collection boundaries, leaving business fields dynamic."""
+    while len(parts) >= 2 and parts[0] == "steps":
+        selected = [step for flow in candidates for step in flow.steps if step.name == parts[1]]
+        if not selected:
+            raise ValueError("expectation references an unavailable nested step")
+        parts = parts[2:]
+        collections = [step for step in selected if isinstance(step, FlowCollectionStepPlan)]
+        if (
+            len(collections) != len(selected)
+            or not parts
+            or parts[0] not in {"result", "partial_result"}
+        ):
+            return
+        if len(parts) < 3 or parts[1] != "items":
+            return
+        index = parts[2]
+        if (
+            not index.isascii()
+            or not index.isdigit()
+            or len(index) > 4
+            or (len(index) > 1 and index[0] == "0")
+            or all(int(index) >= step.max_items for step in collections)
+        ):
+            raise ValueError("expectation references an unavailable collection item")
+        candidates = [flows[name] for step in collections for name in step.flows]
+        parts = parts[3:]
+
+
 def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) -> None:
     """Check known targets and result roots, not unknowable dynamic output fields."""
     for suite in dataset.suites:
@@ -212,7 +244,11 @@ def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) 
                     raise ValueError("unknown execution result root")
                 if parts[0] == "flows" and len(parts) >= 2:
                     target = flows.get(parts[1])
-                    if target is None or (suite.flow is not None and parts[1] != suite.flow):
+                    if (
+                        target is None
+                        or (suite.flow is not None and parts[1] != suite.flow)
+                        or (suite.flow is None and target.callable)
+                    ):
                         raise ValueError("expectation references an unavailable flow")
                     if len(parts) >= 4 and parts[2] == "steps":
                         step_names = {step.name for step in target.steps}
@@ -220,6 +256,7 @@ def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) 
                             suite.step is not None and parts[3] != suite.step
                         ):
                             raise ValueError("expectation references an unavailable step")
+                        _nested_target(parts[2:], [target], flows)
                 if (
                     parts[0] == "execution"
                     and len(parts) >= 2

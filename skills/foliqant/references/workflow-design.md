@@ -109,6 +109,17 @@ proving the tool flow is skipped for cancellation, a triage-flow case for review
 handling, and a classify-step case for each category. Gold comes from business
 review, not from a previous model response.
 
+When one message contains several independent requests, use a `request_units`
+decision for assessment, a trusted handler for application policy, and a
+`flow_collection` step for bounded sequential invocation. The planner emits
+unique task IDs, an allowlisted callable flow ID, and complete input for each
+accepted item. Keep conditional, related, unsupported, or incomplete units in
+review, and let a final handler decide disposition from both the plan and the
+complete collection ledger. Do not invent parallel fan-out or an implicit join.
+A multiselect answer labels one subject; it does not represent several request
+units. Use stable collection task IDs and an explicit map to original business
+IDs instead of coercing model-authored IDs into runtime identifiers.
+
 ## File conventions and customization
 
 ```text
@@ -153,6 +164,11 @@ Each flow instance has:
 | `input` | binding map | Resolves the flow payload |
 | `transition` | target or match route | Required completed-flow route |
 | `on_unresolved` | target or unresolved route, optional | Defaults to terminal review |
+
+A callable flow is a separate workflow-flow form with `callable: true` and an
+optional `definition`. It has no `input`, `transition`, or `on_unresolved` and
+can be invoked only by an allowlisted flow-collection step. It cannot be the
+workflow start or a route target.
 
 A flow definition has optional `input_schema`, optional `output`, and a
 nonempty ordered `steps` list. Step IDs are unique within the flow.
@@ -393,6 +409,70 @@ input:
 YAML selects only a host-registered handler name. Register an async callable with
 explicit input/output schemas and `effect: read`. The current runner rejects
 write handlers.
+
+### Map multiple intentions to work
+
+Use `choice` for exactly one category, `multiselect` for tags, and `request_units`
+for distinct requested actions. Two tags can describe one request; two requests
+can share a category. Never turn every selected label directly into a flow call.
+
+For independent work, use assessment → trusted planner → collection → disposition.
+Preserve the original assessment, including partial answers, withdrawals, quoted
+history, conditions and relations. Its overall evidence strength does not certify
+each unit. The host's explicit policy decides which work is actionable, which
+requests to group or deduplicate, and what needs review. Related work requires an
+authored coordinating flow or review, not an inferred dependency scheduler.
+
+The planner creates validated `FlowCollectionItem` values with safe, unique task
+IDs and a mapping to the original request IDs. Native request IDs are not required
+to satisfy framework ID syntax. Pass only required data to each child. The final
+handler validates `FlowCollectionResult`, checks it represents the entire plan,
+and combines held requests with child outcomes under application-owned business
+rules. A technical collection failure stops the workflow before disposition;
+the caller inspects its partial ledger without a hidden success conversion.
+Framework completion means processing finished, not that a customer's
+external request has been fulfilled. Do not call public `run_flow` repeatedly from
+a handler to simulate composition: each call creates a fresh root invocation.
+
+### Flow collection
+
+```yaml
+type: flow_collection
+items:
+  pointer: /payload/items
+flows:
+  - lookup_status
+  - prepare_guidance
+max_items: 8
+```
+
+| Field | Shape | Rule |
+| --- | --- | --- |
+| `type` | `flow_collection` | Required discriminator |
+| `items` | binding | Resolves an array of invocation items |
+| `flows` | nonempty unique flow-ID list | Compile-time callable-flow allowlist |
+| `max_items` | integer 1–1024 | Defaults to 32 |
+
+Each invocation item has a unique `id`, one allowlisted callable `flow`, and an
+object `input` validated at that flow boundary. Items execute sequentially under
+the root deadline and budgets; collection nesting is bounded to 16 levels.
+All item inputs are validated before any child I/O. An empty list completes.
+A child review permits later independent items, then the collection needs review;
+a technical failure stops it and retains later items as skipped. Review routing
+is explicit on the enclosing routed flow. Business policy stays in handlers. The
+runtime validates the whole list, allowlist, IDs, and child inputs before any
+child I/O. An empty list completes. A child review is recorded and collection
+continues; a technical child failure stops execution and marks remaining items
+skipped.
+
+The public step has `kind: flow_collection`. Completed and review ledgers are in
+`result.items`; a failed ledger remains in `partial_result.items`, including
+failed and skipped records. Each record adds its collection `id` and `flow` to
+the normal flow result fields.
+
+`run_flow` starts one fresh isolated invocation for evaluation or tests. It does
+not append to a collection or compose a root execution; use `flow_collection`
+inside the authored workflow for that behavior.
 
 ## Schemas and Markdown
 

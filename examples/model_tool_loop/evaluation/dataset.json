@@ -1,0 +1,225 @@
+{
+  "name": "model_tool_loop",
+  "revision": "authored",
+  "suites": [
+    {
+      "name": "pipeline",
+      "workflow": "request_assistant",
+      "cases": [
+        {
+          "id": "english_request",
+          "input": {
+            "payload": {
+              "message": "Check FOI-2026-0142 in English."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/payload/reference",
+              "expected": "FOI-2026-0142"
+            },
+            {
+              "name": "language",
+              "path": "/payload/language",
+              "expected": "en"
+            },
+            {
+              "name": "due_date",
+              "path": "/payload/due_date",
+              "expected": "2026-10-05"
+            }
+          ]
+        },
+        {
+          "id": "german_request",
+          "input": {
+            "payload": {
+              "message": "Bitte FOI-2026-0310 auf Deutsch prüfen."
+            },
+            "metadata": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/payload/reference",
+              "expected": "FOI-2026-0310"
+            },
+            {
+              "name": "language",
+              "path": "/payload/language",
+              "expected": "de"
+            },
+            {
+              "name": "due_date",
+              "path": "/payload/due_date",
+              "expected": "05.10.2026"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "answer_flow",
+      "workflow": "request_assistant",
+      "flow": "answer",
+      "cases": [
+        {
+          "id": "english_request",
+          "input": {
+            "payload": {
+              "message": "Check FOI-2026-0142 in English."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/flows/answer/result/reference",
+              "expected": "FOI-2026-0142"
+            },
+            {
+              "name": "language",
+              "path": "/flows/answer/result/language",
+              "expected": "en"
+            },
+            {
+              "name": "due_date",
+              "path": "/flows/answer/result/due_date",
+              "expected": "2026-10-05"
+            }
+          ]
+        },
+        {
+          "id": "german_request",
+          "input": {
+            "payload": {
+              "message": "Bitte FOI-2026-0310 auf Deutsch prüfen."
+            },
+            "metadata": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/flows/answer/result/reference",
+              "expected": "FOI-2026-0310"
+            },
+            {
+              "name": "language",
+              "path": "/flows/answer/result/language",
+              "expected": "de"
+            },
+            {
+              "name": "due_date",
+              "path": "/flows/answer/result/due_date",
+              "expected": "05.10.2026"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "answer_step",
+      "workflow": "request_assistant",
+      "flow": "answer",
+      "step": "answer",
+      "cases": [
+        {
+          "id": "english_request",
+          "input": {
+            "payload": {
+              "message": "Check FOI-2026-0142 in English."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/flows/answer/steps/answer/result/reference",
+              "expected": "FOI-2026-0142"
+            },
+            {
+              "name": "language",
+              "path": "/flows/answer/steps/answer/result/language",
+              "expected": "en"
+            },
+            {
+              "name": "due_date",
+              "path": "/flows/answer/steps/answer/result/due_date",
+              "expected": "2026-10-05"
+            }
+          ]
+        },
+        {
+          "id": "german_request",
+          "input": {
+            "payload": {
+              "message": "Bitte FOI-2026-0310 auf Deutsch prüfen."
+            },
+            "metadata": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "reference",
+              "path": "/flows/answer/steps/answer/result/reference",
+              "expected": "FOI-2026-0310"
+            },
+            {
+              "name": "language",
+              "path": "/flows/answer/steps/answer/result/language",
+              "expected": "de"
+            },
+            {
+              "name": "due_date",
+              "path": "/flows/answer/steps/answer/result/due_date",
+              "expected": "05.10.2026"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

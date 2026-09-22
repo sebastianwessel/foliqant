@@ -4,6 +4,7 @@ These documents define the supported package. They are implementation contracts,
 not a backlog or permission to add unrelated infrastructure.
 
 - [Runtime](runtime.md): scope, architecture, authoring, execution and adapters.
+- [Collections](collections.md): application-owned multi-request planning and bounded child flows.
 - [Evaluation](evaluation.md): gold datasets, isolated/full runs, metrics and reports.
 - [Prompt trust](prompt-trust.md): instructions, input boundaries and quality checks.
 

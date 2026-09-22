@@ -13,6 +13,9 @@ type FrozenObject = Mapping[str, FrozenJson]
 
 # Bound recursive input processing independently of each transport's byte limit.
 MAX_JSON_DEPTH = 64
+# Runtime-owned collection ledgers add structure around already validated leaves.
+# Keep complete execution values below recursive serialization limits as well.
+MAX_EXECUTION_JSON_DEPTH = 192
 
 
 def freeze_json(value: object, *, max_depth: int = MAX_JSON_DEPTH) -> FrozenJson:
