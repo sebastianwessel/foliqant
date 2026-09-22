@@ -55,10 +55,20 @@ model and tool clients declared by that project and prints one JSON result.
 
 ## Learn the runtime
 
+New to Foliqant? Follow the [six-stage tutorial path](docs/tutorials/index.md)
+from a single decision to a multi-request workflow with MCP and a model tool
+loop:
+
+1. [Classify one request](docs/tutorials/decision-basics.md)
+2. [Add structured extraction](docs/tutorials/structured-extraction.md)
+3. [Route between flows](docs/tutorials/multiflow-routing.md)
+4. [Call one read-only MCP tool](docs/tutorials/read-only-mcp.md)
+5. [Let a model use a read-only tool](docs/tutorials/model-tool-loop.md)
+6. [Process several requests conservatively](docs/tutorials/multi-request-processing.md)
+
 | Goal | Guide |
 | --- | --- |
 | Install, scaffold, and embed Foliqant | [Install and run](docs/getting-started/runtime.md) |
-| Learn by adding one capability at a time | [Six-stage tutorial](docs/tutorials/index.md) |
 | Understand workflows, flows, steps, and results | [Runtime concepts](docs/concepts/runtime.md) |
 | Author files, bindings, prompts, routes, and schemas | [Build a workflow](docs/guides/build-workflows.md) |
 | Author typed evidence-backed decisions | [Decision contracts](docs/guides/decision-contracts.md) |
