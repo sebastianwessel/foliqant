@@ -34,19 +34,29 @@ uv pip install /absolute/path/to/foliqant/dist/foliqant-0.1.0-py3-none-any.whl
 ## Create a project
 
 The initializer creates `config/settings.yaml`, one workflow and flow, an LLM
-operation, a sample envelope, and `config/.env.example`:
+operation, a sample request in `envelope.json`, and an environment-variable
+template in `config/.env.example`:
 
 ```sh
 uv run --no-sync foliqant init /tmp/foliqant-demo
 cp /tmp/foliqant-demo/config/.env.example /tmp/foliqant-demo/config/.env
 ```
 
-Set the model served by your local OpenAI-compatible endpoint:
+The runtime does not read `.env.example`; the copy above creates the local
+`.env` it can read. You can skip that copy if you supply the variables through
+your process environment. Keep local `.env` files out of Git.
+
+Set these values in `config/.env` to match your local OpenAI-compatible endpoint:
 
 ```dotenv
 MODEL_ID=your-served-model-id
 MODEL_BASE_URL=http://127.0.0.1:8000/v1
 ```
+
+`envelope.json` contains one sample request: business data in `payload` and
+optional context in `metadata`. It is not configuration and has no required
+filename; `--input` explicitly selects it. See
+[caller input](../reference/inputs-and-results.md#caller-input-envelope).
 
 Then run:
 

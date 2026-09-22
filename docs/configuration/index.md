@@ -33,13 +33,12 @@ deployment-owned sections.
 
 ## Use the conventional folder tree
 
-A project commonly grows into this layout:
+Keep the application configuration in this tree. Replace `<workflow>`, `<flow>`,
+and `<step>` with the names of your process and its operations:
 
 ```text
 config/
   settings.yaml
-  .env.example
-  .env                         # local and ignored
   <workflow>/
     workflow.yaml
     input.schema.json
@@ -48,17 +47,15 @@ config/
       <step>/
         step.md
         output.schema.json
-evaluation/                    # optional; normal runtime startup does not read it
-  dataset.json
-  cases/
-    representative.json
-envelope.json
 ```
 
 A step can instead use `<step>.step.md` or `<step>.step.yaml` directly beside
 `flow.yaml`. Do not create more than one conventional candidate for the same
-step ID. The optional `evaluation/` directory is a sibling of `config/`; its
-reviewed datasets and case files are used only by explicit evaluation commands.
+step ID. Schema files are needed only where you declare a schema reference.
+
+Environment settings, sample requests, and evaluation datasets serve separate
+purposes; they are not part of workflow discovery. Add reviewed test cases later
+using the [evaluation directory layout](../evaluation/ground-truth.md#place-the-dataset).
 
 Paths are resolved from the file that declares them. In this tree,
 `input.schema.json` is relative to `workflow.yaml`, `<flow>/flow.yaml` is
@@ -108,13 +105,19 @@ models:
     supports_tools: false
 ```
 
-Create `config/.env.example` and replace its example values after copying it to
-the ignored `config/.env`:
+Supply the two variables through your shell or deployment environment. For local
+development, you can instead create `config/.env` with the model ID and endpoint
+you actually use:
 
 ```dotenv
 MODEL_ID=replace_with_model_id
 MODEL_BASE_URL=http://127.0.0.1:8000/v1
 ```
+
+The runtime reads `.env` beside `settings.yaml`. The CLI's process environment
+overrides values in that file. No `.env` file is needed when those variables are
+already supplied by the environment. If you use one, add `config/.env` to your
+project's `.gitignore`; creating the file does not automatically ignore it.
 
 `$MODEL_ID` and `$MODEL_BASE_URL` are resolved only when the application opens.
 `allow_insecure_http: true` is appropriate for this loopback development
@@ -190,7 +193,11 @@ The Markdown body is the step's trusted instruction text. Because this LLM step
 does not declare `prompt`, its selected `input` object is sent as the user data.
 The workflow projects the model's text result to the public result `payload`.
 
-For a runtime call, create `envelope.json`:
+## Send a sample request
+
+Configuration describes the process; a request supplies the data to process.
+The CLI reads a request from the file passed to `--input`. For this example,
+save the following as `input.json` in your project directory:
 
 ```json
 {
@@ -201,6 +208,13 @@ For a runtime call, create `envelope.json`:
 }
 ```
 
+This JSON object is called an **envelope**: `payload` contains your business
+data, and optional `metadata` carries context about the request. The filename
+is arbitrary; the runtime does not discover it or require it at startup. When
+embedding the package in Python, pass an `Envelope` directly instead of creating
+a file. See [caller input](../reference/inputs-and-results.md#caller-input-envelope)
+for the complete contract.
+
 Structural validation does not need the model server or environment:
 
 ```sh
@@ -208,12 +222,11 @@ foliqant validate --config config/settings.yaml
 foliqant explain --config config/settings.yaml --workflow summarizer
 ```
 
-To run it, copy and edit the environment file, start the configured compatible
-endpoint, and invoke the workflow:
+With your environment values set and the configured model endpoint running,
+invoke the workflow:
 
 ```sh
-cp config/.env.example config/.env
-foliqant run --config config/settings.yaml --workflow summarizer --input envelope.json
+foliqant run --config config/settings.yaml --workflow summarizer --input input.json
 ```
 
 ## Validate before opening clients

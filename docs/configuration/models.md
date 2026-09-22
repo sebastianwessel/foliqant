@@ -153,8 +153,10 @@ The host's environment mapping overrides file values. Offline preparation does
 not resolve secrets, read `.env`, or contact providers. Prompts, schema strings,
 bindings, and customer inputs do not expand environment variables.
 
-Commit a `.env.example` containing variable names and safe placeholders; ignore
-the real `.env`. Do not put tokens in prompts, evaluation gold, or logs.
+Neither `.env` nor `.env.example` is required when the host supplies the values.
+An optional `.env.example` is a template for other developers; the runtime never
+reads it. If you use a local `.env`, add it to `.gitignore` yourself. Do not put
+tokens in committed files, prompts, evaluation gold, or logs.
 
 ## Bound capacity and retries
 
