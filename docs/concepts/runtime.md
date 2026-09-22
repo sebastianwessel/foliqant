@@ -18,6 +18,40 @@ A workflow may contain one flow or route across several. A flow may contain one
 or more ordered steps. Steps never select the next flow; the containing flow
 owns transitions and unresolved handling.
 
+<div class="docs-diagram" markdown tabindex="0" role="region" aria-label="Workflow architecture diagram; scroll horizontally on small screens">
+
+```mermaid
+flowchart TD
+    accTitle: A workflow contains flows, and flows contain ordered steps
+    accDescr: An intake workflow starts with a classification flow. Its authored transition selects a billing flow with extraction and Python validation steps, or returns a review outcome. Unresolved classification also returns review.
+    subgraph workflow["Workflow: handle a request"]
+        direction TB
+        subgraph classify["Flow: classify"]
+            direction TB
+            intent["Step: decision — identify intent"]
+        end
+        intent --> route{"Classification flow's transition"}
+        route -->|Billing| extract
+        subgraph billing["Flow: billing"]
+            direction TB
+            extract["Step: llm — extract invoice fields"]
+            extract --> check["Step: handler — apply business rules"]
+        end
+        route -->|Other result| review["Outcome: needs_review"]
+        intent -.->|Unresolved handling| review
+        check --> done["Outcome: completed"]
+    end
+```
+
+</div>
+
+This illustrative process uses three of the five step types. A declared `mcp`
+step can read from an external tool; a `flow_collection` step can collect work
+from callable flows. The diagram's arrows between flows represent authored
+transitions, not model-generated instructions. The completed path assumes the
+billing steps succeed; validation and execution failures remain visible in the
+result rather than becoming a successful business outcome.
+
 Choose a new flow when the process needs a separately testable boundary, a
 route, or explicit review handling. Choose another step when work remains in the
 same sequential boundary but needs a different input, schema, provider, tool, or

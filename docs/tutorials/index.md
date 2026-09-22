@@ -1,3 +1,10 @@
+---
+hide:
+  - toc
+---
+
+<p class="docs-eyebrow">Tutorials · The learning path</p>
+
 # Build workflows in six stages
 
 This learning path adds one capability at a time. Each stage starts from a
@@ -5,14 +12,80 @@ business boundary, shows the files that encode it, runs offline by default, and
 adds reviewed English and German gold. Work through the stages in order if you
 are new to the runtime.
 
-| Stage | Capability | Example |
-| --- | --- | --- |
-| 1 | One evidence-backed decision and a review outcome | [`decision_basics`](https://github.com/sebastianwessel/foliqant/tree/main/examples/decision_basics) |
-| 2 | Structured extraction from selected context | [`support_triage`](https://github.com/sebastianwessel/foliqant/tree/main/examples/support_triage) |
-| 3 | Exact deterministic routing between flows | [`routed_intake`](https://github.com/sebastianwessel/foliqant/tree/main/examples/routed_intake) |
-| 4 | One declared read-only MCP call | [`public_request_mcp`](https://github.com/sebastianwessel/foliqant/tree/main/examples/public_request_mcp) |
-| 5 | A model-selected read-only tool loop | [`model_tool_loop`](https://github.com/sebastianwessel/foliqant/tree/main/examples/model_tool_loop) |
-| 6 | Several requests planned, collected, and conservatively disposed | [`multi_request_processing`](https://github.com/sebastianwessel/foliqant/tree/main/examples/multi_request_processing) |
+New here? [Install the runtime](../getting-started/runtime.md) first. Each tutorial
+links its runnable example and explains the capability it adds.
+
+<div class="docs-grid" markdown>
+
+<div class="docs-card" markdown>
+
+<span class="docs-step">01 · DECISIONS</span>
+
+## Classify one request
+
+Make one evidence-backed decision and send uncertain results for review.
+
+[Build your first decision →](decision-basics.md)
+
+</div>
+<div class="docs-card" markdown>
+
+<span class="docs-step">02 · EXTRACTION</span>
+
+## Add structured extraction
+
+Select the context a step needs and extract a result that matches a schema.
+
+[Add extraction →](structured-extraction.md)
+
+</div>
+<div class="docs-card" markdown>
+
+<span class="docs-step">03 · ROUTING</span>
+
+## Route between flows
+
+Use exact deterministic rules to choose which flow runs next.
+
+[Connect your flows →](multiflow-routing.md)
+
+</div>
+<div class="docs-card" markdown>
+
+<span class="docs-step">04 · MCP</span>
+
+## Call a read-only tool
+
+Pass selected context into one declared MCP call with a bounded result.
+
+[Add an MCP step →](read-only-mcp.md)
+
+</div>
+<div class="docs-card" markdown>
+
+<span class="docs-step">05 · TOOL LOOPS</span>
+
+## Let a model use a tool
+
+Give a model a read-only tool while keeping its execution bounded.
+
+[Build a tool loop →](model-tool-loop.md)
+
+</div>
+<div class="docs-card" markdown>
+
+<span class="docs-step">06 · COMPOSITION</span>
+
+## Process several requests
+
+Plan and collect bounded work, then apply your use case's disposition policy.
+
+[Handle multiple requests →](multi-request-processing.md)
+
+</div>
+</div>
+
+## What each example includes
 
 Every example uses `config/settings.yaml`, conventional workflow/flow/step
 paths, and `evaluation/dataset.json`. Model-backed commands use a local

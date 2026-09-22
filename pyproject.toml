@@ -28,7 +28,10 @@ telemetry = [
 ]
 
 [dependency-groups]
-docs = ["mkdocs==1.6.1"]
+docs = [
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.7.7",
+]
 http-example = ["starlette==1.6.0", "uvicorn==0.53.0", "httpx2==2.13.0"]
 dev = [
   { include-group = "http-example" },

@@ -7,13 +7,52 @@ docs_dir: docs
 site_dir: site
 strict: true
 theme:
-  name: mkdocs
-  color_mode: auto
-  user_color_mode_toggle: true
+  name: material
+  language: en
+  font: false
+  logo: assets/mark.svg
+  favicon: assets/mark.svg
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+extra_css:
+  - assets/stylesheets/theme.css
+extra:
+  generator: false
 plugins:
   - search
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
   - toc:
       permalink: true
 validation:
@@ -26,24 +65,27 @@ validation:
     anchors: warn
     unrecognized_links: warn
 nav:
-  - Home: index.md
+  - Overview: index.md
   - Getting started:
       - Install and run: getting-started/runtime.md
+      - Understand the runtime: concepts/runtime.md
   - Tutorials:
       - Learning path: tutorials/index.md
-      - 1. Classify one request: tutorials/decision-basics.md
-      - 2. Add structured extraction: tutorials/structured-extraction.md
-      - 3. Route between flows: tutorials/multiflow-routing.md
-      - 4. Call a read-only MCP tool: tutorials/read-only-mcp.md
-      - 5. Let a model use a tool: tutorials/model-tool-loop.md
-      - 6. Process several requests: tutorials/multi-request-processing.md
-  - Concepts:
-      - Runtime model: concepts/runtime.md
+      - Decisions and control flow:
+          - 1. Classify one request: tutorials/decision-basics.md
+          - 2. Add structured extraction: tutorials/structured-extraction.md
+          - 3. Route between flows: tutorials/multiflow-routing.md
+      - Tools and composition:
+          - 4. Call a read-only MCP tool: tutorials/read-only-mcp.md
+          - 5. Let a model use a tool: tutorials/model-tool-loop.md
+          - 6. Process several requests: tutorials/multi-request-processing.md
   - Guides:
-      - Build workflows: guides/build-workflows.md
-      - Decision contracts: guides/decision-contracts.md
-      - Test and evaluate: guides/testing-and-evaluation.md
-      - Understand evaluation results: guides/evaluation-results.md
+      - Build:
+          - Build workflows: guides/build-workflows.md
+          - Decision contracts: guides/decision-contracts.md
+      - Verify:
+          - Test and evaluate: guides/testing-and-evaluation.md
+          - Understand evaluation results: guides/evaluation-results.md
   - Reference:
       - Configuration and CLI: reference/runtime-configuration.md
-  - Agent skill: skills/foliqant.md
+      - Configure with an AI agent: skills/foliqant.md
