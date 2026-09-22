@@ -1,15 +1,25 @@
 reuse_inventory_version: 1
-discovery_revision: working-tree-626fecd-runtime-evidence-2026-09-22
+discovery_revision: working-tree-eecba17-workflow-composition-2026-09-22
 assets:
 - asset_id: package.decision-output
   kind: schema
   path: ../src/foliqant/contracts/decisions.py
   public_export: DecisionOutput, validate_decision_output
   owner: python-package
-  stability: versioned
+  stability: experimental
   consumers: [package-native-validation, package-compiler, package-evaluation]
-  extension_policy: Runtime v3 reason and evidence strength; reuse native v2 inputs
+  extension_policy: Unversioned runtime reason and evidence strength; reuse shared typed task semantics
     and answerability semantics without modifying model-tooling output or artifacts.
+- asset_id: package.prompt-template
+  kind: module
+  path: ../src/foliqant/core/prompt.py
+  public_export: PromptTemplate, compile_prompt, render_prompt
+  owner: python-package
+  stability: internal
+  consumers: [package-compiler, model-adapters]
+  extension_policy: Compile exact declared input identifiers; serialize substitutions
+    as JSON once, including quoted strings. No evaluation, filters, environment
+    expansion, attribute access or recursive interpolation.
 - asset_id: package.environment
   kind: module
   path: ../src/foliqant/environment.py
@@ -45,9 +55,10 @@ assets:
   owner: python-package
   stability: experimental
   consumers: [package-settings, foreground-cli, embedded-application]
-  extension_policy: Compile inline or separate-file steps and inline or file schemas
-    through one path; require explicit success transitions and keep conservative
-    schema checks distinct from runtime value validation.
+  extension_policy: Compile conventional lookup and explicit inline or referenced
+    definitions through one path; reject missing or ambiguous candidates. References
+    resolve from containing files inside the configuration root. Step order and
+    boundary routing stay explicit with scoped binding checks.
 - asset_id: model.workspace
   kind: module
   path: ../model/src/foliqant_model/workspace.py
@@ -65,7 +76,7 @@ assets:
   owner: python-package
   stability: experimental
   consumers: [embedding-application, evaluation-examples, evaluation-cli]
-  extension_policy: Reuse the existing application and isolated-step executor;
+  extension_policy: Reuse the application pipeline, isolated-flow and scoped-step executors;
     explicit ground truth and revisions only, no automatic judge or runtime persistence.
 - asset_id: package.evaluation-dataset
   kind: schema
@@ -74,7 +85,7 @@ assets:
   owner: python-package
   stability: experimental
   consumers: [evaluation-cli, evaluation-examples, generated-schemas]
-  extension_policy: Convert strict private JSON into existing evaluation dataclasses;
+  extension_policy: Convert strict authored JSON into existing evaluation dataclasses;
     load only on explicit evaluation, never during application startup.
 - asset_id: package.evaluation-artifact
   kind: module
@@ -92,7 +103,7 @@ assets:
   owner: python-package
   stability: experimental
   consumers: [embedded-application, foreground-cli, http-example]
-  extension_policy: Prepare offline, own async clients explicitly and reuse run/run_step
+  extension_policy: Prepare offline, own async clients explicitly and reuse run/run_flow/run_step
     without duplicate execution or configuration loading.
 - asset_id: package.runner
   kind: module
@@ -109,7 +120,7 @@ assets:
 - asset_id: package.execution-values
   kind: module
   path: ../src/foliqant/core/execution.py
-  public_export: RunResult, StepRecord, Usage, TokenUsage
+  public_export: RunResult, FlowRecord, StepRecord, TransitionRecord, Usage, TokenUsage
   owner: python-package
   stability: experimental
   consumers:
@@ -160,7 +171,7 @@ assets:
   consumers:
   - curation
   - package-input-and-question-authoring
-  extension_policy: Preserve native v2 model outputs and existing artifacts/jobs. Runtime v3
+  extension_policy: Preserve native v2 model outputs and existing artifacts/jobs. Unversioned runtime
     output lives separately in package.decision-output; share unchanged task input
     and answer semantics without artifact conversion.
 - asset_id: concept.python-package

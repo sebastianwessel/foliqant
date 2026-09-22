@@ -679,64 +679,6 @@
           "default": null,
           "title": "Model"
         },
-        "name": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "next": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Next"
-        },
-        "on_answer": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-                "type": "string"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Answer"
-        },
-        "on_unresolved": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/UnresolvedRouting"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Unresolved"
-        },
         "question": {
           "anyOf": [
             {
@@ -797,10 +739,10 @@
             "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
               "oneOf": [
                 {
-                  "$ref": "#/$defs/PointerBinding"
+                  "$ref": "#/$defs/SourcePointerBinding"
                 },
                 {
-                  "$ref": "#/$defs/LiteralBinding"
+                  "$ref": "#/$defs/SourceLiteralBinding"
                 }
               ]
             }
@@ -853,13 +795,84 @@
       "title": "FallbackCategory",
       "type": "object"
     },
-    "FinishStepAuthoring": {
+    "FlowDefinition": {
       "additionalProperties": false,
+      "description": "A reusable sequence; the containing workflow owns its instance identity.",
       "properties": {
-        "name": {
+        "input_schema": {
           "anyOf": [
             {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Schema"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output"
+        },
+        "steps": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/NamedStep"
+              },
+              {
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "type": "string"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "title": "FlowDefinition",
+      "type": "object"
+    },
+    "FlowInstance": {
+      "additionalProperties": false,
+      "description": "One named flow invocation with explicit boundary data and authored targets.",
+      "properties": {
+        "definition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowDefinition"
+            },
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
               "type": "string"
             },
             {
@@ -867,27 +880,77 @@
             }
           ],
           "default": null,
-          "title": "Name"
+          "title": "Definition"
         },
-        "outcome": {
-          "enum": [
-            "completed",
-            "needs_review"
+        "input": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                }
+              ]
+            }
+          },
+          "title": "Input",
+          "type": "object"
+        },
+        "on_unresolved": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowTarget"
+            },
+            {
+              "$ref": "#/$defs/OutcomeTarget"
+            },
+            {
+              "$ref": "#/$defs/UnresolvedRouting"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Outcome",
-          "type": "string"
+          "default": null,
+          "title": "On Unresolved"
         },
-        "type": {
-          "const": "finish",
-          "title": "Type",
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowTarget"
+            },
+            {
+              "$ref": "#/$defs/OutcomeTarget"
+            },
+            {
+              "$ref": "#/$defs/MatchRouting"
+            }
+          ],
+          "title": "Transition"
+        }
+      },
+      "required": [
+        "input",
+        "transition"
+      ],
+      "title": "FlowInstance",
+      "type": "object"
+    },
+    "FlowTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
           "type": "string"
         }
       },
       "required": [
-        "type",
-        "outcome"
+        "flow"
       ],
-      "title": "FinishStepAuthoring",
+      "title": "FlowTarget",
       "type": "object"
     },
     "HandlerStepAuthoring": {
@@ -913,48 +976,6 @@
           },
           "title": "Input",
           "type": "object"
-        },
-        "name": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "next": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Next"
-        },
-        "on_unresolved": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/UnresolvedRouting"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Unresolved"
         },
         "type": {
           "const": "handler",
@@ -1080,48 +1101,6 @@
           "default": null,
           "title": "Model"
         },
-        "name": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "next": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Next"
-        },
-        "on_unresolved": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/UnresolvedRouting"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Unresolved"
-        },
         "output": {
           "anyOf": [
             {
@@ -1133,6 +1112,20 @@
             }
           ],
           "title": "Output"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
         },
         "tools": {
           "anyOf": [
@@ -1160,6 +1153,56 @@
       "title": "LlmStepAuthoring",
       "type": "object"
     },
+    "MatchRouting": {
+      "additionalProperties": false,
+      "description": "Exact string matching with an explicit default, without coercion.",
+      "properties": {
+        "binding": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PointerBinding"
+            },
+            {
+              "$ref": "#/$defs/LiteralBinding"
+            }
+          ],
+          "title": "Binding"
+        },
+        "cases": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/FlowTarget"
+              },
+              {
+                "$ref": "#/$defs/OutcomeTarget"
+              }
+            ]
+          },
+          "minProperties": 1,
+          "title": "Cases",
+          "type": "object"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowTarget"
+            },
+            {
+              "$ref": "#/$defs/OutcomeTarget"
+            }
+          ],
+          "title": "Default"
+        }
+      },
+      "required": [
+        "binding",
+        "cases",
+        "default"
+      ],
+      "title": "MatchRouting",
+      "type": "object"
+    },
     "McpStepAuthoring": {
       "additionalProperties": false,
       "properties": {
@@ -1178,48 +1221,6 @@
           },
           "title": "Arguments",
           "type": "object"
-        },
-        "name": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "next": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Next"
-        },
-        "on_unresolved": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/UnresolvedRouting"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Unresolved"
         },
         "server": {
           "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
@@ -1532,6 +1533,61 @@
       "title": "MultiselectQuestionShorthand",
       "type": "object"
     },
+    "NamedStep": {
+      "additionalProperties": false,
+      "description": "One ordered operation with an identity independent of its definition file.",
+      "properties": {
+        "definition": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "decision": "#/$defs/DecisionStepAuthoring",
+                  "handler": "#/$defs/HandlerStepAuthoring",
+                  "llm": "#/$defs/LlmStepAuthoring",
+                  "mcp": "#/$defs/McpStepAuthoring"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/DecisionStepAuthoring"
+                },
+                {
+                  "$ref": "#/$defs/LlmStepAuthoring"
+                },
+                {
+                  "$ref": "#/$defs/McpStepAuthoring"
+                },
+                {
+                  "$ref": "#/$defs/HandlerStepAuthoring"
+                }
+              ]
+            },
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "NamedStep",
+      "type": "object"
+    },
     "NamedToolChoice": {
       "additionalProperties": false,
       "properties": {
@@ -1808,6 +1864,24 @@
       "title": "OrdinalQuestionShorthand",
       "type": "object"
     },
+    "OutcomeTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "enum": [
+            "completed",
+            "needs_review"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome"
+      ],
+      "title": "OutcomeTarget",
+      "type": "object"
+    },
     "PointerBinding": {
       "additionalProperties": false,
       "properties": {
@@ -2048,6 +2122,70 @@
       "title": "SchemaOutput",
       "type": "object"
     },
+    "SourceLiteralBinding": {
+      "additionalProperties": false,
+      "description": "A literal decision source with explicit optional JSON rendering.",
+      "properties": {
+        "format": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "literal": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "literal"
+      ],
+      "title": "SourceLiteralBinding",
+      "type": "object"
+    },
+    "SourcePointerBinding": {
+      "additionalProperties": false,
+      "description": "A selected decision source, rendered as nonempty text or canonical JSON.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "format": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "optional": {
+          "default": false,
+          "title": "Optional",
+          "type": "boolean"
+        },
+        "pointer": {
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "SourcePointerBinding",
+      "type": "object"
+    },
     "ToolPolicy": {
       "additionalProperties": false,
       "properties": {
@@ -2092,13 +2230,15 @@
     },
     "UnresolvedRouting": {
       "additionalProperties": false,
-      "description": "Issue-specific routes with a required default for ambiguity or no issue.",
+      "description": "Issue-specific targets with a required default for ambiguity or no issue.",
       "properties": {
         "conflicting_information": {
           "anyOf": [
             {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
+              "$ref": "#/$defs/FlowTarget"
+            },
+            {
+              "$ref": "#/$defs/OutcomeTarget"
             },
             {
               "type": "null"
@@ -2108,15 +2248,23 @@
           "title": "Conflicting Information"
         },
         "default": {
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "title": "Default",
-          "type": "string"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowTarget"
+            },
+            {
+              "$ref": "#/$defs/OutcomeTarget"
+            }
+          ],
+          "title": "Default"
         },
         "multiple_valid_options": {
           "anyOf": [
             {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
+              "$ref": "#/$defs/FlowTarget"
+            },
+            {
+              "$ref": "#/$defs/OutcomeTarget"
             },
             {
               "type": "null"
@@ -2128,8 +2276,10 @@
         "no_supported_answer": {
           "anyOf": [
             {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
+              "$ref": "#/$defs/FlowTarget"
+            },
+            {
+              "$ref": "#/$defs/OutcomeTarget"
             },
             {
               "type": "null"
@@ -2169,9 +2319,20 @@
   "$id": "https://foliqant.local/schemas/foliqant/runtime/workflow.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "description": "A finite graph of explicit, sequential flow instances.",
   "properties": {
     "defaults": {
       "$ref": "#/$defs/WorkflowDefaults"
+    },
+    "flows": {
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+          "$ref": "#/$defs/FlowInstance"
+        }
+      },
+      "title": "Flows",
+      "type": "object"
     },
     "input_schema": {
       "anyOf": [
@@ -2194,9 +2355,17 @@
       "title": "Input Schema"
     },
     "name": {
-      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-      "title": "Name",
-      "type": "string"
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
     },
     "output": {
       "anyOf": [
@@ -2218,64 +2387,21 @@
       "title": "Output"
     },
     "start": {
-      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-      "title": "Start",
-      "type": "string"
-    },
-    "steps": {
       "anyOf": [
         {
-          "minProperties": 1,
-          "patternProperties": {
-            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
-              "discriminator": {
-                "mapping": {
-                  "decision": "#/$defs/DecisionStepAuthoring",
-                  "finish": "#/$defs/FinishStepAuthoring",
-                  "handler": "#/$defs/HandlerStepAuthoring",
-                  "llm": "#/$defs/LlmStepAuthoring",
-                  "mcp": "#/$defs/McpStepAuthoring"
-                },
-                "propertyName": "type"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/$defs/DecisionStepAuthoring"
-                },
-                {
-                  "$ref": "#/$defs/LlmStepAuthoring"
-                },
-                {
-                  "$ref": "#/$defs/McpStepAuthoring"
-                },
-                {
-                  "$ref": "#/$defs/HandlerStepAuthoring"
-                },
-                {
-                  "$ref": "#/$defs/FinishStepAuthoring"
-                }
-              ]
-            }
-          },
-          "type": "object"
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "title": "Steps"
-    },
-    "version": {
-      "const": 1,
-      "title": "Version",
-      "type": "integer"
+      "title": "Start"
     }
   },
   "required": [
-    "version",
-    "name",
-    "start"
+    "flows"
   ],
   "title": "WorkflowAuthoring",
   "type": "object"

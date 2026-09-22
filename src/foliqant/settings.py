@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import os
+import stat
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from io import StringIO
@@ -23,6 +25,23 @@ from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import HandlerStepPlan, SourceLocation, WorkflowPlan
 
 _MAX_CONFIG_BYTES = 1024 * 1024
+
+
+def _read_settings_file(path: Path) -> bytes:
+    """Read bounded regular data without blocking on special files or races."""
+    selected = path.resolve(strict=True)
+    if not selected.is_file():
+        raise ValueError("configuration must be a regular file")
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(selected, flags)
+    with os.fdopen(descriptor, "rb") as stream:
+        details = os.fstat(stream.fileno())
+        if not stat.S_ISREG(details.st_mode) or details.st_size > _MAX_CONFIG_BYTES:
+            raise ValueError("configuration must be a bounded regular file")
+        raw = stream.read(_MAX_CONFIG_BYTES + 1)
+    if len(raw) > _MAX_CONFIG_BYTES:
+        raise ValueError("configuration size exceeds limit")
+    return raw
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,14 +67,20 @@ def prepare_application(
     """Compile local settings/workflows without resolving secrets or constructing SDKs."""
     try:
         source = config_path.resolve(strict=True)
-        with source.open("rb") as stream:
-            raw = stream.read(_MAX_CONFIG_BYTES + 1)
-        if len(raw) > _MAX_CONFIG_BYTES:
-            raise ValueError("configuration size exceeds limit")
-        data = load_yaml(raw.decode("utf-8"), relative_path="foliqant.yaml")
+        raw = _read_settings_file(source)
+        data = load_yaml(raw.decode("utf-8"), relative_path=source.name)
         freeze_json(data)
-        config = DeploymentConfig.model_validate(data, strict=True)
         root = source.parent
+        if isinstance(data, dict) and "workflows" not in data:
+            discovered = {
+                path.parent.name: path.parent.relative_to(root).as_posix()
+                for path in sorted(root.glob("*/workflow.yaml"))
+                if not path.parent.name.startswith(".")
+            }
+            data["workflows"] = discovered
+        config = DeploymentConfig.model_validate(data, strict=True)
+        if config.workflows is None:
+            raise ValueError("workflows must be configured or discoverable")
         plans: dict[str, WorkflowPlan] = {}
         registered = dict(handlers or {})
         models = ModelRegistry(config.models)
@@ -75,10 +100,12 @@ def prepare_application(
                 model_profiles=config.models,
                 handler_schemas=registered,
                 _model_registry=models,
+                configuration_root=source.parent,
             )
             if any(
                 isinstance(step, HandlerStepPlan) and registered[step.handler].effect != "read"
-                for step in plan.steps
+                for flow in plan.flows
+                for step in flow.steps
             ):
                 raise ValueError("write handlers are unsupported by the read-only pipeline")
             if plan.name != name:
@@ -123,22 +150,19 @@ def prepare_application(
         )
     except CompilationError:
         raise
-    except (OSError, UnicodeError, ValueError, ValidationError, ServiceError):
+    except (OSError, RuntimeError, UnicodeError, ValueError, ValidationError, ServiceError):
         raise CompilationError(
-            "invalid_deployment", SourceLocation("foliqant.yaml", 1, 1)
+            "invalid_deployment", SourceLocation(config_path.name, 1, 1)
         ) from None
 
 
 def load_environment(config_path: Path, environment: Mapping[str, str]) -> dict[str, str]:
     """Read configuration-local .env once; explicit process values always win."""
     values: dict[str, str] = {}
-    path = config_path.resolve().parent / ".env"
     try:
-        if path.exists():
-            with path.open("rb") as stream:
-                raw = stream.read(_MAX_CONFIG_BYTES + 1)
-            if len(raw) > _MAX_CONFIG_BYTES:
-                raise ValueError("environment file exceeds limit")
+        path = config_path.resolve().parent / ".env"
+        if path.exists() or path.is_symlink():
+            raw = _read_settings_file(path)
             values.update(
                 {
                     key: value
@@ -150,5 +174,5 @@ def load_environment(config_path: Path, environment: Mapping[str, str]) -> dict[
             )
         values.update(environment)
         return values
-    except (OSError, UnicodeError, ValueError):
+    except (OSError, RuntimeError, UnicodeError, ValueError):
         raise ServiceError(ErrorCode.INVALID_CONFIGURATION) from None

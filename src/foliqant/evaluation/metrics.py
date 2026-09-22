@@ -203,10 +203,13 @@ def observe_metrics(
         except ServiceError:
             state: ObservationState = "missing"
             parts = spec.path.split("/")
-            if len(parts) >= 3 and parts[1] == "decisions":
+            if len(parts) >= 5 and parts[1] == "flows" and parts[3] == "steps":
                 try:
                     step_status = resolve_binding(
-                        BindingPlan(kind="pointer", pointer=f"/decisions/{parts[2]}/status"),
+                        BindingPlan(
+                            kind="pointer",
+                            pointer=f"/flows/{parts[2]}/steps/{parts[4]}/status",
+                        ),
                         document,
                     )
                     if step_status == "skipped":

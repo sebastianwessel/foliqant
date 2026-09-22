@@ -16,17 +16,17 @@ This installs the runtime adapters, repository checks, examples, and local docs
 tooling from the committed lockfile. It does not download model weights or
 datasets.
 
-Run the model-free quick start before changing a workflow:
+Run the generated local-model project checks before changing a workflow:
 
 ```sh
 uv run --no-sync foliqant init /tmp/foliqant-demo
 uv run --no-sync foliqant validate \
-  --config /tmp/foliqant-demo/foliqant.yaml
-uv run --no-sync foliqant run \
-  --config /tmp/foliqant-demo/foliqant.yaml \
-  --workflow demo \
-  --input /tmp/foliqant-demo/envelope.json
+  --config /tmp/foliqant-demo/config/settings.yaml
 ```
+
+`validate` is offline. Copy `config/.env.example` to `config/.env`, set
+`MODEL_ID` and `MODEL_BASE_URL`, and run the sample only when that endpoint
+call is intended.
 
 ## Check runtime changes
 
@@ -103,9 +103,12 @@ is available.
 ## Keep generated and private data out of Git
 
 Model weights, prepared datasets, customer records, generated candidates,
-checkpoints, prediction logs, and evaluation holdouts belong in a private data
-ignored workspace inside the checkout. Commit source manifests, configuration, schemas,
-and documentation only. The setup command defaults to
+checkpoints, prediction logs, private evaluation corpora, and generated reports
+belong in an ignored workspace inside the checkout. Public examples may commit
+small authored synthetic evaluation fixtures under
+`examples/<name>/evaluation/`; never copy private experiment artifacts there.
+Commit source manifests, configuration, schemas, documentation, and those
+reviewable example fixtures only. The setup command defaults to
 `./.foliqant` and refuses an unignored workspace inside a Git tree.
 
 When a public contract changes, update its schema, example, and focused guide in

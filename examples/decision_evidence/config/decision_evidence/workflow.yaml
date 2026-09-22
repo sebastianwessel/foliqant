@@ -1,0 +1,16 @@
+defaults:
+  model: local_qwen
+input_schema: input.schema.json
+output:
+  pointer: /flows/assessment/result
+  optional: true
+  default: null
+flows:
+  assessment:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      outcome: completed
+    on_unresolved:
+      outcome: needs_review

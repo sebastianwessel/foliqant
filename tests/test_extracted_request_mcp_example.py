@@ -20,17 +20,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_compiled_context_bindings_select_exact_fields() -> None:
     plan = prepare_application(CONFIG_PATH).plans["extracted_request_lookup"]
-    extract = plan.step("extract")
-    lookup = plan.step("lookup")
+    extract = plan.flow("extract").step("extract")
+    lookup = plan.flow("lookup").step("lookup")
+    assert [(name, binding.pointer) for name, binding in plan.flow("lookup").input] == [
+        ("language", "/flows/extract/result/language"),
+        ("reference", "/flows/extract/result/reference"),
+    ]
     assert isinstance(extract, LlmStepPlan)
     assert isinstance(lookup, McpStepPlan)
+    assert extract.prompt is not None
     assert [(name, binding.pointer) for name, binding in extract.input] == [
         ("language", "/payload/language"),
         ("message", "/payload/message"),
     ]
     assert [(name, binding.pointer) for name, binding in lookup.arguments] == [
-        ("language", "/steps/extract/result/language"),
-        ("reference", "/steps/extract/result/reference"),
+        ("language", "/payload/language"),
+        ("reference", "/payload/reference"),
     ]
 
 
@@ -39,13 +44,13 @@ async def test_scripted_extraction_calls_real_mcp_without_envelope_leak() -> Non
     assert result.execution.status == "completed"
     assert result.execution.usage.model_requests == 1
     assert result.execution.usage.tool_calls == 1
-    assert result.decisions["extract"].result == {
+    assert result.flows["extract"].steps["extract"].result == {
         "reference": "FOI-2026-0142",
         "language": "en",
         "internal_summary": "English request-status lookup.",
     }
     assert (
-        result.decisions["lookup"].result
+        result.flows["lookup"].steps["lookup"].result
         == result.payload
         == {
             "reference": "FOI-2026-0142",
@@ -54,7 +59,7 @@ async def test_scripted_extraction_calls_real_mcp_without_envelope_leak() -> Non
             "due_date": "2026-10-05",
         }
     )
-    serialized_lookup = json.dumps(result.decisions["lookup"].result)
+    serialized_lookup = json.dumps(result.flows["lookup"].steps["lookup"].result)
     assert "contact_email" not in serialized_lookup
     assert "private@example.test" not in serialized_lookup
     assert "internal_summary" not in serialized_lookup
@@ -62,11 +67,13 @@ async def test_scripted_extraction_calls_real_mcp_without_envelope_leak() -> Non
 
 async def test_en_de_pipeline_and_isolated_step_evaluations(tmp_path: Path) -> None:
     gold = dataset()
-    assert gold.revision == "2"
-    assert [(spec.step, len(spec.gold_cases)) for spec in gold.suites] == [
-        (None, 2),
-        ("extract", 2),
-        ("lookup", 2),
+    assert gold.revision == "3"
+    assert [(spec.flow, spec.step, len(spec.gold_cases)) for spec in gold.suites] == [
+        (None, None, 2),
+        ("extract", None, 2),
+        ("lookup", None, 2),
+        ("extract", "extract", 2),
+        ("lookup", "lookup", 2),
     ]
     assert {
         cast(dict[str, JsonValue], case.input.payload)["language"]
@@ -79,7 +86,7 @@ async def test_en_de_pipeline_and_isolated_step_evaluations(tmp_path: Path) -> N
     assert summary["mode"] == "offline_wiring"
     report_path = cast(str, summary["report"])
     reports = json.loads(Path(report_path).read_text())["reports"]
-    assert [report["target_step"] for report in reports] == [None, "extract", "lookup"]
+    assert [report["target_step"] for report in reports] == [None, None, None, "extract", "lookup"]
     assert all(report["case_pass_rate"] == 1 for report in reports)
 
 

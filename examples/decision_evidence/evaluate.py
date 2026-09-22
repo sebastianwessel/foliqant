@@ -8,15 +8,8 @@ from examples.common import (
     evaluation_output,
     example_environment,
     private_output_path,
+    read_example_dataset,
     write_example_dataset,
-)
-from examples.decision_evidence.gold import (
-    DEVELOPMENT,
-    ISOLATED_PREDICATE_CASES,
-    QUESTION_IDS,
-    VALIDATION,
-    Assessment,
-    Case,
 )
 from foliqant import Envelope, ExecutionResult, open_application, prepare_application
 from foliqant.core.json import FrozenJson, JsonValue
@@ -30,122 +23,17 @@ from foliqant.evaluation import (
 )
 from foliqant.evaluation.dataset import EvaluationDataset, SuiteSpec, metric_specs, validate_targets
 
-CONFIG_PATH = Path(__file__).with_name("foliqant.yaml")
+CONFIG_PATH = Path(__file__).with_name("config") / "settings.yaml"
 
 
-def _checks(
-    question_id: str, assessment: Assessment, base: str, *, isolated: bool = False
-) -> list[JsonValue]:
-    checks: list[JsonValue] = []
-
-    def check(name: str, path: str, expected: JsonValue, comparison: str = "exact") -> None:
-        checks.append({"name": name, "path": path, "expected": expected, "comparison": comparison})
-
-    check(f"{question_id}_identity", f"{base}/questionId", "assess" if isolated else question_id)
-    check(f"{question_id}_status", f"{base}/answerability/status", assessment.status)
-    check(f"{question_id}_issues", f"{base}/answerability/issues", list(assessment.issues), "set")
-    check(f"{question_id}_strength", f"{base}/evidence_strength", assessment.strength)
-    answer = assessment.answer
-    if question_id == "labels" and isinstance(answer, dict):
-        check("selected_labels", f"{base}/answer/optionIds", answer["optionIds"], "set")
-    elif question_id == "requests" and isinstance(answer, dict):
-        check("relations", f"{base}/answer/relations", answer["relations"])
-        units = answer["units"]
-        assert isinstance(units, list)
-        if not units:
-            check("no_requests", f"{base}/answer/units", [])
-        for position, unit in enumerate(units):
-            assert isinstance(unit, dict)
-            for field in ("categoryId", "subject", "status"):
-                check(
-                    f"request_{position}_{field}",
-                    f"{base}/answer/units/{position}/{field}",
-                    unit[field],
-                )
-    else:
-        check(f"{question_id}_answer", f"{base}/answer", answer)
-    return checks
-
-
-def _case_document(case: Case, *, isolated: bool = False) -> JsonValue:
-    selected = (
-        (("dispute", case.assessments[2]),)
-        if isolated
-        else tuple(zip(QUESTION_IDS, case.assessments, strict=True))
-    )
-    checks: list[JsonValue] = [
-        {
-            "name": "review",
-            "path": "/execution/status",
-            "expected": "needs_review"
-            if any(a.status != "answerable" for _, a in selected)
-            else "completed",
-            "comparison": "exact",
-        }
-    ]
-    for index, (question_id, assessment) in enumerate(selected):
-        base = "/decisions/assess/result" + ("" if isolated else f"/results/{index}")
-        checks.extend(_checks(question_id, assessment, base, isolated=isolated))
-    return {
-        "id": case.id,
-        "input": {
-            "payload": {"message": case.message},
-            "metadata": {"language": case.language, "family": case.family},
-        },
-        "expectations": checks,
-    }
-
-
-def _metrics(*, isolated: bool = False) -> list[JsonValue]:
-    return [
-        {
-            "name": f"{name}_strength",
-            "path": "/decisions/assess/result"
-            + ("" if isolated else f"/results/{index}")
-            + "/evidence_strength",
-            "kind": "classification",
-            "labels": ["limited", "strong", None],
-        }
-        for index, name in enumerate(("dispute",) if isolated else QUESTION_IDS)
-    ]
+QUESTION_IDS = ("triage", "labels", "dispute", "priority", "requests")
+DATASET_PATH = Path(__file__).with_name("evaluation") / "dataset.json"
 
 
 def dataset(*, validation: bool = False) -> EvaluationDataset:
-    """Build explicit expectations without reading generated responses.
-
-    The isolated suite repeats two development inputs with the same predicate
-    gold. It is a task-mixing diagnostic, not two new independent examples.
-    """
-    suites: list[JsonValue] = [
-        {
-            "name": "typed_support",
-            "workflow": "decision_evidence",
-            "cases": [_case_document(case) for case in (VALIDATION if validation else DEVELOPMENT)],
-            "metrics": _metrics(),
-        }
-    ]
-    if not validation:
-        suites.append(
-            {
-                "name": "isolated_predicate",
-                "workflow": "decision_predicate",
-                "cases": [
-                    _case_document(case, isolated=True)
-                    for case in DEVELOPMENT
-                    if case.id in ISOLATED_PREDICATE_CASES
-                ],
-                "metrics": _metrics(isolated=True),
-            }
-        )
-    return EvaluationDataset.model_validate(
-        {
-            "version": 1,
-            "name": "decision_evidence_validation" if validation else "decision_evidence",
-            "revision": "4",
-            "suites": suites,
-        },
-        strict=True,
-    )
+    """Read development gold or the separate held-out synthetic JSON dataset."""
+    selected = DATASET_PATH.with_name("validation.json") if validation else DATASET_PATH
+    return read_example_dataset(selected)
 
 
 async def _unit_count(actual: FrozenJson, expected: FrozenJson) -> bool:
@@ -164,24 +52,25 @@ def build_suite(gold: EvaluationDataset, spec: SuiteSpec) -> EvaluationSuite:
     suite = gold.to_suite(spec)
     if spec.workflow != "decision_evidence":
         return suite
-    authored = {case.id: case for case in (*DEVELOPMENT, *VALIDATION)}
     cases = []
     for case in suite.cases:
         checks = case.expectations
-        answer = authored[case.id].assessments[4].answer
-        if isinstance(answer, dict):
-            units = answer["units"]
-            assert isinstance(units, list)
-            if units:  # Empty arrays already have an exact JSON expectation.
-                checks += (
-                    Expectation(
-                        "request_unit_count",
-                        "/decisions/assess/result/results/4/answer/units",
-                        len(units),
-                        "custom",
-                        "request_unit_count",
-                    ),
-                )
+        unit_prefix = "/flows/assessment/steps/assess/result/results/4/answer/units/"
+        positions = {
+            check.path.removeprefix(unit_prefix).split("/", 1)[0]
+            for check in checks
+            if check.path.startswith(unit_prefix)
+        }
+        if positions:
+            checks += (
+                Expectation(
+                    "request_unit_count",
+                    unit_prefix.rstrip("/"),
+                    len(positions),
+                    "custom",
+                    "request_unit_count",
+                ),
+            )
         cases.append(EvaluationCase(case.id, case.envelope(), checks))
     return EvaluationSuite(suite.name, suite.revision, tuple(cases))
 
@@ -205,18 +94,29 @@ async def run_evaluations(
     async with open_application(prepared, environment=environment) as app:
         for spec, suite in zip(gold.suites, suites, strict=True):
 
-            async def run(envelope: Envelope, workflow: str = spec.workflow) -> ExecutionResult:
-                return await app.run(workflow, envelope)
+            async def run(
+                envelope: Envelope,
+                workflow: str = spec.workflow,
+                flow: str | None = spec.flow,
+                step: str | None = spec.step,
+            ) -> ExecutionResult:
+                if flow is None:
+                    return await app.run(workflow, envelope)
+                if step is None:
+                    return await app.run_flow(workflow, flow, envelope)
+                return await app.run_step(workflow, flow, step, envelope)
 
             reports.append(
                 await evaluate(
                     suite,
                     EvaluationVariant(
                         "local_qwen",
-                        environment["FOLIQANT_CURATION_MODEL"],
+                        environment["MODEL_ID"],
                         run,
                         prepared.configuration_digest,
                         workflow=spec.workflow,
+                        flow=spec.flow,
+                        step=spec.step,
                     ),
                     scorers=SCORERS,
                     include_details=True,

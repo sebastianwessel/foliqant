@@ -13,15 +13,14 @@ Install the runtime with the OpenAI-compatible adapter:
 uv sync --locked --extra openai
 ```
 
-The example deliberately reuses the local Qwen settings already used by model
-curation. Define these non-secret endpoint and model keys in the repository `.env`:
+Define the local runtime model and endpoint in the repository `.env`:
 
 ```dotenv
-FOLIQANT_CURATION_ENDPOINT_URL=http://127.0.0.1:8000/v1
-FOLIQANT_CURATION_MODEL=incoai/Qwen3.8-27B-Splash
+MODEL_BASE_URL=http://127.0.0.1:8000/v1
+MODEL_ID=your-served-model-id
 ```
 
-The example’s `foliqant.yaml` binds those values with `$NAME` references.
+The example’s `config/settings.yaml` binds those values with `$NAME` references.
 Reasoning, token limit, temperature and timeouts live in that YAML profile; edit
 the profile to change shared behavior. The extraction step overrides only
 `max_tokens` to 4096; other options inherit the profile. Curation has its own recipe.
@@ -35,12 +34,12 @@ PYDANTIC_AI_NO_BANNER=1 \
 ```
 
 Success prints one execution result. The extracted fields are in `payload`; the
-validated queue answer, concise reason, and evidence strength are in `decisions.classify`. This is an
+validated queue answer, concise reason, and evidence strength are in `flows.triage.steps.classify`. This is an
 in-process, in-memory run. It provides no HTTP server, authentication, storage,
 retry queue, or model-quality guarantee. The default test uses a local
 `FunctionModel` and never contacts the configured endpoint.
 
-## Evaluate the pipeline and individual steps
+## Evaluate the pipeline, flow and individual steps
 
 ```sh
 uv run --no-sync python -m examples.support_triage.evaluate
@@ -52,9 +51,9 @@ labels, missing actions, clear out-of-catalog requests, two simultaneous active
 queues, unresolved conflicting instructions, an explicit correction, category
 words without a request, a withdrawn request, and a missing referent. Eleven
 inputs are English and five are German; category keys remain English. It checks
-classification on all sixteen inputs and extraction on the six single-action inputs.
+the isolated `triage` flow and classification step on all sixteen inputs and extraction on the six single-action inputs.
 Extraction retains source-language action wording and deadline operators such as
-`by` and `bis`. Expected answers live in `evaluate.py`; scripted outputs in
+`by` and `bis`. Expected answers live in [evaluation/dataset.json](evaluation/dataset.json); scripted outputs in
 `offline.py` only exercise wiring and validation. A negative-control test proves
 mismatched gold fails.
 
@@ -76,13 +75,10 @@ Use `--repeat 3` to run three independent attempts per authored case. Repetition
 can expose variation, but it does not create more distinct gold cases or establish
 model quality.
 
-Export the authored cases in the shared evaluation dataset format, then validate
-that file without opening a model client:
+The committed JSON dataset is immediately usable. Validate it without opening a model client:
 
 ```sh
-uv run --no-sync python -m examples.support_triage.evaluate \
-  --write-dataset .foliqant/evaluation/support-triage-r10.json
-uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yaml --check
+uv run --no-sync foliqant evaluate --config examples/support_triage/config/settings.yaml --check
 ```
 
 Choose a report path for the scripted run and rescore its saved outputs:
@@ -90,13 +86,14 @@ Choose a report path for the scripted run and rescore its saved outputs:
 ```sh
 uv run --no-sync python -m examples.support_triage.evaluate \
   --output .foliqant/evaluation/support-report.json
-uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yaml \
+uv run --no-sync foliqant evaluate --config examples/support_triage/config/settings.yaml \
   --replay .foliqant/evaluation/support-report.json \
   --output .foliqant/evaluation/support-rescored.json
 ```
 
-Both exports require a new path. `--write-dataset` performs no inference. The
-configured dataset is loaded only for evaluation; ordinary workflow startup does
+Report destinations require new paths. `--write-dataset` can copy the authored
+JSON to a new private path without inference. The
+committed dataset is loaded only for evaluation; ordinary workflow startup does
 not require the file. Console reports omit case/check details. The private
 artifact retains inputs, expected and actual values, model reasons within
 returned results, and safe mismatch reasons. Queue classification reports include
@@ -105,7 +102,7 @@ counted as excluded. Separate effective-category and origin metrics check six
 model selections and eight `misc` fallbacks; conflict/multiple-intent cases have no
 selection. Missing-action and known out-of-catalog cases remain separate English
 and German gold scenarios, but both use `no_supported_answer` and the same review
-route. Isolated reports identify `classify` or `extract` explicitly.
+route. Isolated reports identify flow `triage` and step `classify` or `extract` explicitly.
 
 The evidence-strength metric includes explicit `null` alongside `limited` and
 `strong`. The reviewed messages clearly establish either a category or a reason
@@ -114,3 +111,25 @@ not test the limited/unassessed boundary, and strong abstention still needs revi
 [typed decisions and evidence](../decision_evidence/README.md) for a permissible
 limited interpretation, multiple labels, false predicates, and empty collections.
 A strength rating is a model assessment, not a correctness guarantee.
+
+The configuration entry is [config/settings.yaml](config/settings.yaml). The
+[workflow](config/support_triage/workflow.yaml) calls the `triage` flow, whose
+[classification](config/support_triage/triage/classify.step.md) and
+[extraction](config/support_triage/triage/extract/step.md) run sequentially.
+Schemas live beside their definitions. Only the flow boundary selects terminal
+`completed` or `needs_review`; an unresolved classification skips extraction.
+All three supported queues use the same extraction contract.
+
+`settings.yaml` omits the workflow registry: immediate configuration subfolders
+containing `workflow.yaml` are discovered by folder name. Flow definitions resolve
+to `<flow-id>/flow.yaml`; the authored step list still determines execution order.
+Single-flow workflows infer their start; multi-flow workflows name it explicitly.
+
+## Edit evaluation data
+
+[evaluation/dataset.json](evaluation/dataset.json) is the canonical, tracked
+synthetic gold. Edit case inputs, expectations and metrics there; the Python
+evaluator reads it through the shared bounded JSON parser and strict validator.
+No Python regeneration is required. Scripted model responses remain independent
+test doubles, so a changed expectation can fail an offline wiring evaluation.
+Real customer data and generated reports still belong outside Git.

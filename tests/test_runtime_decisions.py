@@ -1,4 +1,4 @@
-"""Runtime support assessments preserve typed decisions without rewriting V2 artifacts."""
+"""Runtime support assessments validate independently of model-training annotations."""
 
 from copy import deepcopy
 
@@ -76,7 +76,6 @@ def _output():
         },
     }
     return {
-        "schemaVersion": 3,
         "results": [
             {
                 "questionId": kind,
@@ -121,7 +120,7 @@ def test_predicate_schema_and_strict_provider_conversion_preserve_answerability_
     result["answer"] = {"value": value}
     result["answerability"] = {"status": status, "issues": issues}
     result["evidence_strength"] = strength
-    raw = {"schemaVersion": 3, "results": [result]}
+    raw = {"results": [result]}
     # Use the native semantic authority rather than maintaining a second truth table.
     from foliqant.decisions.contracts import Answerability, validate_answerability
 
@@ -213,14 +212,14 @@ def test_reason_must_be_nonblank_and_bounded(reason):
 
 
 @pytest.mark.parametrize(
-    "mutation", ["legacy", "explanation", "unit_evidence", "missing_strength", "none"]
+    "mutation", ["unknown_field", "explanation", "unit_evidence", "missing_strength", "none"]
 )
-def test_runtime_rejects_legacy_or_unspecified_assessment_shapes(mutation):
+def test_runtime_rejects_unknown_or_unspecified_assessment_shapes(mutation):
     raw = _output()
-    if mutation == "legacy":
-        raw["schemaVersion"] = 2
+    if mutation == "unknown_field":
+        raw["unexpected"] = True
     elif mutation == "explanation":
-        raw["results"][0]["explanation"] = {"summary": "Legacy"}
+        raw["results"][0]["explanation"] = {"summary": "Unexpected"}
     elif mutation == "unit_evidence":
         raw["results"][4]["answer"]["units"][0]["evidence"] = []
     elif mutation == "missing_strength":
@@ -337,7 +336,7 @@ def test_valid_conditional_relation_and_repeated_category_units_remain_supported
     assert validate_decision_output(_task(), DecisionOutput.model_validate(raw)) == []
 
 
-def test_native_v2_output_still_accepts_its_original_citation_contract():
+def test_model_training_annotations_remain_separate_from_runtime_assessments():
     task = _task().model_copy(update={"questions": [_task().questions[0]]})
     result = deepcopy(_output()["results"][0])
     del result["reason"]

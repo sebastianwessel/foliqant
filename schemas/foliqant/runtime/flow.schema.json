@@ -1,0 +1,2072 @@
+{
+  "$defs": {
+    "AnthropicModelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "api_key": {
+          "environment_reference": true,
+          "format": "password",
+          "title": "Api Key",
+          "type": "string",
+          "writeOnly": true
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "model": {
+          "environment_reference": true,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/AnthropicOptions"
+        },
+        "output_mode": {
+          "enum": [
+            "native",
+            "tool"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "provider": {
+          "const": "anthropic",
+          "title": "Provider",
+          "type": "string"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "supports_json_schema": {
+          "default": true,
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "supports_text": {
+          "default": true,
+          "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "output_mode",
+        "provider"
+      ],
+      "title": "AnthropicModelConfig",
+      "type": "object"
+    },
+    "AnthropicOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effort"
+        },
+        "max_tokens": {
+          "default": 4096,
+          "maximum": 1048576,
+          "minimum": 1,
+          "title": "Max Tokens",
+          "type": "integer"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "thinking": {
+          "anyOf": [
+            {
+              "enum": [
+                "disabled",
+                "adaptive"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thinking"
+        },
+        "thinking_budget": {
+          "anyOf": [
+            {
+              "minimum": 1024,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thinking Budget"
+        },
+        "top_p": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top P"
+        }
+      },
+      "title": "AnthropicOptions",
+      "type": "object"
+    },
+    "AzureModelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "api": {
+          "enum": [
+            "chat",
+            "responses"
+          ],
+          "title": "Api",
+          "type": "string"
+        },
+        "api_flavor": {
+          "enum": [
+            "versioned",
+            "v1"
+          ],
+          "title": "Api Flavor",
+          "type": "string"
+        },
+        "api_key": {
+          "environment_reference": true,
+          "format": "password",
+          "title": "Api Key",
+          "type": "string",
+          "writeOnly": true
+        },
+        "api_version": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "environment_reference": true,
+          "title": "Api Version"
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "endpoint": {
+          "environment_reference": true,
+          "minLength": 1,
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "model": {
+          "environment_reference": true,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/OpenAIOptions"
+        },
+        "output_mode": {
+          "enum": [
+            "native",
+            "tool"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "provider": {
+          "const": "azure_openai",
+          "title": "Provider",
+          "type": "string"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "supports_json_schema": {
+          "default": true,
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "supports_text": {
+          "default": true,
+          "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "output_mode",
+        "provider",
+        "api",
+        "api_flavor",
+        "endpoint"
+      ],
+      "title": "AzureModelConfig",
+      "type": "object"
+    },
+    "CategoryCatalog": {
+      "additionalProperties": false,
+      "description": "A bounded classification catalog prepared before model inference.\n\nCategory keys are normalized deterministically and descriptions are\npreserved exactly. Unsupported external taxonomies require an explicit\nmapping before they enter this contract.",
+      "properties": {
+        "categories": {
+          "items": {
+            "$ref": "#/$defs/CategoryDefinition"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "title": "Categories",
+          "type": "array"
+        }
+      },
+      "required": [
+        "categories"
+      ],
+      "title": "CategoryCatalog",
+      "type": "object"
+    },
+    "CategoryDefinition": {
+      "additionalProperties": false,
+      "description": "One stable machine key with caller-authored category semantics.",
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "description": "Printable ASCII authoring key. The Python CategoryCatalog parser serializes its deterministic lowercase snake_case normalization.",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[\\x20-\\x7e]+$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "description"
+      ],
+      "title": "CategoryDefinition",
+      "type": "object"
+    },
+    "ChoiceQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 1024,
+          "minItems": 2,
+          "title": "Options",
+          "type": "array"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "choice",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "options"
+      ],
+      "title": "ChoiceQuestion",
+      "type": "object"
+    },
+    "ChoiceQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "$ref": "#/$defs/CategoryCatalog"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "type": {
+          "const": "choice",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria",
+        "catalog"
+      ],
+      "title": "ChoiceQuestionShorthand",
+      "type": "object"
+    },
+    "CompatibleModelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_insecure_http": {
+          "default": false,
+          "title": "Allow Insecure Http",
+          "type": "boolean"
+        },
+        "api": {
+          "const": "chat",
+          "default": "chat",
+          "title": "Api",
+          "type": "string"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "environment_reference": true,
+          "title": "Api Key"
+        },
+        "base_url": {
+          "environment_reference": true,
+          "minLength": 1,
+          "title": "Base Url",
+          "type": "string"
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "max_tokens_field": {
+          "default": "max_tokens",
+          "enum": [
+            "max_tokens",
+            "max_completion_tokens"
+          ],
+          "title": "Max Tokens Field",
+          "type": "string"
+        },
+        "model": {
+          "environment_reference": true,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/OpenAIOptions"
+        },
+        "output_mode": {
+          "enum": [
+            "native",
+            "tool"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "provider": {
+          "const": "openai_compatible",
+          "title": "Provider",
+          "type": "string"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "supports_json_schema": {
+          "default": true,
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "supports_text": {
+          "default": true,
+          "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "output_mode",
+        "provider",
+        "base_url"
+      ],
+      "title": "CompatibleModelConfig",
+      "type": "object"
+    },
+    "DecisionFallback": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/FallbackCategory"
+        },
+        "on": {
+          "items": {
+            "$ref": "#/$defs/DecisionIssue"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "On",
+          "type": "array"
+        }
+      },
+      "required": [
+        "category",
+        "on"
+      ],
+      "title": "DecisionFallback",
+      "type": "object"
+    },
+    "DecisionIssue": {
+      "enum": [
+        "no_supported_answer",
+        "conflicting_information",
+        "multiple_valid_options"
+      ],
+      "type": "string"
+    },
+    "DecisionOption": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "description"
+      ],
+      "title": "DecisionOption",
+      "type": "object"
+    },
+    "DecisionQuestion": {
+      "discriminator": {
+        "mapping": {
+          "choice": "#/$defs/ChoiceQuestion",
+          "multiselect": "#/$defs/MultiselectQuestion",
+          "ordinal": "#/$defs/OrdinalQuestion",
+          "predicate": "#/$defs/PredicateQuestion",
+          "request_units": "#/$defs/RequestUnitsQuestion"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ChoiceQuestion"
+        },
+        {
+          "$ref": "#/$defs/MultiselectQuestion"
+        },
+        {
+          "$ref": "#/$defs/PredicateQuestion"
+        },
+        {
+          "$ref": "#/$defs/OrdinalQuestion"
+        },
+        {
+          "$ref": "#/$defs/RequestUnitsQuestion"
+        }
+      ]
+    },
+    "DecisionStepAuthoring": {
+      "additionalProperties": false,
+      "properties": {
+        "fallback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecisionFallback"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "instructions": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/ModelProfileOverride"
+            },
+            {
+              "discriminator": {
+                "mapping": {
+                  "anthropic": "#/$defs/AnthropicModelConfig",
+                  "azure_openai": "#/$defs/AzureModelConfig",
+                  "openai": "#/$defs/OpenAIModelConfig",
+                  "openai_compatible": "#/$defs/CompatibleModelConfig"
+                },
+                "propertyName": "provider"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/OpenAIModelConfig"
+                },
+                {
+                  "$ref": "#/$defs/CompatibleModelConfig"
+                },
+                {
+                  "$ref": "#/$defs/AzureModelConfig"
+                },
+                {
+                  "$ref": "#/$defs/AnthropicModelConfig"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "question": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "choice": "#/$defs/ChoiceQuestionShorthand",
+                  "multiselect": "#/$defs/MultiselectQuestionShorthand",
+                  "ordinal": "#/$defs/OrdinalQuestionShorthand",
+                  "predicate": "#/$defs/PredicateQuestionShorthand",
+                  "request_units": "#/$defs/RequestUnitsQuestionShorthand"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ChoiceQuestionShorthand"
+                },
+                {
+                  "$ref": "#/$defs/MultiselectQuestionShorthand"
+                },
+                {
+                  "$ref": "#/$defs/PredicateQuestionShorthand"
+                },
+                {
+                  "$ref": "#/$defs/OrdinalQuestionShorthand"
+                },
+                {
+                  "$ref": "#/$defs/RequestUnitsQuestionShorthand"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question"
+        },
+        "questions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DecisionQuestion"
+              },
+              "maxItems": 64,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Questions"
+        },
+        "sources": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/SourcePointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/SourceLiteralBinding"
+                }
+              ]
+            }
+          },
+          "title": "Sources",
+          "type": "object"
+        },
+        "type": {
+          "const": "decision",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "sources",
+        "instructions"
+      ],
+      "title": "DecisionStepAuthoring",
+      "type": "object"
+    },
+    "FallbackCategory": {
+      "additionalProperties": false,
+      "description": "Caller-defined fallback category, excluded from the model's options.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "FallbackCategory",
+      "type": "object"
+    },
+    "HandlerStepAuthoring": {
+      "additionalProperties": false,
+      "properties": {
+        "handler": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Handler",
+          "type": "string"
+        },
+        "input": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                }
+              ]
+            }
+          },
+          "title": "Input",
+          "type": "object"
+        },
+        "type": {
+          "const": "handler",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "handler",
+        "input"
+      ],
+      "title": "HandlerStepAuthoring",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "LiteralBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "literal": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "literal"
+      ],
+      "title": "LiteralBinding",
+      "type": "object"
+    },
+    "LlmStepAuthoring": {
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                }
+              ]
+            }
+          },
+          "title": "Input",
+          "type": "object"
+        },
+        "instructions": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/ModelProfileOverride"
+            },
+            {
+              "discriminator": {
+                "mapping": {
+                  "anthropic": "#/$defs/AnthropicModelConfig",
+                  "azure_openai": "#/$defs/AzureModelConfig",
+                  "openai": "#/$defs/OpenAIModelConfig",
+                  "openai_compatible": "#/$defs/CompatibleModelConfig"
+                },
+                "propertyName": "provider"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/OpenAIModelConfig"
+                },
+                {
+                  "$ref": "#/$defs/CompatibleModelConfig"
+                },
+                {
+                  "$ref": "#/$defs/AzureModelConfig"
+                },
+                {
+                  "$ref": "#/$defs/AnthropicModelConfig"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "const": "text",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/SchemaOutput"
+            }
+          ],
+          "title": "Output"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "const": "llm",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "input",
+        "instructions",
+        "output"
+      ],
+      "title": "LlmStepAuthoring",
+      "type": "object"
+    },
+    "McpStepAuthoring": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                }
+              ]
+            }
+          },
+          "title": "Arguments",
+          "type": "object"
+        },
+        "server": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Server",
+          "type": "string"
+        },
+        "tool": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Tool",
+          "type": "string"
+        },
+        "type": {
+          "const": "mcp",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "server",
+        "tool",
+        "arguments"
+      ],
+      "title": "McpStepAuthoring",
+      "type": "object"
+    },
+    "ModelOptionOverrides": {
+      "additionalProperties": false,
+      "description": "Only supplied values replace profile options; null clears optional settings.\n\nProvider-specific fields are checked against the selected profile by the\noffline compiler after merging. Omitted values retain the profile setting.",
+      "properties": {
+        "effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effort"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "maximum": 1048576,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Effort"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "thinking": {
+          "anyOf": [
+            {
+              "enum": [
+                "disabled",
+                "adaptive"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thinking"
+        },
+        "thinking_budget": {
+          "anyOf": [
+            {
+              "minimum": 1024,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thinking Budget"
+        },
+        "top_p": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top P"
+        }
+      },
+      "title": "ModelOptionOverrides",
+      "type": "object"
+    },
+    "ModelProfileOverride": {
+      "additionalProperties": false,
+      "description": "Reuse a deployment profile and replace its model ID or generation options.\n\nExample: ``{profile: local, options: {max_tokens: 800}}`` retains the\nprofile's provider, credentials, capabilities, timeout, and shared admission.",
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "environment_reference": true,
+          "title": "Model"
+        },
+        "options": {
+          "$ref": "#/$defs/ModelOptionOverrides"
+        },
+        "profile": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Profile",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "ModelProfileOverride",
+      "type": "object"
+    },
+    "MultiselectQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "maxSelections": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Maxselections",
+          "type": "integer"
+        },
+        "minSelections": {
+          "maximum": 1024,
+          "minimum": 0,
+          "title": "Minselections",
+          "type": "integer"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "title": "Options",
+          "type": "array"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "multiselect",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "options",
+        "minSelections",
+        "maxSelections"
+      ],
+      "title": "MultiselectQuestion",
+      "type": "object"
+    },
+    "MultiselectQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "$ref": "#/$defs/CategoryCatalog"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "maxSelections": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Maxselections",
+          "type": "integer"
+        },
+        "minSelections": {
+          "maximum": 1024,
+          "minimum": 0,
+          "title": "Minselections",
+          "type": "integer"
+        },
+        "type": {
+          "const": "multiselect",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria",
+        "catalog",
+        "minSelections",
+        "maxSelections"
+      ],
+      "title": "MultiselectQuestionShorthand",
+      "type": "object"
+    },
+    "NamedStep": {
+      "additionalProperties": false,
+      "description": "One ordered operation with an identity independent of its definition file.",
+      "properties": {
+        "definition": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "decision": "#/$defs/DecisionStepAuthoring",
+                  "handler": "#/$defs/HandlerStepAuthoring",
+                  "llm": "#/$defs/LlmStepAuthoring",
+                  "mcp": "#/$defs/McpStepAuthoring"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/DecisionStepAuthoring"
+                },
+                {
+                  "$ref": "#/$defs/LlmStepAuthoring"
+                },
+                {
+                  "$ref": "#/$defs/McpStepAuthoring"
+                },
+                {
+                  "$ref": "#/$defs/HandlerStepAuthoring"
+                }
+              ]
+            },
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "NamedStep",
+      "type": "object"
+    },
+    "NamedToolChoice": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "NamedToolChoice",
+      "type": "object"
+    },
+    "OpenAIModelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "api": {
+          "enum": [
+            "chat",
+            "responses"
+          ],
+          "title": "Api",
+          "type": "string"
+        },
+        "api_key": {
+          "environment_reference": true,
+          "format": "password",
+          "title": "Api Key",
+          "type": "string",
+          "writeOnly": true
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "model": {
+          "environment_reference": true,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/OpenAIOptions"
+        },
+        "output_mode": {
+          "enum": [
+            "native",
+            "tool"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "provider": {
+          "const": "openai",
+          "title": "Provider",
+          "type": "string"
+        },
+        "queue_limit": {
+          "default": 16,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Limit",
+          "type": "integer"
+        },
+        "request_timeout": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Request Timeout",
+          "type": "number"
+        },
+        "supports_json_schema": {
+          "default": true,
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "supports_text": {
+          "default": true,
+          "title": "Supports Text",
+          "type": "boolean"
+        },
+        "supports_tools": {
+          "default": true,
+          "title": "Supports Tools",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "output_mode",
+        "provider",
+        "api"
+      ],
+      "title": "OpenAIModelConfig",
+      "type": "object"
+    },
+    "OpenAIOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "max_tokens": {
+          "default": 4096,
+          "maximum": 1048576,
+          "minimum": 1,
+          "title": "Max Tokens",
+          "type": "integer"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Effort"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "top_p": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top P"
+        }
+      },
+      "title": "OpenAIOptions",
+      "type": "object"
+    },
+    "OrdinalQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "levels": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 128,
+          "minItems": 2,
+          "title": "Levels",
+          "type": "array"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "ordinal",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "levels"
+      ],
+      "title": "OrdinalQuestion",
+      "type": "object"
+    },
+    "OrdinalQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "levels": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 128,
+          "minItems": 2,
+          "title": "Levels",
+          "type": "array"
+        },
+        "type": {
+          "const": "ordinal",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria",
+        "levels"
+      ],
+      "title": "OrdinalQuestionShorthand",
+      "type": "object"
+    },
+    "PointerBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "optional": {
+          "default": false,
+          "title": "Optional",
+          "type": "boolean"
+        },
+        "pointer": {
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "PointerBinding",
+      "type": "object"
+    },
+    "PredicateQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "predicate",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type"
+      ],
+      "title": "PredicateQuestion",
+      "type": "object"
+    },
+    "PredicateQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "type": {
+          "const": "predicate",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria"
+      ],
+      "title": "PredicateQuestionShorthand",
+      "type": "object"
+    },
+    "RequestUnitsQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "allowNoMatch": {
+          "title": "Allownomatch",
+          "type": "boolean"
+        },
+        "allowedSourceIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Allowedsourceids",
+          "type": "array"
+        },
+        "catalog": {
+          "items": {
+            "$ref": "#/$defs/DecisionOption"
+          },
+          "maxItems": 1024,
+          "title": "Catalog",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "type": {
+          "const": "request_units",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "criteria",
+        "allowedSourceIds",
+        "type",
+        "catalog",
+        "allowNoMatch"
+      ],
+      "title": "RequestUnitsQuestion",
+      "type": "object"
+    },
+    "RequestUnitsQuestionShorthand": {
+      "additionalProperties": false,
+      "properties": {
+        "allowNoMatch": {
+          "title": "Allownomatch",
+          "type": "boolean"
+        },
+        "catalog": {
+          "$ref": "#/$defs/CategoryCatalog"
+        },
+        "criteria": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "type": {
+          "const": "request_units",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "criteria",
+        "catalog",
+        "allowNoMatch"
+      ],
+      "title": "RequestUnitsQuestionShorthand",
+      "type": "object"
+    },
+    "SchemaOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            }
+          ],
+          "title": "Schema"
+        }
+      },
+      "required": [
+        "schema"
+      ],
+      "title": "SchemaOutput",
+      "type": "object"
+    },
+    "SourceLiteralBinding": {
+      "additionalProperties": false,
+      "description": "A literal decision source with explicit optional JSON rendering.",
+      "properties": {
+        "format": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "literal": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "literal"
+      ],
+      "title": "SourceLiteralBinding",
+      "type": "object"
+    },
+    "SourcePointerBinding": {
+      "additionalProperties": false,
+      "description": "A selected decision source, rendered as nonempty text or canonical JSON.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "format": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "optional": {
+          "default": false,
+          "title": "Optional",
+          "type": "boolean"
+        },
+        "pointer": {
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "SourcePointerBinding",
+      "type": "object"
+    },
+    "ToolPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "items": {
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Allow",
+          "type": "array"
+        },
+        "choice": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "required"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/NamedToolChoice"
+            }
+          ],
+          "title": "Choice"
+        },
+        "server": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Server",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server",
+        "allow",
+        "choice"
+      ],
+      "title": "ToolPolicy",
+      "type": "object"
+    }
+  },
+  "$id": "https://foliqant.local/schemas/foliqant/runtime/flow.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A reusable sequence; the containing workflow owns its instance identity.",
+  "properties": {
+    "input_schema": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "type": "string"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Input Schema"
+    },
+    "output": {
+      "anyOf": [
+        {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PointerBinding"
+            },
+            {
+              "$ref": "#/$defs/LiteralBinding"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output"
+    },
+    "steps": {
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/NamedStep"
+          },
+          {
+            "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+            "type": "string"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    }
+  },
+  "required": [
+    "steps"
+  ],
+  "title": "FlowDefinition",
+  "type": "object"
+}

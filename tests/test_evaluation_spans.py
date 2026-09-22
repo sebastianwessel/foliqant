@@ -172,7 +172,6 @@ def test_dataset_accepts_source_span_and_validates_it_against_case_input() -> No
     required_start = source.index("Cancel renewal")
     dataset = EvaluationDataset.model_validate(
         {
-            "version": 1,
             "name": "span-gold",
             "revision": "v1",
             "suites": [

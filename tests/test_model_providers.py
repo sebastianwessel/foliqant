@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import pytest
+from flow_fixtures import operation_flow
 
 from foliqant.adapters.models.providers import open_model_bindings
 from foliqant.contracts.models import ModelProfiles
@@ -502,13 +503,13 @@ async def test_sdk_transport_timeout_is_classified_without_losing_attempt(
     plan = WorkflowPlan(
         name="timeout_test",
         revision="a" * 64,
-        start=step.name,
+        start="main",
         default_model=None,
         input_schema_path=None,
         input_schema=None,
         schema_resources=(),
         output=None,
-        steps=(step,),
+        flows=(operation_flow(step),),
         location=location,
     )
     budget = StepBudget(model_requests=1, tool_calls=0)
@@ -517,6 +518,7 @@ async def test_sdk_transport_timeout_is_classified_without_losing_attempt(
         workflow=plan.name,
         revision=plan.revision,
         step_id=step.name,
+        flow_id="main",
         caller=CallerContext(Identity(), {}),
         deadline=asyncio.get_running_loop().time() + 5,
         model_timeout=5,
@@ -619,13 +621,13 @@ async def test_anthropic_authored_schema_is_preserved_or_rejected_before_inferen
     plan = WorkflowPlan(
         name="schema_test",
         revision="a" * 64,
-        start=step.name,
+        start="main",
         default_model=None,
         input_schema_path=None,
         input_schema=None,
         schema_resources=(SchemaResourcePlan("schemas/amounts.json", schema),),
         output=None,
-        steps=(step,),
+        flows=(operation_flow(step),),
         location=location,
     )
     budget = StepBudget(model_requests=1, tool_calls=0)
@@ -634,6 +636,7 @@ async def test_anthropic_authored_schema_is_preserved_or_rejected_before_inferen
         workflow=plan.name,
         revision=plan.revision,
         step_id=step.name,
+        flow_id="main",
         caller=CallerContext(Identity(), {}),
         deadline=asyncio.get_running_loop().time() + 5,
         model_timeout=5,

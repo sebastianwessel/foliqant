@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "action": {"type": "string", "enum": ["freeze_card", "send_statement", "update_address", "dispute_charge"]},
+    "reference": {"type": "string", "minLength": 1, "maxLength": 200},
+    "evidence_origin": {"const": "original_message"}
+  },
+  "required": ["action", "reference", "evidence_origin"],
+  "additionalProperties": false
+}

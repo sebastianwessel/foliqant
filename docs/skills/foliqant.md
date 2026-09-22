@@ -4,10 +4,10 @@ The repository skill at
 [`skills/foliqant`](https://github.com/sebastianwessel/foliqant/blob/main/skills/foliqant/SKILL.md) helps an agent build and
 review applications that use the installable `foliqant` package.
 
-Use it for versioned workflow bundles, in-memory execution, model and MCP
-adapters, native decision contracts, schema validation, telemetry and runnable
-examples. It keeps application-specific HTTP, authentication, persistence and
-queue handling outside the package core.
+Use it for workflow, flow, and operation definitions; in-memory execution; model
+and MCP adapters; decision contracts; schema validation; telemetry; evaluation;
+and runnable examples. It keeps application-specific HTTP, authentication,
+persistence, and queue handling outside the package core.
 
 The skill treats the current package implementation and CLI help as the command
 authority. It preserves the boundary between deterministic workflow policy and

@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "original_message": {"type": "string", "minLength": 1},
+    "attachment": {"type": "string"},
+    "prior_assessment": {
+      "type": "object",
+      "properties": {"origin": {"const": "earlier_model"}, "claim": {"type": "string"}},
+      "required": ["origin", "claim"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["original_message", "attachment", "prior_assessment"],
+  "additionalProperties": false
+}

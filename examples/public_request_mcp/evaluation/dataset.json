@@ -1,0 +1,30 @@
+{
+  "name": "public_request_mcp_examples",
+  "revision": "2",
+  "suites": [
+    {
+      "name": "public_request_lookup",
+      "workflow": "public_request_lookup",
+      "flow": null,
+      "step": null,
+      "cases": "cases/lookup.json",
+      "metrics": []
+    },
+    {
+      "name": "public_request_lookup_flow",
+      "workflow": "public_request_lookup",
+      "flow": "lookup",
+      "step": null,
+      "cases": "cases/lookup.json",
+      "metrics": []
+    },
+    {
+      "name": "public_request_lookup_step",
+      "workflow": "public_request_lookup",
+      "flow": "lookup",
+      "step": "lookup",
+      "cases": "cases/lookup.json",
+      "metrics": []
+    }
+  ]
+}

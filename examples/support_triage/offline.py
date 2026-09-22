@@ -14,8 +14,8 @@ from foliqant.contracts.models import ModelProfiles
 from foliqant.core.admission import CapacityLimiter
 
 ENVIRONMENT = {
-    "FOLIQANT_CURATION_ENDPOINT_URL": "http://127.0.0.1:1/v1",
-    "FOLIQANT_CURATION_MODEL": "offline-scripted-fixture",
+    "MODEL_BASE_URL": "http://127.0.0.1:1/v1",
+    "MODEL_ID": "offline-scripted-fixture",
 }
 
 
@@ -100,8 +100,7 @@ def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
         status = "not_answerable"
         issues = issues or ["no_supported_answer"]
     if '"id":"classify"' in text:
-        value = {
-            "schemaVersion": 3,
+        value: object = {
             "results": [
                 {
                     "questionId": "classify",

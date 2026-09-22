@@ -183,17 +183,17 @@ Strength is a qualitative model assessment, not a calibrated probability or a
 guarantee of correctness. It does not change routing or trigger an automatic
 threshold; keep application policy explicit.
 
-## Contract versions
+## Runtime and model-development contracts
 
-Workflow input uses the existing `DecisionInput` with `schemaVersion: 2`.
-Runtime `DecisionOutput` uses `schemaVersion: 3` and a `results` array. The
-single-question step result exposes the result object illustrated above. For
-multiple questions, the runtime returns results in supplied question order.
-Runtime results and request units contain no citation arrays.
+Runtime `DecisionOutput` contains a `results` array. A single-question
+operation exposes the result object illustrated above. For multiple questions,
+the runtime returns results in supplied question order. Runtime results and
+request units contain no citation arrays.
 
-The separate model-development format in `foliqant.decisions` retains native
-v2 output with explanations and citations for existing datasets and lifecycle
-tools. See [native decision data](native-decision-data.md) for that format.
+The separate model-development format in `foliqant.decisions` retains its
+existing native artifact contract with explanations and citations for datasets
+and lifecycle tools. See [native decision data](native-decision-data.md) for
+that format.
 
 Try the focused [decision evidence example](https://github.com/sebastianwessel/foliqant/blob/main/examples/decision_evidence/README.md)
 for choice versus multiselect, limited interpretations, substantive false,

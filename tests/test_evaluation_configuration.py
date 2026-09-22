@@ -9,29 +9,80 @@ import pytest
 import yaml
 
 from foliqant import Envelope, open_application, prepare_application
+from foliqant.adapters.handlers import HandlerRegistration
 from foliqant.cli import main
 from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.core.execution import StepOutcome
+from foliqant.core.json import freeze_json
 from foliqant.evaluation.command import evaluate_configuration
-from foliqant.evaluation.dataset import EvaluationDataset, load_dataset, read_json
+from foliqant.evaluation.dataset import EvaluationDataset, load_dataset, read_dataset, read_json
+
+
+async def _passthrough(inputs, context):
+    del context
+    return StepOutcome(inputs["document"])
+
+
+_HANDLERS = {
+    "passthrough": HandlerRegistration(
+        _passthrough,
+        freeze_json(
+            {
+                "type": "object",
+                "properties": {"document": {"type": "object"}},
+                "required": ["document"],
+                "additionalProperties": False,
+            }
+        ),
+        freeze_json({"type": "object"}),
+    )
+}
+
+
+def _prepare(path: Path):
+    return prepare_application(path, handlers=_HANDLERS)
 
 
 def _project(tmp_path: Path) -> tuple[Path, Path, dict[str, Any]]:
     workflow = tmp_path / "demo"
     workflow.mkdir()
     (workflow / "workflow.yaml").write_text(
-        "version: 1\nname: demo\nstart: done\nsteps:\n"
-        "  done:\n    type: finish\n    outcome: completed\n",
+        yaml.safe_dump(
+            {
+                "name": "demo",
+                "start": "main",
+                "output": {"pointer": "/flows/main/result"},
+                "flows": {
+                    "main": {
+                        "input": {"document": {"pointer": "/payload"}},
+                        "definition": {
+                            "output": {"pointer": "/steps/done/result"},
+                            "steps": [
+                                {
+                                    "id": "done",
+                                    "definition": {
+                                        "type": "handler",
+                                        "handler": "passthrough",
+                                        "input": {"document": {"pointer": "/payload/document"}},
+                                    },
+                                }
+                            ],
+                        },
+                        "transition": {"outcome": "completed"},
+                    }
+                },
+            }
+        ),
         encoding="utf-8",
     )
     config = tmp_path / "foliqant.yaml"
     config.write_text(
-        "version: 1\nworkflows:\n  demo: demo\nevaluation:\n  dataset: .foliqant/gold.json\n",
+        "workflows:\n  demo: demo\nevaluation:\n  dataset: .foliqant/gold.json\n",
         encoding="utf-8",
     )
     gold = tmp_path / ".foliqant/gold.json"
     gold.parent.mkdir()
     data: dict[str, Any] = {
-        "version": 1,
         "name": "private-demo",
         "revision": "gold-1",
         "suites": [
@@ -73,7 +124,7 @@ async def test_startup_does_not_require_gold_and_reference_does_not_revise_runti
     tmp_path: Path,
 ) -> None:
     config, gold, _ = _project(tmp_path)
-    configured = prepare_application(config)
+    configured = _prepare(config)
     gold.unlink()
     async with open_application(configured, environment={}) as app:
         result = await app.run("demo", Envelope(payload={"value": "works"}))
@@ -81,10 +132,10 @@ async def test_startup_does_not_require_gold_and_reference_does_not_revise_runti
     document = yaml.safe_load(config.read_text())
     document["evaluation"]["dataset"] = "/not/deployed/gold.json"
     config.write_text(yaml.safe_dump(document))
-    relocated = prepare_application(config)
+    relocated = _prepare(config)
     del document["evaluation"]
     config.write_text(yaml.safe_dump(document))
-    absent = prepare_application(config)
+    absent = _prepare(config)
     assert (
         configured.configuration_digest
         == relocated.configuration_digest
@@ -102,7 +153,7 @@ async def test_check_never_opens_application_and_rejects_missing_gold(
         pytest.fail("evaluation check must not open application clients")
 
     monkeypatch.setattr("foliqant.bootstrap.open_application", no_clients)
-    prepared = prepare_application(config)
+    prepared = _prepare(config)
     summary, code = await evaluate_configuration(prepared, check=True)
     assert code == 0 and summary["cases"] == 2
     assert not (tmp_path / ".foliqant/evaluations").exists()
@@ -116,7 +167,7 @@ async def test_report_records_confusion_full_values_and_replays_without_clients(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, gold, data = _project(tmp_path)
-    prepared = prepare_application(config)
+    prepared = _prepare(config)
     output = tmp_path / ".foliqant/report.json"
     summary, code = await evaluate_configuration(prepared, output=output)
     assert code == 1 and summary["status"] == "failed"
@@ -149,7 +200,7 @@ async def test_repeat_report_replay_consumes_each_saved_observation_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _, _ = _project(tmp_path)
-    prepared = prepare_application(config)
+    prepared = _prepare(config)
     output = tmp_path / ".foliqant/repeated.json"
     summary, _ = await evaluate_configuration(prepared, output=output, repeat=2)
     saved = json.loads(output.read_text())
@@ -197,7 +248,7 @@ async def test_source_span_report_replays_through_shared_scorer(tmp_path: Path) 
         }
     )
     gold.write_text(json.dumps(data))
-    prepared = prepare_application(config)
+    prepared = _prepare(config)
     observed = tmp_path / ".foliqant/source-span.json"
     await evaluate_configuration(prepared, output=observed)
     source_check = json.loads(observed.read_text())["reports"][0]["cases"][0]["checks"][-1]
@@ -210,11 +261,11 @@ async def test_source_span_report_replays_through_shared_scorer(tmp_path: Path) 
 
 
 @pytest.mark.parametrize(
-    "change", ["input", "configuration", "target", "order", "missing_result", "identity_type"]
+    "change", ["input", "configuration", "target", "order", "missing_result", "unknown_field"]
 )
 async def test_replay_rejects_misaligned_artifacts(tmp_path: Path, change: str) -> None:
     config, gold, data = _project(tmp_path)
-    prepared = prepare_application(config)
+    prepared = _prepare(config)
     output = tmp_path / "saved.json"
     await evaluate_configuration(prepared, output=output)
     artifact = json.loads(output.read_text())
@@ -228,8 +279,8 @@ async def test_replay_rejects_misaligned_artifacts(tmp_path: Path, change: str) 
         report["target_step"] = "done"
     elif change == "order":
         report["cases"].reverse()
-    elif change == "identity_type":
-        artifact["version"] = True
+    elif change == "unknown_field":
+        artifact["unexpected"] = True
     else:
         report["cases"][0]["details"]["result"] = None
     output.write_text(json.dumps(artifact))
@@ -250,7 +301,7 @@ async def test_existing_output_is_never_overwritten_or_runs_inference(
 
     monkeypatch.setattr("foliqant.bootstrap.open_application", no_clients)
     with pytest.raises(ServiceError) as failure:
-        await evaluate_configuration(prepare_application(config), output=output)
+        await evaluate_configuration(_prepare(config), output=output)
     assert failure.value.code is ErrorCode.CONFLICT
     assert output.read_text() == "keep"
 
@@ -259,6 +310,7 @@ async def test_existing_output_is_never_overwritten_or_runs_inference(
     "change",
     [
         "workflow",
+        "flow",
         "step",
         "pointer",
         "decision",
@@ -273,12 +325,17 @@ def test_invalid_gold_or_targets_rejected_offline(tmp_path: Path, change: str) -
     config, gold, data = _project(tmp_path)
     suite = data["suites"][0]
     expectation = suite["cases"][0]["expectations"][0]
-    if change in {"workflow", "step"}:
+    if change == "workflow":
+        suite[change] = "missing"
+    elif change == "flow":
+        suite[change] = "missing"
+    elif change == "step":
+        suite["flow"] = "main"
         suite[change] = "missing"
     elif change == "pointer":
         expectation["path"] = "/output/category"
     elif change == "decision":
-        expectation["path"] = "/decisions/missing/result"
+        expectation["path"] = "/flows/main/steps/missing/result"
     elif change == "execution":
         expectation["path"] = "/execution/nonsense"
     elif change == "gold":
@@ -291,7 +348,7 @@ def test_invalid_gold_or_targets_rejected_offline(tmp_path: Path, change: str) -
         suite["metrics"][0]["labels"] = ["billing", "billing"]
     gold.write_text(json.dumps(data))
     with pytest.raises((ValueError, ServiceError)):
-        load_dataset(prepare_application(config))
+        load_dataset(_prepare(config))
 
 
 @pytest.mark.parametrize(
@@ -313,9 +370,10 @@ def test_dataset_requires_explicit_null_gold_and_closed_fields(tmp_path: Path) -
 
 
 def test_cli_evaluate_check_and_mismatch_have_safe_outputs(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _, _ = _project(tmp_path)
+    monkeypatch.setattr("foliqant.bootstrap.prepare_application", _prepare)
     assert main(["evaluate", "--config", str(config), "--check"]) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "valid"
     assert main(["evaluate", "--config", str(config)]) == 1
@@ -331,20 +389,67 @@ async def test_mixed_inline_and_separate_case_files_resolve_from_manifest(tmp_pa
     config, gold, data = _project(tmp_path)
     case_file = gold.parent / "pipeline.json"
     case_file.write_text(json.dumps(data["suites"][0]["cases"]))
-    inline = dict(data["suites"][0], name="isolated", step="done")
+    inline = dict(data["suites"][0], name="isolated", flow="main", step="done")
     data["suites"][0]["cases"] = "pipeline.json"
     data["suites"].append(inline)
     gold.write_text(json.dumps(data))
-    prepared = prepare_application(config)
+    prepared = _prepare(config)
     loaded = load_dataset(prepared)
     assert len(loaded.suites[0].gold_cases) == 2
     assert len(loaded.suites[1].gold_cases) == 2
     summary, code = await evaluate_configuration(prepared, check=True)
     assert code == 0 and summary["cases"] == 4
     case_file.unlink()
-    assert prepare_application(config).configuration_digest == prepared.configuration_digest
+    assert _prepare(config).configuration_digest == prepared.configuration_digest
     with pytest.raises(ServiceError):
         await evaluate_configuration(prepared, check=True)
+
+
+async def test_configuration_dispatches_flow_and_step_targets_with_scoped_reports(
+    tmp_path: Path,
+) -> None:
+    config, gold, data = _project(tmp_path)
+    pipeline = data["suites"][0]
+    flow_suite = dict(pipeline, name="flow", flow="main")
+    flow_suite["cases"] = [
+        {
+            **case,
+            "input": {"payload": {"document": case["input"]["payload"]}},
+        }
+        for case in pipeline["cases"]
+    ]
+    step_suite = {
+        "name": "step",
+        "workflow": "demo",
+        "flow": "main",
+        "step": "done",
+        "cases": [
+            {
+                "id": "isolated",
+                "input": {"payload": {"document": {"category": "billing"}}},
+                "expectations": [
+                    {
+                        "name": "category",
+                        "path": "/flows/main/steps/done/result/category",
+                        "expected": "billing",
+                    }
+                ],
+            }
+        ],
+    }
+    data["suites"] = [flow_suite, step_suite]
+    gold.write_text(json.dumps(data))
+    output = tmp_path / ".foliqant/scoped.json"
+
+    summary, code = await evaluate_configuration(_prepare(config), output=output)
+
+    assert code == 1  # The authored flow suite retains one deliberate mismatch.
+    assert summary["suites"] == 2
+    reports = json.loads(output.read_text())["reports"]
+    assert (reports[0]["target_flow"], reports[0]["target_step"]) == ("main", None)
+    assert (reports[1]["target_flow"], reports[1]["target_step"]) == ("main", "done")
+    assert reports[1]["checks"]["passed"] == reports[1]["checks"]["total"] == 1
+    assert reports[1]["steps"][0]["flow"] == "main"
 
 
 @pytest.mark.parametrize("nested", ["another.json", {"cases": []}, []])
@@ -357,7 +462,7 @@ def test_case_references_require_nonempty_arrays_not_nested_references(
     data["suites"][0]["cases"] = str(case_file)
     gold.write_text(json.dumps(data))
     with pytest.raises(ValueError):
-        load_dataset(prepare_application(config))
+        load_dataset(_prepare(config))
 
 
 async def test_replay_rejects_different_workflow_even_all_invocations_failed(
@@ -375,7 +480,7 @@ async def test_replay_rejects_different_workflow_even_all_invocations_failed(
     configuration = yaml.safe_load(config.read_text())
     configuration["workflows"]["other"] = "other"
     config.write_text(yaml.safe_dump(configuration))
-    prepared = prepare_application(config)
+    prepared = _prepare(config)
     dataset = load_dataset(prepared)
 
     async def failed(envelope: Envelope) -> Any:
@@ -410,7 +515,7 @@ async def test_artifact_handles_valid_surrogate_json_and_bounds_publication(
     config, gold, data = _project(tmp_path)
     data["suites"][0]["cases"][0]["input"]["payload"]["private"] = "\ud800"
     gold.write_text(json.dumps(data))
-    prepared = prepare_application(config)
+    prepared = _prepare(config)
     output = tmp_path / "unicode.json"
     await evaluate_configuration(prepared, output=output)
     assert (
@@ -427,3 +532,49 @@ async def test_artifact_handles_valid_surrogate_json_and_bounds_publication(
         await evaluate_configuration(prepared, output=rejected)
     assert not rejected.exists()
     assert not list(tmp_path.glob(".evaluation-*"))
+
+
+async def test_conventional_gold_is_only_loaded_for_explicit_evaluation(tmp_path: Path) -> None:
+    """A deployable bundle runs without its conventionally located test corpus."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    config, old_gold, data = _project(config_dir)
+    document = yaml.safe_load(config.read_text())
+    del document["evaluation"]
+    settings = config_dir / "settings.yaml"
+    settings.write_text(yaml.safe_dump(document))
+    config.unlink()
+    old_gold.unlink()
+    prepared = _prepare(settings)
+    async with open_application(prepared, environment={}) as app:
+        result = await app.run("demo", Envelope(payload={"category": "billing"}))
+    assert result.execution.status == "completed"
+    with pytest.raises(FileNotFoundError):
+        load_dataset(prepared)
+    gold = tmp_path / "evaluation/dataset.json"
+    gold.parent.mkdir()
+    gold.write_text(json.dumps(data))
+    assert load_dataset(prepared).name == data["name"]
+    assert _prepare(settings).configuration_digest == prepared.configuration_digest
+
+
+def test_shared_dataset_reader_materializes_references_without_configuration(tmp_path, monkeypatch):
+    _, gold, document = _project(tmp_path)
+    document["suites"].append(dict(document["suites"][0], name="same_cases"))
+    before = EvaluationDataset.model_validate(document, strict=True)
+    case_file = gold.parent / "shared.json"
+    case_file.write_text(json.dumps(document["suites"][0]["cases"]))
+    for suite in document["suites"]:
+        suite["cases"] = "shared.json"
+    gold.write_text(json.dumps(document))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    loaded = read_dataset(gold)
+    assert loaded.model_dump(mode="json") == before.model_dump(mode="json")
+    assert [loaded.to_suite(suite).fingerprint for suite in loaded.suites] == [
+        before.to_suite(suite).fingerprint for suite in before.suites
+    ]
+    # Case-boundary instances are detached even when the file is shared.
+    loaded.suites[0].gold_cases[0].id = "edited"
+    assert loaded.suites[1].gold_cases[0].id != "edited"

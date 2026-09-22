@@ -24,8 +24,10 @@ from foliqant.core.plan import (
     DecisionStepPlan,
     HandlerStepPlan,
     LlmStepPlan,
+    MatchRoutingPlan,
     McpStepPlan,
     SourceLocation,
+    TransitionTargetPlan,
     UnresolvedRoutingPlan,
     WorkflowPlan,
 )
@@ -58,34 +60,67 @@ _MESSAGES: dict[str, str] = {
 }
 
 _SCAFFOLD: Mapping[str, str] = {
-    "foliqant.yaml": """version: 1
-workflows:
-  demo: workflows/demo
+    "config/settings.yaml": """models:
+  local:
+    provider: openai_compatible
+    model: $MODEL_ID
+    base_url: $MODEL_BASE_URL
+    allow_insecure_http: true
+    output_mode: native
+    supports_tools: false
+    concurrency: 1
+    queue_limit: 0
+    request_timeout: 300
+    options:
+      max_tokens: 8192
+      temperature: 0.1
+      reasoning_effort: low
+execution:
+  model_timeout: 300
+  run_timeout: 310
 """,
-    "workflows/demo/workflow.yaml": """version: 1
-name: demo
-start: done
-steps:
-  done:
-    type: finish
-    outcome: completed
+    "config/demo/workflow.yaml": """defaults: {model: local}
+output: {pointer: /flows/summarize/result}
+flows:
+  summarize:
+    input:
+      message: {pointer: /payload/message}
+    transition: {outcome: completed}
 """,
-    ".env.example": "# Add only environment variables referenced by foliqant.yaml.\n",
+    "config/demo/summarize/flow.yaml": """output: {pointer: /steps/summarize/result}
+steps: [summarize]
+""",
+    "config/demo/summarize/summarize.step.md": """---
+type: llm
+input:
+  message: {pointer: /payload/message}
+output: text
+---
+Summarize the supplied message in one sentence, preserving its language.
+""",
+    "config/.env.example": """# Copy to config/.env and set your local model ID.
+MODEL_ID=your-served-model-id
+MODEL_BASE_URL=http://127.0.0.1:8000/v1
+""",
     ".gitignore": ".env\n.foliqant/\n",
     "envelope.json": """{
-  "payload": {
-    "message": "hello"
-  },
+  "payload": {"message": "Please send my account statement."},
   "metadata": {}
 }
 """,
-    "README.md": """# Foliqant workflow
+    "README.md": """# Workflow project
 
-Run the synthetic, model-free workflow:
+Install `foliqant[openai]`. Copy `config/.env.example` to `config/.env`
+and set the endpoint and model ID served by your local backend.
+
+Validate without contacting the model, then run:
 
 ```sh
+foliqant validate
 foliqant run --workflow demo --input envelope.json
 ```
+
+The default configuration is `config/settings.yaml`; use `--config` for another path.
 """,
 }
 
@@ -118,7 +153,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = _Parser(prog="foliqant", description="Compile and run deterministic workflows.")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    init = commands.add_parser("init", help="Create a minimal model-free project")
+    init = commands.add_parser("init", help="Create a minimal local-model workflow project")
     init.add_argument("destination", type=Path, metavar="DEST")
 
     for name, help_text in (
@@ -129,16 +164,16 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--config",
             type=Path,
-            default=Path("foliqant.yaml"),
-            help="configuration file (default: ./foliqant.yaml)",
+            default=Path("config/settings.yaml"),
+            help="configuration file (default: ./config/settings.yaml)",
         )
 
     explain = commands.add_parser("explain", help="Describe compiled workflow plans offline")
     explain.add_argument(
         "--config",
         type=Path,
-        default=Path("foliqant.yaml"),
-        help="configuration file (default: ./foliqant.yaml)",
+        default=Path("config/settings.yaml"),
+        help="configuration file (default: ./config/settings.yaml)",
     )
     explain.add_argument("--workflow")
 
@@ -146,8 +181,8 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--config",
         type=Path,
-        default=Path("foliqant.yaml"),
-        help="configuration file (default: ./foliqant.yaml)",
+        default=Path("config/settings.yaml"),
+        help="configuration file (default: ./config/settings.yaml)",
     )
     run.add_argument("--workflow", required=True)
     run.add_argument("--input", required=True, metavar="PATH|-")
@@ -287,53 +322,65 @@ def _init(destination: Path) -> dict[str, object]:
     return {"command": "init", "status": "created"}
 
 
+def _target_report(target: TransitionTargetPlan) -> dict[str, object]:
+    return {"flow": target.flow} if target.flow is not None else {"outcome": target.outcome}
+
+
 def _plan_report(
     plan: WorkflowPlan, prepared: PreparedApplication | None = None
 ) -> dict[str, object]:
-    steps: list[dict[str, object]] = []
-    for step in plan.steps:
-        item: dict[str, object] = {"name": step.name, "type": step.type}
-        if step.next is not None:
-            item["next"] = step.next
-        if step.on_unresolved is not None:
-            if isinstance(step.on_unresolved, UnresolvedRoutingPlan):
-                unresolved: dict[str, str] = {"default": step.on_unresolved.default}
-                unresolved.update(step.on_unresolved.issues)
-                item["on_unresolved"] = unresolved
-            else:
-                item["on_unresolved"] = step.on_unresolved
-        if isinstance(step, DecisionStepPlan):
-            item["model"] = step.model
-            item["on_answer"] = dict(step.on_answer)
-            if step.fallback is not None:
+    flows: list[dict[str, object]] = []
+    for flow in plan.flows:
+        steps: list[dict[str, object]] = []
+        for step in flow.steps:
+            item: dict[str, object] = {"name": step.name, "type": step.type}
+            if isinstance(step, (DecisionStepPlan, LlmStepPlan)):
+                item["model"] = step.model
+                if prepared is not None:
+                    profile = prepared._models[step.model]
+                    selection: dict[str, object] = {
+                        "provider": profile.provider,
+                        "model": profile.model,
+                    }
+                    source = prepared._model_admission_groups.get(step.model)
+                    if source is not None:
+                        selection["profile"] = source
+                    elif step.model in prepared.config.models:
+                        selection["profile"] = step.model
+                    item["model_selection"] = selection
+            if isinstance(step, DecisionStepPlan) and step.fallback is not None:
                 category = {"id": step.fallback.category.id}
                 if step.fallback.category.description is not None:
                     category["description"] = step.fallback.category.description
                 item["fallback"] = {"category": category, "on": list(step.fallback.on)}
-        elif isinstance(step, LlmStepPlan):
-            item["model"] = step.model
-            if step.tools is not None:
+            elif isinstance(step, LlmStepPlan) and step.tools is not None:
                 item["tools"] = {"server": step.tools.server, "allow": list(step.tools.allow)}
-        elif isinstance(step, McpStepPlan):
-            item["server"], item["tool"] = step.server, step.tool
-        elif isinstance(step, HandlerStepPlan):
-            item["handler"] = step.handler
-        if prepared is not None and isinstance(step, (DecisionStepPlan, LlmStepPlan)):
-            profile = prepared._models[step.model]
-            selection: dict[str, object] = {"provider": profile.provider, "model": profile.model}
-            source = prepared._model_admission_groups.get(step.model)
-            if source is not None:
-                selection["profile"] = source
-            elif step.model in prepared.config.models:
-                selection["profile"] = step.model
-            item["model_selection"] = selection
-        steps.append(item)
-    return {
-        "name": plan.name,
-        "revision": plan.revision,
-        "start": plan.start,
-        "steps": steps,
-    }
+            elif isinstance(step, McpStepPlan):
+                item["server"], item["tool"] = step.server, step.tool
+            elif isinstance(step, HandlerStepPlan):
+                item["handler"] = step.handler
+            steps.append(item)
+        transition = flow.transition
+        if isinstance(transition, MatchRoutingPlan):
+            # Report routing topology, never literal bindings or prompt content.
+            route: dict[str, object] = {
+                "cases": {key: _target_report(target) for key, target in transition.cases},
+                "default": _target_report(transition.default),
+            }
+        else:
+            route = _target_report(transition)
+        entry: dict[str, object] = {"name": flow.name, "steps": steps, "transition": route}
+        if isinstance(flow.on_unresolved, UnresolvedRoutingPlan):
+            unresolved: dict[str, object] = {
+                "default": _target_report(flow.on_unresolved.default),
+            }
+            for issue, target in flow.on_unresolved.issues:
+                unresolved[issue] = _target_report(target)
+            entry["on_unresolved"] = unresolved
+        elif flow.on_unresolved is not None:
+            entry["on_unresolved"] = _target_report(flow.on_unresolved)
+        flows.append(entry)
+    return {"name": plan.name, "revision": plan.revision, "start": plan.start, "flows": flows}
 
 
 def _validate(config_path: Path) -> dict[str, object]:
@@ -429,7 +476,12 @@ def _logging_labels(prepared: PreparedApplication) -> LogLabels:
     return LogLabels(
         services=frozenset({"foliqant"}),
         workflows=frozenset(prepared.plans),
-        steps=frozenset(step.name for plan in prepared.plans.values() for step in plan.steps),
+        steps=frozenset(
+            step.name
+            for plan in prepared.plans.values()
+            for flow in plan.flows
+            for step in flow.steps
+        ),
     )
 
 
@@ -500,7 +552,7 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object], int]:
             raise _CliFailure("invalid_arguments", _EXIT_INPUT)
         return asyncio.run(
             evaluate_configuration(
-                _prepare(args.config or Path("foliqant.yaml")),
+                _prepare(args.config or Path("config/settings.yaml")),
                 check=args.check,
                 replay=args.replay,
                 output=args.output,

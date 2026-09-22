@@ -1,0 +1,6 @@
+output:
+  pointer: /steps/extract/result
+  optional: true
+  default: null
+steps:
+- extract

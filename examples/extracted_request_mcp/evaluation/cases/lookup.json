@@ -1,0 +1,110 @@
+[
+  {
+    "id": "english_request",
+    "input": {
+      "payload": {
+        "reference": "FOI-2026-0142",
+        "language": "en"
+      },
+      "metadata": {}
+    },
+    "expectations": [
+      {
+        "name": "completed",
+        "path": "/execution/status",
+        "expected": "completed",
+        "comparison": "exact"
+      },
+      {
+        "name": "reference",
+        "path": "/payload/reference",
+        "expected": "FOI-2026-0142",
+        "comparison": "exact"
+      },
+      {
+        "name": "language",
+        "path": "/payload/language",
+        "expected": "en",
+        "comparison": "exact"
+      },
+      {
+        "name": "status",
+        "path": "/payload/status",
+        "expected": "in_review",
+        "comparison": "exact"
+      },
+      {
+        "name": "due_date",
+        "path": "/payload/due_date",
+        "expected": "2026-10-05",
+        "comparison": "exact"
+      },
+      {
+        "name": "no_model",
+        "path": "/execution/usage/model_requests",
+        "expected": 0,
+        "comparison": "exact"
+      },
+      {
+        "name": "one_tool",
+        "path": "/execution/usage/tool_calls",
+        "expected": 1,
+        "comparison": "exact"
+      }
+    ]
+  },
+  {
+    "id": "german_request",
+    "input": {
+      "payload": {
+        "reference": "FOI-2026-0310",
+        "language": "de"
+      },
+      "metadata": {}
+    },
+    "expectations": [
+      {
+        "name": "completed",
+        "path": "/execution/status",
+        "expected": "completed",
+        "comparison": "exact"
+      },
+      {
+        "name": "reference",
+        "path": "/payload/reference",
+        "expected": "FOI-2026-0310",
+        "comparison": "exact"
+      },
+      {
+        "name": "language",
+        "path": "/payload/language",
+        "expected": "de",
+        "comparison": "exact"
+      },
+      {
+        "name": "status",
+        "path": "/payload/status",
+        "expected": "in_review",
+        "comparison": "exact"
+      },
+      {
+        "name": "due_date",
+        "path": "/payload/due_date",
+        "expected": "05.10.2026",
+        "comparison": "exact"
+      },
+      {
+        "name": "no_model",
+        "path": "/execution/usage/model_requests",
+        "expected": 0,
+        "comparison": "exact"
+      },
+      {
+        "name": "one_tool",
+        "path": "/execution/usage/tool_calls",
+        "expected": 1,
+        "comparison": "exact"
+      }
+    ]
+  }
+]

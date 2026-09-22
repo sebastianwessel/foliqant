@@ -9,11 +9,11 @@ standard-library values and ports; provider SDKs and Pydantic stay at boundaries
 
 Library Pydantic contracts in `src/foliqant/contracts/` and
 `src/foliqant/decisions/` generate `schemas/foliqant/`. Model-only contracts
-generate `model/schemas/`. Decision input and model output retain native v2 in
-`foliqant.decisions`; runtime v3 output is owned by `contracts/decisions.py` with
-reason/evidence strength. Keep these output contracts separate and preserve
-model artifacts. Keep wire spellings and versions stable. Strictly
-validate external JSON/YAML; do not hand-edit generated schemas.
+generate `model/schemas/`. The runtime decision output is owned by
+`contracts/decisions.py`; model-development artifacts keep their existing
+native contract. Keep these output contracts separate and preserve immutable
+model artifacts. Strictly validate external JSON/YAML; do not hand-edit
+generated schemas.
 
 Prepare/compile offline at startup. Execute frozen plans with invocation-local
 state. Prefer async I/O; blocking SDKs use the owned `BlockingExecutor` and
@@ -26,13 +26,17 @@ is outbound tool support. HTTP hosting is an example or embedding concern.
 
 Only fixed safe errors and allowlisted sanitized values enter logs/telemetry.
 Do not log payloads, identities, prompts, credentials or raw exceptions.
-Evaluation reuses `run_step` and the same validators; failed/skipped expectations
+Evaluation reuses `run`, `run_flow`, and `run_step` with the same validators; failed/skipped expectations
 remain in denominators. Golden data, results and holdout selection belong to the
 caller. Schema validity and confidence are not accuracy.
-Use `evaluation.dataset` plus the shared JSON suite loader for configuration-based
-evaluation. Cases may be inline or separate files per step/pipeline; never read
-them at runtime startup. Reuse `evaluate`/`write_report`, retain honest missing
+Use conventional `evaluation/dataset.json` or an explicit
+`evaluation.dataset` override with the shared JSON suite loader. Cases may be
+inline or separate files per pipeline/flow/step; never read them at runtime
+startup. Reuse `evaluate`/`write_report`, retain honest missing
 and failure denominators, and keep full private reports out of console logs/Git.
+Public examples commit only small authored synthetic fixtures under
+`examples/<name>/evaluation/`; generated reports and real evaluation data stay
+ignored.
 Use `evaluate --check` or saved-result replay for offline verification; do not
 substitute either for live model quality evidence.
 Examples use the public application lifecycle and existing evaluation module,

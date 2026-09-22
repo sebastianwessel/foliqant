@@ -1,10 +1,13 @@
 # business.* shapes and MAP-BUSINESS-TASK-PLAN describe the archived concept in
 # document 10, not implemented or required library representations.
+# package.* wire formats are unversioned; catalog metadata and native model
+# format versions are separate. Content revisions preserve reproducibility.
 catalog_version: 1
 applicability:
   status: applicable
   scope_refs:
   - CAP-PACKAGE-CONTRACTS
+  - CAP-PACKAGE-COMPILER
   - CAP-PACKAGE-RUNTIME
   - CAP-PACKAGE-PRIVACY
   - CAP-ENV
@@ -24,14 +27,14 @@ shapes:
   representation_class: boundary
   canonical_source: ../src/foliqant/contracts/decisions.py
   owner: package-contracts
-  stability: versioned
+  stability: experimental
   open_policy: closed
   allowed_consumers:
   - package-native-validation
   - embedding-application
   - package-evaluation
   source_contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   mapping_refs:
   - MAP-PACKAGE-VALIDATE-DECISION
 - shape_id: package.authored-deployment
@@ -44,7 +47,7 @@ shapes:
   - package-settings
   - package-environment
   source_contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   mapping_refs:
   - MAP-PACKAGE-RESOLVE-ENVIRONMENT
 - shape_id: package.resolved-deployment
@@ -59,44 +62,44 @@ shapes:
   - mcp-adapters
   - telemetry-adapters
   source_contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   mapping_refs:
   - MAP-PACKAGE-RESOLVE-ENVIRONMENT
 - shape_id: package.evaluation-report
   representation_class: boundary
   canonical_source: ../src/foliqant/evaluation/contracts.py
   owner: package-evaluation
-  stability: versioned
+  stability: experimental
   open_policy: open_json_leaf
   allowed_consumers:
   - embedding-application
   source_contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   mapping_refs:
   - MAP-PACKAGE-EVALUATION
 - shape_id: package.evaluation-suite
   representation_class: command
   canonical_source: ../src/foliqant/evaluation/contracts.py
   owner: package-evaluation
-  stability: versioned
+  stability: experimental
   open_policy: open_json_leaf
   allowed_consumers:
   - package-evaluation
   source_contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   mapping_refs:
   - MAP-PACKAGE-EVALUATION
 - shape_id: package.envelope
   representation_class: boundary
   canonical_source: ../src/foliqant/contracts/envelope.py
   owner: package-contracts
-  stability: versioned
+  stability: experimental
   open_policy: open_json_leaf
   allowed_consumers:
   - service-input-adapters
   - embedded-callers
   source_contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   mapping_refs:
   - MAP-PACKAGE-ACCEPT-ENVELOPE
 - shape_id: package.accepted-envelope
@@ -109,9 +112,72 @@ shapes:
   - service-engine
   - service-output-adapters
   source_contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   mapping_refs:
   - MAP-PACKAGE-ACCEPT-ENVELOPE
+- shape_id: package.workflow-authoring
+  representation_class: command
+  canonical_source: ../src/foliqant/contracts/workflow.py
+  owner: package-contracts
+  stability: experimental
+  open_policy: open_json_leaf
+  allowed_consumers: [package-compiler, generated-schemas]
+  source_contract_refs: [CONTRACT-PACKAGE]
+  mapping_refs: [MAP-PACKAGE-COMPILE]
+- shape_id: package.flow-definition
+  representation_class: command
+  canonical_source: ../src/foliqant/contracts/workflow.py
+  owner: package-contracts
+  stability: experimental
+  open_policy: open_json_leaf
+  allowed_consumers: [package-compiler, generated-schemas]
+  source_contract_refs: [CONTRACT-PACKAGE]
+  mapping_refs: [MAP-PACKAGE-COMPILE-FLOW]
+- shape_id: package.step-definition
+  representation_class: command
+  canonical_source: ../src/foliqant/contracts/workflow.py
+  owner: package-contracts
+  stability: experimental
+  open_policy: open_json_leaf
+  allowed_consumers: [package-compiler, generated-schemas]
+  source_contract_refs: [CONTRACT-PACKAGE]
+  mapping_refs: [MAP-PACKAGE-COMPILE-STEP]
+- shape_id: package.workflow-plan
+  representation_class: domain
+  canonical_source: ../src/foliqant/core/plan.py
+  owner: package-core
+  stability: internal
+  open_policy: open_json_leaf
+  allowed_consumers: [package-bootstrap, package-runner, package-adapters]
+  source_contract_refs: [CONTRACT-PACKAGE]
+  mapping_refs: [MAP-PACKAGE-COMPILE, MAP-PACKAGE-COMPILE-FLOW, MAP-PACKAGE-COMPILE-STEP]
+- shape_id: package.run-result
+  representation_class: domain
+  canonical_source: ../src/foliqant/core/execution.py
+  owner: package-core
+  stability: internal
+  open_policy: open_json_leaf
+  allowed_consumers: [package-result-adapter]
+  source_contract_refs: [CONTRACT-PACKAGE]
+  mapping_refs: [MAP-PACKAGE-EXECUTION-RESULT]
+- shape_id: package.execution-result
+  representation_class: boundary
+  canonical_source: ../src/foliqant/contracts/execution.py
+  owner: package-contracts
+  stability: experimental
+  open_policy: open_json_leaf
+  allowed_consumers: [embedding-application, package-evaluation, generated-schemas]
+  source_contract_refs: [CONTRACT-PACKAGE]
+  mapping_refs: [MAP-PACKAGE-EXECUTION-RESULT]
+- shape_id: package.evaluation-dataset
+  representation_class: command
+  canonical_source: ../src/foliqant/evaluation/dataset.py
+  owner: package-evaluation
+  stability: experimental
+  open_policy: open_json_leaf
+  allowed_consumers: [package-evaluation, generated-schemas]
+  source_contract_refs: [CONTRACT-PACKAGE]
+  mapping_refs: [MAP-PACKAGE-EVALUATION-DATASET]
 - shape_id: model.category-catalog
   representation_class: command
   canonical_source: ../src/foliqant/decisions/category_catalog.py
@@ -587,14 +653,81 @@ shapes:
   mapping_refs:
   - MAP-SCOPED-SOURCE-PROJECTION
 mappings:
+- mapping_id: MAP-PACKAGE-COMPILE
+  from_shape: package.workflow-authoring
+  to_shape: package.workflow-plan
+  direction: command_to_domain
+  allowed_differences: [resolved-definitions, immutable-normalized-plan, content-digest]
+  redaction_or_loss_policy: Resolve explicit references from containing files within
+    the configuration root. Omitted deployment registries discover only immediate
+    nonhidden workflow directories. Conventional flow and step lookup rejects missing
+    or ambiguous candidates; no environment expansion of business text or format conversion.
+  field_operations:
+  - name-and-start:default-from-workflow-directory-and-sole-flow
+  - flows:bind-instance-input-and-boundary-routes
+  - output:validate-workflow-scope-and-availability
+  - transitions:validate-targets-acyclicity-exact-match-and-default
+  verification: [../tests/test_compiler.py, ../tests/test_flow_boundaries.py]
+- mapping_id: MAP-PACKAGE-COMPILE-FLOW
+  from_shape: package.flow-definition
+  to_shape: package.workflow-plan
+  direction: command_to_domain
+  allowed_differences: [resolved-definitions, immutable-normalized-plan]
+  redaction_or_loss_policy: Reused definitions retain distinct flow-instance
+    payloads, result records and tool permissions; no implicit shared context.
+  field_operations:
+  - definition:resolve-flow-id-directory-when-omitted
+  - steps:resolve-exactly-one-conventional-candidate-for-short-ids
+  - steps:preserve-authored-order-and-reject-duplicate-local-ids
+  - bindings:validate-flow-payload-and-earlier-local-step-scope
+  - output:validate-projection-with-explicit-optional-default-rules
+  verification: [../tests/test_compiler.py, ../tests/test_flow_runner.py]
+- mapping_id: MAP-PACKAGE-COMPILE-STEP
+  from_shape: package.step-definition
+  to_shape: package.workflow-plan
+  direction: command_to_domain
+  allowed_differences: [resolved-schemas, compiled-prompt-tokens, normalized-questions]
+  redaction_or_loss_policy: Trusted instructions remain separate from bound input.
+    Prompt substitutions serialize values as JSON once; structured decision-source
+    formatting never changes the original value seen by other bindings.
+  field_operations:
+  - prompt:compile-declared-input-names-with-literal-brace-escaping
+  - sources:retain-explicit-text-or-json-format
+  - output-schema:resolve-and-validate-with-shared-compiler
+  verification: [../tests/test_prompt.py, ../tests/test_model_executor.py, ../tests/test_native_adapter.py]
+- mapping_id: MAP-PACKAGE-EXECUTION-RESULT
+  from_shape: package.run-result
+  to_shape: package.execution-result
+  direction: domain_to_boundary
+  allowed_differences: [ordered-records-to-identifier-maps, safe-error-serialization]
+  redaction_or_loss_policy: Explicit returned results retain business payloads;
+    safe errors omit private values. Missing result fields stay absent and explicit
+    null stays present. Duplicate flow or local-step IDs reject.
+  field_operations:
+  - flows:map-flow-records-and-nested-step-records
+  - transitions:preserve-order-source-reason-and-target
+  - metadata:preserve-validated-caller-context
+  - usage:preserve-unavailable-values-as-null
+  verification: [../tests/test_execution_contracts.py, ../tests/test_flow_boundaries.py]
+- mapping_id: MAP-PACKAGE-EVALUATION-DATASET
+  from_shape: package.evaluation-dataset
+  to_shape: package.evaluation-suite
+  direction: command_to_domain
+  allowed_differences: [immutable-golden-cases, resolved-case-files]
+  redaction_or_loss_policy: Load only for explicit evaluation. Never derive gold
+    from model predictions or initialize providers during target validation.
+  field_operations:
+  - target:validate-workflow-and-optional-flow-or-scoped-step
+  - cases:preserve-authored-inputs-expectations-and-content-revisions
+  verification: [../tests/test_evaluation_configuration.py, ../tests/test_example_evaluations.py]
 - mapping_id: MAP-PACKAGE-VALIDATE-DECISION
   from_shape: model.decision-input
   to_shape: package.decision-output
   direction: custom
   allowed_differences:
   - model-produced-answer-reason-and-evidence-strength
-  redaction_or_loss_policy: Runtime v3 validates a generated response against the
-    unchanged native v2 input. This is not conversion of a native v2 output;
+  redaction_or_loss_policy: The unversioned runtime validates a generated response against shared
+    typed task semantics. This is not conversion of a native model-data output;
     model lifecycle datasets and artifacts retain their existing representation.
   field_operations:
   - questionId-and-type:preserve-and-validate
@@ -636,11 +769,13 @@ mappings:
   allowed_differences:
   - actual-measurements-and-check-outcomes
   - omit-business-content
-  redaction_or_loss_policy: Reports retain safe identifiers, suite fingerprint, caller
-    revisions, outcomes and measurements only; no expected, input, response or raw
-    exception values.
+  redaction_or_loss_policy: Default reports retain identifiers, fingerprints,
+    content revisions, outcomes and measurements without business values or raw
+    exceptions. Explicit private details retain inputs, expected and actual values;
+    console summaries omit them. Formats are unversioned.
   field_operations:
   - suite:hash-immutable-inputs-and-expectations
+  - targets:preserve-workflow-flow-and-local-step-identities
   - checks:count-every-authored-expectation
   - measurements:preserve-unavailable-as-null
   verification:

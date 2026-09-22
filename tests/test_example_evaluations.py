@@ -8,15 +8,13 @@ from examples.http_workflow.evaluate import run_evaluations as http_evaluations
 from examples.public_request_mcp.evaluate import run_evaluations as mcp_evaluations
 from examples.support_triage import evaluate as support_evaluation
 
-from foliqant.evaluation import EvaluationCase, EvaluationSuite, Expectation
-
 
 async def test_mcp_pipeline_and_isolated_step_evaluations(tmp_path) -> None:
     result = await mcp_evaluations(output=tmp_path / "mcp.json")
     assert result["ok"] is True
     assert result["mode"] == "local_stdio"
-    assert result["suites"] == 2
-    assert len(json.loads(Path(result["report"]).read_text())["reports"]) == 2
+    assert result["suites"] == 3
+    assert len(json.loads(Path(result["report"]).read_text())["reports"]) == 3
 
 
 async def test_http_boundary_reuses_gold_suite_and_real_workflow(tmp_path) -> None:
@@ -32,17 +30,20 @@ async def test_http_boundary_reuses_gold_suite_and_real_workflow(tmp_path) -> No
 def test_example_evaluation_fails_when_gold_disagrees(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path
 ) -> None:
-    original = support_evaluation.suite()
-    case = original.cases[0]
-    # Alter independently authored expectations, never the scripted response.
-    wrong = EvaluationCase(
-        case.id,
-        case.envelope(),
-        case.expectations
-        + (Expectation("deliberate_mismatch", "/payload/account_reference", "wrong-account"),),
+    # Editing the canonical JSON changes gold without changing Python or responses.
+    document = support_evaluation.dataset().model_dump(mode="json")
+    document["revision"] = "negative-control"
+    document["suites"][0]["cases"][0]["expectations"].append(
+        {
+            "name": "deliberate_mismatch",
+            "path": "/payload/account_reference",
+            "expected": "wrong-account",
+            "comparison": "exact",
+        }
     )
-    suite = EvaluationSuite(original.name, "negative-control", (wrong, *original.cases[1:]))
-    monkeypatch.setattr(support_evaluation, "suite", lambda: suite)
+    dataset_path = tmp_path / "edited-gold.json"
+    dataset_path.write_text(json.dumps(document))
+    monkeypatch.setattr(support_evaluation, "DATASET_PATH", dataset_path)
     artifact = tmp_path / "negative.json"
     monkeypatch.setattr("sys.argv", ["evaluate", "--output", str(artifact)])
     assert support_evaluation.main() == 1
@@ -63,7 +64,9 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
     assert result["ok"] is True
     assert "details" not in json.dumps(result)
     reports = json.loads(artifact.read_text())["reports"]
-    pipeline, classification, extraction = reports
+    pipeline, flow, classification, extraction = reports
+    assert flow["target_flow"] == "triage" and flow["target_step"] is None
+    assert flow["metrics"] == pipeline["metrics"]
     queue, status, effective, origin, issues, evidence = pipeline["metrics"]
     assert queue["support"] == queue["observed"] == 6
     assert queue["excluded"] == 10  # Review gold does not invent a queue label.
@@ -93,7 +96,7 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
         assert [entry["name"] for entry in report["steps"]] == [step]
         for case in report["cases"]:
             assert case["details"]["input"]["payload"]["message"]
-            assert list(case["details"]["result"]["decisions"]) == [step]
+            assert list(case["details"]["result"]["flows"]["triage"]["steps"]) == [step]
             assert all(check["step"] == step for check in case["checks"])
             assert all(check["details"]["actual_present"] for check in case["checks"])
 
@@ -101,11 +104,11 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
         details = case["details"]
         message = details["input"]["payload"]["message"]
         assert details["result"]["metadata"] == details["input"]["metadata"]
-        decision = details["result"]["decisions"]["classify"]["result"]
+        decision = details["result"]["flows"]["triage"]["steps"]["classify"]["result"]
         assert decision["reason"].strip() and len(decision["reason"]) <= 400
         assert "explanation" not in decision
         assert decision["evidence_strength"] == "strong"
-        step_result = details["result"]["decisions"]["classify"]
+        step_result = details["result"]["flows"]["triage"]["steps"]["classify"]
         if case["id"] in {"multiple_active_intents", "unresolved_contradiction"}:
             assert "selection" not in step_result
         elif case["status"] == "needs_review":
@@ -134,12 +137,12 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
 
     monkeypatch.setattr(support_evaluation.offline, "scripted_response", forbidden)
     dataset = support_evaluation.dataset()
-    pipeline, classification, extraction = dataset.suites
-    assert [len(spec.gold_cases) for spec in dataset.suites] == [16, 16, 6]
+    pipeline, flow, classification, extraction = dataset.suites
+    assert [len(spec.gold_cases) for spec in dataset.suites] == [16, 16, 16, 6]
     assert Counter(
         case.input.metadata.model_dump()["language"] for case in pipeline.gold_cases
     ) == {"en": 11, "de": 5}
-    category_path = "/decisions/classify/result/answer/optionId"
+    category_path = "/flows/triage/steps/classify/result/answer/optionId"
     expected_categories = {
         check.expected
         for case in pipeline.gold_cases
@@ -162,7 +165,7 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
     assert {case.id for case in extraction.gold_cases} == {
         case.id for case in pipeline.gold_cases if case.id not in review_ids
     }
-    issue_path = "/decisions/classify/result/answerability/issues"
+    issue_path = "/flows/triage/steps/classify/result/answerability/issues"
     authored_issues = {
         case.id: next(check.expected for check in case.expectations if check.path == issue_path)
         for case in pipeline.gold_cases
@@ -180,7 +183,8 @@ def test_synthetic_gold_covers_catalog_languages_and_independent_step_inputs(mon
         "withdrawn_request": ["no_supported_answer"],
         "missing_referent": ["no_supported_answer"],
     }
-    for step in (classification, extraction):
+    assert flow.flow == "triage" and flow.step is None
+    for step in (flow, classification, extraction):
         for isolated in step.gold_cases:
             original = next(case for case in pipeline.gold_cases if case.id == isolated.id)
             assert isolated.input.payload == {"message": original.input.payload["message"]}
@@ -235,7 +239,7 @@ async def test_examples_write_shared_full_report_artifact(run, tmp_path) -> None
     path = tmp_path / "report.json"
     result = await run(output=path)
     saved = json.loads(path.read_text())
-    assert saved["version"] == 1
+    assert "version" not in saved
     assert saved["mode"] == result["mode"]
     assert result["report"] == str(path)
     assert "details" not in json.dumps(result)
@@ -265,9 +269,9 @@ async def test_exported_dataset_and_report_replay_through_shared_cli(
     shutil.copytree(
         support_evaluation.CONFIG_PATH.parent, project, ignore=shutil.ignore_patterns("__pycache__")
     )
-    config_path = project / "foliqant.yaml"
+    config_path = project / "settings.yaml"
     config = yaml.safe_load(config_path.read_text())
-    config["evaluation"]["dataset"] = "private/gold.json"
+    config["evaluation"] = {"dataset": "private/gold.json"}
     config_path.write_text(yaml.safe_dump(config))
     monkeypatch.setattr(support_evaluation, "CONFIG_PATH", config_path)
     await write_example_dataset(support_evaluation.dataset(), project / "private/gold.json")
@@ -306,7 +310,8 @@ async def test_exported_dataset_and_report_replay_through_shared_cli(
         for before, after in zip(original["cases"], replay["cases"], strict=True):
             assert after["steps"] == before["steps"]
             assert (
-                after["details"]["result"]["decisions"] == before["details"]["result"]["decisions"]
+                after["details"]["result"]["flows"]["triage"]["steps"]
+                == before["details"]["result"]["flows"]["triage"]["steps"]
             )
     classify = next(step for step in replay_reports[0]["steps"] if step["name"] == "classify")
     assert classify["model_selected_cases"] == 12

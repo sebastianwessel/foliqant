@@ -7,134 +7,24 @@ from examples.common import (
     command,
     evaluation_output,
     private_output_path,
-    suite_document,
+    read_example_dataset,
     write_example_dataset,
 )
 from examples.extracted_request_mcp.run import CONFIG_PATH, open_example, runtime_environment
 from foliqant import Envelope, ExecutionResult, prepare_application
 from foliqant.core.json import JsonValue
 from foliqant.evaluation import (
-    EvaluationCase,
-    EvaluationSuite,
     EvaluationVariant,
-    Expectation,
     evaluate,
 )
 from foliqant.evaluation.dataset import EvaluationDataset, metric_specs
 
-_CASES: tuple[dict[str, str], ...] = (
-    {
-        "id": "english_request",
-        "message": "Check the status of public request FOI-2026-0142 in English.",
-        "language": "en",
-        "email": "private-en@example.test",
-        "reference": "FOI-2026-0142",
-        "due_date": "2026-10-05",
-    },
-    {
-        "id": "german_request",
-        "message": "Bitte Status für Antrag FOI-2026-0310 auf Deutsch prüfen.",
-        "language": "de",
-        "email": "private-de@example.test",
-        "reference": "FOI-2026-0310",
-        "due_date": "05.10.2026",
-    },
-)
-
-
-def _lookup_expectations(case: dict[str, str]) -> tuple[Expectation, ...]:
-    return (
-        Expectation("completed", "/execution/status", "completed"),
-        Expectation("reference", "/payload/reference", case["reference"]),
-        Expectation("language", "/payload/language", case["language"]),
-        Expectation("status", "/payload/status", "in_review"),
-        Expectation("due_date", "/payload/due_date", case["due_date"]),
-    )
-
-
-def _pipeline_suite() -> EvaluationSuite:
-    return EvaluationSuite(
-        "extracted_request_lookup",
-        "2",
-        tuple(
-            EvaluationCase(
-                case["id"],
-                Envelope(
-                    payload={
-                        "message": case["message"],
-                        "language": case["language"],
-                        "contact_email": case["email"],
-                    }
-                ),
-                _lookup_expectations(case)
-                + (
-                    Expectation("one_model", "/execution/usage/model_requests", 1),
-                    Expectation("one_tool", "/execution/usage/tool_calls", 1),
-                ),
-            )
-            for case in _CASES
-        ),
-    )
-
-
-def _extract_suite() -> EvaluationSuite:
-    return EvaluationSuite(
-        "extracted_request_extract",
-        "2",
-        tuple(
-            EvaluationCase(
-                case["id"],
-                Envelope(payload={"message": case["message"], "language": case["language"]}),
-                (
-                    Expectation("completed", "/execution/status", "completed"),
-                    Expectation("reference", "/payload/reference", case["reference"]),
-                    Expectation("language", "/payload/language", case["language"]),
-                    Expectation("one_model", "/execution/usage/model_requests", 1),
-                    Expectation("no_tool", "/execution/usage/tool_calls", 0),
-                ),
-            )
-            for case in _CASES
-        ),
-    )
-
-
-def _lookup_suite() -> EvaluationSuite:
-    return EvaluationSuite(
-        "extracted_request_lookup_step",
-        "1",
-        tuple(
-            EvaluationCase(
-                case["id"],
-                Envelope(payload={"reference": case["reference"], "language": case["language"]}),
-                _lookup_expectations(case)
-                + (
-                    Expectation("no_model", "/execution/usage/model_requests", 0),
-                    Expectation("one_tool", "/execution/usage/tool_calls", 1),
-                ),
-            )
-            for case in _CASES
-        ),
-    )
+DATASET_PATH = Path(__file__).with_name("evaluation") / "dataset.json"
 
 
 def dataset() -> EvaluationDataset:
-    """Return authored EN/DE gold for the pipeline and both isolated operations."""
-
-    return EvaluationDataset.model_validate(
-        {
-            "version": 1,
-            "name": "extracted_request_mcp_examples",
-            "revision": "2",
-            "suites": [
-                suite_document(_pipeline_suite(), workflow="extracted_request_lookup"),
-                suite_document(
-                    _extract_suite(), workflow="extracted_request_lookup", step="extract"
-                ),
-                suite_document(_lookup_suite(), workflow="extracted_request_lookup", step="lookup"),
-            ],
-        },
-        strict=True,
-    )
+    """Read the editable, canonical synthetic evaluation dataset."""
+    return read_example_dataset(DATASET_PATH)
 
 
 async def run_evaluations(
@@ -150,22 +40,30 @@ async def run_evaluations(
         reports = []
         for spec in gold.suites:
             step = spec.step
+            flow = spec.flow
 
-            async def invoke(envelope: Envelope, selected: str | None = step) -> ExecutionResult:
-                if selected is None:
+            async def invoke(
+                envelope: Envelope, selected: str | None = step, selected_flow: str | None = flow
+            ) -> ExecutionResult:
+                if selected_flow is None:
                     return await app.run("extracted_request_lookup", envelope)
-                return await app.run_step("extracted_request_lookup", selected, envelope)
+                if selected is None:
+                    return await app.run_flow("extracted_request_lookup", selected_flow, envelope)
+                return await app.run_step(
+                    "extracted_request_lookup", selected_flow, selected, envelope
+                )
 
             reports.append(
                 await evaluate(
                     gold.to_suite(spec),
                     EvaluationVariant(
                         name="local_qwen" if live else "scripted_wiring",
-                        revision=environment["FOLIQANT_CURATION_MODEL"],
+                        revision=environment["MODEL_ID"],
                         configuration_revision=prepared.configuration_digest,
                         workflow="extracted_request_lookup",
                         run=invoke,
                         step=step,
+                        flow=flow,
                     ),
                     include_details=True,
                     metrics=metric_specs(spec),

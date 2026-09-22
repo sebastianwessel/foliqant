@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 from mcp import Client, types
 from mcp.server import MCPServer
+from tests.flow_fixtures import operation_flow
 
 from foliqant.adapters.mcp.runtime import McpExecutor, McpRuntime, McpTools
 from foliqant.contracts.mcp import McpProfiles
@@ -23,6 +24,7 @@ from foliqant.ports.execution import StepContext
 
 def context(identity: Identity | None = None) -> StepContext:
     return StepContext(
+        flow_id="main",
         execution_id="run",
         workflow="test",
         revision="a" * 64,
@@ -253,7 +255,7 @@ async def test_model_calls_real_mcp_tool_then_returns_final_answer(
         ),
     )
     plan = WorkflowPlan(
-        "test", "a" * 64, "lookup", None, None, None, (), None, (step,), step.location
+        "test", "a" * 64, "main", None, None, None, (), None, (operation_flow(step),), step.location
     )
     settings: list[object] = []
 
@@ -323,7 +325,7 @@ async def test_required_tool_cannot_be_satisfied_by_model_text_alone() -> None:
         tools=ToolPolicyPlan("records", ("lookup",), "required"),
     )
     plan = WorkflowPlan(
-        "test", "a" * 64, "lookup", None, None, None, (), None, (step,), step.location
+        "test", "a" * 64, "main", None, None, None, (), None, (operation_flow(step),), step.location
     )
 
     async def model(messages: Any, info: Any) -> ModelResponse:

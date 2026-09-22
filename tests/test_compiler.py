@@ -1,966 +1,765 @@
-"""Offline workflow authoring and compilation acceptance tests."""
+"""Offline compilation acceptance for explicit workflow/flow/step authoring."""
 
 import json
+from collections import Counter
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
+import yaml
 from pydantic import TypeAdapter, ValidationError
 
 from foliqant.compiler import CompilationError, compile_workflow
-from foliqant.contracts.workflow import Binding
-from foliqant.core.plan import DecisionStepPlan, LlmStepPlan
+from foliqant.compiler.models import ModelRegistry
+from foliqant.contracts.models import OpenAIModelConfig
+from foliqant.contracts.workflow import Binding, FlowDefinition, WorkflowAuthoring
+from foliqant.core.json import freeze_json
+from foliqant.core.plan import DecisionStepPlan, LlmStepPlan, MatchRoutingPlan
+from foliqant.core.prompt import render_prompt
 
 
-def _write(directory: Path, relative: str, text: str) -> None:
-    path = directory / relative
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+def _write(root: Path, path: str, value: Any) -> Path:
+    target = root / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(value if isinstance(value, str) else yaml.safe_dump(value, sort_keys=False))
+    return target
 
 
-def _base(directory: Path) -> None:
-    _write(
-        directory,
-        "workflow.yaml",
-        "version: 1\nname: support_triage\nstart: classify\ndefaults:\n  model: local\n",
+def _handler(**extra: Any) -> dict[str, Any]:
+    return {"type": "handler", "handler": "echo", "input": {}, **extra}
+
+
+def _llm(**extra: Any) -> dict[str, Any]:
+    return {"type": "llm", "instructions": "Summarize.", "input": {}, "output": "text", **extra}
+
+
+def _decision(**extra: Any) -> dict[str, Any]:
+    return {
+        "type": "decision",
+        "instructions": "Choose a queue.",
+        "sources": {"message": {"pointer": "/payload/message"}},
+        "question": {
+            "type": "choice",
+            "criteria": ["Choose the applicable queue."],
+            "catalog": {
+                "categories": [
+                    {"id": "Billing Issue", "description": "Billing"},
+                    {"id": "Technical", "description": "Technical"},
+                ]
+            },
+        },
+        **extra,
+    }
+
+
+def _flow(*steps: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    return {
+        "input": {},
+        "definition": {
+            "steps": [
+                {"id": f"step{index}", "definition": step}
+                for index, step in enumerate(steps or (_handler(),))
+            ]
+        },
+        "transition": {"outcome": "completed"},
+        **extra,
+    }
+
+
+def _workflow(root: Path, flows: dict[str, Any] | None = None, **extra: Any) -> dict[str, Any]:
+    document = {
+        "name": "demo",
+        "start": "first",
+        "defaults": {"model": "local"},
+        "flows": flows or {"first": _flow()},
+        **extra,
+    }
+    _write(root, "workflow.yaml", document)
+    return document
+
+
+def _compile(root: Path, **extra: Any) -> Any:
+    return compile_workflow(
+        root, model_aliases={"local": "model"}, tool_catalogs={}, handler_names={"echo"}, **extra
     )
-    _write(
-        directory,
-        "steps/classify.md",
-        """---
-type: decision
-sources:
-  ticket: {pointer: /payload/ticket}
-question:
-  type: choice
-  criteria: [Choose the applicable queue.]
-  catalog:
-    categories:
-      - {id: Billing Issue, description: Billing support}
-      - {id: Technical, description: Technical support}
-on_answer:
-  billing_issue: bill
-  technical: tech
----
-Which queue applies?
-""",
-    )
-    _write(directory, "steps/bill.yaml", "type: finish\noutcome: completed\n")
-    _write(directory, "steps/tech.yaml", "type: finish\noutcome: needs_review\n")
 
 
-def test_compiles_markdown_shorthand_to_frozen_deterministic_plan(tmp_path: Path) -> None:
-    _base(tmp_path)
-    first = compile_workflow(
-        tmp_path, model_aliases={"local": "provider:model"}, tool_catalogs={}, handler_names=set()
-    )
-    second = compile_workflow(
-        tmp_path, model_aliases={"local": "provider:model"}, tool_catalogs={}, handler_names=set()
-    )
+def _fails(root: Path, reason: str | None = None, **extra: Any) -> CompilationError:
+    with pytest.raises(CompilationError) as caught:
+        _compile(root, **extra)
+    if reason is not None:
+        assert caught.value.reason == reason
+    assert str(caught.value) == "The workflow configuration is invalid."
+    return caught.value
 
-    assert first == second
-    assert len(first.revision) == 64
-    decision = first.step("classify")
-    assert isinstance(decision, DecisionStepPlan)
-    assert decision.questions[0].prompt == "Which queue applies?"
-    assert tuple(option.id for option in decision.questions[0].options) == (
-        "billing_issue",
-        "technical",
-    )
-    assert decision.question_mode == "single"
-    assert decision.unresolved_before_transition is True
-    assert decision.location.path == "steps/classify.md"
+
+def test_inline_sequence_is_frozen_and_order_does_not_follow_ids(tmp_path: Path) -> None:
+    flow = _flow()
+    flow["definition"]["steps"] = [
+        {"id": "z_first", "definition": _handler()},
+        {
+            "id": "a_second",
+            "definition": _handler(input={"prior": {"pointer": "/steps/z_first/result"}}),
+        },
+    ]
+    _workflow(tmp_path, {"first": flow})
+    plan = _compile(tmp_path)
+    assert plan == _compile(tmp_path)
+    assert len(plan.revision) == 64
+    assert [step.name for step in plan.flow("first").steps] == ["z_first", "a_second"]
     with pytest.raises(AttributeError):
-        decision.name = "changed"  # type: ignore[misc]
+        plan.flow("first").name = "changed"
+    with pytest.raises(KeyError):
+        plan.flow("missing")
+    with pytest.raises(KeyError):
+        plan.flow("first").step("missing")
 
 
-def test_binding_is_key_discriminated_and_requires_explicit_optional_default() -> None:
-    adapter = TypeAdapter(Binding)
-    pointer = adapter.validate_python(
-        {"pointer": "/payload/maybe", "optional": True, "default": None}
+def test_explicit_markdown_definition_retains_source_and_question_identity(tmp_path: Path) -> None:
+    _write(
+        tmp_path, "triage/flow.yaml", {"steps": [{"id": "assess", "definition": "assets/step.md"}]}
     )
-    assert pointer.model_fields_set == {"pointer", "optional", "default"}
-    adapter.validate_python({"literal": {"pointer": "is still literal"}})
+    step = _decision()
+    instructions = step.pop("instructions")
+    _write(
+        tmp_path, "triage/assets/step.md", "---\n" + yaml.safe_dump(step) + "---\n" + instructions
+    )
+    _workflow(tmp_path, {"first": _flow(definition="triage/flow.yaml")})
+    decision = _compile(tmp_path).flow("first").step("assess")
+    assert isinstance(decision, DecisionStepPlan)
+    assert decision.questions[0].id == "assess"
+    assert [option.id for option in decision.questions[0].options] == ["billing_issue", "technical"]
+    assert decision.location.path == "triage/assets/step.md"
+    assert decision.instructions == instructions
+
+
+def test_inline_and_file_definitions_share_one_contract(tmp_path: Path) -> None:
+    _write(tmp_path, "item.yaml", _handler())
+    _workflow(tmp_path, {"first": _flow()})
+    inline = _compile(tmp_path).flow("first").steps[0]
+    _workflow(
+        tmp_path,
+        {"first": _flow(definition={"steps": [{"id": "step0", "definition": "item.yaml"}]})},
+    )
+    external = _compile(tmp_path).flow("first").steps[0]
+    assert inline == replace(external, location=inline.location)
+    _write(tmp_path, "ignored.yaml", "!unsafe")
+    _write(tmp_path, "steps/ignored.yaml", "!unsafe")
+    assert _compile(tmp_path).flow("first").steps[0] == external
+
+
+def test_binding_discriminator_requires_explicit_default_and_preserves_null() -> None:
+    adapter = TypeAdapter(Binding)
+    value = adapter.validate_python(
+        {"pointer": "/payload/missing", "optional": True, "default": None}
+    )
+    assert value.model_fields_set == {"pointer", "optional", "default"}
+    adapter.validate_python({"literal": {"pointer": "literal data"}})
     for invalid in (
-        {"pointer": "/payload/maybe", "optional": True},
-        {"pointer": "/payload/value", "default": None},
-        {"pointer": "not-a-pointer"},
-        {"pointer": "/steps/bad~2name/result"},
-        {"literal": 1, "pointer": "/payload/value"},
+        {"pointer": "/x", "optional": True},
+        {"pointer": "/x", "default": None},
+        {"pointer": "bad"},
+        {"pointer": "/bad~2name"},
+        {"pointer": "/x", "literal": 1},
+        {"literal": "data", "format": "json"},
     ):
         with pytest.raises(ValidationError):
             adapter.validate_python(invalid)
 
 
+@pytest.mark.parametrize("field", ["version", "unknown_setting"])
+def test_workflow_rejects_unknown_fields(tmp_path: Path, field: str) -> None:
+    _workflow(tmp_path, **{field: 1})
+    _fails(tmp_path, "invalid_contract")
+
+
+@pytest.mark.parametrize("field", ["next", "on_answer", "on_unresolved", "name"])
+def test_step_routes_and_implicit_names_are_rejected(tmp_path: Path, field: str) -> None:
+    _workflow(tmp_path, {"first": _flow(_handler(**{field: "other"}))})
+    _fails(tmp_path, "invalid_contract")
+
+
+@pytest.mark.parametrize("kind", ["finish", "dispatch", "workflow"])
+def test_nonoperation_steps_are_rejected(tmp_path: Path, kind: str) -> None:
+    _workflow(tmp_path, {"first": _flow({"type": kind})})
+    _fails(tmp_path, "invalid_contract")
+
+
+def test_step_files_without_explicit_flows_are_not_loaded(tmp_path: Path) -> None:
+    _write(tmp_path, "workflow.yaml", {"name": "demo", "start": "item"})
+    _write(tmp_path, "steps/item.yaml", _handler())
+    _fails(tmp_path, "invalid_contract")
+
+
+def test_duplicate_ids_empty_sequences_and_unordered_steps_are_rejected() -> None:
+    for steps in ([], {"a": _handler()}, [{"id": "a", "definition": _handler()}] * 2):
+        with pytest.raises(ValidationError):
+            FlowDefinition.model_validate({"steps": steps})
+
+
 @pytest.mark.parametrize(
-    "bad_yaml",
+    "source", ["name: first\nname: second", "name: !unsafe first", "x: &x [*x]"]
+)
+def test_yaml_rejects_duplicates_tags_and_aliases_safely(tmp_path: Path, source: str) -> None:
+    _write(tmp_path, "workflow.yaml", source)
+    error = _fails(tmp_path, "invalid_yaml")
+    assert error.location.path == "workflow.yaml"
+
+
+def test_contract_diagnostics_do_not_echo_unknown_fields_or_values(tmp_path: Path) -> None:
+    _workflow(tmp_path, secret_sentinel="secret_value")
+    error = _fails(tmp_path, "invalid_contract")
+    assert error.field == "*"
+    assert "secret" not in str(vars(error))
+
+
+@pytest.mark.parametrize(
+    "target,reason", [("first", "workflow_cycle"), ("missing", "missing_flow")]
+)
+def test_flow_cycles_and_missing_targets_fail_offline(
+    tmp_path: Path, target: str, reason: str
+) -> None:
+    _workflow(tmp_path, {"first": _flow(transition={"flow": target})})
+    _fails(tmp_path, reason)
+
+
+def test_unreachable_declared_flow_is_rejected(tmp_path: Path) -> None:
+    _workflow(tmp_path, {"first": _flow(), "unused": _flow()})
+    _fails(tmp_path, "unreachable_flow")
+
+
+def test_unresolved_routes_participate_in_graph_and_cannot_directly_complete(
+    tmp_path: Path,
+) -> None:
+    _workflow(
+        tmp_path,
+        {
+            "first": _flow(
+                on_unresolved={
+                    "default": {"flow": "review"},
+                    "conflicting_information": {"outcome": "needs_review"},
+                }
+            ),
+            "review": _flow(),
+        },
+    )
+    assert len(_compile(tmp_path).flows) == 2
+    for route in (
+        {"outcome": "completed"},
+        {"default": {"outcome": "completed"}},
+        {
+            "default": {"outcome": "needs_review"},
+            "multiple_valid_options": {"outcome": "completed"},
+        },
+    ):
+        document = _workflow(tmp_path, {"first": _flow(on_unresolved=route)})
+        with pytest.raises(ValidationError):
+            WorkflowAuthoring.model_validate(document)
+
+
+def test_exact_routes_require_a_default_and_do_not_reserve_terminal_ids(tmp_path: Path) -> None:
+    route = {
+        "binding": {"literal": "billing"},
+        "cases": {"billing": {"flow": "completed"}},
+        "default": {"outcome": "needs_review"},
+    }
+    _workflow(tmp_path, {"first": _flow(transition=route), "completed": _flow()})
+    assert isinstance(_compile(tmp_path).flow("first").transition, MatchRoutingPlan)
+    del route["default"]
+    _workflow(tmp_path, {"first": _flow(transition=route), "completed": _flow()})
+    _fails(tmp_path, "invalid_contract")
+
+
+@pytest.mark.parametrize("value", [True, 3, [], {}])
+def test_known_nonstring_routes_are_rejected(tmp_path: Path, value: Any) -> None:
+    _workflow(
+        tmp_path,
+        {
+            "first": _flow(
+                transition={
+                    "binding": {"literal": value},
+                    "cases": {"yes": {"outcome": "completed"}},
+                    "default": {"outcome": "needs_review"},
+                }
+            )
+        },
+    )
+    _fails(tmp_path, "incompatible_route_type")
+
+
+@pytest.mark.parametrize("pointer", ["/flows/first/result", "/steps/step1/result"])
+def test_step_scope_rejects_cross_flow_or_unavailable_local_results(
+    tmp_path: Path, pointer: str
+) -> None:
+    _workflow(
+        tmp_path, {"first": _flow(_handler(input={"value": {"pointer": pointer}}), _handler())}
+    )
+    _fails(
+        tmp_path,
+        "dangling_pointer" if pointer.startswith("/flows") else "unavailable_step_reference",
+    )
+
+
+def test_optional_future_local_record_and_early_review_output_are_explicit(tmp_path: Path) -> None:
+    flow = _flow(
+        _handler(
+            input={"later": {"pointer": "/steps/step1/result", "optional": True, "default": None}}
+        ),
+        _handler(),
+    )
+    flow["definition"]["output"] = {"pointer": "/steps/step1/result"}
+    _workflow(tmp_path, {"first": flow})
+    _fails(tmp_path, "incompatible_output_binding")
+    flow["definition"]["output"].update(optional=True, default=None)
+    _workflow(tmp_path, {"first": flow})
+    assert _compile(tmp_path).flow("first").output.optional
+
+
+@pytest.mark.parametrize(
+    "pointer",
     [
-        "version: 1\nname: one\nname: two\nstart: done\n",
-        "version: 1\nname: !unsafe one\nstart: done\n",
+        "/steps/step0/result",
+        "/flows/first/steps/step0/result",
+        "/flows/first",
+        "/flows/missing/result",
     ],
 )
-def test_yaml_rejects_duplicate_keys_and_custom_tags_safely(tmp_path: Path, bad_yaml: str) -> None:
-    _write(tmp_path, "workflow.yaml", bad_yaml)
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.location.path == "workflow.yaml"
-    assert str(error.value) == "The workflow configuration is invalid."
-    assert "unsafe" not in str(error.value)
+def test_boundary_scope_exposes_only_declared_flow_results(tmp_path: Path, pointer: str) -> None:
+    _workflow(tmp_path, {"first": _flow(input={"data": {"pointer": pointer}})})
+    _fails(tmp_path)
 
 
-def test_dispatch_is_explicitly_unavailable_in_first_slice(tmp_path: Path) -> None:
-    _write(tmp_path, "workflow.yaml", "version: 1\nname: wf\nstart: fan_out\n")
-    _write(tmp_path, "steps/fan_out.yaml", "type: dispatch\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "unsupported_step_type"
-
-
-def test_model_alias_must_be_explicitly_declared(tmp_path: Path) -> None:
-    _base(tmp_path)
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "unknown_model"
-
-
-def test_rejects_cycle_unreachable_and_incomplete_choice_routes(tmp_path: Path) -> None:
-    _base(tmp_path)
-    _write(tmp_path, "steps/never.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-        )
-    assert error.value.reason == "unreachable_step"
-
-    (tmp_path / "steps/never.yaml").unlink()
-    classify = (tmp_path / "steps/classify.md").read_text().replace("  technical: tech\n", "")
-    _write(tmp_path, "steps/classify.md", classify)
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-        )
-    assert error.value.reason == "incomplete_answer_routes"
-
-
-def test_rejects_cycle(tmp_path: Path) -> None:
-    _write(tmp_path, "workflow.yaml", "version: 1\nname: wf\nstart: one\n")
-    _write(tmp_path, "steps/one.yaml", "type: handler\nhandler: work\ninput: {}\nnext: two\n")
-    _write(tmp_path, "steps/two.yaml", "type: handler\nhandler: work\ninput: {}\nnext: one\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path,
-            model_aliases={},
-            tool_catalogs={},
-            handler_names={"work"},
-        )
-    assert error.value.reason == "workflow_cycle"
-
-
-def test_multiquestion_on_answer_is_forbidden(tmp_path: Path) -> None:
-    _write(
-        tmp_path, "workflow.yaml", "version: 1\nname: wf\nstart: decide\ndefaults: {model: local}\n"
-    )
-    _write(
-        tmp_path,
-        "steps/decide.yaml",
-        """type: decision
-sources:
-  item: {pointer: /payload/item}
-instructions: Decide.
-questions:
-  - id: first
-    prompt: Is it first?
-    criteria: [Use evidence.]
-    allowedSourceIds: [item]
-    type: predicate
-  - id: second
-    prompt: Is it second?
-    criteria: [Use evidence.]
-    allowedSourceIds: [item]
-    type: predicate
-on_answer: {'true': done, 'false': done}
-""",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-        )
-    assert error.value.reason == "invalid_contract"
-
-
-def test_mandatory_prior_step_reference_must_dominate_consumer(tmp_path: Path) -> None:
-    _write(
-        tmp_path, "workflow.yaml", "version: 1\nname: wf\nstart: choose\ndefaults: {model: local}\n"
-    )
-    _write(
-        tmp_path,
-        "steps/choose.yaml",
-        """type: decision
-sources: {x: {pointer: /payload/x}}
-instructions: Choose.
-question: {type: predicate, criteria: [Decide.] }
-on_answer: {'true': produce, 'false': consume}
-""",
-    )
-    _write(
-        tmp_path,
-        "steps/produce.yaml",
-        """type: llm
-input: {x: {pointer: /payload/x}}
-instructions: Produce.
-output: text
-next: consume
-""",
-    )
-    _write(
-        tmp_path,
-        "steps/consume.yaml",
-        """type: llm
-input: {value: {pointer: /steps/produce/result}}
-instructions: Consume.
-output: text
-next: done
-""",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-        )
-    assert error.value.reason == "unavailable_step_reference"
-
-    consume = (
-        (tmp_path / "steps/consume.yaml")
-        .read_text()
-        .replace(
-            "{pointer: /steps/produce/result}",
-            "{pointer: /steps/produce/result, optional: true, default: null}",
-        )
-    )
-    _write(tmp_path, "steps/consume.yaml", consume)
-    plan = compile_workflow(
-        tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-    )
-    assert isinstance(plan.step("consume"), LlmStepPlan)
-
-
-def test_step_pointer_name_is_decoded_before_exact_lookup(tmp_path: Path) -> None:
-    _write(tmp_path, "workflow.yaml", "version: 1\nname: wf\nstart: produce\n")
-    _write(
-        tmp_path,
-        "steps/produce.yaml",
-        "type: handler\nhandler: work\ninput: {}\nnext: consume\n",
-    )
-    _write(
-        tmp_path,
-        "steps/consume.yaml",
-        "type: handler\nhandler: work\n"
-        "input: {x: {pointer: /steps/pro~1duce/result}}\nnext: done\n",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path,
-            model_aliases={},
-            tool_catalogs={},
-            handler_names={"work"},
-        )
-    assert error.value.reason == "dangling_pointer"
-
-
-def test_local_schema_and_declared_tool_catalog_are_checked_offline(tmp_path: Path) -> None:
-    _write(
-        tmp_path, "workflow.yaml", "version: 1\nname: wf\nstart: call\ndefaults: {model: local}\n"
-    )
-    _write(
-        tmp_path,
-        "schemas/result.json",
-        '{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}',
-    )
-    _write(
-        tmp_path,
-        "steps/call.yaml",
-        """type: llm
-input: {}
-instructions: Call the tool.
-next: done
-output: {schema: schemas/result.json}
-tools:
-  server: local_tools
-  allow: [lookup]
-  choice: {name: lookup}
-""",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    catalog = {
-        "local_tools": {
-            "tools": {
-                "lookup": {
-                    "input_schema": {"type": "object"},
-                    "output_schema": {"type": "object"},
-                    "effect": "read",
-                }
-            }
-        }
+def test_branch_specific_input_and_workflow_output_require_explicit_defaults(
+    tmp_path: Path,
+) -> None:
+    route = {
+        "binding": {"literal": "left"},
+        "cases": {"left": {"flow": "left"}},
+        "default": {"flow": "right"},
     }
-    plan = compile_workflow(
-        tmp_path, model_aliases={"local": "model"}, tool_catalogs=catalog, handler_names=set()
+    flows = {
+        "first": _flow(transition=route),
+        "left": _flow(transition={"flow": "join"}),
+        "right": _flow(transition={"flow": "join"}),
+        "join": _flow(input={"prior": {"pointer": "/flows/left/result"}}),
+    }
+    _workflow(tmp_path, flows)
+    _fails(tmp_path, "unavailable_flow_reference")
+    flows["join"]["input"]["prior"].update(optional=True, default=None)
+    _workflow(tmp_path, flows, output={"pointer": "/flows/join/result"})
+    _fails(tmp_path, "unavailable_flow_reference")
+    _workflow(
+        tmp_path, flows, output={"pointer": "/flows/join/result", "optional": True, "default": None}
     )
-    assert isinstance(plan.step("call"), LlmStepPlan)
-
-    catalog["local_tools"]["tools"]["lookup"]["input_schema"] = {"type": "unknown"}
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs=catalog, handler_names=set()
-        )
-    assert error.value.reason == "invalid_tool_schema"
+    _compile(tmp_path)
 
 
-@pytest.mark.parametrize("schema", ["https://example.test/schema.json", "../outside.json"])
-def test_schema_paths_are_local_and_confined(tmp_path: Path, schema: str) -> None:
-    _write(
-        tmp_path, "workflow.yaml", f"version: 1\nname: wf\nstart: done\ninput_schema: {schema}\n"
+@pytest.mark.parametrize(
+    "kind,path",
+    [
+        ("flow", "../outside.yaml"),
+        ("flow", "/tmp/file.yaml"),
+        ("flow", "https://example.test/flow.yaml"),
+        ("step", "../outside.yaml"),
+        ("step", "missing.yaml"),
+        ("step", "step.txt"),
+    ],
+)
+def test_definition_paths_are_explicit_confined_and_supported(
+    tmp_path: Path, kind: str, path: str
+) -> None:
+    _write(tmp_path, "nested/flow.yaml", {"steps": [{"id": "run", "definition": path}]})
+    definition = path if kind == "flow" else "nested/flow.yaml"
+    _workflow(tmp_path, {"first": _flow(definition=definition)})
+    _fails(tmp_path, "invalid_flow_path" if kind == "flow" else "invalid_step_path")
+
+
+def test_shared_flow_definitions_use_config_scope_but_steps_use_flow_scope(tmp_path: Path) -> None:
+    _write(tmp_path, "shared/flow.yaml", {"steps": [{"id": "run", "definition": "step.yaml"}]})
+    _write(tmp_path, "shared/step.yaml", _handler())
+    bundle = tmp_path / "workflow"
+    _workflow(
+        bundle,
+        {
+            "first": _flow(definition="../shared/flow.yaml", transition={"flow": "second"}),
+            "second": _flow(definition="../shared/flow.yaml"),
+        },
     )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "invalid_schema_path"
+    plan = _compile(bundle, configuration_root=tmp_path)
+    assert [flow.name for flow in plan.flows] == ["first", "second"]
+    assert plan.flow("first").step("run").name == plan.flow("second").step("run").name
+    _fails(bundle, "invalid_flow_path")
+    (tmp_path / "shared/step.yaml").unlink()
+    _write(tmp_path, "outside.yaml", _handler())
+    (tmp_path / "shared/step.yaml").symlink_to(tmp_path / "outside.yaml")
+    _fails(bundle, "invalid_step_path", configuration_root=tmp_path)
 
 
-def test_schema_rejects_remote_refs_and_escaping_symlinks(tmp_path: Path) -> None:
+def test_colocated_schema_bases_transitive_resources_and_exact_bytes(tmp_path: Path) -> None:
     _write(
         tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: done\ninput_schema: schemas/input.json\n",
+        "flow/flow.yaml",
+        {"steps": [{"id": "extract", "definition": "extract/step.yaml"}]},
     )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    _write(tmp_path, "schemas/input.json", '{"$ref":"https://example.test/input.json"}')
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "invalid_schema_path"
+    _write(tmp_path, "flow/extract/step.yaml", _llm(output={"schema": "output.json"}))
+    _write(tmp_path, "flow/extract/output.json", '{"$ref":"../shared.json#/$defs/value"}')
+    _write(tmp_path, "flow/shared.json", '{"$defs":{"value":{"type":"string"}}}')
+    _workflow(tmp_path, {"first": _flow(definition="flow/flow.yaml")})
+    first = _compile(tmp_path)
+    step = first.flow("first").step("extract")
+    assert step.output_schema_path == "flow/extract/output.json"
+    assert {item.path for item in first.schema_resources} == {
+        "flow/extract/output.json",
+        "flow/shared.json",
+    }
+    _write(tmp_path, "flow/shared.json", '{ "$defs": {"value": {"type": "string"}}}')
+    assert _compile(tmp_path).revision != first.revision
+    # Move the colocated step directory; its relative schema still resolves.
+    (tmp_path / "flow/extract").rename(tmp_path / "flow/renamed")
+    _write(
+        tmp_path,
+        "flow/flow.yaml",
+        {"steps": [{"id": "extract", "definition": "renamed/step.yaml"}]},
+    )
+    assert _compile(tmp_path).flow("first").step("extract").name == "extract"
 
-    outside = tmp_path.parent / f"{tmp_path.name}-outside.json"
-    outside.write_text('{"type":"object"}')
-    (tmp_path / "schemas/input.json").unlink()
-    (tmp_path / "schemas/input.json").symlink_to(outside)
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "invalid_schema_path"
+
+def test_inline_schema_refs_use_declaring_step_directory(tmp_path: Path) -> None:
+    _write(tmp_path, "flow.yaml", {"steps": [{"id": "extract", "definition": "assets/step.yaml"}]})
+    _write(tmp_path, "assets/step.yaml", _llm(output={"schema": {"$ref": "shape.json"}}))
+    _write(tmp_path, "assets/shape.json", '{"type":"string"}')
+    _workflow(tmp_path, {"first": _flow(definition="flow.yaml")})
+    plan = _compile(tmp_path)
+    assert {item.path for item in plan.schema_resources} == {
+        "assets/shape.json",
+        "assets/.foliqant-inline-step-first-extract.json",
+    }
 
 
-def test_revision_hashes_exact_schema_bytes_read_outside_schemas(
+@pytest.mark.parametrize(
+    "reference", ["https://example.test/schema.json", "../../../outside.json", "/tmp/outside.json"]
+)
+def test_schema_references_never_escape_or_open_remote_files(
+    tmp_path: Path, reference: str
+) -> None:
+    _workflow(tmp_path, {"first": _flow(_llm(output={"schema": {"$ref": reference}}))})
+    _fails(tmp_path, "invalid_schema_path")
+
+
+def test_schema_annotations_are_data_until_referenced_as_schema(tmp_path: Path) -> None:
+    schema = {
+        "type": "object",
+        "examples": [{"$id": "arbitrary", "$ref": "https://invalid.test"}],
+        "properties": {"x": {"type": "string"}},
+    }
+    _workflow(tmp_path, {"first": _flow(_llm(output={"schema": schema}))})
+    _compile(tmp_path)
+    schema["$ref"] = "#/examples/0"
+    _workflow(tmp_path, {"first": _flow(_llm(output={"schema": schema}))})
+    _fails(tmp_path, "invalid_schema_path")
+
+
+def test_reused_definition_and_schema_bytes_are_read_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _write(
+    _write(tmp_path, "flow.yaml", {"steps": [{"id": "same", "definition": "step.yaml"}]})
+    _write(tmp_path, "step.yaml", _llm(output={"schema": "schema.json"}))
+    _write(tmp_path, "schema.json", '{"type":"string"}')
+    _workflow(
         tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: done\ninput_schema: input.json\n",
+        {
+            "first": _flow(definition="flow.yaml", transition={"flow": "second"}),
+            "second": _flow(definition="flow.yaml"),
+        },
     )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    schema_path = tmp_path / "input.json"
-    schema_path.write_text('{"const":"first"}')
-    original_read_bytes = Path.read_bytes
+    original = Path.read_bytes
+    reads: Counter[Path] = Counter()
+
+    def read(path: Path) -> bytes:
+        reads[path] += 1
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read)
+    _compile(tmp_path)
+    assert set(reads.values()) == {1}
+    assert {path.name for path in reads} == {
+        "workflow.yaml",
+        "flow.yaml",
+        "step.yaml",
+        "schema.json",
+    }
+
+
+def test_model_overrides_are_scoped_by_flow_and_keep_shared_admission(tmp_path: Path) -> None:
+    profile = OpenAIModelConfig(provider="openai", model="base", api="chat", output_mode="native")
+    registry = ModelRegistry({"local": profile})
+    _workflow(
+        tmp_path,
+        {
+            "first": _flow(
+                _llm(model={"profile": "local", "model": "first_model"}),
+                transition={"flow": "second"},
+            ),
+            "second": _flow(_llm(model={"profile": "local", "model": "second_model"})),
+        },
+    )
+    plan = _compile(tmp_path, model_profiles={"local": profile}, _model_registry=registry)
+    before = plan.flow("first").step("step0").model
+    after = plan.flow("second").step("step0").model
+    assert before != after
+    assert registry.profiles[before].model == "first_model"
+    assert registry.profiles[after].model == "second_model"
+    assert registry.admission_groups[before] == registry.admission_groups[after] == "local"
+
+
+def test_model_capabilities_are_checked_before_client_creation(tmp_path: Path) -> None:
+    profile = OpenAIModelConfig(
+        provider="openai",
+        model="base",
+        api="chat",
+        output_mode="native",
+        supports_json_schema=False,
+    )
+    _workflow(tmp_path, {"first": _flow(_llm(output={"schema": {"type": "string"}}))})
+    _fails(tmp_path, "unsupported_model_capability", model_profiles={"local": profile})
+
+
+def test_prompt_is_compiled_once_and_unknown_variables_fail_offline(tmp_path: Path) -> None:
+    step = _llm(input={"message": {"literal": "Hi"}}, prompt="Message: {{ message }}")
+    _workflow(tmp_path, {"first": _flow(step)})
+    compiled = _compile(tmp_path).flow("first").steps[0]
+    assert isinstance(compiled, LlmStepPlan)
+    assert render_prompt(compiled.prompt, freeze_json({"message": "Hi"})) == 'Message: "Hi"'
+    step["prompt"] = "{{ missing }}"
+    _workflow(tmp_path, {"first": _flow(step)})
+    _fails(tmp_path, "invalid_prompt")
+
+
+def test_json_source_format_is_explicit_and_does_not_change_native_questions(
+    tmp_path: Path,
+) -> None:
+    step = _decision(sources={"message": {"literal": {"prior": True}, "format": "json"}})
+    _workflow(tmp_path, {"first": _flow(step)})
+    compiled = _compile(tmp_path).flow("first").steps[0]
+    assert compiled.source_formats == (("message", "json"),)
+    assert compiled.questions[0].allowed_source_ids == ("message",)
+    del step["sources"]["message"]["format"]
+    _workflow(tmp_path, {"first": _flow(step)})
+    _fails(tmp_path, "incompatible_binding_type")
+
+
+def test_known_flow_input_mismatches_and_missing_keys_fail_offline(tmp_path: Path) -> None:
+    schema = {
+        "type": "object",
+        "properties": {"message": {"type": "string"}},
+        "required": ["message"],
+        "additionalProperties": False,
+    }
+    for inputs, reason in [
+        ({}, "invalid_input_bindings"),
+        ({"message": {"literal": 3}}, "incompatible_binding_type"),
+        ({"message": {"literal": "ok"}, "extra": {"literal": True}}, "invalid_input_bindings"),
+    ]:
+        flow = _flow(input=inputs)
+        flow["definition"]["input_schema"] = schema
+        _workflow(tmp_path, {"first": flow})
+        _fails(tmp_path, reason)
+
+
+def test_markdown_cannot_have_two_instruction_sources(tmp_path: Path) -> None:
+    _write(tmp_path, "step.md", "---\n" + yaml.safe_dump(_llm()) + "---\nOther instructions")
+    _workflow(
+        tmp_path, {"first": _flow(definition={"steps": [{"id": "call", "definition": "step.md"}]})}
+    )
+    _fails(tmp_path, "ambiguous_instructions")
+
+
+def test_long_flow_graph_does_not_use_recursive_traversal(tmp_path: Path) -> None:
+    flows = {
+        f"flow{index}": _flow(
+            transition={"flow": f"flow{index + 1}"} if index < 1049 else {"outcome": "completed"}
+        )
+        for index in range(1050)
+    }
+    _workflow(tmp_path, flows, start="flow0")
+    assert len(_compile(tmp_path).flows) == 1050
+
+
+def test_exact_read_bytes_define_revision_even_when_disk_changes_mid_compile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _workflow(tmp_path, input_schema="schema.json")
+    schema = _write(tmp_path, "schema.json", '{"const":"before"}')
+    original = Path.read_bytes
     changed = False
 
-    def mutate_after_read(path: Path) -> bytes:
+    def mutate(path: Path) -> bytes:
         nonlocal changed
-        source = original_read_bytes(path)
-        if path == schema_path and not changed:
+        data = original(path)
+        if path == schema and not changed:
             changed = True
-            schema_path.write_text('{"const":"second"}')
-        return source
+            schema.write_text('{"const":"after"}')
+        return data
 
-    monkeypatch.setattr(Path, "read_bytes", mutate_after_read)
-    first = compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    second = compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert first.revision != second.revision
-    assert first.input_schema == {"const": "first"}
-    assert second.input_schema == {"const": "second"}
-
-
-def test_transitive_schema_resources_are_frozen_and_revision_bound(tmp_path: Path) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: done\ninput_schema: schemas/root.json\n",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    _write(tmp_path, "schemas/root.json", '{"$ref":"defs.json#/$defs/value"}')
-    _write(tmp_path, "schemas/defs.json", '{"$defs":{"value":{"const":"first"}}}')
-    first = compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert first.input_schema_path == "schemas/root.json"
-    assert tuple(resource.path for resource in first.schema_resources) == (
-        "schemas/defs.json",
-        "schemas/root.json",
-    )
-    _write(tmp_path, "schemas/defs.json", '{"$defs":{"value":{"const":"second"}}}')
-    second = compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert first.revision != second.revision
-
-
-def test_schema_reference_walk_ignores_annotations_and_checks_fragments(tmp_path: Path) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: done\ninput_schema: schema.json\n",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    _write(tmp_path, "schema.json", '{"const":{"$ref":"https://business.example/value"}}')
-    compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    _write(tmp_path, "schema.json", '{"$ref":"#/missing"}')
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "invalid_schema_reference"
-
-
-def test_schema_ids_are_rejected_only_at_schema_positions(tmp_path: Path) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: done\ninput_schema: schema.json\n",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    _write(tmp_path, "schema.json", '{"const":{"$id":"business-value"}}')
-    compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    _write(tmp_path, "schema.json", '{"$id":"local-id","type":"object"}')
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "invalid_schema_path"
+    monkeypatch.setattr(Path, "read_bytes", mutate)
+    before = _compile(tmp_path)
+    after = _compile(tmp_path)
+    assert before.input_schema == {"const": "before"}
+    assert after.input_schema == {"const": "after"}
+    assert before.revision != after.revision
 
 
 @pytest.mark.parametrize(
-    "schema, reason",
+    "schema,reason",
     [
-        (
-            {"$ref": "#/default", "default": {"$ref": "https://invalid.example/x"}},
-            "invalid_schema_path",
-        ),
+        ({"$ref": "#/missing"}, "invalid_schema_reference"),
+        ({"$id": "local", "type": "object"}, "invalid_schema_path"),
         ({"$ref": "#/const", "const": 17}, "invalid_schema_reference"),
+        ({"$ref": "#/default", "default": {"$ref": "https://invalid.test"}}, "invalid_schema_path"),
     ],
 )
-def test_referenced_annotation_values_become_validated_schemas(
-    tmp_path: Path, schema: dict[str, object], reason: str
+def test_schema_fragments_and_referenced_annotations_are_validated(
+    tmp_path: Path, schema: dict[str, Any], reason: str
 ) -> None:
+    _workflow(tmp_path, input_schema=schema)
+    _fails(tmp_path, reason)
+
+
+def test_schema_symlinks_cannot_leave_flow_bundle(tmp_path: Path) -> None:
     _write(
         tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: done\ninput_schema: schema.json\n",
+        "flow/flow.yaml",
+        {"steps": [{"id": "extract", "definition": _llm(output={"schema": "output.json"})}]},
     )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
+    outside = _write(tmp_path, "outside.json", '{"type":"string"}')
+    (tmp_path / "flow/output.json").symlink_to(outside)
+    _workflow(tmp_path, {"first": _flow(definition="flow/flow.yaml")})
+    _fails(tmp_path, "invalid_schema_path")
+
+
+@pytest.mark.parametrize("depth", [70, 600])
+def test_deep_schema_and_literal_values_fail_with_safe_errors(tmp_path: Path, depth: int) -> None:
+    nested = "[" * depth + "null" + "]" * depth
+    _workflow(tmp_path)
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(workflow.read_text() + f"output: {{literal: {nested}}}\n")
+    _fails(tmp_path)
+    schema: dict[str, Any] = {"type": "string"}
+    for _ in range(70):
+        schema = {"properties": {"child": schema}}
     _write(tmp_path, "schema.json", json.dumps(schema))
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == reason
+    _workflow(tmp_path, input_schema="schema.json")
+    _fails(tmp_path, "invalid_json_schema")
+
+
+def test_remote_schema_reference_is_rejected_before_any_socket(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import socket
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("offline compiler must not open a socket")
+
+    monkeypatch.setattr(socket, "create_connection", forbidden)
+    _workflow(tmp_path, input_schema={"$ref": "https://invalid.example/private"})
+    _fails(tmp_path, "invalid_schema_path")
 
 
 @pytest.mark.parametrize(
     "schema",
     [
-        {"$ref": "#/default", "default": {"$ref": "https://invalid.example/x"}},
+        {"$ref": "https://invalid.test/tool.json"},
+        {"$ref": "#/default", "default": {"$ref": "https://invalid.test"}},
         {"$ref": "#/const", "const": 17},
+        {"type": "unsupported"},
     ],
 )
-def test_declared_tool_referenced_annotations_cannot_bypass_schema_policy(
-    tmp_path: Path, schema: dict[str, object]
+def test_declared_tool_schema_validation_cannot_be_bypassed(
+    tmp_path: Path, schema: dict[str, Any]
 ) -> None:
-    _write(tmp_path, "workflow.yaml", "version: 1\nname: wf\nstart: done\n")
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
+    _workflow(tmp_path)
     catalog = {"tools": {"lookup": {"input_schema": schema, "effect": "read"}}}
-    with pytest.raises(CompilationError) as error:
+    with pytest.raises(CompilationError) as caught:
         compile_workflow(
-            tmp_path,
-            model_aliases={},
-            tool_catalogs={"tools": catalog},
-            handler_names=set(),
+            tmp_path, model_aliases={}, tool_catalogs={"tools": catalog}, handler_names={"echo"}
         )
-    assert error.value.reason == "invalid_tool_schema"
+    assert caught.value.reason == "invalid_tool_schema"
 
 
-def test_deep_json_schema_is_rejected_with_safe_compilation_error(tmp_path: Path) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: done\ninput_schema: schema.json\n",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    schema: dict[str, object] = {"type": "string"}
-    for _ in range(70):
-        schema = {"properties": {"child": schema}}
-    _write(tmp_path, "schema.json", json.dumps(schema))
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert str(error.value) == "The workflow configuration is invalid."
-
-
-def test_duplicate_explicit_question_ids_are_rejected(tmp_path: Path) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: decide\ndefaults: {model: local}\n",
-    )
-    question = """    id: duplicate
-    prompt: Decide.
-    criteria: [Use evidence.]
-    allowedSourceIds: [item]
-    type: predicate
-"""
-    _write(
-        tmp_path,
-        "steps/decide.yaml",
-        "type: decision\nsources: {item: {pointer: /payload/item}}\n"
-        "instructions: Decide.\nquestions:\n  - "
-        + question.lstrip()
-        + "  - "
-        + question.lstrip()
-        + "next: done\n",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path,
-            model_aliases={"local": "model"},
-            tool_catalogs={},
-            handler_names=set(),
-        )
-    assert error.value.reason == "invalid_contract"
-
-
-def test_declared_tool_schemas_reject_nonlocal_refs(tmp_path: Path) -> None:
-    _write(tmp_path, "workflow.yaml", "version: 1\nname: wf\nstart: done\n")
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    catalog = {
-        "tools": {
-            "lookup": {
-                "input_schema": {"$ref": "https://example.test/tool.json"},
-                "effect": "read",
-            }
-        }
-    }
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path,
-            model_aliases={},
-            tool_catalogs={"local_tools": catalog},
-            handler_names=set(),
-        )
-    assert error.value.reason == "invalid_tool_schema"
-
-
-def test_named_tool_choice_does_not_collide_with_control_values(tmp_path: Path) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: call\ndefaults: {model: local}\n",
-    )
-    _write(
-        tmp_path,
-        "steps/call.yaml",
-        """type: llm
-input: {}
-instructions: Call.
-next: done
-output: text
-tools: {server: tools, allow: [lookup], choice: {name: auto}}
-""",
-    )
+def test_named_tool_choice_and_declared_capabilities_are_exact(tmp_path: Path) -> None:
     tool = {"input_schema": {"type": "object"}, "effect": "read"}
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    catalog = {"tools": {"lookup": tool}}
-    with pytest.raises(CompilationError) as error:
+    catalog = {"tools": {"lookup": tool, "auto": tool}}
+    step = _llm(tools={"server": "tools", "allow": ["lookup"], "choice": {"name": "auto"}})
+    _workflow(tmp_path, {"first": _flow(step)})
+    with pytest.raises(CompilationError) as caught:
         compile_workflow(
             tmp_path,
             model_aliases={"local": "model"},
             tool_catalogs={"tools": catalog},
             handler_names=set(),
         )
-    assert error.value.reason == "unknown_tool"
-
-    catalog["tools"]["auto"] = tool
-    _write(
-        tmp_path,
-        "steps/call.yaml",
-        (tmp_path / "steps/call.yaml").read_text().replace("[lookup]", "[lookup, auto]"),
-    )
-    plan = compile_workflow(
-        tmp_path,
-        model_aliases={"local": "model"},
-        tool_catalogs={"tools": catalog},
-        handler_names=set(),
-    )
-    step = plan.step("call")
-    assert isinstance(step, LlmStepPlan)
-    assert step.tools is not None
-    assert step.tools.choice_mode == "named"
-    assert step.tools.choice_name == "auto"
-
-
-@pytest.mark.parametrize("version", ["true", "1.0"])
-def test_workflow_version_requires_exact_integer(version: str, tmp_path: Path) -> None:
-    _write(tmp_path, "workflow.yaml", f"version: {version}\nname: wf\nstart: done\n")
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "invalid_contract"
-
-
-def test_deep_yaml_is_rejected_with_safe_compilation_error(tmp_path: Path) -> None:
-    nested = "[" * 600 + "null" + "]" * 600
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        f"version: 1\nname: wf\nstart: done\noutput: {{literal: {nested}}}\n",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert str(error.value) == "The workflow configuration is invalid."
-
-
-def test_deep_literal_maps_to_safe_compilation_error_after_parsing(tmp_path: Path) -> None:
-    nested = "[" * 70 + "null" + "]" * 70
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        f"version: 1\nname: wf\nstart: done\noutput: {{literal: {nested}}}\n",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "invalid_contract"
-
-
-def test_output_binding_accounts_for_implicit_unresolved_review_terminal(tmp_path: Path) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        """version: 1
-name: wf
-start: decide
-defaults: {model: local}
-output: {pointer: /steps/later/result}
-""",
-    )
-    _write(
-        tmp_path,
-        "steps/decide.yaml",
-        """type: decision
-sources: {item: {pointer: /payload/item}}
-instructions: Decide.
-question: {type: predicate, criteria: [Use evidence.]}
-next: later
-""",
-    )
-    _write(tmp_path, "steps/later.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
+    assert caught.value.reason == "unknown_tool"
+    step["tools"]["allow"].append("auto")
+    _workflow(tmp_path, {"first": _flow(step)})
+    compiled = (
         compile_workflow(
             tmp_path,
             model_aliases={"local": "model"},
-            tool_catalogs={},
+            tool_catalogs={"tools": catalog},
             handler_names=set(),
         )
-    assert error.value.reason == "incompatible_output_binding"
-
-    workflow = (
-        (tmp_path / "workflow.yaml")
-        .read_text()
-        .replace(
-            "{pointer: /steps/later/result}",
-            "{pointer: /steps/later/result, optional: true, default: null}",
-        )
+        .flow("first")
+        .steps[0]
     )
-    _write(tmp_path, "workflow.yaml", workflow)
-    compile_workflow(
-        tmp_path,
-        model_aliases={"local": "model"},
-        tool_catalogs={},
-        handler_names=set(),
-    )
+    assert compiled.tools.choice_mode == "named"
+    assert compiled.tools.choice_name == "auto"
 
 
 @pytest.mark.parametrize(
-    "literal",
+    "inputs,reason",
     [
-        "&cycle [*cycle]",
-        "[&shared [1], *shared, *shared]",
+        ({}, "invalid_input_bindings"),
+        ({"value": {"literal": 3}}, "incompatible_binding_type"),
+        ({"value": {"literal": "ok"}, "other": {"literal": 1}}, "invalid_input_bindings"),
     ],
 )
-def test_yaml_aliases_are_rejected_before_recursive_expansion(tmp_path: Path, literal: str) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        f"version: 1\nname: wf\nstart: done\noutput: {{literal: {literal}}}\n",
-    )
-    _write(tmp_path, "steps/done.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "invalid_yaml"
-
-
-def _inline(
-    directory: Path, *, schema: object | None = None, pointer: str = "/payload/value"
+def test_required_closed_mcp_arguments_are_checked_offline(
+    tmp_path: Path, inputs: Any, reason: str
 ) -> None:
-    workflow: dict[str, object] = {
-        "version": 1,
-        "name": "wf",
-        "start": "produce",
-        "defaults": {"model": "local"},
-        "steps": {
-            "produce": {
-                "type": "llm",
-                "instructions": "Return value.",
-                "input": {"value": {"pointer": pointer}},
-                "output": {
-                    "schema": {
-                        "type": "object",
-                        "properties": {"value": {"type": "string"}},
-                        "required": ["value"],
-                        "additionalProperties": False,
-                    }
-                },
-                "next": "done",
-            },
-            "done": {"type": "finish", "outcome": "completed"},
-        },
-    }
-    if schema is not None:
-        workflow["input_schema"] = schema
-    _write(directory, "workflow.yaml", json.dumps(workflow))
-
-
-def test_inline_steps_and_schemas_share_runtime_validation(tmp_path: Path) -> None:
-    from foliqant.adapters.validation.schema import WorkflowSchemas
-    from foliqant.core.errors import ServiceError
-    from foliqant.core.json import freeze_json
-
-    _inline(
-        tmp_path,
-        schema={
-            "$defs": {"value": {"type": "string"}},
+    tool = {
+        "input_schema": {
             "type": "object",
-            "properties": {"value": {"$ref": "#/$defs/value"}},
+            "properties": {"value": {"type": "string"}},
+            "required": ["value"],
+            "additionalProperties": False,
         },
-    )
-    plan = compile_workflow(
-        tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-    )
-    validator = WorkflowSchemas(plan)
-    validator.validate_input(freeze_json({"value": "accepted"}))
-    validator.validate_output("produce", freeze_json({"value": "accepted"}))
-    with pytest.raises(ServiceError):
-        validator.validate_input(freeze_json({"value": 17}))
-    with pytest.raises(ServiceError):
-        validator.validate_output("produce", freeze_json({"value": 17}))
-    assert validator.provider_output_schema("produce")["type"] == "object"
-    assert plan.step("produce").location.path == "workflow.yaml"
-
-
-def test_inline_schema_file_refs_are_frozen_and_revision_bound(tmp_path: Path) -> None:
-    _inline(tmp_path, schema={"$ref": "input.json"})
-    _write(tmp_path, "input.json", '{"type":"object","properties":{"value":{"type":"string"}}}')
-    first = compile_workflow(
-        tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-    )
-    _write(tmp_path, "input.json", '{"type":"object","properties":{"value":{"type":"number"}}}')
-    second = compile_workflow(
-        tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-    )
-    assert first.revision != second.revision
-    assert "input.json" in {resource.path for resource in first.schema_resources}
-
-
-def test_inline_and_file_steps_cannot_be_mixed(tmp_path: Path) -> None:
-    _inline(tmp_path)
-    _write(tmp_path, "steps/other.yaml", "type: finish\noutcome: completed\n")
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-        )
-    assert error.value.reason == "mixed_step_sources"
-    assert error.value.field == "steps"
-    assert "inline" in error.value.hint
-
-
-def test_markdown_body_and_instructions_are_ambiguous(tmp_path: Path) -> None:
-    _base(tmp_path)
-    path = tmp_path / "steps/classify.md"
-    path.write_text(
-        path.read_text().replace("type: decision", "type: decision\ninstructions: Secret sentinel")
-    )
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-        )
-    assert error.value.reason == "ambiguous_instructions"
-    assert error.value.field == "instructions"
-    assert "Secret" not in str(vars(error.value))
-
-
-@pytest.mark.parametrize(
-    "step",
-    [
-        {"type": "handler", "handler": "work", "input": {}},
-        {"type": "llm", "model": "local", "input": {}, "instructions": "Reply.", "output": "text"},
-        {
-            "type": "decision",
-            "model": "local",
-            "sources": {"value": {"literal": "evidence"}},
-            "instructions": "Decide.",
-            "question": {"type": "predicate", "criteria": ["Use evidence."]},
-        },
-    ],
-)
-def test_nonterminal_success_requires_an_explicit_transition(
-    tmp_path: Path, step: dict[str, object]
-) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        json.dumps({"version": 1, "name": "wf", "start": "work", "steps": {"work": step}}),
-    )
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names={"work"}
-        )
-    assert error.value.reason == "missing_transition"
-    assert error.value.field == "next"
-
-
-@pytest.mark.parametrize(
-    "schema,pointer",
-    [
-        (
-            {
-                "type": "object",
-                "properties": {"value": {"type": "string"}},
-                "additionalProperties": False,
-            },
-            "/payload/typo",
-        ),
-        ({"type": "object", "properties": {"value": {"type": "string"}}}, "/payload/value/child"),
-        ({"type": "array", "items": {"type": "string"}}, "/payload/word"),
-    ],
-)
-def test_impossible_schema_paths_are_rejected(
-    tmp_path: Path, schema: dict[str, object], pointer: str
-) -> None:
-    _inline(tmp_path, schema=schema, pointer=pointer)
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-        )
-    assert error.value.reason == "dangling_pointer"
-
-
-def test_uncertain_applicator_paths_remain_runtime_checked(tmp_path: Path) -> None:
-    _inline(
-        tmp_path,
-        schema={
-            "anyOf": [
-                {"type": "object", "properties": {"value": {"type": "string"}}},
-                {"type": "string"},
-            ]
-        },
-    )
-    compile_workflow(
-        tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-    )
-
-
-@pytest.mark.parametrize(
-    "binding,reason",
-    [
-        ({"literal": 42}, "incompatible_binding_type"),
-        ({"pointer": "/payload/value"}, "incompatible_binding_type"),
-        ({"pointer": "/steps/produce/result/typo"}, "dangling_pointer"),
-    ],
-)
-def test_mcp_inputs_and_prior_schema_outputs_are_checked(
-    tmp_path: Path, binding: dict[str, object], reason: str
-) -> None:
-    _inline(tmp_path, schema={"type": "object", "properties": {"value": {"type": "number"}}})
-    path = tmp_path / "workflow.yaml"
-    raw = json.loads(path.read_text())
-    raw["steps"]["produce"]["next"] = "lookup"
-    raw["steps"]["lookup"] = {
-        "type": "mcp",
-        "server": "tools",
-        "tool": "lookup",
-        "arguments": {"value": binding},
-        "next": "done",
+        "effect": "read",
     }
-    path.write_text(json.dumps(raw))
-    catalog = {
-        "tools": {
-            "lookup": {
-                "input_schema": {
-                    "type": "object",
-                    "properties": {"value": {"type": "string"}},
-                    "required": ["value"],
-                    "additionalProperties": False,
-                },
-                "effect": "read",
-            }
-        }
-    }
-    with pytest.raises(CompilationError) as error:
+    _workflow(
+        tmp_path,
+        {"first": _flow({"type": "mcp", "server": "tools", "tool": "lookup", "arguments": inputs})},
+    )
+    with pytest.raises(CompilationError) as caught:
         compile_workflow(
             tmp_path,
-            model_aliases={"local": "model"},
-            tool_catalogs={"tools": catalog},
+            model_aliases={},
+            tool_catalogs={"tools": {"tools": {"lookup": tool}}},
             handler_names=set(),
         )
-    assert error.value.reason == reason
+    assert caught.value.reason == reason
 
 
-def test_declared_model_capabilities_fail_before_adapter_creation(tmp_path: Path) -> None:
-    from foliqant.contracts.models import OpenAIModelConfig
-
-    _inline(tmp_path)
-    profile = OpenAIModelConfig(
-        provider="openai",
-        model="test",
-        api="chat",
-        output_mode="native",
-        supports_json_schema=False,
-    )
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path,
-            model_aliases={"local": "model"},
-            model_profiles={"local": profile},
-            tool_catalogs={},
-            handler_names=set(),
-        )
-    assert error.value.reason == "unsupported_model_capability"
-    assert error.value.field == "model"
-
-
-def test_contract_diagnostics_hide_unknown_field_names_and_values(tmp_path: Path) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: done\nsecret_sentinel: secret_value\n",
-    )
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.field == "*"
-    assert "secret" not in str(vars(error.value))
-
-
-def test_handler_schemas_check_input_and_output_paths_and_bind_revision(tmp_path: Path) -> None:
+def test_handler_schemas_enforce_inputs_outputs_and_revision_identity(tmp_path: Path) -> None:
     from dataclasses import dataclass
-    from typing import cast
-
-    from foliqant.core.json import FrozenObject, freeze_json
 
     @dataclass(frozen=True)
     class Schemas:
-        input_schema: FrozenObject
-        output_schema: FrozenObject
+        input_schema: Any
+        output_schema: Any
 
-    inputs = cast(
-        FrozenObject,
+    registered = Schemas(
         freeze_json(
             {
                 "type": "object",
@@ -969,211 +768,100 @@ def test_handler_schemas_check_input_and_output_paths_and_bind_revision(tmp_path
                 "additionalProperties": False,
             }
         ),
-    )
-    outputs = cast(
-        FrozenObject,
         freeze_json(
             {
                 "type": "object",
-                "properties": {"value": {"type": "string"}},
+                "properties": {"message": {"type": "string"}},
                 "additionalProperties": False,
             }
         ),
     )
-    workflow = {
-        "version": 1,
-        "name": "wf",
-        "start": "work",
-        "steps": {
-            "work": {
-                "type": "handler",
-                "handler": "trusted",
-                "input": {"value": {"literal": 1}},
-                "next": "done",
-            },
-            "done": {"type": "finish", "outcome": "completed"},
+    flow = _flow(_handler(input={"value": {"literal": "bad"}}))
+    _workflow(tmp_path, {"first": flow})
+    _fails(tmp_path, "incompatible_binding_type", handler_schemas={"echo": registered})
+    flow["definition"]["steps"][0]["definition"]["input"]["value"] = {"literal": 1}
+    flow["definition"]["output"] = {"pointer": "/steps/step0/result/absent"}
+    _workflow(tmp_path, {"first": flow})
+    _fails(tmp_path, "dangling_pointer", handler_schemas={"echo": registered})
+    flow["definition"]["output"] = {"pointer": "/steps/step0/result/message"}
+    _workflow(tmp_path, {"first": flow})
+    before = _compile(tmp_path, handler_schemas={"echo": registered})
+    after = _compile(
+        tmp_path,
+        handler_schemas={
+            "echo": replace(registered, output_schema=freeze_json({"type": "object"}))
         },
-        "output": {"pointer": "/steps/work/result/value"},
-    }
-    _write(tmp_path, "workflow.yaml", json.dumps(workflow))
-    first = compile_workflow(
-        tmp_path,
-        model_aliases={},
-        tool_catalogs={},
-        handler_names={"trusted"},
-        handler_schemas={"trusted": Schemas(inputs, outputs)},
     )
-    second = compile_workflow(
-        tmp_path,
-        model_aliases={},
-        tool_catalogs={},
-        handler_names={"trusted"},
-        handler_schemas={"trusted": Schemas(inputs, cast(FrozenObject, freeze_json({})))},
-    )
-    assert first.revision != second.revision
-    workflow["output"] = {"pointer": "/steps/work/result/typo"}
-    _write(tmp_path, "workflow.yaml", json.dumps(workflow))
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path,
-            model_aliases={},
-            tool_catalogs={},
-            handler_names={"trusted"},
-            handler_schemas={"trusted": Schemas(inputs, outputs)},
-        )
-    assert error.value.reason == "dangling_pointer"
+    assert before.revision != after.revision
 
 
 @pytest.mark.parametrize(
-    "arguments", [{}, {"value": {"literal": "yes"}, "extra": {"literal": "no"}}]
+    "schema,path",
+    [
+        ({"type": "string"}, "/child"),
+        ({"type": "array", "items": {"type": "string"}}, "/0/child"),
+        ({"type": "object", "additionalProperties": False}, "/unknown"),
+    ],
 )
-def test_required_and_closed_mcp_argument_shapes_are_checked(
-    tmp_path: Path, arguments: dict[str, object]
+def test_proven_impossible_local_input_paths_fail_offline(
+    tmp_path: Path, schema: Any, path: str
 ) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        json.dumps(
-            {
-                "version": 1,
-                "name": "wf",
-                "start": "lookup",
-                "steps": {
-                    "lookup": {
-                        "type": "mcp",
-                        "server": "tools",
-                        "tool": "lookup",
-                        "arguments": arguments,
-                        "next": "done",
-                    },
-                    "done": {"type": "finish", "outcome": "completed"},
-                },
-            }
-        ),
-    )
-    catalog = {
-        "tools": {
-            "lookup": {
-                "input_schema": {
-                    "type": "object",
-                    "properties": {"value": {"type": "string"}},
-                    "required": ["value"],
-                    "additionalProperties": False,
-                },
-                "effect": "read",
-            }
-        }
-    }
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={}, tool_catalogs={"tools": catalog}, handler_names=set()
-        )
-    assert error.value.reason == "invalid_input_bindings"
+    flow = _flow(_handler(input={"value": {"pointer": "/payload" + path}}))
+    flow["definition"]["input_schema"] = schema
+    _workflow(tmp_path, {"first": flow})
+    _fails(tmp_path, "dangling_pointer")
 
 
-def test_inline_mapping_is_the_only_step_name_source(tmp_path: Path) -> None:
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        "version: 1\nname: wf\nstart: done\nsteps:\n"
-        "  done: {name: done, type: finish, outcome: completed}\n",
-    )
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
-    assert error.value.reason == "ambiguous_step_name"
-
-
-def test_object_only_keywords_do_not_prove_array_paths_impossible(tmp_path: Path) -> None:
-    _inline(
-        tmp_path, schema={"properties": {}, "additionalProperties": False}, pointer="/payload/0"
-    )
-    compile_workflow(
-        tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-    )
-
-
-def test_inline_schema_diagnostics_reference_the_authored_file(tmp_path: Path) -> None:
-    _inline(tmp_path, schema={"$ref": "#/not_present"})
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
-        )
-    assert error.value.reason == "invalid_schema_reference"
-    assert error.value.location.path == "workflow.yaml"
-    assert error.value.field == "input_schema"
-
-
-def test_output_projection_accounts_for_handler_unresolved_terminal(tmp_path: Path) -> None:
-    workflow = {
-        "version": 1,
-        "name": "wf",
-        "start": "first",
-        "output": {"pointer": "/steps/second/result"},
-        "steps": {
-            "first": {"type": "handler", "handler": "work", "input": {}, "next": "second"},
-            "second": {"type": "handler", "handler": "work", "input": {}, "next": "done"},
-            "done": {"type": "finish", "outcome": "completed"},
-        },
-    }
-    _write(tmp_path, "workflow.yaml", json.dumps(workflow))
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names={"work"})
-    assert error.value.reason == "incompatible_output_binding"
-    workflow["output"] = {"pointer": "/steps/second/result", "optional": True, "default": None}
-    _write(tmp_path, "workflow.yaml", json.dumps(workflow))
-    compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names={"work"})
-
-
-def test_remote_inline_schema_reference_never_opens_a_socket(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_uncertain_applicator_and_numeric_object_paths_remain_runtime_checked(
+    tmp_path: Path,
 ) -> None:
-    import socket
+    for schema in (
+        {"allOf": [{"properties": {"value": {"type": "string"}}}], "additionalProperties": False},
+        {"additionalProperties": False},
+    ):
+        flow = _flow(_handler(input={"value": {"pointer": "/payload/0"}}))
+        flow["definition"]["input_schema"] = schema
+        _workflow(tmp_path, {"first": flow})
+        _compile(tmp_path)
 
-    def forbidden(*args: object, **kwargs: object) -> None:
-        pytest.fail("offline compilation attempted network I/O")
 
-    monkeypatch.setattr(socket, "create_connection", forbidden)
-    _inline(tmp_path, schema={"$ref": "https://private.example/schema?token=SECRET_SENTINEL"})
-    with pytest.raises(CompilationError) as error:
-        compile_workflow(
-            tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
+def test_optional_proven_absent_path_checks_its_default(tmp_path: Path) -> None:
+    flow = _flow(
+        _decision(
+            sources={
+                "message": {"pointer": "/payload/missing", "optional": True, "default": "fallback"}
+            }
         )
-    assert error.value.reason == "invalid_schema_path"
-    assert "SECRET_SENTINEL" not in str(vars(error.value))
-    assert "private.example" not in str(vars(error.value))
-    assert error.value.__suppress_context__
-
-
-def test_optional_proven_absent_schema_path_uses_its_explicit_default(tmp_path: Path) -> None:
-    _inline(tmp_path, schema={"type": "object", "properties": {}, "additionalProperties": False})
-    path = tmp_path / "workflow.yaml"
-    raw = json.loads(path.read_text())
-    raw["steps"]["produce"]["input"]["value"] = {
-        "pointer": "/payload/missing",
-        "optional": True,
-        "default": "fallback",
-    }
-    path.write_text(json.dumps(raw))
-    compile_workflow(
-        tmp_path, model_aliases={"local": "model"}, tool_catalogs={}, handler_names=set()
     )
+    flow["definition"]["input_schema"] = {"type": "object", "additionalProperties": False}
+    _workflow(tmp_path, {"first": flow})
+    _compile(tmp_path)
+    flow["definition"]["steps"][0]["definition"]["sources"]["message"]["default"] = 3
+    _workflow(tmp_path, {"first": flow})
+    _fails(tmp_path, "incompatible_binding_type")
 
 
-def test_long_acyclic_graph_does_not_depend_on_python_recursion_limit(tmp_path: Path) -> None:
-    steps: dict[str, object] = {
-        f"step_{index}": {
-            "type": "handler",
-            "handler": "work",
-            "input": {},
-            "next": f"step_{index + 1}" if index < 1049 else "done",
-        }
-        for index in range(1050)
+def test_explicit_decision_questions_enforce_unique_ids_and_allowed_sources(tmp_path: Path) -> None:
+    question = {
+        "id": "same",
+        "type": "predicate",
+        "prompt": "Decide.",
+        "criteria": ["Use evidence."],
+        "allowedSourceIds": ["message"],
     }
-    steps["done"] = {"type": "finish", "outcome": "completed"}
-    _write(
-        tmp_path,
-        "workflow.yaml",
-        json.dumps({"version": 1, "name": "wf", "start": "step_0", "steps": steps}),
-    )
-    plan = compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names={"work"})
-    assert len(plan.steps) == 1051
+    step = _decision()
+    del step["question"]
+    step["questions"] = [question, deepcopy(question)]
+    _workflow(tmp_path, {"first": _flow(step)})
+    _fails(tmp_path, "invalid_contract")
+    step["questions"][1]["id"] = "other"
+    step["questions"][1]["allowedSourceIds"] = ["absent"]
+    _workflow(tmp_path, {"first": _flow(step)})
+    _fails(tmp_path, "unknown_question_source")
+
+
+def test_inline_schema_error_location_is_authored_file(tmp_path: Path) -> None:
+    _workflow(tmp_path, {"first": _flow(_llm(output={"schema": {"type": "invalid"}}))})
+    error = _fails(tmp_path, "invalid_json_schema")
+    assert error.location.path == "workflow.yaml"
+    assert error.field == "output.schema"

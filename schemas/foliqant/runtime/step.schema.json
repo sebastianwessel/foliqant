@@ -679,64 +679,6 @@
           "default": null,
           "title": "Model"
         },
-        "name": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "next": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Next"
-        },
-        "on_answer": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-                "type": "string"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Answer"
-        },
-        "on_unresolved": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/UnresolvedRouting"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Unresolved"
-        },
         "question": {
           "anyOf": [
             {
@@ -797,10 +739,10 @@
             "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
               "oneOf": [
                 {
-                  "$ref": "#/$defs/PointerBinding"
+                  "$ref": "#/$defs/SourcePointerBinding"
                 },
                 {
-                  "$ref": "#/$defs/LiteralBinding"
+                  "$ref": "#/$defs/SourceLiteralBinding"
                 }
               ]
             }
@@ -853,43 +795,6 @@
       "title": "FallbackCategory",
       "type": "object"
     },
-    "FinishStepAuthoring": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "outcome": {
-          "enum": [
-            "completed",
-            "needs_review"
-          ],
-          "title": "Outcome",
-          "type": "string"
-        },
-        "type": {
-          "const": "finish",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type",
-        "outcome"
-      ],
-      "title": "FinishStepAuthoring",
-      "type": "object"
-    },
     "HandlerStepAuthoring": {
       "additionalProperties": false,
       "properties": {
@@ -913,48 +818,6 @@
           },
           "title": "Input",
           "type": "object"
-        },
-        "name": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "next": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Next"
-        },
-        "on_unresolved": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/UnresolvedRouting"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Unresolved"
         },
         "type": {
           "const": "handler",
@@ -1080,48 +943,6 @@
           "default": null,
           "title": "Model"
         },
-        "name": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "next": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Next"
-        },
-        "on_unresolved": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/UnresolvedRouting"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Unresolved"
-        },
         "output": {
           "anyOf": [
             {
@@ -1133,6 +954,20 @@
             }
           ],
           "title": "Output"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
         },
         "tools": {
           "anyOf": [
@@ -1178,48 +1013,6 @@
           },
           "title": "Arguments",
           "type": "object"
-        },
-        "name": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "next": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Next"
-        },
-        "on_unresolved": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/UnresolvedRouting"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Unresolved"
         },
         "server": {
           "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
@@ -2048,6 +1841,70 @@
       "title": "SchemaOutput",
       "type": "object"
     },
+    "SourceLiteralBinding": {
+      "additionalProperties": false,
+      "description": "A literal decision source with explicit optional JSON rendering.",
+      "properties": {
+        "format": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "literal": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "literal"
+      ],
+      "title": "SourceLiteralBinding",
+      "type": "object"
+    },
+    "SourcePointerBinding": {
+      "additionalProperties": false,
+      "description": "A selected decision source, rendered as nonempty text or canonical JSON.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "format": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "optional": {
+          "default": false,
+          "title": "Optional",
+          "type": "boolean"
+        },
+        "pointer": {
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "SourcePointerBinding",
+      "type": "object"
+    },
     "ToolPolicy": {
       "additionalProperties": false,
       "properties": {
@@ -2089,61 +1946,6 @@
       ],
       "title": "ToolPolicy",
       "type": "object"
-    },
-    "UnresolvedRouting": {
-      "additionalProperties": false,
-      "description": "Issue-specific routes with a required default for ambiguity or no issue.",
-      "properties": {
-        "conflicting_information": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Conflicting Information"
-        },
-        "default": {
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "title": "Default",
-          "type": "string"
-        },
-        "multiple_valid_options": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Multiple Valid Options"
-        },
-        "no_supported_answer": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "No Supported Answer"
-        }
-      },
-      "required": [
-        "default"
-      ],
-      "title": "UnresolvedRouting",
-      "type": "object"
     }
   },
   "$id": "https://foliqant.local/schemas/foliqant/runtime/step.schema.json",
@@ -2151,7 +1953,6 @@
   "discriminator": {
     "mapping": {
       "decision": "#/$defs/DecisionStepAuthoring",
-      "finish": "#/$defs/FinishStepAuthoring",
       "handler": "#/$defs/HandlerStepAuthoring",
       "llm": "#/$defs/LlmStepAuthoring",
       "mcp": "#/$defs/McpStepAuthoring"
@@ -2170,9 +1971,6 @@
     },
     {
       "$ref": "#/$defs/HandlerStepAuthoring"
-    },
-    {
-      "$ref": "#/$defs/FinishStepAuthoring"
     }
   ]
 }

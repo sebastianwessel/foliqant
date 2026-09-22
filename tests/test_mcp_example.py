@@ -33,8 +33,8 @@ async def test_real_stdio_server_executes_public_request_lookup() -> None:
         "due_date": "2026-10-05",
         "assigned_team": "records_review",
     }
-    assert result.decisions["lookup"].status == "completed"
-    assert result.decisions["done"].status == "completed"
+    assert result.flows["lookup"].steps["lookup"].status == "completed"
+    assert result.flows["lookup"].status == "completed"
 
 
 def test_documented_offline_command_starts_stdio_server_and_prints_json() -> None:

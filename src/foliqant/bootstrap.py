@@ -103,7 +103,7 @@ class _DeclaredReadAuthorizer:
         if declaration.effect != "read":
             raise ServiceError(ErrorCode.FORBIDDEN)
         try:
-            step = plan.step(context.step_id)
+            step = plan.flow(context.flow_id).step(context.step_id)
         except KeyError:
             raise ServiceError(ErrorCode.FORBIDDEN) from None
         if isinstance(step, McpStepPlan) and (step.server, step.tool) == (server, tool):
@@ -143,9 +143,30 @@ class WorkflowApplication:
             workflow, envelope, identity=identity, transport_trace=transport_trace
         )
 
+    async def run_flow(
+        self,
+        workflow: str,
+        flow_id: str,
+        envelope: Envelope,
+        *,
+        identity: Identity | None = None,
+        transport_trace: TraceContext | None = None,
+    ) -> ExecutionResult:
+        """Execute one flow against its resolved input, without boundary routing."""
+        if not isinstance(flow_id, str) or not flow_id:
+            raise ServiceError(ErrorCode.INVALID_INPUT)
+        return await self._invoke(
+            workflow,
+            envelope,
+            identity=identity,
+            transport_trace=transport_trace,
+            flow_id=flow_id,
+        )
+
     async def run_step(
         self,
         workflow: str,
+        flow_id: str,
         step_id: str,
         envelope: Envelope,
         *,
@@ -158,13 +179,19 @@ class WorkflowApplication:
         Input keys match the step's input/source/argument binding names. All
         adapter validation and limits apply; configured routes are not followed.
         """
-        if not isinstance(step_id, str) or not step_id:
+        if (
+            not isinstance(flow_id, str)
+            or not flow_id
+            or not isinstance(step_id, str)
+            or not step_id
+        ):
             raise ServiceError(ErrorCode.INVALID_INPUT)
         return await self._invoke(
             workflow,
             envelope,
             identity=identity,
             transport_trace=transport_trace,
+            flow_id=flow_id,
             step_id=step_id,
         )
 
@@ -175,6 +202,7 @@ class WorkflowApplication:
         *,
         identity: Identity | None,
         transport_trace: TraceContext | None,
+        flow_id: str | None = None,
         step_id: str | None = None,
     ) -> ExecutionResult:
         if not self._ready:
@@ -192,10 +220,20 @@ class WorkflowApplication:
             raise ServiceError(ErrorCode.DEPENDENCY_FAILURE)
         self._active[task] = self._active.get(task, 0) + 1
         try:
-            if step_id is not None:
+            if step_id is not None and flow_id is not None:
                 return to_execution_result(
                     await runner.run_step(
+                        flow_id,
                         step_id,
+                        accepted,
+                        identity=selected_identity,
+                        transport_trace=transport_trace,
+                    )
+                )
+            if flow_id is not None:
+                return to_execution_result(
+                    await runner.run_flow(
+                        flow_id,
                         accepted,
                         identity=selected_identity,
                         transport_trace=transport_trace,
@@ -302,8 +340,14 @@ async def open_application(
                 labels = TelemetryLabels(
                     services=frozenset({config.telemetry.service_name}),
                     workflows=frozenset(prepared.plans),
+                    flows=frozenset(
+                        flow.name for plan in prepared.plans.values() for flow in plan.flows
+                    ),
                     steps=frozenset(
-                        step.name for plan in prepared.plans.values() for step in plan.steps
+                        step.name
+                        for plan in prepared.plans.values()
+                        for flow in plan.flows
+                        for step in flow.steps
                     ),
                     models=frozenset(profile.model for profile in prepared._models.values()),
                     providers=frozenset({"openai", "anthropic", "azure", "function"}),

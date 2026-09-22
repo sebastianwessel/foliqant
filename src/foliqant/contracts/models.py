@@ -90,7 +90,7 @@ class CompatibleModelConfig(_ModelConfig):
     base_url: EnvironmentText = Field(min_length=1, json_schema_extra=ENVIRONMENT_FIELD)
     api_key: EnvironmentCredential | None = Field(default=None, json_schema_extra=ENVIRONMENT_FIELD)
     allow_insecure_http: bool = False
-    # Some compatible servers accept only the legacy max_tokens field.
+    # Some compatible servers accept only the max_tokens field.
     max_tokens_field: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
     options: OpenAIOptions = Field(default_factory=OpenAIOptions)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject model weights and dataset files accidentally added to Git's index."""
+"""Reject private data and model artifacts accidentally added to Git's index."""
 
 import argparse
 import subprocess
@@ -57,14 +57,25 @@ def main() -> int:
     forbidden = sorted(
         str(path)
         for path in paths
-        if path.suffix.lower() in FORBIDDEN_SUFFIXES or path.parts[0] in FORBIDDEN_ROOTS
+        if path.suffix.lower() in FORBIDDEN_SUFFIXES
+        or path.parts[0] in FORBIDDEN_ROOTS
+        or any(part in {".foliqant", ".venv", "__pycache__"} for part in path.parts)
+        or path.name == ".env"
+        or (path.name.startswith(".env.") and path.name != ".env.example")
+        or any(
+            parent == "evaluation" and child == "results"
+            for parent, child in zip(path.parts, path.parts[1:], strict=False)
+        )
     )
     if forbidden:
-        print("Dataset/model files must not be tracked:")
+        print("Private configuration, generated data, and model files must not be tracked:")
         for path in forbidden:
             print(f"  {path}")
         return 1
-    print("Tracked-data audit passed: no dataset files, model weights or generated output roots.")
+    print(
+        "Tracked-data audit passed: no model/data formats or private output roots; "
+        "authored synthetic example evaluation JSON is allowed."
+    )
     return 0
 
 

@@ -87,16 +87,8 @@ def test_minimal_install_has_no_server_storage_or_dev_dependencies(tmp_path):
     bundle = tmp_path / "bundle"
     for arguments in (
         ["init", str(bundle)],
-        ["validate", "--config", str(bundle / "foliqant.yaml")],
-        [
-            "run",
-            "--config",
-            str(bundle / "foliqant.yaml"),
-            "--workflow",
-            "demo",
-            "--input",
-            str(bundle / "envelope.json"),
-        ],
+        ["validate", "--config", str(bundle / "config/settings.yaml")],
+        ["explain", "--config", str(bundle / "config/settings.yaml")],
     ):
         result = subprocess.run(
             [str(binary / "foliqant"), *arguments],
@@ -106,6 +98,7 @@ def test_minimal_install_has_no_server_storage_or_dev_dependencies(tmp_path):
             timeout=30,
         )
         assert isinstance(json.loads(result.stdout), dict)
+    _assert_installed_core_run(binary, bundle, environment)
 
 
 def test_wheel_contains_and_runs_the_public_package(tmp_path):
@@ -161,6 +154,7 @@ def test_wheel_contains_and_runs_the_public_package(tmp_path):
             uv,
             "pip",
             "install",
+            "--offline",
             "--python",
             str(binary / "python"),
             str(wheel),
@@ -181,7 +175,7 @@ def test_wheel_contains_and_runs_the_public_package(tmp_path):
             "import foliqant.decisions, foliqant.evaluation; "
             "from foliqant import Envelope, load_environment, open_application; "
             "from pathlib import Path; "
-            "assert load_environment(Path('foliqant.yaml'), {'EXAMPLE': 'value'}) "
+            "assert load_environment(Path('settings.yaml'), {'EXAMPLE': 'value'}) "
             "== {'EXAMPLE': 'value'}",
         ],
         cwd=outside,
@@ -196,15 +190,7 @@ def test_wheel_contains_and_runs_the_public_package(tmp_path):
     bundle = outside / "bundle"
     for arguments in (
         ["init", str(bundle)],
-        [
-            "run",
-            "--config",
-            str(bundle / "foliqant.yaml"),
-            "--workflow",
-            "demo",
-            "--input",
-            str(bundle / "envelope.json"),
-        ],
+        ["explain", "--config", str(bundle / "config/settings.yaml")],
     ):
         result = subprocess.run(
             [str(binary / "foliqant"), *arguments],
@@ -216,3 +202,56 @@ def test_wheel_contains_and_runs_the_public_package(tmp_path):
             timeout=30,
         )
         assert isinstance(json.loads(result.stdout), dict)
+    _assert_installed_core_run(binary, bundle, environment)
+
+
+def _assert_installed_core_run(binary, bundle, environment):
+    """Run installed core with host code, requiring no optional model SDK or network."""
+    import subprocess
+
+    config = bundle / "handler.yaml"
+    config.write_text("workflows: {demo: handler}\n")
+    flow = bundle / "handler"
+    flow.mkdir()
+    (flow / "workflow.yaml").write_text(
+        "name: demo\nstart: main\n"
+        "output: {pointer: /flows/main/result}\nflows:\n  main:\n"
+        "    input: {value: {pointer: /payload/value}}\n"
+        "    transition: {outcome: completed}\n    definition:\n"
+        "      output: {pointer: /steps/echo/result}\n      steps:\n"
+        "        - id: echo\n          definition:\n"
+        "            type: handler\n            handler: echo\n"
+        "            input: {value: {pointer: /payload/value}}\n"
+    )
+    code = """
+import asyncio, sys
+from pathlib import Path
+from foliqant import Envelope, open_application, prepare_application
+from foliqant.adapters.handlers import HandlerRegistration
+from foliqant.core.execution import StepOutcome
+
+async def echo(inputs, context):
+    assert context.flow_id == 'main'
+    return StepOutcome(inputs['value'])
+
+async def main():
+    prepared = prepare_application(Path(sys.argv[1]), handlers={
+        'echo': HandlerRegistration(echo, {'type': 'object'}, {'type': 'string'})
+    })
+    async with open_application(prepared, environment={}) as app:
+        result = await app.run('demo', Envelope(payload={'value': 'installed'}))
+        assert result.execution.status == 'completed'
+        assert result.payload == 'installed'
+        assert result.flows['main'].steps['echo'].result == 'installed'
+        assert result.execution.usage.model_requests == 0
+asyncio.run(main())
+"""
+    result = subprocess.run(
+        [str(binary / "python"), "-I", "-c", code, str(config)],
+        cwd=bundle,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr

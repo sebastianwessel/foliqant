@@ -17,6 +17,15 @@ REPORT_MODES = frozenset(
 )
 
 
+def report_document(raw: object) -> dict[str, Any]:
+    """Validate the closed report envelope shared by replay and comparison."""
+    if not isinstance(raw, dict) or set(raw) != {"mode", "dataset", "reports"}:
+        raise ValueError("invalid evaluation report envelope")
+    if raw["mode"] not in REPORT_MODES:
+        raise ValueError("invalid evaluation report mode")
+    return raw
+
+
 def default_artifact_path(directory: Path, *, prefix: str = "report") -> Path:
     """Return a collision-resistant path for a private evaluation artifact."""
     return directory / f"{prefix}-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}.json"
@@ -63,7 +72,6 @@ def write_report(
     if mode not in REPORT_MODES:
         raise ValueError("unknown evaluation report mode")
     document = {
-        "version": 1,
         "mode": mode,
         "dataset": {"name": dataset_name, "revision": dataset_revision},
         "reports": [report.to_dict() for report in reports],

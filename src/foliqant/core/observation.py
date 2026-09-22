@@ -36,6 +36,7 @@ def observe(
     observer: ExecutionObserver | None,
     workflow: str,
     *,
+    flow: str | None = None,
     step: str | None = None,
     trace: TraceContext | None = None,
     transport_trace: TraceContext | None = None,
@@ -46,7 +47,7 @@ def observe(
     if observer is not None:
         try:
             observation = observer.start(
-                workflow, step=step, trace=trace, transport_trace=transport_trace
+                workflow, flow=flow, step=step, trace=trace, transport_trace=transport_trace
             )
         except Exception:
             pass

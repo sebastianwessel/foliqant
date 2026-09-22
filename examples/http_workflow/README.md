@@ -16,7 +16,7 @@ PYDANTIC_AI_NO_BANNER=1 \
 
 The default runner reuses the support example’s deployment. Model ID and
 endpoint come from the root `.env`; reasoning, temperature, token limit and
-timeouts are configured in its `foliqant.yaml`. There is no model discovery. Omitting `--live` prints help
+timeouts are configured in its `config/settings.yaml`. There is no model discovery. Omitting `--live` prints help
 and performs no call.
 
 In a second terminal:
@@ -47,7 +47,7 @@ The default sends the support example’s same golden cases through an in-proces
 ASGI client and the real workflow with scripted model responses. No port or model
 connection is opened. Transport rejection checks are in `tests/test_http_example.py`.
 Use `--live` to measure the configured local Qwen model through this boundary.
-The command exits nonzero on failed expectations. Per-step evaluations remain in
+The command exits nonzero on failed expectations. Flow and step evaluations remain in
 `examples.support_triage.evaluate`, avoiding duplicated business cases.
 
 Each evaluation saves a new private report by default and prints its path. Use
@@ -59,7 +59,7 @@ Export the shared pipeline gold or save a full private report:
 
 ```sh
 uv run --no-sync python -m examples.http_workflow.evaluate \
-  --write-dataset .foliqant/evaluation/http-support-triage-r10.json
+  --write-dataset .foliqant/evaluation/http-support-triage-r11.json
 uv run --no-sync python -m examples.http_workflow.evaluate \
   --output .foliqant/evaluation/http-support-report.json
 ```
@@ -69,3 +69,12 @@ returned results; console output omits those details while retaining metrics and
 safe failure reasons. Queue and execution-status confusion matrices use explicit
 label catalogs. Export paths must be new. Keep generated files under ignored
 `.foliqant/` or outside the checkout; add `--live` only for an intended model run.
+
+## Edit evaluation data
+
+[evaluation/dataset.json](evaluation/dataset.json) is the canonical, tracked
+synthetic gold. Edit case inputs, expectations and metrics there; the Python
+evaluator reads it through the shared bounded JSON parser and strict validator.
+No Python regeneration is required. Scripted model responses remain independent
+test doubles, so a changed expectation can fail an offline wiring evaluation.
+Real customer data and generated reports still belong outside Git.

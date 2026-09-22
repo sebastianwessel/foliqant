@@ -1,0 +1,794 @@
+[
+  {
+    "id": "separate_accounts",
+    "input": {
+      "payload": {
+        "message": "Send the statement for account S-71 and the statement for account S-72 whenever convenient. I dispute the duplicate fee."
+      },
+      "metadata": {
+        "language": "en",
+        "family": "distinct_same_category_subjects",
+        "rationale": "Two distinct subjects require two units but only one category; charge dispute is separate."
+      }
+    },
+    "expectations": [
+      {
+        "name": "review",
+        "path": "/execution/status",
+        "expected": "completed",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_identity",
+        "path": "/flows/assessment/steps/assess/result/results/0/questionId",
+        "expected": "triage",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_status",
+        "path": "/flows/assessment/steps/assess/result/results/0/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_issues",
+        "path": "/flows/assessment/steps/assess/result/results/0/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "triage_strength",
+        "path": "/flows/assessment/steps/assess/result/results/0/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_answer",
+        "path": "/flows/assessment/steps/assess/result/results/0/answer",
+        "expected": {
+          "optionId": "send_statement"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_identity",
+        "path": "/flows/assessment/steps/assess/result/results/1/questionId",
+        "expected": "labels",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_status",
+        "path": "/flows/assessment/steps/assess/result/results/1/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_issues",
+        "path": "/flows/assessment/steps/assess/result/results/1/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "labels_strength",
+        "path": "/flows/assessment/steps/assess/result/results/1/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "selected_labels",
+        "path": "/flows/assessment/steps/assess/result/results/1/answer/optionIds",
+        "expected": [
+          "send_statement"
+        ],
+        "comparison": "set"
+      },
+      {
+        "name": "dispute_identity",
+        "path": "/flows/assessment/steps/assess/result/results/2/questionId",
+        "expected": "dispute",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_status",
+        "path": "/flows/assessment/steps/assess/result/results/2/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_issues",
+        "path": "/flows/assessment/steps/assess/result/results/2/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "dispute_strength",
+        "path": "/flows/assessment/steps/assess/result/results/2/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_answer",
+        "path": "/flows/assessment/steps/assess/result/results/2/answer",
+        "expected": {
+          "value": "true"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_identity",
+        "path": "/flows/assessment/steps/assess/result/results/3/questionId",
+        "expected": "priority",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_status",
+        "path": "/flows/assessment/steps/assess/result/results/3/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_issues",
+        "path": "/flows/assessment/steps/assess/result/results/3/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "priority_strength",
+        "path": "/flows/assessment/steps/assess/result/results/3/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_answer",
+        "path": "/flows/assessment/steps/assess/result/results/3/answer",
+        "expected": {
+          "levelId": "routine"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_identity",
+        "path": "/flows/assessment/steps/assess/result/results/4/questionId",
+        "expected": "requests",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_status",
+        "path": "/flows/assessment/steps/assess/result/results/4/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_issues",
+        "path": "/flows/assessment/steps/assess/result/results/4/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "requests_strength",
+        "path": "/flows/assessment/steps/assess/result/results/4/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "relations",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/relations",
+        "expected": [],
+        "comparison": "exact"
+      },
+      {
+        "name": "request_0_categoryId",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/0/categoryId",
+        "expected": "send_statement",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_0_subject",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/0/subject",
+        "expected": "S-71",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_0_status",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/0/status",
+        "expected": "active",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_1_categoryId",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/1/categoryId",
+        "expected": "send_statement",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_1_subject",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/1/subject",
+        "expected": "S-72",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_1_status",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/1/status",
+        "expected": "active",
+        "comparison": "exact"
+      }
+    ]
+  },
+  {
+    "id": "separate_accounts_de",
+    "input": {
+      "payload": {
+        "message": "Senden Sie die Kontoauszüge für Konto S-71 und Konto S-72, wenn es Ihnen passt. Ich beanstande die doppelte Gebühr."
+      },
+      "metadata": {
+        "language": "de",
+        "family": "distinct_same_category_subjects",
+        "rationale": "Same held-out family and expectations as the English distinct-subject case."
+      }
+    },
+    "expectations": [
+      {
+        "name": "review",
+        "path": "/execution/status",
+        "expected": "completed",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_identity",
+        "path": "/flows/assessment/steps/assess/result/results/0/questionId",
+        "expected": "triage",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_status",
+        "path": "/flows/assessment/steps/assess/result/results/0/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_issues",
+        "path": "/flows/assessment/steps/assess/result/results/0/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "triage_strength",
+        "path": "/flows/assessment/steps/assess/result/results/0/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_answer",
+        "path": "/flows/assessment/steps/assess/result/results/0/answer",
+        "expected": {
+          "optionId": "send_statement"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_identity",
+        "path": "/flows/assessment/steps/assess/result/results/1/questionId",
+        "expected": "labels",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_status",
+        "path": "/flows/assessment/steps/assess/result/results/1/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_issues",
+        "path": "/flows/assessment/steps/assess/result/results/1/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "labels_strength",
+        "path": "/flows/assessment/steps/assess/result/results/1/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "selected_labels",
+        "path": "/flows/assessment/steps/assess/result/results/1/answer/optionIds",
+        "expected": [
+          "send_statement"
+        ],
+        "comparison": "set"
+      },
+      {
+        "name": "dispute_identity",
+        "path": "/flows/assessment/steps/assess/result/results/2/questionId",
+        "expected": "dispute",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_status",
+        "path": "/flows/assessment/steps/assess/result/results/2/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_issues",
+        "path": "/flows/assessment/steps/assess/result/results/2/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "dispute_strength",
+        "path": "/flows/assessment/steps/assess/result/results/2/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_answer",
+        "path": "/flows/assessment/steps/assess/result/results/2/answer",
+        "expected": {
+          "value": "true"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_identity",
+        "path": "/flows/assessment/steps/assess/result/results/3/questionId",
+        "expected": "priority",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_status",
+        "path": "/flows/assessment/steps/assess/result/results/3/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_issues",
+        "path": "/flows/assessment/steps/assess/result/results/3/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "priority_strength",
+        "path": "/flows/assessment/steps/assess/result/results/3/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_answer",
+        "path": "/flows/assessment/steps/assess/result/results/3/answer",
+        "expected": {
+          "levelId": "routine"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_identity",
+        "path": "/flows/assessment/steps/assess/result/results/4/questionId",
+        "expected": "requests",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_status",
+        "path": "/flows/assessment/steps/assess/result/results/4/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_issues",
+        "path": "/flows/assessment/steps/assess/result/results/4/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "requests_strength",
+        "path": "/flows/assessment/steps/assess/result/results/4/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "relations",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/relations",
+        "expected": [],
+        "comparison": "exact"
+      },
+      {
+        "name": "request_0_categoryId",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/0/categoryId",
+        "expected": "send_statement",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_0_subject",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/0/subject",
+        "expected": "S-71",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_0_status",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/0/status",
+        "expected": "active",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_1_categoryId",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/1/categoryId",
+        "expected": "send_statement",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_1_subject",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/1/subject",
+        "expected": "S-72",
+        "comparison": "exact"
+      },
+      {
+        "name": "request_1_status",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer/units/1/status",
+        "expected": "active",
+        "comparison": "exact"
+      }
+    ]
+  },
+  {
+    "id": "only_conflict",
+    "input": {
+      "payload": {
+        "message": "Freeze my card. Do not freeze my card. Both instructions remain in force; neither takes precedence. No statement is wanted. There is no urgency. I am not disputing any charge."
+      },
+      "metadata": {
+        "language": "en",
+        "family": "complete_unresolved_conflict",
+        "rationale": "No unconflicted purpose/action survives; all three abstentions have decisive support."
+      }
+    },
+    "expectations": [
+      {
+        "name": "review",
+        "path": "/execution/status",
+        "expected": "needs_review",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_identity",
+        "path": "/flows/assessment/steps/assess/result/results/0/questionId",
+        "expected": "triage",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_status",
+        "path": "/flows/assessment/steps/assess/result/results/0/answerability/status",
+        "expected": "not_answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_issues",
+        "path": "/flows/assessment/steps/assess/result/results/0/answerability/issues",
+        "expected": [
+          "conflicting_information"
+        ],
+        "comparison": "set"
+      },
+      {
+        "name": "triage_strength",
+        "path": "/flows/assessment/steps/assess/result/results/0/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_answer",
+        "path": "/flows/assessment/steps/assess/result/results/0/answer",
+        "expected": null,
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_identity",
+        "path": "/flows/assessment/steps/assess/result/results/1/questionId",
+        "expected": "labels",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_status",
+        "path": "/flows/assessment/steps/assess/result/results/1/answerability/status",
+        "expected": "not_answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_issues",
+        "path": "/flows/assessment/steps/assess/result/results/1/answerability/issues",
+        "expected": [
+          "conflicting_information"
+        ],
+        "comparison": "set"
+      },
+      {
+        "name": "labels_strength",
+        "path": "/flows/assessment/steps/assess/result/results/1/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_answer",
+        "path": "/flows/assessment/steps/assess/result/results/1/answer",
+        "expected": null,
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_identity",
+        "path": "/flows/assessment/steps/assess/result/results/2/questionId",
+        "expected": "dispute",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_status",
+        "path": "/flows/assessment/steps/assess/result/results/2/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_issues",
+        "path": "/flows/assessment/steps/assess/result/results/2/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "dispute_strength",
+        "path": "/flows/assessment/steps/assess/result/results/2/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_answer",
+        "path": "/flows/assessment/steps/assess/result/results/2/answer",
+        "expected": {
+          "value": "false"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_identity",
+        "path": "/flows/assessment/steps/assess/result/results/3/questionId",
+        "expected": "priority",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_status",
+        "path": "/flows/assessment/steps/assess/result/results/3/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_issues",
+        "path": "/flows/assessment/steps/assess/result/results/3/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "priority_strength",
+        "path": "/flows/assessment/steps/assess/result/results/3/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_answer",
+        "path": "/flows/assessment/steps/assess/result/results/3/answer",
+        "expected": {
+          "levelId": "routine"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_identity",
+        "path": "/flows/assessment/steps/assess/result/results/4/questionId",
+        "expected": "requests",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_status",
+        "path": "/flows/assessment/steps/assess/result/results/4/answerability/status",
+        "expected": "not_answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_issues",
+        "path": "/flows/assessment/steps/assess/result/results/4/answerability/issues",
+        "expected": [
+          "conflicting_information"
+        ],
+        "comparison": "set"
+      },
+      {
+        "name": "requests_strength",
+        "path": "/flows/assessment/steps/assess/result/results/4/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_answer",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer",
+        "expected": null,
+        "comparison": "exact"
+      }
+    ]
+  },
+  {
+    "id": "only_conflict_de",
+    "input": {
+      "payload": {
+        "message": "Sperren Sie meine Karte. Sperren Sie meine Karte nicht. Beide Anweisungen gelten weiter; keine hat Vorrang. Ein Kontoauszug ist nicht gewünscht. Es besteht keine Eile. Ich beanstande keine Belastung."
+      },
+      "metadata": {
+        "language": "de",
+        "family": "complete_unresolved_conflict",
+        "rationale": "Same held-out conflict family; translation is not an independent validation family."
+      }
+    },
+    "expectations": [
+      {
+        "name": "review",
+        "path": "/execution/status",
+        "expected": "needs_review",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_identity",
+        "path": "/flows/assessment/steps/assess/result/results/0/questionId",
+        "expected": "triage",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_status",
+        "path": "/flows/assessment/steps/assess/result/results/0/answerability/status",
+        "expected": "not_answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_issues",
+        "path": "/flows/assessment/steps/assess/result/results/0/answerability/issues",
+        "expected": [
+          "conflicting_information"
+        ],
+        "comparison": "set"
+      },
+      {
+        "name": "triage_strength",
+        "path": "/flows/assessment/steps/assess/result/results/0/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "triage_answer",
+        "path": "/flows/assessment/steps/assess/result/results/0/answer",
+        "expected": null,
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_identity",
+        "path": "/flows/assessment/steps/assess/result/results/1/questionId",
+        "expected": "labels",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_status",
+        "path": "/flows/assessment/steps/assess/result/results/1/answerability/status",
+        "expected": "not_answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_issues",
+        "path": "/flows/assessment/steps/assess/result/results/1/answerability/issues",
+        "expected": [
+          "conflicting_information"
+        ],
+        "comparison": "set"
+      },
+      {
+        "name": "labels_strength",
+        "path": "/flows/assessment/steps/assess/result/results/1/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "labels_answer",
+        "path": "/flows/assessment/steps/assess/result/results/1/answer",
+        "expected": null,
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_identity",
+        "path": "/flows/assessment/steps/assess/result/results/2/questionId",
+        "expected": "dispute",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_status",
+        "path": "/flows/assessment/steps/assess/result/results/2/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_issues",
+        "path": "/flows/assessment/steps/assess/result/results/2/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "dispute_strength",
+        "path": "/flows/assessment/steps/assess/result/results/2/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_answer",
+        "path": "/flows/assessment/steps/assess/result/results/2/answer",
+        "expected": {
+          "value": "false"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_identity",
+        "path": "/flows/assessment/steps/assess/result/results/3/questionId",
+        "expected": "priority",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_status",
+        "path": "/flows/assessment/steps/assess/result/results/3/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_issues",
+        "path": "/flows/assessment/steps/assess/result/results/3/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "priority_strength",
+        "path": "/flows/assessment/steps/assess/result/results/3/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "priority_answer",
+        "path": "/flows/assessment/steps/assess/result/results/3/answer",
+        "expected": {
+          "levelId": "routine"
+        },
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_identity",
+        "path": "/flows/assessment/steps/assess/result/results/4/questionId",
+        "expected": "requests",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_status",
+        "path": "/flows/assessment/steps/assess/result/results/4/answerability/status",
+        "expected": "not_answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_issues",
+        "path": "/flows/assessment/steps/assess/result/results/4/answerability/issues",
+        "expected": [
+          "conflicting_information"
+        ],
+        "comparison": "set"
+      },
+      {
+        "name": "requests_strength",
+        "path": "/flows/assessment/steps/assess/result/results/4/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "requests_answer",
+        "path": "/flows/assessment/steps/assess/result/results/4/answer",
+        "expected": null,
+        "comparison": "exact"
+      }
+    ]
+  }
+]

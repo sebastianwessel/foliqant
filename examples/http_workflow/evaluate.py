@@ -13,24 +13,23 @@ from examples.common import (
     evaluation_output,
     example_environment,
     private_output_path,
+    read_example_dataset,
     write_example_dataset,
 )
 from examples.http_workflow.server import SupportRun, create_app
 from examples.support_triage import offline
-from examples.support_triage.evaluate import dataset as support_dataset
 from examples.support_triage.run import CONFIG_PATH, open_example
 from foliqant import Envelope, ExecutionResult, RuntimePlugins, prepare_application
 from foliqant.core.json import JsonValue
 from foliqant.evaluation import EvaluationVariant, evaluate
 from foliqant.evaluation.dataset import EvaluationDataset, metric_specs
 
+DATASET_PATH = Path(__file__).with_name("evaluation") / "dataset.json"
+
 
 def dataset() -> EvaluationDataset:
-    """The HTTP boundary evaluates exactly the shared support pipeline gold."""
-    data = support_dataset().model_dump(mode="json")
-    data["name"] = "http_support_triage_examples"
-    data["suites"] = data["suites"][:1]
-    return EvaluationDataset.model_validate(data, strict=True)
+    """Read the editable, canonical synthetic evaluation dataset."""
+    return read_example_dataset(DATASET_PATH)
 
 
 async def run_evaluations(
@@ -73,7 +72,7 @@ async def run_evaluations(
                 gold.to_suite(spec),
                 EvaluationVariant(
                     name="http_local_qwen" if live else "http_scripted_wiring",
-                    revision=environment["FOLIQANT_CURATION_MODEL"],
+                    revision=environment["MODEL_ID"],
                     configuration_revision=prepared.configuration_digest,
                     workflow="support_triage",
                     run=invoke,

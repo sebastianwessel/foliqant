@@ -5,17 +5,17 @@ to do.
 
 | Part | Use it for | Execution model |
 | --- | --- | --- |
-| `foliqant` Python package | Compile and run workflows with model, MCP, and Python steps | In process; each awaited call returns one result |
+| `foliqant` Python package | Compile and run workflows with model, MCP, and Python operations | In process; each awaited call returns one result |
 | `foliqant-model` tool project | Prepare data, train adapters, evaluate, calibrate, and export models | Explicit local commands that create versioned artifacts |
 
 ## Run workflows
 
-Start with [install and run](getting-started/runtime.md). It creates a model-free
-workflow that needs no endpoint or credentials. Then continue with:
+Start with [install and run](getting-started/runtime.md). It creates a small
+local-model workflow with explicit endpoint settings. Then continue with:
 
 - [Runtime concepts](concepts/runtime-and-model-development.md) for ownership and
   process boundaries.
-- [Workflow authoring](guides/build-workflows.md) for bundles, steps, bindings,
+- [Workflow authoring](guides/build-workflows.md) for flows, operations, bindings,
   and offline compilation.
 - [Runtime configuration](reference/runtime-configuration.md) for model and MCP
   profiles, execution limits, telemetry, environment values, and CLI behavior.

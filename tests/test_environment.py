@@ -36,11 +36,16 @@ def profiles(**overrides: object) -> ModelProfiles:
 def configuration(tmp_path: Path) -> Path:
     bundle = tmp_path / "workflows/demo"
     (bundle / "steps").mkdir(parents=True)
-    (bundle / "workflow.yaml").write_text("version: 1\nname: demo\nstart: done\n")
-    (bundle / "steps/done.yaml").write_text("type: finish\noutcome: completed\n")
+    (bundle / "workflow.yaml").write_text(
+        "name: demo\nstart: main\nflows:\n"
+        "  main:\n    input: {}\n    transition: {outcome: completed}\n"
+        "    definition:\n      steps:\n        - id: summarize\n"
+        "          definition: {type: llm, model: local, instructions: Summarize., "
+        "input: {}, output: text}\n"
+    )
     path = tmp_path / "foliqant.yaml"
     path.write_text(
-        "version: 1\nworkflows: {demo: workflows/demo}\n"
+        "workflows: {demo: workflows/demo}\n"
         "models:\n  local:\n    provider: openai_compatible\n    model: $MODEL_NAME\n"
         "    base_url: $MODEL_URL\n    api_key: $MODEL_KEY\n    output_mode: native\n"
     )

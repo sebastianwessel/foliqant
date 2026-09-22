@@ -1,46 +1,56 @@
 # Runtime configuration and CLI
 
-The deployment file is strict YAML with `version: 1`. The smallest valid file
-only maps a public workflow name to its bundle directory:
+The default configuration is `config/settings.yaml`. It is strict YAML. With
+the conventional layout it can contain only shared settings:
 
 ```yaml
-version: 1
-workflows:
-  support_triage: workflows/support_triage
+models: {}
 ```
 
-Add `models`, `mcp`, `execution`, or `telemetry` only when the workflow needs
-them. An optional `evaluation` section points to local golden cases. Execution settings have safe defaults:
+When `workflows` is omitted, preparation discovers immediate nonhidden
+`config/*/workflow.yaml` files. Each directory name is its workflow name. Use
+an explicit map for customized names or locations:
+
+```yaml
+workflows:
+  public_name: internal_directory
+```
+
+Add `models`, `mcp`, `execution`, `telemetry`, or `evaluation` only
+when needed. Explicit paths are relative to the configuration file and must
+remain below its directory. An explicit mapping key must equal the compiled
+workflow name.
+
+## Execution limits
 
 | Setting | Default | Meaning |
 | --- | ---: | --- |
 | `concurrency` | `4` | Runs admitted at once per process |
 | `queue_limit` | `16` | Additional runs allowed to wait |
-| `run_timeout` | `300` | Total seconds for one run |
+| `run_timeout` | `300` | Total seconds for one workflow call |
 | `model_timeout` | `60` | Total seconds for one model attempt |
 | `tool_timeout` | `30` | Total seconds for one tool attempt |
-| `max_steps` | `32` | Maximum executed steps per run |
-| `model_requests_per_step` | `4` | Maximum started model requests per step |
-| `tool_calls_per_step` | `3` | Maximum started tool calls per step |
+| `max_steps` | `32` | Maximum operations executed in one call |
+| `model_requests_per_step` | `4` | Model requests started by one operation |
+| `tool_calls_per_step` | `3` | Tool calls started by one operation |
 
-Limits are per process. They are not a distributed rate limiter or retry policy.
-Every started request consumes an attempt even if it fails. Unavailable token
-counts remain unknown.
+These bounds are per process. Admission does not create jobs or persistence.
+Cancellation does not prove that an already-started remote or blocking operation
+stopped.
 
 ## Model profiles
 
-Profiles require an explicit provider and model ID. Foliqant does not discover a
-model and reserves no alias such as `primary`.
+A model profile states the provider, model, output mode, capabilities, admission,
+timeout, and generation options. There is no implicit endpoint or model
+discovery.
 
 ```yaml
 models:
-  local_qwen:
+  local:
     provider: openai_compatible
-    api: chat
-    model: incoai/Qwen3.8-27B-Splash
-    base_url: http://127.0.0.1:8000/v1
+    model: $MODEL_ID
+    base_url: $MODEL_BASE_URL
     allow_insecure_http: true
-    api_key: null
     output_mode: native
     supports_text: true
     supports_json_schema: true
@@ -49,234 +59,153 @@ models:
     queue_limit: 0
     request_timeout: 300
     options:
-      max_tokens: 8192
+      max_tokens: 4096
       temperature: 0.1
       reasoning_effort: low
 ```
 
-Supported providers are `openai_compatible`, `openai`, `azure_openai`, and
-`anthropic`. Provider/API combinations and structured-output modes are validated
-before inference. The host validates model output against the original schema;
-there is no automatic mode switch or output repair.
+Supported providers are `openai`, `openai_compatible`, `azure_openai`,
+and `anthropic`. Provider-specific fields are validated before a client opens.
+A workflow can set `defaults.model`; an individual decision or LLM operation
+can select a profile, apply an explicit model/options override, or provide a
+complete compatible profile.
 
-The remaining run time and `execution.model_timeout` bound the total model
-attempt. A profile's `request_timeout` configures the provider SDK's network
-timeout. Setting `request_timeout: 300` does not override the default 60-second
-model-attempt limit; raise `execution.model_timeout` explicitly when a local
-model needs more time.
-
-## Select a model for one step
-
-A `decision` or `llm` step inherits `defaults.model` from its workflow. Set
-`model: local_qwen` on the step to select another declared profile. To adjust
-one step without copying the profile, use:
-
-```yaml
-model:
-  profile: local_qwen
-  options:
-    max_tokens: 4096
-    temperature: 0.1
-```
-
-The override can also set `model` to a different provider model ID. Unspecified
-options inherit the profile; explicit `null` clears an optional setting. The
-merged settings are validated against the original provider's supported fields
-and constraints. Derived steps share their source profile's admission limits,
-so creating several variants does not multiply its allowed concurrency.
-
-For a different provider or an independent connection, a step may contain a
-complete provider configuration using the same fields as a deployment profile:
-
-```yaml
-model:
-  provider: openai_compatible
-  model: '$EXTRACTION_MODEL'
-  base_url: '$EXTRACTION_URL'
-  api_key: '$EXTRACTION_KEY'
-  output_mode: native
-  options:
-    temperature: 0.1
-```
-
-Inline configurations do not inherit another provider's settings. Use environment
-references for inline credentials; literal API keys in workflow files are
-rejected. Only designated deployment fields accept references; prompts, binding
-values and customer content are never expanded. Preparation validates the
-configuration offline and opening resolves its environment once. No per-step
-model discovery, request retry, or automatic provider fallback is added.
+`output_mode: native` uses the provider's native structured-output feature.
+`output_mode: tool` uses a generated output tool and therefore requires tool
+support. The configured capabilities must cover every operation that selects
+the profile.
 
 ## Environment references
 
-Use a complete `$VARIABLE` value in supported deployment fields:
+Only fields marked as deployment environment fields expand `$NAME`. Examples
+include model IDs, endpoints, credentials, telemetry headers, and MCP process
+settings. `$$` is a literal dollar. Prompts, instructions, bindings, schemas,
+documents, and customer input stay literal.
 
-```yaml
-models:
-  assistant:
-    provider: openai_compatible
-    model: '$MODEL_NAME'
-    base_url: '$MODEL_URL'
-    api_key: '$MODEL_KEY'
-    output_mode: native
-```
+The application loads `.env` beside the selected settings file and then
+overlays the environment passed by the host; process values win. Preparation
+and the offline CLI commands do not read environment values.
 
-The reference-capable fields are:
-
-| Configuration | Fields |
-| --- | --- |
-| Model profile | `model`, `api_key`, compatible `base_url`, Azure `endpoint` and `api_version` |
-| MCP HTTP transport | `endpoint` |
-| MCP stdio transport | `command`, each `args` entry, `cwd`, each `env` value |
-| Telemetry | `traces_endpoint`, `metrics_endpoint`, each `traces_headers` and `metrics_headers` value |
-
-Other configuration, workflow instructions, literal bindings, schemas, and
-customer input remain literal. Provider names, flags, numeric limits, workflow
-paths, and registration IDs do not accept references.
-
-Variable names follow `[A-Za-z_][A-Za-z0-9_]*`. Only the full value can be a
-reference: `${NAME}`, `$NAME/suffix`, `prefix$NAME`, and shell expressions are
-rejected. `$$` escapes a literal dollar: `$$NAME` resolves to `$NAME`, and
-`prefix$$NAME` resolves to `prefix$NAME`.
-Resolved values are never expanded again. Nothing executes a shell or performs
-interpolation.
-
-`open_application(prepared, environment=os.environ)` reads `.env` beside the
-prepared deployment once when opening, then lets the supplied process mapping
-override file values. `.env` interpolation is disabled, and opening does not
-change the process environment. `load_environment(config_path, environment)`
-remains available when a host explicitly needs the merged mapping; it is not a
-required step before opening an application.
-
-`prepare_application`, `validate`, `doctor`, and `explain` validate reference
-syntax and compile local workflows without reading environment values, resolving
-credentials, or constructing SDK clients. Opening requires every declared
-reference to be present and nonblank, even a header on a disabled telemetry
-signal. It validates resolved URLs, Azure API flavor, absolute stdio working
-directories, header values, and other field constraints before constructing
-clients. These are local configuration checks; they do not probe endpoints or
-verify tokens.
-
-`openai`, `anthropic`, and `azure_openai` default `api_key` to
-`$OPENAI_API_KEY`, `$ANTHROPIC_API_KEY`, and `$AZURE_OPENAI_API_KEY`, respectively.
-An unauthenticated compatible endpoint may use `api_key: null`. Prefer references
-for credentials. API keys, telemetry headers, and stdio environment values use
-protected secret values: authored references remain visible in JSON exports,
-while secret literals and resolved secrets are redacted in exports and `repr`.
-Resolved secrets do not enter configuration revisions, diagnostics, or logs.
-Revisions depend on authored references and nonsecret configuration, not the
-current values of environment variables.
+Model API keys must be environment references. Keep secrets out of YAML, source
+control, logs, telemetry, errors, and evaluation artifacts.
 
 ## MCP profiles
 
-An MCP profile fixes its transport and an operator-reviewed tool catalog. Each
-tool has exact input/output schemas and an effect. Current workflow execution is
-read-only; write tools are rejected.
+An MCP profile declares one Streamable HTTP or stdio transport plus an
+operator-reviewed tool catalog:
 
-Discovery must match every declared tool and schema before use. Extra discovered
-tools receive no permission. Each workflow step also allowlists its tool. A host
-authorizer still decides whether the current trusted caller may access the
-specific resource.
+```yaml
+mcp:
+  records:
+    transport:
+      type: streamable_http
+      endpoint: $MCP_ENDPOINT
+    auth: oauth
+    identity_meta_key: example.com/runtime/identity
+    catalog:
+      tools:
+        lookup:
+          effect: read
+          input_schema:
+            type: object
+            properties:
+              reference: {type: string}
+            required: [reference]
+            additionalProperties: false
+          output_schema:
+            type: object
+            properties:
+              status: {type: string}
+            required: [status]
+            additionalProperties: false
+```
 
-Streamable HTTP endpoints must be explicit. Authentication hooks are registered
-by the embedding application and partition credentials by the complete caller
-scope. Stdio commands, arguments, working directory, and environment are trusted
-startup configuration; request data cannot select them.
+Current runtime access is read-only. Each MCP operation names exactly one
+declared server and tool; an LLM operation with tools separately allowlists its
+server and tool names. The runtime validates arguments and declared results.
 
-See the [local public-request example](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/README.md)
-for a complete stdio profile and authorizer.
+`auth` is a name, not a credential. It must match a trusted
+`McpCredentialProvider` supplied as the same key in
+`RuntimePlugins(mcp_credentials={...})`. It is supported only for Streamable
+HTTP. The provider creates fresh authorization for a scope containing the server
+alias, endpoint, auth name, and current caller identity. Missing named providers
+fail before a session opens.
+
+`SdkOAuthCredentialProvider` delegates OAuth discovery, PKCE, state, refresh,
+and resource handling to the MCP SDK. The host supplies client metadata,
+identity-partitioned token storage, an allowlist of HTTPS authorization-server
+origins, and optional operator UI callbacks. Foliqant does not store tokens or
+launch an authorization UI.
+
+`identity_meta_key` optionally sends non-null tenant/principal identifiers in
+MCP request metadata under an explicit reverse-DNS key. This conveys context to
+the remote tool; it does not authenticate the caller.
+
+The default tool authorizer enforces the compiled allowlist. A host can inject a
+stricter resource-aware `ToolAuthorizer`. The embedding service still owns
+caller authentication and application permission.
 
 ## Telemetry
 
-Telemetry is optional and uses explicit OTLP/HTTP trace and metric endpoints.
-When a signal endpoint is absent, Foliqant creates no exporter for that signal.
-Ambient OTLP endpoints and headers are not discovered. Configure header values
-with the same reference syntax:
-
-```yaml
-telemetry:
-  service_name: support-triage
-  traces_endpoint: '$OTLP_TRACES_ENDPOINT'
-  traces_headers:
-    authorization: '$OTLP_AUTHORIZATION'
-```
-
-The variable must contain the complete header value, including any required
-scheme such as `Bearer `. Use `metrics_headers` for metric exporter headers.
-
-Observations use bounded configured labels and fixed error codes. Business
-payloads, arbitrary metadata, credentials, prompts, model output, and exception
-text must not enter logs or telemetry. Only protected W3C `traceparent` and
-`tracestate` values are propagated; baggage is excluded.
+`telemetry` can export traces and metrics over OTLP/HTTP. Endpoints, protected
+headers, batching, intervals, and timeouts are explicit. Empty endpoint values
+disable that signal. Telemetry records safe identifiers, timings, statuses, and
+usage; it does not record payloads, metadata, prompts, model output, credentials,
+or raw exceptions.
 
 ## Evaluation dataset
 
+The conventional dataset is `evaluation/dataset.json` beside `config/`.
+`foliqant evaluate` selects it only when evaluation is explicitly invoked.
+Use a configured path for a custom location:
+
 ```yaml
 evaluation:
-  dataset: .foliqant/evaluation/gold.json
+  dataset: ../../reviewed-gold/support.json
 ```
 
-The dataset is a strict JSON file resolved relative to the deployment file.
-`prepare_application`, application startup, `validate`, and `doctor` do not open
-or inspect it. Evaluation metadata is excluded from the runtime configuration
-digest. Only the explicit evaluation commands load gold or saved reports.
+The path is relative to `config/settings.yaml`. Normal preparation, startup,
+`validate`, `doctor`, and `run` do not open or inspect conventional or
+configured gold. Only evaluation commands load it, and the selection does not
+affect the compiled runtime configuration digest.
 
-Use [testing and evaluation](../guides/testing-and-evaluation.md) for a complete
-dataset, isolated-step checks, metric definitions, and replay. Keep gold and full
-result artifacts in an ignored private directory. No thresholds, model judges,
-or executable scorer imports are accepted in this configuration.
+Use [testing and evaluation](../guides/testing-and-evaluation.md) for the dataset
+shape and pipeline, flow, and operation scopes.
 
-## CLI
+## CLI reference
 
 ```text
 foliqant init DEST
 foliqant validate [--config PATH]
-foliqant doctor [--config PATH]
 foliqant explain [--config PATH] [--workflow NAME]
+foliqant doctor [--config PATH]
 foliqant run [--config PATH] --workflow NAME --input PATH|-
-             [--tenant-id ID] [--principal-id ID] [--debug]
 foliqant evaluate [--config PATH] [--check | --replay REPORT]
-                  [--output PATH] [--max-concurrency 1] [--timeout 300] [--repeat N]
 foliqant evaluate --compare CANDIDATE --baseline BASELINE [--output PATH]
 ```
 
-`init` refuses to overwrite an existing destination. The other commands default
-to `foliqant.yaml` in the current directory; they do not search parent
-directories. `validate`, `doctor`, and `explain` are offline. `run` reads one
-strict JSON envelope from a regular file or stdin and prints one result. It has
-no `serve`, worker, migration, or job status command.
+Commands that use runtime configuration default to
+`./config/settings.yaml`; they do not search parent directories.
 
-`evaluate --check` validates gold, targets, and structural result paths offline.
-`evaluate` runs dataset suites sequentially against the configured application;
-one case runs at a time by default. `--timeout` is a per-case deadline in seconds.
-`evaluate --replay REPORT` rescores saved full results without running workflows
-or opening model/tool clients. A normal or replay run writes a new report under
-`.foliqant/evaluations/` beside the configuration, unless `--output` selects a
-new path. Existing report files are never overwritten. Each dataset/case file is
-limited to 64 MiB; report writing and replay share a 256 MiB limit. Stdout contains only a
-content-free summary; the artifact contains sensitive inputs, gold, and public
-results. Exit codes are `0` for passing checks, `1` for gold mismatch, `2` for
-invalid input/configuration, `3` for missing dependencies, and `4` for runtime
-failure. Runtime failure takes precedence even when an assertion expected it.
+`run` accepts one bounded envelope and prints one safe JSON result.
+`evaluate --check` validates gold, targets, and structural pointers without
+opening providers. `evaluate --replay` rescores saved public results without
+inference. A normal evaluation executes its configured scopes. Use
+`--max-concurrency`, `--timeout`, and `--repeat` explicitly when changing
+their conservative defaults.
 
-`--repeat N` requests additional attempts per source case; it does not create
-new independent gold. Replayed attempts retain their original repetition
-identities. `--compare` compares two compatible saved reports fully offline and
-does not load application configuration. See
-[evaluation results](../guides/evaluation-results.md) for interpreting metrics,
-repeatability, and per-case changes without confusing coverage with accuracy.
+Reports default to unique files under `.foliqant/evaluations/` beside the
+settings file. `--output` selects a new path and never overwrites. These
+artifacts may contain complete inputs, expectations, and public results; keep
+them private and out of Git.
 
-Success is one JSON object on stdout. Failures use a fixed safe error object and
-nonzero exit status. `--debug` changes approved diagnostics only; it does not
-print customer content or raw dependency exceptions.
+Exit codes are `0` for success, `1` for a gold mismatch, `2` for invalid
+input or configuration, `3` for a missing optional dependency, `4` for a
+runtime failure, and `130` for interruption.
 
-## Runtime ownership
+## Runtime boundary
 
-`open_application` owns model and MCP clients for its async context. Keep it open
-for the application's serving lifetime and close it after intake stops. A call
-to `application.run` remains in memory until it returns. Process termination
-loses unfinished runs.
-
-Handlers are registered Python callables with explicit schemas. Configuration
-never imports arbitrary code. Blocking-only integrations must use the bounded
-blocking executor and an SDK-level timeout; cancellation cannot forcibly stop a
-running Python thread or prove whether an external side effect occurred.
+The library has no storage, worker, job lookup, migration, or application-login
+subsystem. Each call runs in the foreground and returns one
+`ExecutionResult`. A remote host owns transport, authentication, rate control,
+idempotency, and persistence.

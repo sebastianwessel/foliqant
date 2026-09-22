@@ -7,7 +7,7 @@ import pytest
 
 from foliqant.contracts.envelope import Envelope
 from foliqant.contracts.execution import ExecutionResult, StepResult, to_execution_result
-from foliqant.core.execution import RunResult, StepRecord, Usage
+from foliqant.core.execution import FlowRecord, RunResult, StepRecord, TokenUsage, Usage
 from foliqant.core.json import FrozenJson, freeze_json
 from foliqant.evaluation import (
     EvaluationCase,
@@ -30,8 +30,22 @@ def result(payload: object = None) -> ExecutionResult:
             freeze_json(payload),
             {},
             (
-                ("classify", StepRecord("completed", freeze_json({"label": "a"}), True)),
-                ("unused", StepRecord("skipped")),
+                (
+                    "main",
+                    FlowRecord(
+                        "completed",
+                        (
+                            (
+                                "classify",
+                                StepRecord("completed", freeze_json({"label": "a"}), True),
+                            ),
+                            ("unused", StepRecord("skipped")),
+                        ),
+                        freeze_json(payload),
+                        True,
+                        Usage(),
+                    ),
+                ),
             ),
             Usage(),
         )
@@ -53,6 +67,14 @@ def variant(run: object, name: str = "baseline") -> EvaluationVariant:
     return EvaluationVariant(name, "prompt-v1", run, "configuration-v1")  # type: ignore[arg-type]
 
 
+def test_isolated_step_variant_requires_its_flow_scope() -> None:
+    async def run(envelope: Envelope) -> ExecutionResult:
+        return result(envelope.payload)
+
+    with pytest.raises(ValueError, match="flow"):
+        EvaluationVariant("step", "v1", run, "configuration-v1", step="classify")
+
+
 async def test_gold_counts_missing_skipped_and_type_sensitive_mismatches() -> None:
     async def run(envelope: Envelope) -> ExecutionResult:
         return result({"value": True, "nothing": None, "labels": ["b", "a", "a"]})
@@ -62,9 +84,9 @@ async def test_gold_counts_missing_skipped_and_type_sensitive_mismatches() -> No
         Expectation("null", "/payload/nothing", None),
         Expectation("absent", "/payload/absent", None),
         Expectation("set", "/payload/labels", ("a", "b"), "set"),
-        Expectation("step", "/decisions/classify/result/label", "a"),
-        Expectation("skipped", "/decisions/unused/result", None),
-        Expectation("expected-skip", "/decisions/unused/status", "skipped"),
+        Expectation("step", "/flows/main/steps/classify/result/label", "a"),
+        Expectation("skipped", "/flows/main/steps/unused/result", None),
+        Expectation("expected-skip", "/flows/main/steps/unused/status", "skipped"),
     )
     report = await evaluate(gold, variant(run))
     assert (report.checks.total, report.checks.passed, report.checks.failed) == (7, 4, 1)
@@ -199,7 +221,16 @@ async def test_review_and_failure_metrics_independent_of_expected_status() -> No
                 "failed",
                 None,
                 {},
-                (("classify", StepRecord("failed", error=Failure(ErrorCode.TIMEOUT))),),
+                (
+                    (
+                        "main",
+                        FlowRecord(
+                            "failed",
+                            (("classify", StepRecord("failed", error=Failure(ErrorCode.TIMEOUT))),),
+                            error=Failure(ErrorCode.TIMEOUT),
+                        ),
+                    ),
+                ),
                 Usage(),
                 Failure(ErrorCode.TIMEOUT),
             )
@@ -208,7 +239,7 @@ async def test_review_and_failure_metrics_independent_of_expected_status() -> No
     report = await evaluate(
         suite(
             Expectation("status", "/execution/status", "failed"),
-            Expectation("unavailable", "/decisions/classify/result", None),
+            Expectation("unavailable", "/flows/main/steps/classify/result", None),
         ),
         variant(run),
     )
@@ -261,7 +292,7 @@ def test_gold_is_copied_and_invalid_contracts_fail_before_execution() -> None:
 async def test_pointer_escaping_and_measured_step_fields() -> None:
     async def run(envelope: Envelope) -> ExecutionResult:
         base = result({"a/b": {"~key": [3]}})
-        base.decisions["classify"] = StepResult(
+        base.flows["main"].steps["classify"] = StepResult(
             status="completed",
             result={"label": "a"},
             elapsed_seconds=0.25,
@@ -273,6 +304,69 @@ async def test_pointer_escaping_and_measured_step_fields() -> None:
     assert report.case_pass_rate == 1
     assert report.cases[0].steps[0].elapsed_seconds == 0.25
     assert report.cases[0].steps[0].usage is not None
+
+
+async def test_early_review_keeps_flow_scoped_step_denominators_and_usage_separate() -> None:
+    measured = Usage(model_requests=1, tokens=TokenUsage(input_tokens=7, output_tokens=2))
+
+    async def run(envelope: Envelope) -> ExecutionResult:
+        del envelope
+        return to_execution_result(
+            RunResult(
+                "review",
+                "inbox",
+                "r1",
+                "needs_review",
+                None,
+                {},
+                (
+                    (
+                        "main",
+                        FlowRecord(
+                            "needs_review",
+                            (
+                                (
+                                    "assess",
+                                    StepRecord(
+                                        "needs_review",
+                                        freeze_json({"answer": "review"}),
+                                        True,
+                                        usage=measured,
+                                    ),
+                                ),
+                                ("later", StepRecord("skipped")),
+                            ),
+                            usage=measured,
+                            elapsed_seconds=0.5,
+                        ),
+                    ),
+                ),
+                measured,
+            )
+        )
+
+    report = await evaluate(
+        suite(
+            Expectation("answer", "/flows/main/steps/assess/result/answer", "review"),
+            Expectation("later", "/flows/main/steps/later/result", None),
+        ),
+        EvaluationVariant("review", "v1", run, "configuration-v1", flow="main", workflow="inbox"),
+    )
+
+    assert report.target_flow == "main"
+    assert report.review_rate == 1
+    assert (report.checks.passed, report.checks.skipped) == (1, 1)
+    assert [(check.flow, check.step) for check in report.cases[0].checks] == [
+        ("main", "assess"),
+        ("main", "later"),
+    ]
+    assert [(step.flow, step.name) for step in report.steps] == [
+        ("main", "assess"),
+        ("main", "later"),
+    ]
+    assert report.usage is not None and report.usage.model_requests.known_total == 1
+    assert report.flows[0].usage.model_requests.known_total == 1
+    assert report.steps[0].usage.model_requests.known_total == 1
 
 
 async def test_pipeline_self_cancellation_cancels_other_workers() -> None:
@@ -300,32 +394,16 @@ async def test_pipeline_self_cancellation_cancels_other_workers() -> None:
 
 
 async def test_evaluate_an_isolated_real_runner_step(tmp_path) -> None:
-    from test_runner import Scripted, make_plan, runner
+    del tmp_path
+    from test_flow_runner import Executor, flow, plan, runner
 
     from foliqant.bootstrap import WorkflowApplication
-    from foliqant.core.execution import StepOutcome
 
-    plan = make_plan(
-        tmp_path,
-        {
-            "first": "type: handler\nhandler: echo\ninput: {}\nnext: second\n",
-            "second": (
-                "type: handler\nhandler: echo\n"
-                "input: {text: {pointer: /steps/first/result}}\nnext: done\n"
-            ),
-            "done": "type: finish\noutcome: completed\n",
-        },
-    )
-    called = []
-
-    async def execute(step, inputs, context):
-        called.append(step.name)
-        return StepOutcome(freeze_json({"label": inputs["text"]}))
-
-    app = WorkflowApplication({"inbox": runner(plan, Scripted(execute))})
+    executor = Executor()
+    app = WorkflowApplication({"inbox": runner(plan(flow("main")), executor)})
 
     async def isolated(envelope: Envelope) -> ExecutionResult:
-        return await app.run_step("inbox", "second", envelope)
+        return await app.run_step("inbox", "main", "step_0", envelope)
 
     gold = EvaluationSuite(
         "step-gold",
@@ -333,16 +411,16 @@ async def test_evaluate_an_isolated_real_runner_step(tmp_path) -> None:
         (
             EvaluationCase(
                 "case",
-                Envelope(payload={"text": "request"}),
+                Envelope(payload={"message": "Bitte helfen."}),
                 (
-                    Expectation("label", "/decisions/second/result/label", "request"),
-                    Expectation("final", "/payload/label", "request"),
+                    Expectation("label", "/flows/main/steps/step_0/result/text", "Bitte helfen."),
+                    Expectation("final", "/payload/text", "Bitte helfen."),
                 ),
             ),
         ),
     )
     report = await evaluate(gold, variant(isolated))
-    assert called == ["second"]
+    assert [call[2] for call in executor.calls] == ["step_0"]
     assert report.case_pass_rate == 1
     assert report.cases[0].steps[0].elapsed_seconds is not None
 

@@ -12,9 +12,11 @@ from foliqant.compiler import compile_workflow
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.json import FrozenJson, FrozenObject, freeze_json
 from foliqant.core.plan import (
+    FlowPlan,
     LlmStepPlan,
     SchemaResourcePlan,
     SourceLocation,
+    TransitionTargetPlan,
     WorkflowPlan,
 )
 
@@ -55,15 +57,15 @@ def test_provider_bundle_rebases_transitive_refs_and_preserves_literal_data(
 
     monkeypatch.setattr(socket, "socket", forbidden)
     monkeypatch.setattr(Path, "read_text", forbidden)
-    exported = schemas.provider_output_schema("generate")
+    exported = schemas.provider_output_schema("main", "generate")
     validator = Draft202012Validator(exported)
     valid = {"count": 3, "literal": literal}
     assert validator.is_valid(valid)
     assert not validator.is_valid({"count": 2, "literal": literal})
     assert not validator.is_valid({"count": 3, "literal": {"$ref": "different"}})
-    schemas.validate_output("generate", _frozen(valid))
+    schemas.validate_output("main", "generate", _frozen(valid))
     exported.clear()
-    assert Draft202012Validator(schemas.provider_output_schema("generate")).is_valid(valid)
+    assert Draft202012Validator(schemas.provider_output_schema("main", "generate")).is_valid(valid)
 
 
 def test_provider_bundle_preserves_promoted_annotation_schema() -> None:
@@ -79,7 +81,7 @@ def test_provider_bundle_preserves_promoted_annotation_schema() -> None:
             resources=(_resource("schema.json", root),),
         )
     )
-    exported = schemas.provider_output_schema("generate")
+    exported = schemas.provider_output_schema("main", "generate")
     validator = Draft202012Validator(exported)
     assert validator.is_valid({"count": 3})
     assert not validator.is_valid({"count": 2})
@@ -98,7 +100,7 @@ def test_provider_bundle_rejects_ordinary_recursion() -> None:
         )
     )
     with pytest.raises(ServiceError) as error:
-        schemas.provider_output_schema("generate")
+        schemas.provider_output_schema("main", "generate")
     assert error.value.code == ErrorCode.INVALID_CONFIGURATION
 
 
@@ -114,7 +116,7 @@ def test_provider_bundle_drops_unused_recursive_definitions() -> None:
             resources=(_resource("schema.json", root),),
         )
     )
-    exported = schemas.provider_output_schema("generate")
+    exported = schemas.provider_output_schema("main", "generate")
     assert exported == {"type": "string"}
 
 
@@ -137,7 +139,7 @@ def test_provider_bundle_rejects_excessive_reference_expansion() -> None:
         )
     )
     with pytest.raises(ServiceError) as error:
-        schemas.provider_output_schema("generate")
+        schemas.provider_output_schema("main", "generate")
     assert error.value.code == ErrorCode.INVALID_CONFIGURATION
 
 
@@ -150,7 +152,7 @@ def test_provider_bundle_wraps_boolean_roots_as_objects(root: bool, valid: objec
             resources=(_resource("schema.json", root),),
         )
     )
-    exported = schemas.provider_output_schema("generate")
+    exported = schemas.provider_output_schema("main", "generate")
     assert exported == {"allOf": [root]}
     assert Draft202012Validator(exported).is_valid(valid) is root
 
@@ -187,13 +189,13 @@ def test_provider_bundle_inlines_refs_in_all_draft_schema_positions(
             resources=(_resource("schema.json", root),),
         )
     )
-    exported = schemas.provider_output_schema("generate")
+    exported = schemas.provider_output_schema("main", "generate")
     assert "$defs" not in exported
     assert Draft202012Validator(exported).is_valid(valid)
     assert not Draft202012Validator(exported).is_valid(invalid)
-    schemas.validate_output("generate", _frozen(valid))
+    schemas.validate_output("main", "generate", _frozen(valid))
     with pytest.raises(ServiceError) as error:
-        schemas.validate_output("generate", _frozen(invalid))
+        schemas.validate_output("main", "generate", _frozen(invalid))
     assert error.value.code == ErrorCode.INVALID_OUTPUT
 
 
@@ -210,14 +212,14 @@ def test_provider_bundle_preserves_ref_sibling_intersection() -> None:
             resources=(_resource("schema.json", root),),
         )
     )
-    exported = schemas.provider_output_schema("generate")
+    exported = schemas.provider_output_schema("main", "generate")
     validator = Draft202012Validator(exported)
     assert "$defs" not in exported
     assert validator.is_valid(10)
     assert not validator.is_valid(5)
-    schemas.validate_output("generate", _frozen(10))
+    schemas.validate_output("main", "generate", _frozen(10))
     with pytest.raises(ServiceError) as error:
-        schemas.validate_output("generate", _frozen(5))
+        schemas.validate_output("main", "generate", _frozen(5))
     assert error.value.code == ErrorCode.INVALID_OUTPUT
 
 
@@ -241,9 +243,9 @@ def test_provider_export_rejects_dynamic_scopes_without_affecting_host_validatio
             resources=(_resource("schema.json", root),),
         )
     )
-    schemas.validate_output("generate", _frozen({}))
+    schemas.validate_output("main", "generate", _frozen({}))
     with pytest.raises(ServiceError) as error:
-        schemas.provider_output_schema("generate")
+        schemas.provider_output_schema("main", "generate")
     assert error.value.code == ErrorCode.INVALID_CONFIGURATION
 
 
@@ -279,7 +281,7 @@ def _plan(
     return WorkflowPlan(
         name="test",
         revision="a" * 64,
-        start="generate" if steps else "done",
+        start="main",
         default_model=None,
         input_schema_path=input_path,
         input_schema=(
@@ -287,7 +289,19 @@ def _plan(
         ),
         schema_resources=resources,
         output=None,
-        steps=steps,
+        flows=(
+            FlowPlan(
+                name="main",
+                input=(),
+                steps=steps,
+                input_schema_path=None,
+                input_schema=None,
+                output=None,
+                transition=TransitionTargetPlan(outcome="completed"),
+                on_unresolved=None,
+                location=SourceLocation("flow.yaml", 1, 1),
+            ),
+        ),
         location=SourceLocation("workflow.yaml", 1, 1),
     )
 
@@ -333,13 +347,13 @@ def test_validates_step_output_and_rejects_unconfigured_step() -> None:
         )
     )
 
-    schemas.validate_output("generate", _frozen("ok"))
+    schemas.validate_output("main", "generate", _frozen("ok"))
     with pytest.raises(ServiceError) as error:
-        schemas.validate_output("generate", _frozen("PRIVATE BAD OUTPUT"))
+        schemas.validate_output("main", "generate", _frozen("PRIVATE BAD OUTPUT"))
     assert error.value.code == ErrorCode.INVALID_OUTPUT
     assert "PRIVATE BAD OUTPUT" not in str(error.value)
     with pytest.raises(ServiceError) as error:
-        schemas.validate_output("unknown", _frozen(None))
+        schemas.validate_output("main", "unknown", _frozen(None))
     assert error.value.code == ErrorCode.INVALID_CONFIGURATION
 
 
@@ -360,7 +374,7 @@ def test_boolean_schemas_are_supported() -> None:
 
     schemas.validate_input(_frozen({"anything": [1, True, None]}))
     with pytest.raises(ServiceError) as error:
-        schemas.validate_output("generate", _frozen(None))
+        schemas.validate_output("main", "generate", _frozen(None))
     assert error.value.code == ErrorCode.INVALID_OUTPUT
 
 
@@ -415,13 +429,15 @@ def test_compiled_schemas_need_no_filesystem_or_network_after_construction(
     (tmp_path / "steps").mkdir()
     (tmp_path / "schemas").mkdir()
     (tmp_path / "workflow.yaml").write_text(
-        "version: 1\nname: test\nstart: done\ninput_schema: schemas/root.json\n"
+        "name: test\nstart: main\ninput_schema: schemas/root.json\n"
+        "flows:\n  main:\n    input: {}\n    transition: {outcome: completed}\n"
+        "    definition:\n      steps:\n        - id: done\n          definition: steps/done.yaml\n"
     )
-    (tmp_path / "steps/done.yaml").write_text("type: finish\noutcome: completed\n")
+    (tmp_path / "steps/done.yaml").write_text("type: handler\nhandler: noop\ninput: {}\n")
     (tmp_path / "schemas/root.json").write_text('{"$ref":"defs.json"}')
     definitions = tmp_path / "schemas/defs.json"
     definitions.write_text('{"const":"original"}')
-    plan = compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names=set())
+    plan = compile_workflow(tmp_path, model_aliases={}, tool_catalogs={}, handler_names={"noop"})
     schemas = WorkflowSchemas(plan)
     definitions.write_text('{"const":"mutated"}')
 

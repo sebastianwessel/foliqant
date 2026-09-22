@@ -26,6 +26,7 @@ class ModelRegistry:
         aliases: Mapping[str, str],
         workflow: str,
         step: str,
+        flow: str,
         location: SourceLocation,
     ) -> str:
         selected = selection if selection is not None else default
@@ -56,7 +57,7 @@ class ModelRegistry:
             effective = selected
         # Identity is deliberately independent of credential values. Distinct
         # steps own distinct bindings; derived bindings share source admission.
-        token = hashlib.sha256(f"{workflow}:{step}".encode()).hexdigest()
+        token = hashlib.sha256(f"{workflow}:{flow}:{step}".encode()).hexdigest()
         alias = f"step_model_{token}"
         while alias in aliases:
             alias = f"step_{alias}"

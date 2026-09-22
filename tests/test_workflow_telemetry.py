@@ -28,7 +28,9 @@ from foliqant.core.runner import WorkflowRunner
 from foliqant.ports.execution import OperationStep, StepContext
 from foliqant.ports.observation import Observation, TraceContext
 
-_LABELS = TelemetryLabels(workflows=frozenset({"inbox"}), steps=frozenset({"first", "done"}))
+_LABELS = TelemetryLabels(
+    workflows=frozenset({"inbox"}), steps=frozenset({"first"}), flows=frozenset({"main"})
+)
 _PARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 
 
@@ -50,8 +52,7 @@ async def test_real_runner_spans_and_metrics_do_not_capture_business_values(tmp_
     plan = make_plan(
         tmp_path,
         {
-            "first": "type: handler\nhandler: echo\ninput: {}\nnext: done\n",
-            "done": "type: finish\noutcome: completed\n",
+            "first": "type: handler\nhandler: echo\ninput: {}\n",
         },
     )
     seen = []
@@ -88,11 +89,12 @@ async def test_real_runner_spans_and_metrics_do_not_capture_business_values(tmp_
         context_api.detach(token)
     assert result.status == "completed"
     spans = exporter.get_finished_spans()
-    assert [s.name for s in spans] == ["foliqant.step", "foliqant.step", "foliqant.workflow"]
+    assert [s.name for s in spans] == ["foliqant.step", "foliqant.flow", "foliqant.workflow"]
     root = spans[-1]
     assert root.parent.span_id == int("0123456789abcdef", 16)
     assert all(s.context.trace_id == int(_PARENT.split("-")[1], 16) for s in spans)
-    assert all(s.parent.span_id == root.context.span_id for s in spans[:-1])
+    assert spans[0].parent.span_id == spans[1].context.span_id
+    assert spans[1].parent.span_id == root.context.span_id
     assert seen[0]["traceparent"].split("-")[2] == f"{spans[0].context.span_id:016x}"
     assert set(seen[0]) == {"traceparent", "tracestate"}
     assert "PRIVATE" not in " ".join(s.to_json() for s in spans)
@@ -100,7 +102,11 @@ async def test_real_runner_spans_and_metrics_do_not_capture_business_values(tmp_
     assert metrics is not None
     assert "PRIVATE" not in metrics.to_json()
     names = {m.name for r in metrics.resource_metrics for s in r.scope_metrics for m in s.metrics}
-    assert names == {"foliqant.workflow.duration", "foliqant.step.duration"}
+    assert names == {
+        "foliqant.workflow.duration",
+        "foliqant.flow.duration",
+        "foliqant.step.duration",
+    }
     assert not trace_api.get_current_span().get_span_context().is_valid
 
 
@@ -110,8 +116,7 @@ async def test_outcome_status_and_context_restored(tmp_path: Path, telemetry, mo
     plan = make_plan(
         tmp_path,
         {
-            "first": "type: handler\nhandler: echo\ninput: {}\nnext: done\n",
-            "done": "type: finish\noutcome: completed\n",
+            "first": "type: handler\nhandler: echo\ninput: {}\n",
         },
     )
 
@@ -169,7 +174,13 @@ async def test_concurrent_callers_do_not_share_trace_context(telemetry):
 async def test_broken_observer_does_not_change_business_result_or_error(stage):
     class Broken:
         def start(
-            self, workflow: str, *, step: str | None = None, trace: TraceContext | None = None
+            self,
+            workflow: str,
+            *,
+            flow: str | None = None,
+            step: str | None = None,
+            trace: TraceContext | None = None,
+            transport_trace: TraceContext | None = None,
         ) -> Observation:
             if stage == "start":
                 raise RuntimeError("PRIVATE")
@@ -207,11 +218,15 @@ async def test_transport_carrier_precedes_metadata_as_complete_carrier(
     tmp_path, telemetry, metadata_parent
 ):
     observer, exporter, _, _ = telemetry
-    plan = make_plan(tmp_path, {"first": "type: finish\noutcome: completed\n"})
+    plan = make_plan(tmp_path, {"first": "type: handler\nhandler: echo\ninput: {}\n"})
+
+    async def execute(step, inputs, context):
+        return StepOutcome(None)
+
     carrier = _PARENT.replace("0123456789abcdef0123456789abcdef", "3" * 32)
     runner = WorkflowRunner(
         plan,
-        executor=Scripted(None),  # No operation step is executed.
+        executor=Scripted(execute),
         validator=NoSchema(),
         admission=CapacityLimiter(concurrency=1, queue_limit=0),
         observer=observer,

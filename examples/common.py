@@ -13,14 +13,14 @@ from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.json import JsonValue, thaw_json
 from foliqant.evaluation import EvaluationReport, EvaluationSuite
 from foliqant.evaluation.artifact import default_artifact_path, write_report
-from foliqant.evaluation.dataset import EvaluationDataset
+from foliqant.evaluation.dataset import EvaluationDataset, read_dataset
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def example_environment(environment: Mapping[str, str] = os.environ) -> dict[str, str]:
     """Explicitly read the shared root .env; process values take precedence."""
-    return load_environment(ROOT / "foliqant.yaml", environment)
+    return load_environment(ROOT / "settings.yaml", environment)
 
 
 def command(run: Callable[[], Awaitable[dict[str, JsonValue]]]) -> int:
@@ -87,6 +87,7 @@ def suite_document(
     *,
     workflow: str,
     step: str | None = None,
+    flow: str | None = None,
     metrics: Sequence[JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
     """Represent authored synthetic Python gold in the shared dataset wire format."""
@@ -111,9 +112,16 @@ def suite_document(
         ],
         "metrics": list(metrics or ()),
     }
+    if flow is not None:
+        document["flow"] = flow
     if step is not None:
         document["step"] = step
     return document
+
+
+def read_example_dataset(path: Path) -> EvaluationDataset:
+    """Read canonical gold with the shared bounded case-reference loader."""
+    return read_dataset(path)
 
 
 def private_output_path(path: Path | None) -> Path | None:

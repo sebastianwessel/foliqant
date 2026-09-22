@@ -114,15 +114,18 @@ class WorkflowTelemetry:
     ) -> None:
         self._labels = labels
         self._workflow_tracer = tracer_provider.get_tracer("foliqant.workflow")
+        self._flow_tracer = tracer_provider.get_tracer("foliqant.flow")
         self._step_tracer = tracer_provider.get_tracer("foliqant.step")
         meter = (meter_provider or NoOpMeterProvider()).get_meter("foliqant.metrics")
         self._workflow_duration = meter.create_histogram("foliqant.workflow.duration", unit="s")
+        self._flow_duration = meter.create_histogram("foliqant.flow.duration", unit="s")
         self._step_duration = meter.create_histogram("foliqant.step.duration", unit="s")
 
     def start(
         self,
         workflow: str,
         *,
+        flow: str | None = None,
         step: str | None = None,
         trace: TraceContext | None = None,
         transport_trace: TraceContext | None = None,
@@ -133,11 +136,16 @@ class WorkflowTelemetry:
             attributes["foliqant.workflow.name"] = workflow
         if step in self._labels.steps:
             attributes["foliqant.step.name"] = step
-        tracer = self._workflow_tracer if step is None else self._step_tracer
+        if flow in self._labels.flows:
+            attributes["foliqant.flow.name"] = flow
+        if step is not None:
+            tracer, duration, name = self._step_tracer, self._step_duration, "step"
+        elif flow is not None:
+            tracer, duration, name = self._flow_tracer, self._flow_duration, "flow"
+        else:
+            tracer, duration, name = self._workflow_tracer, self._workflow_duration, "workflow"
         parent = _parent(trace, transport_trace)
-        span = tracer.start_span(
-            "workflow" if step is None else "step", context=parent, attributes=attributes
-        )
+        span = tracer.start_span(name, context=parent, attributes=attributes)
         try:
             token = context_api.attach(trace_api.set_span_in_context(span, parent))
         except BaseException:
@@ -146,6 +154,6 @@ class WorkflowTelemetry:
         return _Observation(
             span,
             token,
-            self._workflow_duration if step is None else self._step_duration,
+            duration,
             attributes,
         )

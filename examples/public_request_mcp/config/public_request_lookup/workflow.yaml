@@ -1,0 +1,13 @@
+input_schema: input.schema.json
+output:
+  pointer: /flows/lookup/result
+  optional: true
+  default:
+    status: needs_review
+flows:
+  lookup:
+    input:
+      reference:
+        pointer: /payload/reference
+    transition:
+      outcome: completed

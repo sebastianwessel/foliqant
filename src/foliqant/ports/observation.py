@@ -30,6 +30,7 @@ class ExecutionObserver(Protocol):
         self,
         workflow: str,
         *,
+        flow: str | None = None,
         step: str | None = None,
         trace: TraceContext | None = None,
         transport_trace: TraceContext | None = None,

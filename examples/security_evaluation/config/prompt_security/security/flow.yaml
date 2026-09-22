@@ -1,0 +1,8 @@
+input_schema: input.schema.json
+output:
+  pointer: /steps/confirm/result
+  optional: true
+  default: null
+steps:
+  - assess
+  - confirm

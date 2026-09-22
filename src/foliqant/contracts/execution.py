@@ -20,6 +20,7 @@ from foliqant.contracts.decisions import ChoiceResult
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import (
     Failure,
+    FlowRecord,
     RunResult,
     RunStatus,
     StepRecord,
@@ -302,10 +303,109 @@ class StepResult(_ExecutionBoundary):
         return values
 
 
+class FlowResult(_ExecutionBoundary):
+    """A flow's scoped step records and explicitly present projected result."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "oneOf": [
+                {
+                    "properties": {"status": {"const": "completed"}},
+                    "required": ["result"],
+                    "not": {"required": ["error"]},
+                },
+                {
+                    "properties": {"status": {"const": "needs_review"}},
+                    "not": {"required": ["error"]},
+                },
+                {
+                    "properties": {"status": {"const": "failed"}},
+                    "required": ["error"],
+                    "not": {"required": ["result"]},
+                },
+                {
+                    "properties": {"status": {"const": "cancelled"}},
+                    "not": {"required": ["result"]},
+                },
+                {
+                    "properties": {"status": {"const": "skipped"}},
+                    "not": {"anyOf": [{"required": ["result"]}, {"required": ["error"]}]},
+                },
+            ]
+        }
+    )
+
+    status: StepStatus
+    steps: dict[Id, StepResult]
+    result: JsonValue = Field(default=None, json_schema_extra=_omit_default)
+    usage: Usage | None = None
+    elapsed_seconds: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    error: SafeError | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+
+    @model_validator(mode="after")
+    def status_matches_optional_fields(self) -> Self:
+        # Reuse the step presence and measurement rules without admitting selection.
+        StepResult.model_validate(
+            {name: getattr(self, name) for name in self.model_fields_set if name != "steps"},
+            strict=True,
+        )
+        return self
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        for name in ("result", "error"):
+            if name not in self.model_fields_set:
+                values.pop(name, None)
+        for name in ("usage", "elapsed_seconds"):
+            if getattr(self, name) is None:
+                values.pop(name, None)
+        return values
+
+
+class TransitionResult(_ExecutionBoundary):
+    """One recorded workflow boundary with exactly one authored target."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "oneOf": [
+                {"required": ["flow"], "not": {"required": ["outcome"]}},
+                {"required": ["outcome"], "not": {"required": ["flow"]}},
+            ]
+        }
+    )
+
+    source: Id
+    reason: Literal["completed", "needs_review"]
+    flow: Id | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+    outcome: Literal["completed", "needs_review"] | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+
+    @model_validator(mode="after")
+    def exactly_one_target(self) -> Self:
+        if ("flow" in self.model_fields_set) == ("outcome" in self.model_fields_set):
+            raise ValueError("transition requires exactly one target")
+        if ("flow" in self.model_fields_set and self.flow is None) or (
+            "outcome" in self.model_fields_set and self.outcome is None
+        ):
+            raise ValueError("transition target cannot be null")
+        return self
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        for name in ("flow", "outcome"):
+            if name not in self.model_fields_set:
+                values.pop(name, None)
+        return values
+
+
 class ExecutionResult(_ExecutionBoundary):
     payload: JsonValue
     metadata: Metadata
-    decisions: dict[Id, StepResult]
+    flows: dict[Id, FlowResult]
+    transitions: list[TransitionResult]
     execution: ExecutionInfo
 
     @field_validator("metadata", mode="before")
@@ -358,15 +458,43 @@ def _step_result(record: StepRecord) -> dict[str, JsonValue]:
     return value
 
 
+def _flow_result(record: FlowRecord) -> dict[str, JsonValue]:
+    if not record.has_result and record.result is not None:
+        raise ServiceError(ErrorCode.INVALID_OUTPUT)
+    steps: dict[str, JsonValue] = {}
+    for step_id, step in record.steps:
+        if step_id in steps:
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+        steps[step_id] = _step_result(step)
+    value: dict[str, JsonValue] = {"status": record.status, "steps": steps}
+    if record.has_result:
+        value["result"] = thaw_json(record.result)
+    if record.usage is not None:
+        value["usage"] = _usage(record.usage)
+    if record.elapsed_seconds is not None:
+        value["elapsed_seconds"] = record.elapsed_seconds
+    if record.error is not None:
+        value["error"] = _safe_error(record.error)
+    return value
+
+
 def to_execution_result(value: RunResult) -> ExecutionResult:
-    """Copy an immutable core result into its strict public representation."""
+    """Copy an immutable core result into its strict flow-scoped representation."""
 
     try:
-        decisions: dict[str, JsonValue] = {}
-        for step_id, record in value.decisions:
-            if step_id in decisions:
+        flows: dict[str, JsonValue] = {}
+        for flow_id, record in value.flows:
+            if flow_id in flows:
                 raise ServiceError(ErrorCode.INVALID_OUTPUT)
-            decisions[step_id] = _step_result(record)
+            flows[flow_id] = _flow_result(record)
+        transitions: list[JsonValue] = []
+        for transition in value.transitions:
+            item: dict[str, JsonValue] = {"source": transition.source, "reason": transition.reason}
+            if transition.flow is not None:
+                item["flow"] = transition.flow
+            if transition.outcome is not None:
+                item["outcome"] = transition.outcome
+            transitions.append(item)
         execution: dict[str, JsonValue] = {
             "id": value.execution_id,
             "workflow": value.workflow,
@@ -380,7 +508,8 @@ def to_execution_result(value: RunResult) -> ExecutionResult:
             {
                 "payload": thaw_json(value.payload),
                 "metadata": thaw_json(value.metadata),
-                "decisions": decisions,
+                "flows": flows,
+                "transitions": transitions,
                 "execution": execution,
             },
             strict=True,

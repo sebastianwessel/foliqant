@@ -7,61 +7,25 @@ from examples.common import (
     command,
     evaluation_output,
     private_output_path,
-    suite_document,
+    read_example_dataset,
     write_example_dataset,
 )
 from examples.public_request_mcp.run import CONFIG_PATH, open_example
 from foliqant import Envelope, ExecutionResult, prepare_application
 from foliqant.core.json import JsonValue
 from foliqant.evaluation import (
-    EvaluationCase,
     EvaluationSuite,
     EvaluationVariant,
-    Expectation,
     evaluate,
 )
 from foliqant.evaluation.dataset import EvaluationDataset, metric_specs
 
-
-def _gold_suite() -> EvaluationSuite:
-    return EvaluationSuite(
-        name="public_request_lookup",
-        revision="1",
-        cases=tuple(
-            EvaluationCase(
-                f"request_{index}",
-                Envelope(payload={"reference": reference}),
-                (
-                    Expectation("completed", "/execution/status", "completed"),
-                    Expectation("reference", "/payload/reference", reference),
-                    Expectation("status", "/payload/status", "in_review"),
-                    Expectation("deadline", "/payload/due_date", "2026-10-05"),
-                    Expectation("team", "/payload/assigned_team", "records_review"),
-                    Expectation("one_tool", "/execution/usage/tool_calls", 1),
-                    Expectation("no_model", "/execution/usage/model_requests", 0),
-                ),
-            )
-            for index, reference in enumerate(("FOI-2026-0142", "FOI-2026-0310"))
-        ),
-    )
+DATASET_PATH = Path(__file__).with_name("evaluation") / "dataset.json"
 
 
 def dataset() -> EvaluationDataset:
-    """Reuse the same authored expectations for pipeline and isolated lookup."""
-    gold = _gold_suite()
-    isolated = EvaluationSuite("public_request_lookup_step", gold.revision, gold.cases)
-    return EvaluationDataset.model_validate(
-        {
-            "version": 1,
-            "name": "public_request_mcp_examples",
-            "revision": "1",
-            "suites": [
-                suite_document(gold, workflow="public_request_lookup"),
-                suite_document(isolated, workflow="public_request_lookup", step="lookup"),
-            ],
-        },
-        strict=True,
-    )
+    """Read the editable, canonical synthetic evaluation dataset."""
+    return read_example_dataset(DATASET_PATH)
 
 
 def suite() -> EvaluationSuite:
@@ -79,10 +43,15 @@ async def run_evaluations(*, output: Path | None = None, repeat: int = 1) -> dic
         reports = []
         for spec in gold.suites:
             isolated = spec.step is not None
+            flow = spec.flow
 
-            async def invoke(envelope: Envelope, step_only: bool = isolated) -> ExecutionResult:
+            async def invoke(
+                envelope: Envelope, step_only: bool = isolated, selected_flow: str | None = flow
+            ) -> ExecutionResult:
                 if step_only:
-                    return await app.run_step("public_request_lookup", "lookup", envelope)
+                    return await app.run_step("public_request_lookup", "lookup", "lookup", envelope)
+                if selected_flow is not None:
+                    return await app.run_flow("public_request_lookup", selected_flow, envelope)
                 return await app.run("public_request_lookup", envelope)
 
             reports.append(
@@ -95,6 +64,7 @@ async def run_evaluations(*, output: Path | None = None, repeat: int = 1) -> dic
                         workflow="public_request_lookup",
                         run=invoke,
                         step=spec.step,
+                        flow=spec.flow,
                     ),
                     include_details=True,
                     metrics=metric_specs(spec),

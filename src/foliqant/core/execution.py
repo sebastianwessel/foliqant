@@ -117,6 +117,29 @@ class StepOutcome:
 
 
 @dataclass(frozen=True, slots=True)
+class FlowRecord:
+    """One sequential flow, including unvisited steps and an explicit result presence."""
+
+    status: StepStatus
+    steps: tuple[tuple[str, StepRecord], ...]
+    result: FrozenJson = None
+    has_result: bool = False
+    usage: Usage | None = None
+    elapsed_seconds: float | None = None
+    error: Failure | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TransitionRecord:
+    """An authored boundary selected after a completed or unresolved flow."""
+
+    source: str
+    reason: Literal["completed", "needs_review"]
+    flow: str | None = None
+    outcome: Literal["completed", "needs_review"] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class RunResult:
     execution_id: str
     workflow: str
@@ -124,9 +147,10 @@ class RunResult:
     status: RunStatus
     payload: FrozenJson
     metadata: FrozenObject
-    decisions: tuple[tuple[str, StepRecord], ...]
+    flows: tuple[tuple[str, FlowRecord], ...]
     usage: Usage
     error: Failure | None = None
+    transitions: tuple[TransitionRecord, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

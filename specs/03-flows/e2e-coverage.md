@@ -7,22 +7,35 @@ and accept input -> bounded configured execution -> validated terminal result ->
 drain and close. The HTTP example uses this same foreground call. No durable
 acceptance, child job, persisted state or recovery resource exists.
 
-`run_step` executes one configured step with explicit resolved payload keys and
-no upstream execution or routing. Evaluation snapshots explicit golden cases,
-invokes that step or a pipeline, and reports pass/fail/missing/skipped/error
+`run_flow(workflow, flow_id, envelope)` executes one flow using an already resolved
+payload, without workflow routing. `run_step(workflow, flow_id, step_id, envelope)`
+executes one operation without upstream execution or routing. Pipeline runs bind
+each flow payload explicitly, run its steps sequentially, project its result and
+choose a configured transition at the boundary. Results retain flow-local step
+records, including skipped steps, and ordered transition records.
+Evaluation snapshots explicit golden cases, invokes a pipeline, flow or step, and reports pass/fail/missing/skipped/error
 outcomes, review/failure rates and measured usage. Variants use the same suite;
 caller-owned holdouts remain separate. Failures and cancellation cannot become
 successful checks or fabricated token/latency measurements.
 
-Runtime decision acceptance covers v3 reasons and evidence strength across all
+Runtime decision acceptance covers short reasons and evidence strength across all
 question types; null answers/unknown predicates; substantive false predicates;
 allowed empty and partially answerable collections; request-unit subject
-occurrence in allowed inputs; and rejection of native v2 citation output at the
-runtime boundary. Existing native v2 model-data validation remains unchanged.
+occurrence in allowed inputs; and rejection of citation-shaped output or format-version fields at the
+unversioned runtime boundary. Existing native v2 model-data validation remains unchanged.
 Evaluation includes an explicit null classification label alongside limited and
 strong, while preserving string-only null abstention and missing/error outcomes.
 
-Evidence: `tests/test_bootstrap.py`, `tests/test_runner.py`,
+Acceptance also covers duplicate local IDs, cross-flow step isolation, explicit
+optional/default bindings after possibly unresolved steps, scalar exact-match
+routing with a default, structured JSON decision sources, literal prompt injection
+attempts, and no recursive interpolation. Configuration references remain within
+the configuration root. Omitted workflow registries discover immediate nonhidden
+workflow directories; short step IDs require exactly one conventional file.
+Missing or ambiguous lookup fails before clients open; order and routing stay explicit. Step outputs cannot invent routes or tool permissions.
+
+Evidence: `tests/test_bootstrap.py`, `tests/test_flow_runner.py`,
+`tests/test_flow_boundaries.py`, `tests/test_prompt.py`, `tests/test_compiler.py`,
 `tests/test_step_execution.py`, `tests/test_evaluation.py`, adapter/protocol tests
 and schema/architecture checks. Archived business-process paths in document 10
 are not package acceptance requirements.

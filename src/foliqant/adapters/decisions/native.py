@@ -1,5 +1,6 @@
 """Project runtime decisions over native input questions across the adapter boundary."""
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Never
@@ -67,8 +68,8 @@ def _question_value(question: DecisionQuestionPlan) -> dict[str, object]:
 def build_decision_input(step: DecisionStepPlan, sources: FrozenObject) -> DecisionInput:
     """Build the canonical input from resolved source text and every compiled question.
 
-    The first service authoring slice has no source-kind field. Its resolved
-    string sources are therefore canonical native ``document`` sources.
+    Text sources remain unchanged. Explicit JSON sources are deterministically
+    serialized into native document text without changing the native contract.
     """
 
     expected_source_ids = tuple(source_id for source_id, _binding in step.sources)
@@ -76,9 +77,25 @@ def build_decision_input(step: DecisionStepPlan, sources: FrozenObject) -> Decis
         _fail(ErrorCode.INVALID_INPUT)
 
     native_sources: list[dict[str, str]] = []
+    source_formats = dict(step.source_formats)
     for source_id in expected_source_ids:
-        text = sources[source_id]
-        if not isinstance(text, str) or not text.strip():
+        value = sources[source_id]
+        if source_formats.get(source_id, "text") == "json":
+            try:
+                text = json.dumps(
+                    thaw_json(value),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+            except (TypeError, ValueError, RecursionError):
+                _fail(ErrorCode.INVALID_INPUT)
+        else:
+            if not isinstance(value, str):
+                _fail(ErrorCode.INVALID_INPUT)
+            text = value
+        if not text.strip():
             _fail(ErrorCode.INVALID_INPUT)
         native_sources.append({"id": source_id, "kind": "document", "text": text})
 

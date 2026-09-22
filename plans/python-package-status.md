@@ -42,8 +42,10 @@ Small synthetic model runs verify integration only, not production accuracy.
 Current fallback, context, and step-model verification is recorded in
 [the implementation review](reviews/fallback-context-models-2026-09-21.md).
 
-Native input/output now use schema version 2 with `no_supported_answer`,
-`conflicting_information`, and `multiple_valid_options`. Missing facts and
-unrepresentable answers share one issue and the example review route. See
-[the contract upgrade review](reviews/unified-answerability-v2.md) for runtime,
-model-data conversion, and current evaluation evidence.
+Current runtime configuration and results use the unversioned workflow/flow/step
+contract. Decision results use `no_supported_answer`, `conflicting_information`,
+and `multiple_valid_options`; missing facts and unrepresentable answers share
+one issue. Existing native model-development formats and immutable artifacts
+remain separate. The active refactor and its verification are recorded in
+[composition status](workflow-refactor-status.md); older reviews are historical
+measurement records, not current configuration instructions.

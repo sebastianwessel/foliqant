@@ -12,7 +12,7 @@ from foliqant.contracts.envelope import Envelope
 from foliqant.contracts.execution import ExecutionResult
 from foliqant.core.json import MAX_JSON_DEPTH, JsonValue, freeze_json
 
-from .artifact import MAX_REPORT_BYTES, REPORT_MODES
+from .artifact import MAX_REPORT_BYTES, report_document
 from .contracts import EvaluationCase, Expectation
 from .dataset import read_json
 from .metrics import MetricObservation, MetricSpec, observe_metrics, summarize_metrics
@@ -70,11 +70,7 @@ def _sequence(value: object, reason: str) -> list[Any]:
 
 
 def _artifact(path: Path) -> dict[str, Any]:
-    raw = _mapping(read_json(path, max_bytes=MAX_REPORT_BYTES), "invalid evaluation artifact")
-    if type(raw.get("version")) is not int or raw["version"] != 1:
-        raise ValueError("invalid evaluation artifact version")
-    if raw.get("mode") not in REPORT_MODES:
-        raise ValueError("evaluation artifact mode is invalid")
+    raw = report_document(read_json(path, max_bytes=MAX_REPORT_BYTES))
     dataset = _mapping(raw.get("dataset"), "evaluation artifact dataset is missing")
     if not isinstance(dataset.get("name"), str) or not isinstance(dataset.get("revision"), str):
         raise ValueError("evaluation artifact dataset identity is invalid")
@@ -99,11 +95,14 @@ def _same(left: object, right: object, reason: str) -> None:
         raise ValueError(reason)
 
 
-def _identity(report: dict[str, Any]) -> tuple[str, str, str | None, str | None]:
+def _identity(
+    report: dict[str, Any],
+) -> tuple[str, str, str | None, str | None, str | None]:
     values = (
         report.get("suite_name"),
         report.get("suite_fingerprint"),
         report.get("target_workflow"),
+        report.get("target_flow"),
         report.get("target_step"),
     )
     if not isinstance(values[0], str) or not isinstance(values[1], str):
@@ -111,8 +110,12 @@ def _identity(report: dict[str, Any]) -> tuple[str, str, str | None, str | None]
     if values[2] is not None and not isinstance(values[2], str):
         raise ValueError("report workflow target is invalid")
     if values[3] is not None and not isinstance(values[3], str):
+        raise ValueError("report flow target is invalid")
+    if values[4] is not None and not isinstance(values[4], str):
         raise ValueError("report step target is invalid")
-    return cast(tuple[str, str, str | None, str | None], values)
+    if values[4] is not None and values[3] is None:
+        raise ValueError("report step target requires a flow target")
+    return cast(tuple[str, str, str | None, str | None, str | None], values)
 
 
 def _repetition(case: dict[str, Any]) -> int:
@@ -173,15 +176,17 @@ def _attempt_contract(report: dict[str, Any], cases: list[dict[str, Any]]) -> tu
     return repeat, source_count
 
 
-def _check_semantics(case: dict[str, Any]) -> list[tuple[Any, Any, Any, Any]]:
+def _check_semantics(case: dict[str, Any]) -> list[tuple[Any, Any, Any, Any, Any]]:
     checks = _sequence(case.get("checks"), "case checks are missing")
-    values: list[tuple[Any, Any, Any, Any]] = []
+    values: list[tuple[Any, Any, Any, Any, Any]] = []
     for raw in checks:
         check = _mapping(raw, "case check is invalid")
         outcome = check.get("outcome")
         if outcome not in _OUTCOME_RANK:
             raise ValueError("case check outcome is invalid")
-        values.append((check.get("name"), check.get("path"), check.get("step"), outcome))
+        values.append(
+            (check.get("name"), check.get("path"), check.get("flow"), check.get("step"), outcome)
+        )
     return values
 
 
@@ -393,15 +398,15 @@ def _compare_suite(
         before_checks = _check_semantics(before)
         after_checks = _check_semantics(after)
         _same(
-            [(name, path, step) for name, path, step, _ in after_checks],
-            [(name, path, step) for name, path, step, _ in before_checks],
+            [(name, path, flow, step) for name, path, flow, step, _ in after_checks],
+            [(name, path, flow, step) for name, path, flow, step, _ in before_checks],
             "case check semantics differ",
         )
         if not before_checks:
             raise ValueError("case has no checks")
         check_changes = [
-            _OUTCOME_RANK[cast(str, candidate_check[3])]
-            - _OUTCOME_RANK[cast(str, baseline_check[3])]
+            _OUTCOME_RANK[cast(str, candidate_check[4])]
+            - _OUTCOME_RANK[cast(str, baseline_check[4])]
             for baseline_check, candidate_check in zip(before_checks, after_checks, strict=True)
         ]
         baseline_status = cast(str, before["status"])
@@ -418,10 +423,10 @@ def _compare_suite(
             else "unchanged"
         )
         totals[outcome] += 1
-        before_covered_case = sum(check[3] in {"passed", "failed"} for check in before_checks)
-        after_covered_case = sum(check[3] in {"passed", "failed"} for check in after_checks)
-        before_passed_case = sum(check[3] == "passed" for check in before_checks)
-        after_passed_case = sum(check[3] == "passed" for check in after_checks)
+        before_covered_case = sum(check[4] in {"passed", "failed"} for check in before_checks)
+        after_covered_case = sum(check[4] in {"passed", "failed"} for check in after_checks)
+        before_passed_case = sum(check[4] == "passed" for check in before_checks)
+        after_passed_case = sum(check[4] == "passed" for check in after_checks)
         total_checks += len(before_checks)
         before_covered += before_covered_case
         after_covered += after_covered_case
@@ -454,11 +459,11 @@ def _compare_suite(
                     "baseline_passed": before_passed_case,
                     "candidate_passed": after_passed_case,
                     "baseline_outcomes": {
-                        check_outcome: sum(check[3] == check_outcome for check in before_checks)
+                        check_outcome: sum(check[4] == check_outcome for check in before_checks)
                         for check_outcome in _OUTCOME_RANK
                     },
                     "candidate_outcomes": {
-                        check_outcome: sum(check[3] == check_outcome for check in after_checks)
+                        check_outcome: sum(check[4] == check_outcome for check in after_checks)
                         for check_outcome in _OUTCOME_RANK
                     },
                 },
@@ -486,6 +491,7 @@ def _compare_suite(
         "suite_name": baseline["suite_name"],
         "suite_fingerprint": baseline["suite_fingerprint"],
         "target_workflow": baseline.get("target_workflow"),
+        "target_flow": baseline.get("target_flow"),
         "target_step": baseline.get("target_step"),
         "baseline_variant": {
             "name": baseline.get("variant_name"),
@@ -564,7 +570,6 @@ def compare_reports(candidate: Path, baseline: Path) -> ReportComparison:
         for outcome in ("improved", "regressed", "mixed", "unchanged")
     }
     document: dict[str, JsonValue] = {
-        "version": 1,
         "kind": "evaluation_report_comparison",
         "dataset": cast(JsonValue, baseline_raw["dataset"]),
         "baseline": {"path": str(baseline.absolute()), "mode": baseline_raw["mode"]},

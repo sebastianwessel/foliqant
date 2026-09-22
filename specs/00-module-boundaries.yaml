@@ -4,7 +4,7 @@ modules:
   owner: python-package
   public_entrypoint: src/foliqant/contracts/decisions.py
   public_symbols: [DecisionOutput, validate_decision_output]
-  owned_concepts: [runtime-v3-results, reason, evidence-strength, allowed-source-subject-validation]
+  owned_concepts: [unversioned-runtime-results, reason, evidence-strength, allowed-source-subject-validation]
   allowed_dependencies: [pydantic, shared-decision-contracts]
   forbidden_dependencies: [model-training-runtime, provider-sdk, persistence-client]
   architecture_check: tests/test_architecture.py
@@ -27,6 +27,7 @@ modules:
   - measured-coverage-and-usage
   - private-dataset-and-report-boundaries
   - offline-validation-and-rescoring
+  - pipeline-flow-and-scoped-step-targets
   allowed_dependencies:
   - standard-library
   - pydantic
@@ -52,6 +53,8 @@ modules:
   - in-memory-budgets
   - bounded-admission
   - deterministic-runner
+  - sequential-flows-and-boundary-transitions
+  - json-serialized-prompt-templates
   - safe-error-codes
   allowed_dependencies:
   - standard-library
@@ -95,7 +98,10 @@ modules:
   - safe-authoring
   - confined-schemas
   - shared-inline-and-file-compilation
-  - explicit-success-transitions
+  - explicit-flow-boundary-transitions
+  - containing-file-references-with-configuration-root-confinement
+  - bounded-workflow-discovery-and-unambiguous-step-lookup
+  - declared-prompt-placeholders-and-decision-source-formats
   - conservative-schema-binding-checks
   - safe-field-and-hint-diagnostics
   - deterministic-plan
@@ -206,6 +212,7 @@ modules:
   - adapter-composition
   - environment-resolution-composition
   - application-lifecycle
+  - pipeline-flow-and-step-execution
   allowed_dependencies:
   - package-core
   - package-ports

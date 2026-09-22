@@ -33,6 +33,7 @@ class StepContext:
     model_timeout: float
     tool_timeout: float
     budget: AttemptBudget
+    flow_id: str
 
 
 class StepExecutor(Protocol):
@@ -47,3 +48,5 @@ class InputValidator(Protocol):
     """Precompiled, pure bounded validation; this method performs no I/O."""
 
     def validate_input(self, payload: FrozenJson) -> None: ...
+
+    def validate_flow_input(self, flow_id: str, payload: FrozenJson) -> None: ...

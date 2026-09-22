@@ -194,7 +194,7 @@
     },
     "SuiteSpec": {
       "additionalProperties": false,
-      "description": "A pipeline target, or one step with already-resolved step inputs.",
+      "description": "A pipeline, flow, or step target with resolved scoped inputs.",
       "properties": {
         "cases": {
           "anyOf": [
@@ -213,6 +213,19 @@
             }
           ],
           "title": "Cases"
+        },
+        "flow": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flow"
         },
         "metrics": {
           "items": {
@@ -277,7 +290,7 @@
   "$id": "https://foliqant.local/schemas/foliqant/runtime/evaluation-dataset.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Versioned ground truth for configured pipeline and isolated-step evaluation.\n\nThe JSON file is independent of deployment dependencies. Loading and target\nchecks never resolve environment secrets, import user code or open SDKs.",
+  "description": "Explicit ground truth for configured pipeline and isolated-step evaluation.\n\nThe JSON file is independent of deployment dependencies. Loading and target\nchecks never resolve environment secrets, import user code or open SDKs.",
   "properties": {
     "name": {
       "minLength": 1,
@@ -299,15 +312,9 @@
       "minItems": 1,
       "title": "Suites",
       "type": "array"
-    },
-    "version": {
-      "const": 1,
-      "title": "Version",
-      "type": "integer"
     }
   },
   "required": [
-    "version",
     "name",
     "revision",
     "suites"

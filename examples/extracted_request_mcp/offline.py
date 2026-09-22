@@ -14,8 +14,8 @@ from foliqant.contracts.models import ModelProfiles
 from foliqant.core.admission import CapacityLimiter
 
 MODEL_ENVIRONMENT = {
-    "FOLIQANT_CURATION_ENDPOINT_URL": "http://127.0.0.1:1/v1",
-    "FOLIQANT_CURATION_MODEL": "offline-scripted-fixture",
+    "MODEL_BASE_URL": "http://127.0.0.1:1/v1",
+    "MODEL_ID": "offline-scripted-fixture",
 }
 
 

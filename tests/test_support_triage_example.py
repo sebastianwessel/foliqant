@@ -25,14 +25,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_compiled_workflow_has_one_unresolved_review_route() -> None:
     plan = prepare_application(CONFIG_PATH).plans["support_triage"]
-    classify = plan.step("classify")
+    classify = plan.flow("triage").step("classify")
     assert isinstance(classify, DecisionStepPlan)
     assert classify.fallback is not None
     assert classify.fallback.on == ("no_supported_answer",)
-    assert classify.on_unresolved is not None
-    assert classify.on_unresolved.default == "review"
-    assert classify.on_unresolved.issues == ()
-    assert {step.name for step in plan.steps} == {"classify", "extract", "done", "review"}
+    flow = plan.flow("triage")
+    assert flow.on_unresolved is not None
+    assert flow.on_unresolved.outcome == "needs_review"
+    assert {step.name for step in flow.steps} == {"classify", "extract"}
 
 
 async def test_pipeline_and_each_model_step_have_passing_offline_evaluations() -> None:
@@ -42,7 +42,7 @@ async def test_pipeline_and_each_model_step_have_passing_offline_evaluations() -
     assert isinstance(report["report"], str)
     reports = json.loads(Path(report["report"]).read_text())["reports"]
     assert isinstance(reports, list)
-    assert len(reports) == 3
+    assert len(reports) == 4
     assert all(isinstance(item, dict) and item["check_coverage"] == 1.0 for item in reports)
 
 

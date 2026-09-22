@@ -1,5 +1,5 @@
 generation_map_version: 1
-contract_ref: CONTRACT-PACKAGE-V1
+contract_ref: CONTRACT-PACKAGE
 authority: ../11-python-package.md
 entries:
   - id: GEN-PACKAGE-DEPLOYMENT
@@ -54,7 +54,8 @@ entries:
     command: uv run --no-sync python scripts/generate_schemas.py
     drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
-      - core-to-boundary mapping preserves omitted fields versus explicit null
+      - core-to-boundary mapping preserves omitted fields versus explicit null in nested flows and steps
+      - ordered transitions preserve configured source, reason and exactly one flow or outcome target
       - canonical error messages and token subset validation use shared core rules
     verification: [../../tests/test_execution_contracts.py, ../../tests/test_bootstrap.py, ../../tests/test_step_execution.py]
   - id: GEN-PACKAGE-DECISION-OUTPUT
@@ -63,7 +64,7 @@ entries:
     command: uv run --no-sync python scripts/generate_schemas.py
     drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
-      - runtime v3 reason and evidence-strength output validates against unchanged native v2 inputs
+      - unversioned runtime reason and evidence-strength output validates against shared typed task semantics
       - answerability, answer cardinality, relations and allowed-source subject occurrence
       - validated runtime results use supplied question order
       - no model-tooling output conversion or artifact changes
@@ -83,25 +84,37 @@ entries:
     canonical_source: ../../src/foliqant/contracts/workflow.py
     generated_outputs:
       - ../../schemas/foliqant/runtime/workflow.schema.json
+      - ../../schemas/foliqant/runtime/flow.schema.json
       - ../../schemas/foliqant/runtime/step.schema.json
       - ../../schemas/foliqant/runtime/tool-catalog.schema.json
     command: uv run --no-sync python scripts/generate_schemas.py
     drift_check: uv run --no-sync python scripts/generate_schemas.py --check
     handwritten_remainder:
-      - one compilation path for inline or separate-file steps and inline or file schemas
-      - explicit success transitions, unresolved review terminals and graph dominance
-      - conservative schema-aware binding checks, safe diagnostics and local file confinement
+      - one compilation path for conventional lookup and explicit inline or referenced definitions
+      - optional workflow registry discovers only immediate nonhidden workflow directories
+      - missing or ambiguous conventional step files reject; file order never determines execution
+      - ordered steps, flow-boundary success/unresolved transitions and graph dominance
+      - flow-local binding checks, shared configuration-root confinement and containing-file reference resolution
+      - JSON-serialized prompt substitutions and explicit text/json decision sources
       - category normalization and native semantic checks
       - cross-field invariants remain strict Pydantic runtime validators
-    verification: [../../tests/test_compiler.py, ../../tests/test_bindings.py]
+    verification: [../../tests/test_compiler.py, ../../tests/test_bindings.py, ../../tests/test_prompt.py, ../../tests/test_flow_boundaries.py]
+
+  - id: GEN-PACKAGE-EVALUATION-DATASET
+    canonical_source: ../../src/foliqant/evaluation/dataset.py
+    generated_outputs: [../../schemas/foliqant/runtime/evaluation-dataset.schema.json]
+    command: uv run --no-sync python scripts/generate_schemas.py
+    drift_check: uv run --no-sync python scripts/generate_schemas.py --check
+    handwritten_remainder:
+      - pipeline, flow and scoped step target validation
+      - dataset inputs map to immutable cases without deriving gold from predictions
+      - unversioned report serialization and private exclusive artifact publication
+    verification: [../../tests/test_evaluation_configuration.py, ../../tests/test_example_evaluations.py, ../../tests/test_evaluation.py]
 
 # Internal in-memory dataclasses are not a second public JSON Schema contract.
 # The small HTTP example maps the generated envelope and ExecutionResult shapes;
 # it adds no accepted-job, persistence, lookup or transport schema.
 
-# Evaluation suites/reports are typed Python dataclasses in
-# src/foliqant/evaluation/contracts.py; report.to_dict() is the sole JSON mapping.
-# No separate handwritten JSON schema is maintained. test_evaluation.py checks
-# scoring, privacy and serialization against those types.
-# tests/test_example_evaluations.py checks example pipeline and isolated-step suites,
-# the HTTP boundary and a deliberately wrong golden expectation as a negative control.
+# Evaluation reports are unversioned typed dataclasses; report.to_dict() owns
+# their JSON mapping. Explicit dataset wire input has its own generated schema.
+# Content revisions/fingerprints identify inputs and measurements, not formats.

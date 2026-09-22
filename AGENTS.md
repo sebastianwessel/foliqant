@@ -35,10 +35,12 @@ relevant skill together when a public surface changes. Runtime fields are
 snake_case; existing native decision/model wire fields retain their camelCase
 names. Do not rename immutable artifacts or change old recipe identities.
 
-Reuse the same compiler for inline and file-based steps/schemas. Reuse the marked
-deployment-field environment resolver; never expand prompts or input data. Every
-runnable example needs explicit golden pipeline/step evaluations, with offline
-wiring checks distinguished from opt-in live model measurements.
+Reuse the same compiler for conventional, explicit, and inline definitions and
+schemas. Conventional lookup resolves files only; authored step order and flow
+routes determine execution. Reuse the marked deployment-field environment
+resolver; never expand prompts or input data. Every runnable example needs
+explicit golden pipeline/flow/step evaluations, with offline wiring checks
+distinguished from opt-in live model measurements.
 
 ## Execution and data
 
@@ -49,11 +51,13 @@ contact a model endpoint just to check docs or change shared environments during
 an active run. Real lifecycle acceptance needs real execution evidence; unit
 doubles and small synthetic examples cannot establish model quality.
 
-Keep customer data, golden corpora, generated datasets, weights, adapters,
-checkpoints, predictions, secrets and logs outside Git. Tests create minimal
-temporary records in code. Preserve source rights, split isolation, lineage and
+Keep customer data, private golden corpora, generated datasets, weights,
+adapters, checkpoints, predictions, reports, secrets, and logs outside Git.
+Small authored synthetic evaluation fixtures for public examples belong under
+`examples/<name>/evaluation/` and remain reviewable source. Tests create other
+minimal records in code. Preserve source rights, split isolation, lineage, and
 artifact immutability. Research/noncommercial data is usable only within its
-terms; private hosting is not permission. Do not accept gated terms, upload data
+terms; private hosting is not permission. Do not accept gated terms, upload data,
 or use paid services unless authorized.
 The default model workspace is the ignored `.foliqant/` directory in this
 checkout; installed commands use their current directory. Use the shared

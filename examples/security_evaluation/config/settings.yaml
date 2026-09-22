@@ -1,0 +1,21 @@
+models:
+  local_qwen:
+    provider: openai_compatible
+    model: $MODEL_ID
+    base_url: $MODEL_BASE_URL
+    allow_insecure_http: true
+    output_mode: native
+    supports_tools: false
+    concurrency: 1
+    queue_limit: 0
+    request_timeout: 300
+    options:
+      max_tokens: 8192
+      temperature: 0.1
+      reasoning_effort: low
+execution:
+  concurrency: 1
+  queue_limit: 0
+  model_timeout: 300
+  run_timeout: 610
+  max_steps: 2

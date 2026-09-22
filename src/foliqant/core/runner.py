@@ -1,4 +1,4 @@
-"""In-memory workflow execution with deterministic, bounded routing."""
+"""In-memory workflows with sequential flows and deterministic boundary routing."""
 
 import asyncio
 import math
@@ -15,11 +15,34 @@ from .bindings import resolve_binding, resolve_bindings
 from .budget import StepBudget
 from .envelope import AcceptedEnvelope
 from .errors import ErrorCode, ServiceError
-from .execution import CallerContext, Failure, RunResult, RunStatus, StepOutcome, StepRecord, Usage
+from .execution import (
+    CallerContext,
+    Failure,
+    FlowRecord,
+    RunResult,
+    RunStatus,
+    Selection,
+    StepOutcome,
+    StepRecord,
+    TransitionRecord,
+    Usage,
+)
 from .identity import Identity, validate_identity_id
 from .json import FrozenJson, FrozenObject, freeze_json
 from .observation import incoming_trace, observe
-from .plan import DecisionStepPlan, FinishStepPlan, McpStepPlan, UnresolvedRoutingPlan, WorkflowPlan
+from .plan import (
+    BindingPlan,
+    CategoryPlan,
+    CompiledStep,
+    DecisionIssue,
+    DecisionStepPlan,
+    FlowPlan,
+    MatchRoutingPlan,
+    McpStepPlan,
+    TransitionTargetPlan,
+    UnresolvedRoutingPlan,
+    WorkflowPlan,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,38 +66,118 @@ class ExecutionLimits:
 _DEFAULT_LIMITS = ExecutionLimits()
 
 
-def _binding_context(envelope: AcceptedEnvelope, records: dict[str, StepRecord]) -> FrozenObject:
-    steps: dict[str, FrozenJson] = {}
-    for name, record in records.items():
-        value: dict[str, FrozenJson] = {"status": record.status}
-        if record.has_result:
-            value["result"] = record.result
-        if record.selection is not None:
-            value["selection"] = record.selection.as_json()
-        if record.error is not None:
-            value["error"] = MappingProxyType(
-                {
-                    "code": record.error.code.value,
-                    "message": record.error.message,
-                    "retryable": record.error.retryable,
-                }
-            )
-        steps[name] = MappingProxyType(value)
+@dataclass(slots=True)
+class _RunBudget:
+    """Invocation-local counter shared by all flows, including isolated evaluation."""
+
+    consumed: int = 0
+
+
+def _failure(error: Exception) -> Failure:
+    if isinstance(error, TimeoutError):
+        return Failure(ErrorCode.TIMEOUT)
+    if isinstance(error, ServiceError):
+        return Failure(error.code, error.retryable)
+    return Failure(ErrorCode.DEPENDENCY_FAILURE)
+
+
+def _record_data(record: StepRecord | FlowRecord) -> FrozenObject:
+    value: dict[str, FrozenJson] = {"status": record.status}
+    if record.has_result:
+        value["result"] = record.result
+    if isinstance(record, StepRecord) and record.selection is not None:
+        value["selection"] = record.selection.as_json()
+    if record.error is not None:
+        value["error"] = MappingProxyType(
+            {
+                "code": record.error.code.value,
+                "message": record.error.message,
+                "retryable": record.error.retryable,
+            }
+        )
+    return MappingProxyType(value)
+
+
+def _binding_context(envelope: AcceptedEnvelope, records: Mapping[str, StepRecord]) -> FrozenObject:
     return MappingProxyType(
         {
             "payload": envelope.payload,
             "metadata": envelope.metadata,
-            "steps": MappingProxyType(steps),
+            "steps": MappingProxyType(
+                {name: _record_data(record) for name, record in records.items()}
+            ),
         }
     )
 
 
-class WorkflowRunner:
-    """Run a compiled workflow without persistence or hidden background execution.
+def _workflow_context(
+    envelope: AcceptedEnvelope, records: Mapping[str, FlowRecord]
+) -> FrozenObject:
+    return MappingProxyType(
+        {
+            "payload": envelope.payload,
+            "metadata": envelope.metadata,
+            "flows": MappingProxyType(
+                {name: _record_data(record) for name, record in records.items()}
+            ),
+        }
+    )
 
-    Share a configured admission limiter across runners when they compete for
-    the same intake resource. Each run gets independent identity, budget and data.
-    Provider, handler and MCP effects belong to the injected StepExecutor.
+
+def _step_bindings(step: CompiledStep) -> tuple[tuple[str, BindingPlan], ...]:
+    return (
+        step.sources
+        if isinstance(step, DecisionStepPlan)
+        else step.arguments
+        if isinstance(step, McpStepPlan)
+        else step.input
+    )
+
+
+def _validate_outcome(outcome: object, step: CompiledStep) -> StepOutcome:
+    """Reject malformed adapter control facts before recording or further effects."""
+    if not isinstance(outcome, StepOutcome) or type(outcome.needs_review) is not bool:
+        raise ServiceError(ErrorCode.INVALID_OUTPUT)
+    issues = outcome.unresolved_issues
+    allowed = ("no_supported_answer", "conflicting_information", "multiple_valid_options")
+    if (
+        not isinstance(issues, tuple)
+        or any(type(issue) is not str or issue not in allowed for issue in issues)
+        or len(set(issues)) != len(issues)
+    ):
+        raise ServiceError(ErrorCode.INVALID_OUTPUT)
+    selected = outcome.selection
+    if selected is not None:
+        if (
+            not isinstance(step, DecisionStepPlan)
+            or not isinstance(selected, Selection)
+            or not isinstance(selected.category, CategoryPlan)
+            or type(selected.category.id) is not str
+            or not selected.category.id.strip()
+            or len(selected.category.id) > 128
+            or (
+                selected.category.description is not None
+                and (
+                    type(selected.category.description) is not str
+                    or not selected.category.description
+                )
+            )
+            or selected.origin not in ("model", "fallback")
+            or outcome.needs_review != (selected.origin == "fallback")
+        ):
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+    return outcome
+
+
+def _skipped(flow: FlowPlan) -> FlowRecord:
+    return FlowRecord("skipped", tuple((step.name, StepRecord("skipped")) for step in flow.steps))
+
+
+class WorkflowRunner:
+    """Execute one authored graph with one admission slot, deadline and step budget.
+
+    Each flow has its own payload and local step records. Data crosses flow
+    boundaries only through configured bindings. No conversation state is shared.
     """
 
     def __init__(
@@ -87,12 +190,8 @@ class WorkflowRunner:
         limits: ExecutionLimits = _DEFAULT_LIMITS,
         observer: ExecutionObserver | None = None,
     ) -> None:
-        self._plan = plan
-        self._executor = executor
-        self._validator = validator
-        self._admission = admission
-        self._limits = limits
-        self._observer = observer
+        self._plan, self._executor, self._validator = plan, executor, validator
+        self._admission, self._limits, self._observer = admission, limits, observer
 
     async def run(
         self,
@@ -102,19 +201,33 @@ class WorkflowRunner:
         deadline: float | None = None,
         transport_trace: TraceContext | None = None,
     ) -> RunResult:
-        """Validate and admit a run; boundary failures raise and execution failures return.
-
-        An explicit transport carrier takes precedence over envelope telemetry
-        when valid. Carriers are never merged or used for authorization.
-
-        CancelledError always propagates after owned adapter cleanup.
-        """
+        """Run the whole workflow; cancellation propagates after adapter cleanup."""
         return await self._admit(
             envelope, identity=identity, deadline=deadline, transport_trace=transport_trace
         )
 
+    async def run_flow(
+        self,
+        flow_id: str,
+        envelope: AcceptedEnvelope,
+        *,
+        identity: Identity,
+        deadline: float | None = None,
+        transport_trace: TraceContext | None = None,
+    ) -> RunResult:
+        """Run one flow with resolved flow input, without workflow transitions."""
+        self._flow(flow_id)
+        return await self._admit(
+            envelope,
+            identity=identity,
+            deadline=deadline,
+            transport_trace=transport_trace,
+            flow_id=flow_id,
+        )
+
     async def run_step(
         self,
+        flow_id: str,
         step_id: str,
         envelope: AcceptedEnvelope,
         *,
@@ -122,27 +235,13 @@ class WorkflowRunner:
         deadline: float | None = None,
         transport_trace: TraceContext | None = None,
     ) -> RunResult:
-        """Run exactly one step using explicit resolved input values.
-
-        Payload keys must match the step's input/source/argument names. Upstream
-        bindings and pipeline input/output projections are deliberately not run.
-        The usual adapter validation, limits and cancellation rules still apply.
-        """
+        """Run one step with resolved input keys; never run preceding steps or routes."""
         try:
-            step = self._plan.step(step_id)
+            step = self._flow(flow_id).step(step_id)
         except KeyError:
             raise ServiceError(ErrorCode.NOT_FOUND) from None
-        bindings = (
-            ()
-            if isinstance(step, FinishStepPlan)
-            else step.sources
-            if isinstance(step, DecisionStepPlan)
-            else step.arguments
-            if isinstance(step, McpStepPlan)
-            else step.input
-        )
         if not isinstance(envelope.payload, Mapping) or set(envelope.payload) != {
-            key for key, _ in bindings
+            key for key, _ in _step_bindings(step)
         }:
             raise ServiceError(ErrorCode.INVALID_INPUT)
         return await self._admit(
@@ -150,8 +249,15 @@ class WorkflowRunner:
             identity=identity,
             deadline=deadline,
             transport_trace=transport_trace,
+            flow_id=flow_id,
             step_id=step_id,
         )
+
+    def _flow(self, name: str) -> FlowPlan:
+        try:
+            return self._plan.flow(name)
+        except KeyError:
+            raise ServiceError(ErrorCode.NOT_FOUND) from None
 
     async def _admit(
         self,
@@ -160,10 +266,10 @@ class WorkflowRunner:
         identity: Identity,
         deadline: float | None,
         transport_trace: TraceContext | None,
+        flow_id: str | None = None,
         step_id: str | None = None,
     ) -> RunResult:
-        loop = asyncio.get_running_loop()
-        end = loop.time() + self._limits.run_timeout
+        end = asyncio.get_running_loop().time() + self._limits.run_timeout
         if deadline is not None:
             if not math.isfinite(deadline):
                 raise ServiceError(ErrorCode.INVALID_INPUT)
@@ -175,8 +281,10 @@ class WorkflowRunner:
             if claim != getattr(identity, key):
                 raise ServiceError(ErrorCode.FORBIDDEN)
         try:
-            if step_id is None:
+            if flow_id is None:
                 self._validator.validate_input(envelope.payload)
+            elif step_id is None:
+                self._validator.validate_flow_input(flow_id, envelope.payload)
         except ServiceError:
             raise
         except Exception:
@@ -188,95 +296,200 @@ class WorkflowRunner:
                 trace=incoming_trace(envelope.metadata),
                 transport_trace=transport_trace,
             ) as observation:
-                result = await self._run(envelope, identity=identity, deadline=end, step_id=step_id)
+                result = await self._run(envelope, identity, end, flow_id, step_id)
                 observation.status = result.status
                 observation.error = result.error.code if result.error is not None else None
                 return result
 
+    def _target(
+        self,
+        flow: FlowPlan,
+        record: FlowRecord,
+        issues: tuple[DecisionIssue, ...],
+        context: FrozenObject,
+    ) -> TransitionTargetPlan:
+        if record.status == "needs_review":
+            target = flow.on_unresolved
+            if isinstance(target, UnresolvedRoutingPlan):
+                target = target.target(issues)
+            target = target or TransitionTargetPlan(outcome="needs_review")
+            if target.outcome == "completed":
+                raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+            return target
+        route = flow.transition
+        if isinstance(route, MatchRoutingPlan):
+            value = resolve_binding(route.binding, context)
+            if value is not None and not isinstance(value, str):
+                raise ServiceError(ErrorCode.INVALID_INPUT)
+            return (
+                dict(route.cases).get(value, route.default) if value is not None else route.default
+            )
+        return route
+
     async def _run(
         self,
         envelope: AcceptedEnvelope,
-        *,
         identity: Identity,
         deadline: float,
-        step_id: str | None = None,
+        flow_id: str | None,
+        step_id: str | None,
     ) -> RunResult:
-        plan = self._plan
         execution_id = str(uuid4())
         records = {
-            step.name: StepRecord("skipped")
-            for step in plan.steps
-            if step_id is None or step.name == step_id
+            flow.name: _skipped(flow)
+            for flow in self._plan.flows
+            if flow_id is None or flow.name == flow_id
         }
+        transitions: list[TransitionRecord] = []
+        budget = _RunBudget()
+        usage = Usage()
+        payload = envelope.payload
+        status: RunStatus = "completed"
+        error: Failure | None = None
+        current: str | None = flow_id or self._plan.start
+        visited: set[str] = set()
+        active: str | None = None
+        try:
+            while current is not None:
+                if asyncio.get_running_loop().time() >= deadline:
+                    raise ServiceError(ErrorCode.TIMEOUT)
+                if current in visited or len(visited) >= len(self._plan.flows):
+                    raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+                visited.add(current)
+                try:
+                    flow = self._plan.flow(current)
+                except KeyError:
+                    raise ServiceError(ErrorCode.INVALID_CONFIGURATION) from None
+                active = current
+                if flow_id is None:
+                    inputs = resolve_bindings(flow.input, _workflow_context(envelope, records))
+                    local = AcceptedEnvelope(payload=inputs, metadata=envelope.metadata)
+                    self._validator.validate_flow_input(current, inputs)
+                else:
+                    local = envelope
+                with observe(self._observer, self._plan.name, flow=flow.name) as observation:
+                    record, issues = await self._execute_flow(
+                        flow, local, identity, deadline, execution_id, budget, step_id
+                    )
+                    observation.status = (
+                        "failed"
+                        if record.status == "failed"
+                        else "needs_review"
+                        if record.status == "needs_review"
+                        else "completed"
+                    )
+                    observation.error = record.error.code if record.error is not None else None
+                records[current] = record
+                if record.usage is not None:
+                    usage = usage.plus(record.usage)
+                active = None
+                if record.status == "failed":
+                    status, error = "failed", record.error
+                    break
+                if flow_id is not None:
+                    status = "needs_review" if record.status == "needs_review" else "completed"
+                    payload = record.result
+                    break
+                target = self._target(flow, record, issues, _workflow_context(envelope, records))
+                if (target.flow is None) == (target.outcome is None):
+                    raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+                transitions.append(
+                    TransitionRecord(
+                        current,
+                        "needs_review" if record.status == "needs_review" else "completed",
+                        target.flow,
+                        target.outcome,
+                    )
+                )
+                current = target.flow
+                if target.outcome is not None:
+                    status = target.outcome
+            if status != "failed" and flow_id is None and self._plan.output is not None:
+                payload = resolve_binding(self._plan.output, _workflow_context(envelope, records))
+            if asyncio.get_running_loop().time() >= deadline:
+                raise ServiceError(ErrorCode.TIMEOUT)
+        except asyncio.CancelledError:
+            raise
+        except Exception as caught:
+            status, error, payload = "failed", _failure(caught), envelope.payload
+            if active is not None:
+                previous = records[active]
+                records[active] = FlowRecord(
+                    "failed", previous.steps, error=error, usage=Usage(), elapsed_seconds=0.0
+                )
+        return RunResult(
+            execution_id,
+            self._plan.name,
+            self._plan.revision,
+            status,
+            payload,
+            envelope.metadata,
+            tuple(records.items()),
+            usage,
+            error,
+            tuple(transitions),
+        )
+
+    async def _execute_flow(
+        self,
+        flow: FlowPlan,
+        envelope: AcceptedEnvelope,
+        identity: Identity,
+        deadline: float,
+        execution_id: str,
+        run_budget: _RunBudget,
+        step_id: str | None,
+    ) -> tuple[FlowRecord, tuple[DecisionIssue, ...]]:
+        steps = tuple(step for step in flow.steps if step_id is None or step.name == step_id)
+        records = {step.name: StepRecord("skipped") for step in steps}
         usage = Usage()
         status: RunStatus = "completed"
         error: Failure | None = None
-        payload = envelope.payload
-        current: str | None = step_id or plan.start
+        result = envelope.payload
+        has_result = False
         active: str | None = None
-        visited: set[str] = set()
-        step_started = 0.0
+        started = asyncio.get_running_loop().time()
+        step_started = started
         step_usage = Usage()
+        issues: tuple[DecisionIssue, ...] = ()
         try:
             async with asyncio.timeout_at(deadline):
-                while current is not None:
+                for step in steps:
                     await asyncio.sleep(0)
-                    if asyncio.get_running_loop().time() >= deadline:
-                        raise ServiceError(ErrorCode.TIMEOUT)
-                    if len(visited) >= self._limits.max_steps:
+                    if run_budget.consumed >= self._limits.max_steps:
                         raise ServiceError(ErrorCode.BUDGET_EXHAUSTED)
-                    if current in visited:
-                        raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
-                    visited.add(current)
-                    try:
-                        step = plan.step(current)
-                    except KeyError:
-                        raise ServiceError(ErrorCode.INVALID_CONFIGURATION) from None
-                    active = current
-                    step_started = asyncio.get_running_loop().time()
-                    step_usage = Usage()
-                    with observe(self._observer, plan.name, step=step.name) as step_observation:
-                        if isinstance(step, FinishStepPlan):
-                            status = step.outcome
-                            step_observation.status = status
-                            records[current] = StepRecord(
-                                status,
-                                None,
-                                True,
-                                elapsed_seconds=asyncio.get_running_loop().time() - step_started,
-                                usage=step_usage,
-                            )
-                            if step_id is not None:
-                                payload = None
-                            active = None
-                            break
-                        bindings = (
-                            step.sources
-                            if isinstance(step, DecisionStepPlan)
-                            else step.arguments
-                            if isinstance(step, McpStepPlan)
-                            else step.input
-                        )
+                    run_budget.consumed += 1
+                    active, step_started, step_usage = (
+                        step.name,
+                        asyncio.get_running_loop().time(),
+                        Usage(),
+                    )
+                    with observe(
+                        self._observer, self._plan.name, flow=flow.name, step=step.name
+                    ) as observation:
                         if step_id is not None:
                             if not isinstance(envelope.payload, Mapping):
                                 raise ServiceError(ErrorCode.INVALID_INPUT)
                             inputs = envelope.payload
                         else:
-                            inputs = resolve_bindings(bindings, _binding_context(envelope, records))
+                            inputs = resolve_bindings(
+                                _step_bindings(step), _binding_context(envelope, records)
+                            )
                         budget = StepBudget(
                             model_requests=self._limits.model_requests_per_step,
                             tool_calls=self._limits.tool_calls_per_step,
                         )
                         context = StepContext(
                             execution_id,
-                            plan.name,
-                            plan.revision,
+                            self._plan.name,
+                            self._plan.revision,
                             step.name,
                             CallerContext(identity, envelope.metadata),
                             deadline,
                             self._limits.model_timeout,
                             self._limits.tool_timeout,
                             budget,
+                            flow.name,
                         )
                         try:
                             outcome = await self._executor.execute(step, inputs, context)
@@ -285,67 +498,38 @@ class WorkflowRunner:
                             usage = usage.plus(step_usage)
                         if asyncio.get_running_loop().time() >= deadline:
                             raise ServiceError(ErrorCode.TIMEOUT)
-                        if (
-                            not isinstance(outcome, StepOutcome)
-                            or type(outcome.needs_review) is not bool
-                        ):
-                            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+                        outcome = _validate_outcome(outcome, step)
                         try:
-                            result = freeze_json(outcome.result)
+                            value = freeze_json(outcome.result)
                         except ServiceError:
                             raise ServiceError(ErrorCode.INVALID_OUTPUT) from None
-                        step_observation.status = (
-                            "needs_review" if outcome.needs_review else "completed"
-                        )
-                        records[current] = StepRecord(
-                            step_observation.status,
-                            result,
+                        observation.status = "needs_review" if outcome.needs_review else "completed"
+                        records[step.name] = StepRecord(
+                            observation.status,
+                            value,
                             True,
                             elapsed_seconds=asyncio.get_running_loop().time() - step_started,
                             usage=step_usage,
                             selection=outcome.selection,
                         )
-                        if outcome.needs_review:
-                            current = (
-                                step.on_unresolved.target(
-                                    outcome.unresolved_issues
-                                    if isinstance(step, DecisionStepPlan)
-                                    else ()
-                                )
-                                if isinstance(step.on_unresolved, UnresolvedRoutingPlan)
-                                else step.on_unresolved
-                            )
-                            if current is None:
-                                status = "needs_review"
-                        elif isinstance(step, DecisionStepPlan) and step.on_answer:
-                            if not isinstance(outcome.route_key, str):
-                                raise ServiceError(ErrorCode.INVALID_OUTPUT)
-                            target = dict(step.on_answer).get(outcome.route_key)
-                            if target is None:
-                                raise ServiceError(ErrorCode.INVALID_OUTPUT)
-                            current = target
-                        else:
-                            current = step.next
                         active = None
                         if step_id is not None:
-                            payload = result
-                            status = "needs_review" if outcome.needs_review else "completed"
+                            result = value
+                        if outcome.needs_review:
+                            status = "needs_review"
+                            issues = (
+                                outcome.unresolved_issues
+                                if isinstance(step, DecisionStepPlan)
+                                else ()
+                            )
                             break
-                if plan.output is not None and step_id is None:
-                    payload = resolve_binding(plan.output, _binding_context(envelope, records))
-                if asyncio.get_running_loop().time() >= deadline:
-                    raise ServiceError(ErrorCode.TIMEOUT)
+                if step_id is None and flow.output is not None:
+                    result = resolve_binding(flow.output, _binding_context(envelope, records))
+                has_result = True
         except asyncio.CancelledError:
             raise
         except Exception as caught:
-            if isinstance(caught, TimeoutError):
-                error = Failure(ErrorCode.TIMEOUT)
-            elif isinstance(caught, ServiceError):
-                error = Failure(caught.code, caught.retryable)
-            else:
-                error = Failure(ErrorCode.DEPENDENCY_FAILURE)
-            status = "failed"
-            payload = envelope.payload
+            status, error, result = "failed", _failure(caught), None
             if active is not None:
                 records[active] = StepRecord(
                     "failed",
@@ -353,14 +537,12 @@ class WorkflowRunner:
                     elapsed_seconds=asyncio.get_running_loop().time() - step_started,
                     usage=step_usage,
                 )
-        return RunResult(
-            execution_id,
-            plan.name,
-            plan.revision,
+        return FlowRecord(
             status,
-            payload,
-            envelope.metadata,
             tuple(records.items()),
+            result,
+            has_result,
             usage,
+            asyncio.get_running_loop().time() - started,
             error,
-        )
+        ), issues

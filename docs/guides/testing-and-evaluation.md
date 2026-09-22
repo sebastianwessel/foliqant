@@ -1,87 +1,88 @@
 # Test and evaluate workflows
 
-Add an optional dataset reference to your application configuration, then run
-`foliqant evaluate`. It runs the configured workflows against authored gold and
-saves a local report. No evaluation package, hosted account, or judge model is
-required. Workflows that use models or tools call their configured dependencies;
-a model-free workflow needs neither.
+Foliqant scores explicit JSON-pointer expectations against public
+`ExecutionResult` values. Gold remains caller-authored: the evaluator does not
+infer expected answers, call a judge, optimize prompts, or select a winning
+variant.
 
-Use `--check` to validate the dataset without executing anything. Use `--replay`
-to score saved results again without model or tool calls. Unit tests with fakes,
-synthetic workflow checks, and quality measurements against reviewed gold answer
-different questions; keep their evidence separate.
+Use three complementary scopes:
 
-See [understand evaluation results](evaluation-results.md) for interpreting
-scores, diagnosing failures, and choosing useful coverage before optimizing.
+| Scope | Dataset fields | Execution |
+| --- | --- | --- |
+| Pipeline | `workflow` | Full workflow routing through `application.run` |
+| Flow | `workflow`, `flow` | One flow through `application.run_flow` |
+| Operation | `workflow`, `flow`, `step` | One operation through `application.run_step` |
 
-## Start with a model-free evaluation
+A step target always requires its containing flow. Flow and operation cases
+provide already-resolved boundary inputs; they do not run upstream bindings or
+routes. Pipeline cases exercise the original workflow envelope and routing.
 
-Create a project using the [runtime installation](../getting-started/runtime.md):
+## Place the dataset
 
-```sh
-uv run --no-sync foliqant init /tmp/foliqant-eval-demo
-mkdir -p /tmp/foliqant-eval-demo/.foliqant/evaluation
+The conventional project layout keeps reviewed gold beside `config/`:
+
+```text
+config/
+  settings.yaml
+  support_triage/
+    workflow.yaml
+evaluation/
+  dataset.json
 ```
 
-The generated `demo` workflow finishes successfully and returns the input
-payload. Replace `/tmp/foliqant-eval-demo/foliqant.yaml` with:
+When `evaluation.dataset` is omitted, an explicit `foliqant evaluate` command
+looks for `evaluation/dataset.json` beside `config/`. Runtime preparation,
+startup, validation, and execution never inspect it.
+
+Use an explicit reference in `config/settings.yaml` only for a customized
+location:
 
 ```yaml
-version: 1
-workflows:
-  demo: workflows/demo
 evaluation:
-  dataset: .foliqant/evaluation/gold.json
+  dataset: ../../reviewed-gold/support.json
 ```
 
-Save this complete synthetic dataset as
-`/tmp/foliqant-eval-demo/.foliqant/evaluation/gold.json`:
+The explicit path is relative to the settings file. A small dataset can keep
+cases inline:
 
 ```json
 {
-  "version": 1,
-  "name": "demo_gold",
-  "revision": "1",
+  "name": "support_checks",
+  "revision": "reviewed-2026-09-22",
   "suites": [
     {
-      "name": "demo_pipeline",
-      "workflow": "demo",
-      "metrics": [
-        {
-          "name": "category",
-          "path": "/payload/category",
-          "kind": "classification",
-          "labels": ["billing", "cancellation"]
-        }
-      ],
+      "name": "support_pipeline",
+      "workflow": "support_triage",
       "cases": [
         {
-          "id": "billing_request",
+          "id": "cancel_en",
           "input": {
-            "payload": {"category": "billing", "tags": ["invoice", "account"]},
-            "metadata": {}
+            "payload": {
+              "requestId": "eval-001",
+              "message": "Cancel renewal for account C-1049."
+            },
+            "metadata": {"language": "en"}
           },
           "expectations": [
-            {"name": "completed", "path": "/execution/status", "expected": "completed"},
-            {"name": "category", "path": "/payload/category", "expected": "billing"},
             {
-              "name": "tags",
-              "path": "/payload/tags",
-              "expected": ["account", "invoice"],
-              "comparison": "set"
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed"
+            },
+            {
+              "name": "queue",
+              "path": "/flows/triage/steps/classify/result/answer/optionId",
+              "expected": "cancellation"
             }
           ]
-        },
+        }
+      ],
+      "metrics": [
         {
-          "id": "cancellation_request",
-          "input": {
-            "payload": {"category": "cancellation"},
-            "metadata": {}
-          },
-          "expectations": [
-            {"name": "completed", "path": "/execution/status", "expected": "completed"},
-            {"name": "category", "path": "/payload/category", "expected": "cancellation"}
-          ]
+          "name": "queue_quality",
+          "path": "/flows/triage/steps/classify/result/answer/optionId",
+          "kind": "classification",
+          "labels": ["billing_dispute", "service_change", "cancellation", null]
         }
       ]
     }
@@ -89,395 +90,195 @@ Save this complete synthetic dataset as
 }
 ```
 
-Run the offline check, then execute the synthetic workflow:
+`name` and `revision` identify the authored suite content. Change the
+revision when the reviewed cases or their meaning change; the evaluator also
+computes a content fingerprint.
 
-```sh
-uv run --no-sync foliqant evaluate \
-  --config /tmp/foliqant-eval-demo/foliqant.yaml --check
-uv run --no-sync foliqant evaluate \
-  --config /tmp/foliqant-eval-demo/foliqant.yaml
-```
+Use public result paths:
 
-The first command checks dataset structure, workflow/step targets, pointer syntax
-and known result roots/steps, and gold label catalogs. It cannot prove that a
-dynamic payload field will exist or that authored gold is correct. The second executes
-the finish-only workflow and should pass all five assertions. Its classification
-matrix should have one correct billing case and one correct cancellation case.
-This proves dataset loading, execution, and scoring work together; it does not
-measure a classifier or model.
-
-To verify that disagreement is caught, change only the first case's expected
-category to `"cancellation"`, keep its input unchanged, and rerun. The command
-should exit with status `1`. Restore the authored gold afterward.
-
-The dataset path resolves relative to `foliqant.yaml`, even when the command is
-run from another directory. Application startup, `validate`, and `doctor` do not
-open or inspect this optional dataset. Changing the evaluation reference does
-not change the runtime configuration digest.
-
-## Author gold for your workflow
-
-A dataset contains `version: 1`, a `name`, a `revision`, and nonempty `suites`.
-Each suite selects a configured `workflow`, names its cases, and may declare
-metrics. Dataset files use strict JSON, not YAML, JSONL, or executable imports.
-The optional YAML application setting only points to the JSON file. Each main
-dataset or referenced case file is limited to 64 MiB.
-
-Each case has a stable `id`, an `input` envelope with `payload` and `metadata`,
-and named `expectations`. Authors supply the expected values independently of
-model outputs. Include representative successes, ambiguous inputs, missing
-information, and relevant boundaries. Keep customer corpora outside Git; the
-inline values above are deliberately synthetic.
-
-Expectation paths are RFC 6901 JSON pointers over the public `ExecutionResult`:
-
-| What to check | Example path |
+| Observation | Pointer |
 | --- | --- |
 | Terminal workflow status | `/execution/status` |
-| Final payload field | `/payload/category` |
-| Native classification result | `/decisions/classify/result/answer/optionId` |
-| A schema-output field | `/decisions/extract/result/account_reference` |
-| Whether a step required review | `/decisions/classify/status` |
+| Workflow payload | `/payload/...` |
+| Flow result | `/flows/{flow}/result/...` |
+| Operation result | `/flows/{flow}/steps/{step}/result/...` |
+| Effective decision selection | `/flows/{flow}/steps/{step}/selection/category/id` |
+| Usage | `/execution/usage/model_requests` |
 
-`comparison` defaults to `exact`, preserving JSON scalar types and array order;
-for example, JSON `1` and `1.0` differ.
-`set` compares top-level arrays without order or duplicate sensitivity; nested
-values still use exact JSON comparison. Missing differs from explicit `null`.
-A successful schema check alone does not establish correct extracted values:
-assert each business field that matters. An expected abstention or review should
-have an explicit status/result assertion, rather than being omitted from the gold.
+The dataset never uses authored local binding paths such as
+`/steps/{step}/...`; those exist only while a flow executes.
 
-Custom async scorers remain available through the Python API. Dataset
-configuration supports exact, set, and source-span comparisons; it never imports Python
-code or calls an implicit model judge.
+## Split larger gold files
 
-For verbatim extraction with flexible boundaries, use
-[`source_span` gold](evaluation-results.md#score-verbatim-extraction).
-
-The [decision evidence example](https://github.com/sebastianwessel/foliqant/blob/main/examples/decision_evidence/README.md)
-provides focused gold for reason/strength responses across the question types.
-Its default evaluator validates configuration and gold offline; `--live` runs
-the real configured model and retains a private report.
-
-## Keep cases together or split them by step
-
-Keep small datasets inline, as in the cookbook. For larger suites, `cases` may
-instead be a path string. One manifest can mix inline case arrays and file
-references. The application still needs only one `evaluation.dataset` entry.
-
-For a configured `support_triage` workflow, a split manifest can be:
+`cases` may be a JSON filename instead of an inline array. It resolves relative
+to the dataset manifest:
 
 ```json
 {
-  "version": 1,
-  "name": "support_gold",
-  "revision": "1",
+  "name": "support_checks",
+  "revision": "reviewed-2026-09-22",
   "suites": [
-    {
-      "name": "classification",
-      "workflow": "support_triage",
-      "step": "classify",
-      "cases": "classify.json",
-      "metrics": [{
-        "name": "queue",
-        "path": "/decisions/classify/result/answer/optionId",
-        "kind": "classification",
-        "labels": ["billing_dispute", "service_change", "cancellation"]
-      }]
-    },
-    {
-      "name": "extraction",
-      "workflow": "support_triage",
-      "step": "extract",
-      "cases": "extract.json"
-    },
     {
       "name": "pipeline",
       "workflow": "support_triage",
       "cases": "pipeline.json"
+    },
+    {
+      "name": "triage_flow",
+      "workflow": "support_triage",
+      "flow": "triage",
+      "cases": "triage-flow.json"
+    },
+    {
+      "name": "classification",
+      "workflow": "support_triage",
+      "flow": "triage",
+      "step": "classify",
+      "cases": "classify-step.json"
     }
   ]
 }
 ```
 
-Each referenced file contains a JSON **array of cases**, with no dataset or
-suite wrapper. For example, `classify.json` could contain:
+Case files contain only the case array. Keep related translations and source
+families together when splitting development and holdout data.
 
-```json
-[
-  {
-    "id": "explicit_cancellation",
-    "input": {
-      "payload": {"message": "Cancel renewal for account C-1049."},
-      "metadata": {}
-    },
-    "expectations": [{
-      "name": "queue",
-      "path": "/decisions/classify/result/answer/optionId",
-      "expected": "cancellation"
-    }]
-  }
-]
-```
+## Author comparisons
 
-Create `extract.json` and `pipeline.json` with the same case shape, using inputs
-and gold appropriate to those targets. Workflow/step targets and metric catalogs
-stay in the manifest. A relative case-file path resolves from the **main dataset
-file's directory**, not from `foliqant.yaml` or the current directory. Absolute
-paths are also accepted. References have one level: case files contain arrays,
-not references to more files.
+Each expectation uses one comparison:
 
-Only `evaluate` (including `--check` and replay) reads the manifest and case
-files. Ordinary startup, `validate`, and `doctor` do not inspect those files.
-The same validation and scoring rules apply to inline and referenced cases.
+- `exact` preserves JSON types and array order.
+- `set` compares a top-level array without order or duplicates.
+- `source_span` checks a required span inside an allowed span of case input.
+- A Python-only `custom` expectation names an explicitly registered async
+  scorer and records its revision.
 
-## Evaluate a step in isolation
+For `source_span`, the expected value declares `input_path`, a required
+`[start, end]` range, and an allowed `[start, end]` range. This scores
+verbatim extraction without copying sensitive source text into console output.
 
-Add `"step": "classify"` to a suite to select an isolated step. Its case payload
-contains that step's **resolved input keys**, such as:
+Metrics are optional and use independently declared label catalogs.
+`classification` produces confusion counts and per-label precision, recall,
+and F1. `multilabel` produces exact-set and micro/macro label summaries.
+Missing, skipped, and error observations stay in denominators.
 
-```json
-{"payload": {"message": "Cancel renewal for account C-1049."}, "metadata": {}}
-```
-
-The evaluator calls `run_step` using the normal executor, limits, and output
-validation. It does not run upstream steps or follow subsequent routes. Paths
-still address the public result, for example
-`/decisions/classify/result/answer/optionId`.
-
-For a native decision step, assertions can check the selected option, public
-`reason`, `evidence_strength`, and review status independently.
-
-A suite without `step` runs the full workflow. Checking the same intermediate
-path there measures the step with the inputs produced by the real upstream
-workflow. Use both modes to distinguish step errors from upstream/routing errors.
-
-## Read assertions and metrics
-
-Assertions compare individual observed values with gold. A case passes only
-when all its assertions pass. Reports retain failed, missing, skipped, and errored
-checks instead of silently dropping them:
-
-- Check pass rate is passed checks divided by all declared checks.
-- Check coverage is passed plus failed checks divided by all declared checks.
-- Case pass rate, execution failure rate, and review rate describe different
-  outcomes; agreement with an expected review is possible.
-- Durations and model/tool usage reflect recorded execution. Unknown token counts
-  are not zero.
-
-Optional `metrics` summarize the labels at one expectation path across a suite.
-Use `classification` for one label and `multilabel` for arrays of labels. Declare
-the full label vocabulary explicitly; do not infer it from the predictions. The
-metric path identifies the matching authored expectation in each case. A metric
-requires at least one matching gold value; each matching case must have exactly
-one expectation at that path. Multilabel gold lists must contain unique labels.
-Metric reports expose the following counts:
-
-| Field | Meaning |
-| --- | --- |
-| `support` | Attempts with a matching gold expectation |
-| `excluded` | Attempts without gold at this metric path |
-| `source_support` / `source_excluded` | Corresponding distinct authored case counts |
-| `observed` | Valid predictions in the declared label vocabulary |
-| `abstained` | Explicit JSON `null` prediction when null is not a declared classification label |
-| `missing` / `skipped` | Unavailable pointer / target step skipped |
-| `errors` | Failed execution, even if an earlier output exists |
-| `invalid` | Wrong output type or labels outside the vocabulary |
-| `correct` | Correct single label or exact multilabel set |
-| `accuracy` | `correct / support`, or `null` when support is zero |
-| `coverage` | `observed / support`, or `null` when support is zero |
-
-Unobserved predictions remain in `support`, so abstaining does not inflate
-accuracy. The classification confusion matrix and per-label counts cover
-`observed` predictions; read them alongside coverage. Per-label `true_positive`, `false_positive`,
-`false_negative`, and `true_negative` counts describe each label on those
-observations. For multilabel predictions, the set must match exactly to increment
-`correct`; partial label matches appear in the per-label counts. Numeric metric
-summaries are descriptive and do not create extra pass/fail assertions.
-Multilabel metric accuracy always compares sets, independently of the assertion's
-`comparison`. An exact array assertion can fail on order while its multilabel
-metric is correct; use `comparison: "set"` when assertion order should not matter.
-
-Classification labels may include explicit JSON `null`. For example, measure
-support on a decision step with:
-
-```json
-{
-  "name": "evidence_strength",
-  "path": "/decisions/classify/result/evidence_strength",
-  "kind": "classification",
-  "labels": ["limited", "strong", null]
-}
-```
-
-Author an expectation at that path for every case, including `expected: null`
-when no strength assessment was made. A clearly justified abstention can instead
-have expected strength `strong`. A declared null is an observed label in the
-confusion matrix, so unjustified ratings can be compared with unassessed outcomes.
-Missing paths, skipped steps, and errors remain separate; they never become null
-labels.
-
-Without null in the catalog, a null prediction remains an abstention and null
-gold is invalid. Assert review status separately when it has no categorical
-gold; cases without an expectation at the metric path are excluded only from
-that metric. All authored checks remain in the check denominator. Multilabel
-catalogs and gold arrays contain strings only.
-
-For the cookbook, read the confusion matrix with expected labels as rows and
-predicted labels as columns. In declared order `[billing, cancellation]`, a
-perfect matrix is:
-
-| Expected / predicted | billing | cancellation |
-| --- | ---: | ---: |
-| billing | 1 | 0 |
-| cancellation | 0 | 1 |
-
-An off-diagonal count shows which label was confused with another. With only two
-synthetic cases, this matrix describes those two observations, not an estimate
-of production accuracy.
-
-## Save and replay results
-
-Normal evaluation writes a unique
-`.foliqant/evaluations/report-TIMESTAMP.json` under the configuration directory.
-Select a new explicit destination with `--output`; existing files are never
-overwritten:
+## Check without execution
 
 ```sh
-uv run --no-sync foliqant evaluate \
-  --config /tmp/foliqant-eval-demo/foliqant.yaml \
-  --output /tmp/foliqant-eval-demo/.foliqant/evaluations/baseline.json
-uv run --no-sync foliqant evaluate \
-  --config /tmp/foliqant-eval-demo/foliqant.yaml \
-  --replay /tmp/foliqant-eval-demo/.foliqant/evaluations/baseline.json \
-  --output /tmp/foliqant-eval-demo/.foliqant/evaluations/replayed.json
+foliqant evaluate --check
 ```
 
-Replay scores the saved results without opening SDK clients or running workflows.
-It is useful for inspecting revised expectations or metrics with the same
-observations. Dataset/suite/case identities, inputs, and runtime/workflow revisions
-must match the saved run; gold and metric definitions can change. Saved
-`target_workflow` and `target_step` identify the requested target even when
-invocation failed. Input comparison preserves numeric distinctions such as
-`1` versus `1.0`. It cannot
-measure a changed prompt, model, or workflow. Those changes need a new
-execution against the same gold. Replay preserves each saved attempt's source
-invocation duration and step usage; the suite's wall time measures rescoring.
-It reuses each saved repetition once and never fabricates extra repetitions.
-Use the original execution reports for performance comparisons.
+This validates dataset structure, configured workflow/flow/step targets,
+structural pointer roots, metric catalogs, and source spans. It does not open
+model or MCP clients and cannot prove that dynamic fields exist or that business
+gold is correct.
 
-Stdout contains a content-free summary. The saved artifact contains full case
-inputs, gold, and public results, including public reason and evidence-strength fields.
-It does not capture private model reasoning. Treat the report as sensitive data:
-keep `.foliqant/` ignored by Git and restrict access to exported reports. The
-library's default Python report omits business values; the CLI deliberately
-retains them to support inspection and replay. Report writing and replay both
-enforce a 256 MiB limit.
+Run a configured evaluation only when its external calls are intended:
 
-## Use evaluations in CI
+```sh
+foliqant evaluate --max-concurrency 1 --timeout 300
+```
 
-Use `foliqant evaluate --check` for offline dataset/target validation. Execute a
-model-free workflow or a scripted example to verify wiring. Replay a saved report
-to check scoring without inference. Run `foliqant evaluate` against a model-backed
-configuration only when that endpoint execution is intended; unlike the scripted
-example commands, the generic command does not install fake model responses.
+Model-backed suites make real model calls; MCP-backed suites open their declared
+clients. No hidden retries, endpoint discovery, or judge calls are added. A
+model-free or scripted example checks wiring, not model quality.
 
-From the repository checkout, `./scripts/evaluate` forwards the same options to
-`foliqant evaluate`.
+## Use pipeline, flow, and operation suites together
 
-Suites run sequentially, with one concurrent case by default. `--max-concurrency`
-opts into bounded case concurrency; `--timeout` defaults to 300 seconds per case.
-The configured runtime and dependency limits still apply. Avoid competing live
-evaluations against a capacity-limited local server.
+Pipeline evaluation is the business-facing measurement because it exercises
+boundary validation, flow routing, and context bindings. Flow evaluation isolates
+one reusable flow. Operation evaluation isolates a single prompt, decision, tool,
+or handler with its final input shape.
 
-| Exit code | Meaning |
-| --- | --- |
-| `0` | Requested check or evaluation passed |
-| `1` | Results did not satisfy the authored gold |
-| `2` | Invalid configuration, dataset, or command input |
-| `3` | A required dependency is missing |
-| `4` | Runtime execution failed |
+Use scoped suites to diagnose a pipeline result, but do not count repeated
+pipeline, flow, and operation cases as additional independent business gold.
+Correct isolated output with an incorrect pipeline points toward upstream
+bindings, flow projections, or routing. An isolated failure points toward the
+operation contract, provider behavior, or its direct input.
 
-A failed, cancelled, or errored execution yields `4` even if an assertion expected
-that status. Matching an intended `needs_review` result does not itself fail the
-command.
+## Replay and compare offline
 
-No numeric score threshold or model judge is configured here. Review metrics
-alongside failed cases. Select prompt/model variants on development data, then
-confirm the choice on a separate reviewed holdout. Do not adjust gold to match
-an observed answer or repeatedly tune on the holdout. Caller-supplied model
-revisions identify configuration, not verified provider weights.
+Normal evaluation writes a unique private report under
+`.foliqant/evaluations/` beside the settings file:
 
-## Use the Python API and local fakes
+```sh
+foliqant evaluate --output .foliqant/evaluations/baseline.json
+foliqant evaluate \
+  --replay .foliqant/evaluations/baseline.json \
+  --output .foliqant/evaluations/rescored.json
+```
 
-Use `EvaluationCase`, `EvaluationSuite`, `Expectation`, `EvaluationVariant`,
-`evaluate`, and `compare_variants` from `foliqant.evaluation` when embedding
-custom scorers or comparing explicitly authored variants. Close over
-`application.run(workflow, envelope)` or
-`application.run_step(workflow, step, envelope)` in the variant's async `run`
-callable. Custom predicates use an explicit versioned `RegisteredScorer`;
-configuration never imports them. For an already opened `application` and its
-`prepared` configuration:
+Replay scores saved full results against the current gold without opening SDK
+clients. It can measure changed expectations or scorers, but cannot measure a
+changed prompt, model, tool, or workflow execution.
+
+Compare two compatible saved reports:
+
+```sh
+foliqant evaluate \
+  --compare .foliqant/evaluations/candidate.json \
+  --baseline .foliqant/evaluations/baseline.json \
+  --output .foliqant/evaluations/comparison.json
+```
+
+Comparison requires matching suite/case inputs, gold, workflow/flow/step targets,
+scorers, catalogs, and attempt identities. Configuration revisions may differ.
+The result preserves improvements and regressions; it does not apply an invented
+acceptance threshold.
+
+## Measure variability explicitly
+
+`--repeat N` executes every source case the same number of times. `case_count`
+counts authored sources and `attempt_count` counts executions. Repetition is
+useful for variability, but repeated attempts are not independent cases.
+
+Defaults are sequential suites, one case at a time, and a 300-second per-case
+timeout. Increase concurrency only when the provider and local capacity can
+support it.
+
+## Embed the evaluator
 
 ```python
-from foliqant import Envelope
-from foliqant.evaluation import (
-    EvaluationCase, EvaluationSuite, EvaluationVariant, Expectation, evaluate,
-)
+from foliqant.evaluation import EvaluationVariant, evaluate
 
-suite = EvaluationSuite(
-    name="demo_pipeline",
-    revision="1",
-    cases=(EvaluationCase(
-        id="completed",
-        envelope=Envelope(payload={"message": "hello"}),
-        expectations=(Expectation("completed", "/execution/status", "completed"),),
-    ),),
-)
 variant = EvaluationVariant(
-    name="baseline",
-    revision="1",
+    name="candidate",
+    revision="served-model-2026-09-22",
     configuration_revision=prepared.configuration_digest,
-    run=lambda envelope: application.run("demo", envelope),
+    workflow="support_triage",
+    flow="triage",
+    step="classify",
+    run=lambda envelope: application.run_step(
+        "support_triage", "triage", "classify", envelope
+    ),
 )
-report = await evaluate(suite, variant)
-print(report.checks.pass_rate)
+
+report = await evaluate(suite, variant, include_details=True)
 ```
 
-Python evaluation returns an in-memory report and does not write a file. Pass
-`include_details=True` only when you need private input/gold/result snapshots;
-the caller owns their storage. The CLI selects this option for its replayable
-artifact. `compare_variants` runs explicit variants sequentially against one
-suite; it does not generate prompts or choose a winner automatically.
+For a flow variant, omit `step` and call `run_flow`; for a pipeline variant,
+omit both and call `run`. Python evaluation returns an in-memory report.
+`write_report` is an explicit separate operation.
 
-Inject a PydanticAI `FunctionModel` or a small `StepExecutor` to test routing,
-validation, review behavior, and failures offline. The support example's
-[`test_support_triage_example.py`](https://github.com/sebastianwessel/foliqant/blob/main/tests/test_support_triage_example.py)
-exercises both native decisions and schema output without network access.
+See the runnable
+[support triage](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/README.md),
+[public-request MCP](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/README.md),
+and [extraction-to-MCP](https://github.com/sebastianwessel/foliqant/blob/main/examples/extracted_request_mcp/README.md)
+examples for pipeline, flow, and operation suites.
 
-After installing development extras, run the existing synthetic example suites:
+## Use evaluation evidence carefully
 
-```sh
-uv run --no-sync python -m examples.support_triage.evaluate
-uv run --no-sync python -m examples.public_request_mcp.evaluate
-uv run --no-sync python -m examples.extracted_request_mcp.evaluate
-uv run --no-sync python -m examples.http_workflow.evaluate
-```
+Keep full reports private: detailed mode contains complete inputs, expectations,
+and public results. Offline checks establish structure. Scripted suites establish
+deterministic wiring. Live evaluations measure only the chosen cases, endpoint,
+configuration, and time. None of these alone proves general accuracy, security,
+or efficiency.
 
-Support triage checks full pipelines and isolated classification/extraction.
-Its sixteen authored inputs cover all three queue categories, missing information,
-out-of-catalog requests, multiple active intents, contradictory instructions,
-explicit corrections, category words without a request, a withdrawn request, and
-a missing referent. Eleven inputs are English and five are German. Extraction
-gold checks account versus invoice references, absent values, and unchanged
-deadline wording. The HTTP example
-reuses these same inputs; the MCP example adds two synthetic request lookups.
-The extraction-to-MCP example adds a selected-field binding between steps.
-Repeated pipelines and isolated steps do not create additional independent gold.
-Its default scripted model verifies wiring. MCP uses a real local stdio server
-without a model. HTTP uses an in-process ASGI client. Model-backed examples accept
-`--live` to use the explicitly configured model; those small suites remain smoke
-checks, not a reviewed quality benchmark.
+Public runnable examples keep their small authored synthetic datasets under
+`examples/<name>/evaluation/` so reviewers can inspect the expectation source.
+Do not place generated reports, downloaded corpora, customer data, or private
+experiment results there.
 
-For training-time held-out datasets, calibration, and artifact audits, use the
-separate [model evaluation guide](evaluate-and-audit.md).
+Select prompts and model settings on development gold, then confirm once on an
+untouched holdout. Preserve failures, reviews, missing outputs, and usage gaps;
+do not drop them from denominators.

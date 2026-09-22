@@ -25,6 +25,8 @@ from .contracts import (
     EvaluationSuite,
     EvaluationVariant,
     Expectation,
+    FlowReport,
+    FlowSummary,
     RegisteredScorer,
     StepReport,
     StepSummary,
@@ -41,13 +43,15 @@ from .spans import matches_source_span
 from .summaries import summarize_latency, summarize_usage
 
 
-def _step(path: str) -> str | None:
+def _scope(path: str) -> tuple[str | None, str | None]:
     parts = path.split("/")
-    return (
-        parts[2].replace("~1", "/").replace("~0", "~")
-        if len(parts) >= 3 and parts[1] == "decisions"
-        else None
-    )
+    if len(parts) < 3 or parts[1] != "flows":
+        return None, None
+    flow = parts[2].replace("~1", "/").replace("~0", "~")
+    step = None
+    if len(parts) >= 5 and parts[3] == "steps":
+        step = parts[4].replace("~1", "/").replace("~0", "~")
+    return flow, step
 
 
 async def _check(
@@ -57,26 +61,36 @@ async def _check(
     scorers: Mapping[str, RegisteredScorer],
     deadline: float,
     include_details: bool,
+    target_flow: str | None,
     target_step: str | None,
     case_input: FrozenJson,
 ) -> CheckReport:
-    step = _step(expected.path) or target_step
+    path_flow, path_step = _scope(expected.path)
+    flow = path_flow or target_flow
+    step = path_step or target_step
     outcome: CheckOutcome
     try:
         actual = resolve_binding(BindingPlan(kind="pointer", pointer=expected.path), document)
     except ServiceError:
-        record = result.decisions.get(step) if step is not None else None
+        flow_record = result.flows.get(flow) if flow is not None else None
+        record = (
+            flow_record.steps.get(step) if flow_record is not None and step is not None else None
+        )
+        status = (
+            record.status if record is not None else flow_record.status if flow_record else None
+        )
         outcome = (
             "skipped"
-            if record is not None and record.status == "skipped"
+            if status == "skipped"
             else "error"
-            if record is not None and record.status in {"failed", "cancelled"}
+            if status in {"failed", "cancelled"}
             else "missing"
         )
         return CheckReport(
             expected.name,
             expected.path,
             outcome,
+            flow,
             step,
             outcome,
             CheckDetails(False, None, expected.expected) if include_details else None,
@@ -106,6 +120,7 @@ async def _check(
         expected.name,
         expected.path,
         outcome,
+        flow,
         step,
         "match" if outcome == "passed" else "mismatch" if outcome == "failed" else "scorer_error",
         CheckDetails(True, actual, expected.expected) if include_details else None,
@@ -134,12 +149,15 @@ async def _case(
         # Revalidate and detach any nested mutable dictionaries before scoring.
         result = ExecutionResult.model_validate(returned.model_dump(mode="json"), strict=True)
         # Payload and each step result retain their business-value depth bound.
-        # The public result adds at most three container levels around those values.
+        # The public result adds flow and step containers around those values.
         freeze_json(result.payload)
-        for record in result.decisions.values():
-            if "result" in record.model_fields_set:
-                freeze_json(record.result)
-        document = freeze_json(result.model_dump(mode="json"), max_depth=MAX_JSON_DEPTH + 3)
+        for flow in result.flows.values():
+            if "result" in flow.model_fields_set:
+                freeze_json(flow.result)
+            for record in flow.steps.values():
+                if "result" in record.model_fields_set:
+                    freeze_json(record.result)
+        document = freeze_json(result.model_dump(mode="json"), max_depth=MAX_JSON_DEPTH + 5)
     except Exception as error:
         code = (
             "timeout"
@@ -156,12 +174,14 @@ async def _case(
                     check.name,
                     check.path,
                     "error",
-                    _step(check.path) or variant.step,
+                    _scope(check.path)[0] or variant.flow,
+                    _scope(check.path)[1] or variant.step,
                     "execution_error",
                     CheckDetails(False, None, check.expected) if include_details else None,
                 )
                 for check in case.expectations
             ),
+            (),
             (),
             perf_counter() - started,
             None,
@@ -181,26 +201,34 @@ async def _case(
                 scorers,
                 deadline,
                 include_details,
+                variant.flow,
                 variant.step,
                 case_input,
             )
             for check in case.expectations
         ]
     )
+    flows = tuple(
+        FlowReport(name, flow.status, flow.elapsed_seconds, flow.usage)
+        for name, flow in result.flows.items()
+    )
     steps = tuple(
         StepReport(
+            flow_name,
             name,
             step.status,
             step.elapsed_seconds,
             step.usage,
             step.selection.origin if step.selection is not None else None,
         )
-        for name, step in result.decisions.items()
+        for flow_name, flow in result.flows.items()
+        for name, step in flow.steps.items()
     )
     report = CaseReport(
         case.id,
         result.execution.status,
         checks,
+        flows,
         steps,
         elapsed,
         result.execution.usage,
@@ -226,26 +254,54 @@ def _summary(checks: Iterable[CheckReport]) -> CheckSummary:
 
 def _step_summaries(cases: tuple[CaseReport, ...]) -> tuple[StepSummary, ...]:
     names = sorted(
-        {step.name for case in cases for step in case.steps}
-        | {check.step for case in cases for check in case.checks if check.step is not None}
+        {(step.flow, step.name) for case in cases for step in case.steps}
+        | {
+            (check.flow, check.step)
+            for case in cases
+            for check in case.checks
+            if check.flow is not None and check.step is not None
+        }
     )
     summaries = []
-    for name in names:
-        records = [step for case in cases for step in case.steps if step.name == name]
+    for flow, name in names:
+        assert flow is not None and name is not None
+        records = [
+            step for case in cases for step in case.steps if (step.flow, step.name) == (flow, name)
+        ]
         summaries.append(
             StepSummary(
+                flow,
                 name,
-                _summary(check for case in cases for check in case.checks if check.step == name),
+                _summary(
+                    check
+                    for case in cases
+                    for check in case.checks
+                    if (check.flow, check.step) == (flow, name)
+                ),
                 len(records),
                 sum(step.status == "skipped" for step in records),
                 sum(step.status in {"failed", "cancelled"} for step in records),
                 sum(step.status == "needs_review" for step in records),
                 summarize_latency(
-                    next((step.elapsed_seconds for step in case.steps if step.name == name), None)
+                    next(
+                        (
+                            step.elapsed_seconds
+                            for step in case.steps
+                            if (step.flow, step.name) == (flow, name)
+                        ),
+                        None,
+                    )
                     for case in cases
                 ),
                 summarize_usage(
-                    next((step.usage for step in case.steps if step.name == name), None)
+                    next(
+                        (
+                            step.usage
+                            for step in case.steps
+                            if (step.flow, step.name) == (flow, name)
+                        ),
+                        None,
+                    )
                     for case in cases
                 ),
                 model_selected_cases=sum(step.selection_origin == "model" for step in records),
@@ -260,6 +316,28 @@ def _step_summaries(cases: tuple[CaseReport, ...]) -> tuple[StepSummary, ...]:
             )
         )
     return tuple(summaries)
+
+
+def _flow_summaries(cases: tuple[CaseReport, ...]) -> tuple[FlowSummary, ...]:
+    names = sorted({flow.name for case in cases for flow in case.flows})
+    return tuple(
+        FlowSummary(
+            name,
+            len(records := [flow for case in cases for flow in case.flows if flow.name == name]),
+            sum(flow.status == "skipped" for flow in records),
+            sum(flow.status in {"failed", "cancelled"} for flow in records),
+            sum(flow.status == "needs_review" for flow in records),
+            summarize_latency(
+                next((flow.elapsed_seconds for flow in case.flows if flow.name == name), None)
+                for case in cases
+            ),
+            summarize_usage(
+                next((flow.usage for flow in case.flows if flow.name == name), None)
+                for case in cases
+            ),
+        )
+        for name in names
+    )
 
 
 def _options(
@@ -362,6 +440,7 @@ async def evaluate(
         timeout,
         cases,
         _summary(check for case in cases for check in case.checks),
+        _flow_summaries(cases),
         _step_summaries(cases),
         sum(case.passed for case in cases) / len(cases),
         sum(case.status in {"failed", "cancelled", "error"} for case in cases) / len(cases),
@@ -371,6 +450,7 @@ async def evaluate(
             metrics, [completed[index][1] for index in range(attempt_count)], repeat=repeat
         ),
         variant.step,
+        variant.flow,
         variant.workflow,
         repeat,
         len(suite.cases),

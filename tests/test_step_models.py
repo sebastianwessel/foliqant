@@ -30,12 +30,11 @@ def profile(**overrides):
     }
 
 
-def step(selection, *, kind="llm", next_step="done"):
+def step(selection, *, kind="llm"):
     common = {
         "type": kind,
         "model": selection,
         "instructions": "Keep $PROMPT literal.",
-        "next": next_step,
     }
     if kind == "llm":
         return {**common, "input": {"text": {"literal": "$INPUT"}}, "output": "text"}
@@ -49,25 +48,35 @@ def step(selection, *, kind="llm", next_step="done"):
 def write_config(tmp_path, steps, *, models=None, layout="inline"):
     bundle = tmp_path / "demo"
     bundle.mkdir()
-    workflow = {"version": 1, "name": "demo", "start": "first"}
-    all_steps = {**steps, "done": {"type": "finish", "outcome": "completed"}}
-    if layout == "inline":
-        workflow["steps"] = all_steps
-    else:
-        directory = bundle / "steps"
-        directory.mkdir()
-        for name, authored in all_steps.items():
+    definitions = []
+    for name, authored in steps.items():
+        definition = authored
+        if layout != "inline":
+            directory = bundle / "steps"
+            directory.mkdir(exist_ok=True)
             document = dict(authored)
             if layout == "markdown" and document["type"] in {"llm", "decision"}:
                 body = document.pop("instructions")
-                (directory / f"{name}.md").write_text(f"---\n{json.dumps(document)}\n---\n{body}\n")
+                definition = f"steps/{name}.md"
+                (bundle / definition).write_text(f"---\n{json.dumps(document)}\n---\n{body}\n")
             else:
-                (directory / f"{name}.yaml").write_text(json.dumps(document))
+                definition = f"steps/{name}.yaml"
+                (bundle / definition).write_text(json.dumps(document))
+        definitions.append({"id": name, "definition": definition})
+    workflow = {
+        "name": "demo",
+        "start": "main",
+        "flows": {
+            "main": {
+                "input": {},
+                "definition": {"steps": definitions},
+                "transition": {"outcome": "completed"},
+            }
+        },
+    }
     (bundle / "workflow.yaml").write_text(json.dumps(workflow))
     path = tmp_path / "foliqant.yaml"
-    path.write_text(
-        json.dumps({"version": 1, "workflows": {"demo": "demo"}, "models": models or {}})
-    )
+    path.write_text(json.dumps({"workflows": {"demo": "demo"}, "models": models or {}}))
     return path
 
 
@@ -86,7 +95,7 @@ def test_override_compiles_through_all_step_layouts_without_environment(tmp_path
         layout=layout,
     )
     prepared = prepare_application(path)
-    selected = prepared.plans["demo"].step("first").model
+    selected = prepared.plans["demo"].flow("main").step("first").model
     effective = prepared._models[selected]
     assert effective.model == "$STEP_MODEL"
     assert effective.options.max_tokens == 40
@@ -137,9 +146,14 @@ def test_anthropic_partial_options_merge_before_cross_field_validation(tmp_path)
         models={"local": base},
     )
     prepared = prepare_application(path)
-    assert prepared._models[prepared.plans["demo"].step("first").model].options.effort == "high"
+    assert (
+        prepared._models[prepared.plans["demo"].flow("main").step("first").model].options.effort
+        == "high"
+    )
     document = json.loads((tmp_path / "demo/workflow.yaml").read_text())
-    document["steps"]["first"]["model"]["options"] = {"thinking": None}
+    document["flows"]["main"]["definition"]["steps"][0]["definition"]["model"]["options"] = {
+        "thinking": None
+    }
     (tmp_path / "demo/workflow.yaml").write_text(json.dumps(document))
     with pytest.raises(CompilationError) as caught:
         prepare_application(path)
@@ -201,10 +215,10 @@ async def test_overrides_execute_with_resolved_model_and_only_explicit_option_ch
         prepared, environment=environment, plugins=RuntimePlugins(model_factory=factory)
     ) as app:
         result = await app.run("demo", Envelope(payload={}))
-        isolated = await app.run_step("demo", "first", Envelope(payload={"text": "$INPUT"}))
+        isolated = await app.run_step("demo", "main", "first", Envelope(payload={"text": "$INPUT"}))
     assert result.execution.status == isolated.execution.status == "completed"
-    assert result.decisions["first"].result == isolated.payload == "offline result"
-    selected = opened[0].models[prepared.plans["demo"].step("first").model]
+    assert result.flows["main"].steps["first"].result == isolated.payload == "offline result"
+    selected = opened[0].models[prepared.plans["demo"].flow("main").step("first").model]
     assert selected.model == "selected-model"
     assert selected.api_key.get_secret_value() == "credential-sentinel"
     assert "credential-sentinel" not in opened[0].model_dump_json()
@@ -219,7 +233,7 @@ async def test_profile_and_derived_steps_share_concurrency_and_queue_limits(tmp_
     path = write_config(
         tmp_path,
         {
-            "first": step("local", next_step="second"),
+            "first": step("local"),
             "second": step({"profile": "local", "options": {"max_tokens": 50}}),
         },
         models={"local": profile(concurrency=1, queue_limit=0)},
@@ -250,11 +264,13 @@ async def test_profile_and_derived_steps_share_concurrency_and_queue_limits(tmp_
         prepare_application(path), environment={}, plugins=RuntimePlugins(model_factory=factory)
     ) as app:
         active = asyncio.create_task(
-            app.run_step("demo", "first", Envelope(payload={"text": "one"}))
+            app.run_step("demo", "main", "first", Envelope(payload={"text": "one"}))
         )
         await asyncio.wait_for(entered.wait(), timeout=2)
         try:
-            rejected = await app.run_step("demo", "second", Envelope(payload={"text": "two"}))
+            rejected = await app.run_step(
+                "demo", "main", "second", Envelope(payload={"text": "two"})
+            )
             assert rejected.execution.status == "failed"
             assert rejected.execution.error.code == ErrorCode.CAPACITY_EXCEEDED
             assert rejected.execution.usage.model_requests == 0
@@ -262,7 +278,7 @@ async def test_profile_and_derived_steps_share_concurrency_and_queue_limits(tmp_
         finally:
             release.set()
             await active
-        accepted = await app.run_step("demo", "second", Envelope(payload={"text": "two"}))
+        accepted = await app.run_step("demo", "main", "second", Envelope(payload={"text": "two"}))
         assert accepted.execution.status == "completed"
         assert calls == [900, 50]
 
@@ -355,11 +371,15 @@ def test_effective_model_and_options_change_revisions_but_secrets_do_not(tmp_pat
     assert first.plans["demo"].revision == secret_changed.plans["demo"].revision
     workflow_path = tmp_path / "demo/workflow.yaml"
     workflow = json.loads(workflow_path.read_text())
-    workflow["steps"]["first"]["model"]["options"]["max_tokens"] = 30
+    workflow["flows"]["main"]["definition"]["steps"][0]["definition"]["model"]["options"][
+        "max_tokens"
+    ] = 30
     workflow_path.write_text(json.dumps(workflow))
     options_changed = prepare_application(path)
     assert options_changed.plans["demo"].revision != first.plans["demo"].revision
-    workflow["steps"]["first"]["model"]["model"] = "other-model"
+    workflow["flows"]["main"]["definition"]["steps"][0]["definition"]["model"]["model"] = (
+        "other-model"
+    )
     workflow_path.write_text(json.dumps(workflow))
     assert (
         prepare_application(path).plans["demo"].revision != options_changed.plans["demo"].revision
@@ -400,7 +420,9 @@ def test_explain_names_provider_model_and_source_profile_without_credentials(tmp
         models={"local": profile(api_key="private-credential-sentinel")},
     )
     report = _explain(path, "demo")
-    model_step = next(item for item in report["workflows"][0]["steps"] if item["name"] == "first")
+    model_step = next(
+        item for item in report["workflows"][0]["flows"][0]["steps"] if item["name"] == "first"
+    )
     expected = {"provider": "openai_compatible", "model": "$STEP_MODEL"}
     if not inline:
         expected["profile"] = "local"

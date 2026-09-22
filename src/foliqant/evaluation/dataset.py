@@ -9,7 +9,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
-from foliqant.contracts.base import BoundaryModel, Version1
+from foliqant.contracts.base import BoundaryModel
 from foliqant.contracts.envelope import Envelope
 from foliqant.contracts.workflow import Id, NonBlank
 from foliqant.core.json import JsonValue, freeze_json
@@ -71,13 +71,20 @@ class MetricConfig(BoundaryModel):
 
 
 class SuiteSpec(BoundaryModel):
-    """A pipeline target, or one step with already-resolved step inputs."""
+    """A pipeline, flow, or step target with resolved scoped inputs."""
 
     name: NonBlank
     workflow: Id
+    flow: Id | None = None
     step: Id | None = None
     cases: Annotated[list[GoldCase], Field(min_length=1, max_length=100_000)] | NonBlank
     metrics: Annotated[list[MetricConfig], Field(max_length=64)] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def scoped_target(self) -> Self:
+        if self.step is not None and self.flow is None:
+            raise ValueError("step target requires a flow target")
+        return self
 
     @property
     def gold_cases(self) -> list[GoldCase]:
@@ -118,13 +125,12 @@ class SuiteSpec(BoundaryModel):
 
 
 class EvaluationDataset(BoundaryModel):
-    """Versioned ground truth for configured pipeline and isolated-step evaluation.
+    """Explicit ground truth for configured pipeline and isolated-step evaluation.
 
     The JSON file is independent of deployment dependencies. Loading and target
     checks never resolve environment secrets, import user code or open SDKs.
     """
 
-    version: Version1
     name: NonBlank
     revision: NonBlank
     suites: Annotated[list[SuiteSpec], Field(min_length=1, max_length=128)]
@@ -188,7 +194,10 @@ def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) 
         plan = prepared.plans.get(suite.workflow)
         if plan is None:
             raise ValueError("unknown evaluation workflow")
-        names = {step.name for step in plan.steps}
+        flows = {flow.name: flow for flow in plan.flows}
+        if suite.flow is not None and suite.flow not in flows:
+            raise ValueError("unknown evaluation flow")
+        names = {step.name for step in flows[suite.flow].steps} if suite.flow is not None else set()
         if suite.step is not None and suite.step not in names:
             raise ValueError("unknown evaluation step")
         for case in suite.gold_cases:
@@ -199,11 +208,18 @@ def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) 
                 ]
                 if not parts:
                     continue  # The empty pointer is the whole result.
-                if parts[0] not in {"payload", "metadata", "decisions", "execution"}:
+                if parts[0] not in {"payload", "metadata", "flows", "transitions", "execution"}:
                     raise ValueError("unknown execution result root")
-                if parts[0] == "decisions" and len(parts) >= 2:
-                    if parts[1] not in names or (suite.step is not None and parts[1] != suite.step):
-                        raise ValueError("expectation references an unavailable step")
+                if parts[0] == "flows" and len(parts) >= 2:
+                    target = flows.get(parts[1])
+                    if target is None or (suite.flow is not None and parts[1] != suite.flow):
+                        raise ValueError("expectation references an unavailable flow")
+                    if len(parts) >= 4 and parts[2] == "steps":
+                        step_names = {step.name for step in target.steps}
+                        if parts[3] not in step_names or (
+                            suite.step is not None and parts[3] != suite.step
+                        ):
+                            raise ValueError("expectation references an unavailable step")
                 if (
                     parts[0] == "execution"
                     and len(parts) >= 2
@@ -212,14 +228,12 @@ def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) 
                     raise ValueError("unknown execution field")
 
 
-def load_dataset(prepared: PreparedApplication) -> EvaluationDataset:
-    """Load configured private gold on demand; application startup never calls this."""
-    config = prepared.config.evaluation
-    if config is None:
-        raise ValueError("evaluation.dataset is required")
-    path = Path(config.dataset)
-    if not path.is_absolute():
-        path = prepared.source.parent / path
+def read_dataset(path: Path) -> EvaluationDataset:
+    """Read explicit gold and one-level case references relative to its manifest.
+
+    This materializes and validates the same boundary as inline cases without
+    compiling configuration, resolving secrets, or opening provider clients.
+    """
     dataset = EvaluationDataset.model_validate(read_json(path), strict=True)
     # References are one-level case arrays, relative to the manifest, not cwd.
     # Materialize to the same boundary as inline gold before validating/scoring.
@@ -232,6 +246,19 @@ def load_dataset(prepared: PreparedApplication) -> EvaluationDataset:
             suite["cases"] = read_json(case_path)
             if not isinstance(suite["cases"], list):
                 raise ValueError("case file must contain a JSON array")
-    dataset = EvaluationDataset.model_validate(document, strict=True)
+    return EvaluationDataset.model_validate(document, strict=True)
+
+
+def load_dataset(prepared: PreparedApplication) -> EvaluationDataset:
+    """Load configured private gold on demand; application startup never calls this."""
+    config = prepared.config.evaluation
+    path = (
+        prepared.source.parent.parent / "evaluation" / "dataset.json"
+        if config is None
+        else Path(config.dataset)
+    )
+    if not path.is_absolute():
+        path = prepared.source.parent / path
+    dataset = read_dataset(path)
     validate_targets(dataset, prepared)
     return dataset

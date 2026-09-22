@@ -123,7 +123,7 @@ class EvaluationCase:
 
 @dataclass(frozen=True, slots=True)
 class EvaluationSuite:
-    """A versioned, nonempty in-memory golden suite with content fingerprint."""
+    """A nonempty in-memory golden suite with content fingerprint."""
 
     name: str
     revision: str
@@ -181,7 +181,8 @@ class EvaluationVariant:
     """Caller-selected pipeline and explicit nonsecret configuration identities.
 
     Revisions describe caller configuration, not verified provider model weights.
-    Close over a prepared application's run or run_step method in ``run``.
+    Close over a prepared application's run, run_flow, or run_step method in
+    ``run`` and identify the same target explicitly.
     """
 
     name: str
@@ -189,6 +190,7 @@ class EvaluationVariant:
     run: Pipeline
     configuration_revision: str
     step: str | None = None
+    flow: str | None = None
     workflow: str | None = None
 
     def __post_init__(self) -> None:
@@ -198,13 +200,17 @@ class EvaluationVariant:
             raise ValueError("variant requires an async pipeline callable")
         if self.step is not None:
             _identifier(self.step)
+            if self.flow is None:
+                raise ValueError("step target requires a flow target")
+        if self.flow is not None:
+            _identifier(self.flow)
         if self.workflow is not None:
             _identifier(self.workflow)
 
 
 @dataclass(frozen=True, slots=True)
 class RegisteredScorer:
-    """An explicitly versioned async predicate over immutable actual and gold JSON."""
+    """An explicitly identified async predicate over immutable actual and gold JSON."""
 
     name: str
     revision: str
@@ -231,6 +237,7 @@ class CheckReport:
     name: str
     path: str
     outcome: CheckOutcome
+    flow: str | None
     step: str | None
     reason_code: str | None = None
     details: CheckDetails | None = None
@@ -251,11 +258,20 @@ class CaseDetails:
 
 @dataclass(frozen=True, slots=True)
 class StepReport:
+    flow: str
     name: str
     status: str
     elapsed_seconds: float | None
     usage: Usage | None
     selection_origin: Literal["model", "fallback"] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FlowReport:
+    name: str
+    status: str
+    elapsed_seconds: float | None
+    usage: Usage | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,6 +287,7 @@ class CaseReport:
     id: str
     status: str
     checks: tuple[CheckReport, ...]
+    flows: tuple[FlowReport, ...]
     steps: tuple[StepReport, ...]
     elapsed_seconds: float
     usage: Usage | None
@@ -307,6 +324,7 @@ class CheckSummary:
 
 @dataclass(frozen=True, slots=True)
 class StepSummary:
+    flow: str
     name: str
     checks: CheckSummary
     observed_cases: int
@@ -319,6 +337,17 @@ class StepSummary:
     model_selected_cases: int = 0
     fallback_selected_cases: int = 0
     fallback_rate: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FlowSummary:
+    name: str
+    observed_cases: int
+    skipped_cases: int
+    failed_cases: int
+    review_cases: int
+    latency: LatencySummary = field(default_factory=lambda: summarize_latency(()))
+    usage: UsageSummary = field(default_factory=lambda: summarize_usage(()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +374,7 @@ class EvaluationReport:
     timeout: float
     cases: tuple[CaseReport, ...]
     checks: CheckSummary
+    flows: tuple[FlowSummary, ...]
     steps: tuple[StepSummary, ...]
     case_pass_rate: float
     failure_rate: float
@@ -352,6 +382,7 @@ class EvaluationReport:
     elapsed_seconds: float
     metrics: tuple[MetricReport, ...] = ()
     target_step: str | None = None
+    target_flow: str | None = None
     target_workflow: str | None = None
     repeat: int = 1
     source_case_count: int = 0

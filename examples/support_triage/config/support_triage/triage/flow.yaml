@@ -1,0 +1,8 @@
+output:
+  pointer: /steps/extract/result
+  optional: true
+  default:
+    status: needs_review
+steps:
+- classify
+- extract

@@ -1,0 +1,108 @@
+[
+  {
+    "id": "request_0",
+    "input": {
+      "payload": {
+        "reference": "FOI-2026-0142"
+      },
+      "metadata": {}
+    },
+    "expectations": [
+      {
+        "name": "completed",
+        "path": "/execution/status",
+        "expected": "completed",
+        "comparison": "exact"
+      },
+      {
+        "name": "reference",
+        "path": "/payload/reference",
+        "expected": "FOI-2026-0142",
+        "comparison": "exact"
+      },
+      {
+        "name": "status",
+        "path": "/payload/status",
+        "expected": "in_review",
+        "comparison": "exact"
+      },
+      {
+        "name": "deadline",
+        "path": "/payload/due_date",
+        "expected": "2026-10-05",
+        "comparison": "exact"
+      },
+      {
+        "name": "team",
+        "path": "/payload/assigned_team",
+        "expected": "records_review",
+        "comparison": "exact"
+      },
+      {
+        "name": "one_tool",
+        "path": "/execution/usage/tool_calls",
+        "expected": 1,
+        "comparison": "exact"
+      },
+      {
+        "name": "no_model",
+        "path": "/execution/usage/model_requests",
+        "expected": 0,
+        "comparison": "exact"
+      }
+    ]
+  },
+  {
+    "id": "request_1",
+    "input": {
+      "payload": {
+        "reference": "FOI-2026-0310"
+      },
+      "metadata": {}
+    },
+    "expectations": [
+      {
+        "name": "completed",
+        "path": "/execution/status",
+        "expected": "completed",
+        "comparison": "exact"
+      },
+      {
+        "name": "reference",
+        "path": "/payload/reference",
+        "expected": "FOI-2026-0310",
+        "comparison": "exact"
+      },
+      {
+        "name": "status",
+        "path": "/payload/status",
+        "expected": "in_review",
+        "comparison": "exact"
+      },
+      {
+        "name": "deadline",
+        "path": "/payload/due_date",
+        "expected": "2026-10-05",
+        "comparison": "exact"
+      },
+      {
+        "name": "team",
+        "path": "/payload/assigned_team",
+        "expected": "records_review",
+        "comparison": "exact"
+      },
+      {
+        "name": "one_tool",
+        "path": "/execution/usage/tool_calls",
+        "expected": 1,
+        "comparison": "exact"
+      },
+      {
+        "name": "no_model",
+        "path": "/execution/usage/model_requests",
+        "expected": 0,
+        "comparison": "exact"
+      }
+    ]
+  }
+]

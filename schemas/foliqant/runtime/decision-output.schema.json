@@ -797,7 +797,7 @@
   "$id": "https://foliqant.local/schemas/foliqant/runtime/decision-output.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Runtime V3 output for unchanged native V2 questions and sources.\n\n``evidence_strength`` is required; null means support was not assessed.\nRatings cover the whole assessment, including justified abstentions, and do\nnot override answerability, catalog membership, or configured routing.",
+  "description": "Typed output for configured questions and sources.\n\n``evidence_strength`` is required; null means support was not assessed.\nRatings cover the whole assessment, including justified abstentions, and do\nnot override answerability, catalog membership, or configured routing.",
   "properties": {
     "results": {
       "items": {
@@ -807,12 +807,6 @@
       "minItems": 1,
       "title": "Results",
       "type": "array"
-    },
-    "schemaVersion": {
-      "const": 3,
-      "default": 3,
-      "title": "Schemaversion",
-      "type": "integer"
     }
   },
   "required": [

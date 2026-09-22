@@ -1,10 +1,9 @@
-"""Runtime decision responses, separate from immutable native V2 training contracts."""
+"""Decision assessments returned by configured runtime operations."""
 
 from copy import deepcopy
 from typing import Annotated, Literal, Self
 
 from pydantic import (
-    BeforeValidator,
     ConfigDict,
     Field,
     GetJsonSchemaHandler,
@@ -31,13 +30,6 @@ from foliqant.decisions.contracts import (
     validate_answerability,
     validate_request_relations,
 )
-
-
-def _runtime_version(value: object) -> object:
-    if type(value) is not int or value != 3:
-        raise ValueError("must be the integer 3")
-    return value
-
 
 type EvidenceStrength = Literal["limited", "strong"]
 """Supplied support for the whole assessment, including a justified abstention."""
@@ -167,14 +159,13 @@ type DecisionResult = Annotated[
 
 
 class DecisionOutput(ContractModel):
-    """Runtime V3 output for unchanged native V2 questions and sources.
+    """Typed output for configured questions and sources.
 
     ``evidence_strength`` is required; null means support was not assessed.
     Ratings cover the whole assessment, including justified abstentions, and do
     not override answerability, catalog membership, or configured routing.
     """
 
-    schemaVersion: Annotated[Literal[3], BeforeValidator(_runtime_version)] = 3
     results: Annotated[list[DecisionResult], Field(min_length=1, max_length=256)]
 
 

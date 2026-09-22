@@ -17,7 +17,7 @@ from foliqant import (
 from foliqant.contracts.execution import ExecutionResult
 from foliqant.core.json import JsonValue
 
-CONFIG_PATH = Path(__file__).with_name("foliqant.yaml")
+CONFIG_PATH = Path(__file__).with_name("config") / "settings.yaml"
 
 
 @asynccontextmanager

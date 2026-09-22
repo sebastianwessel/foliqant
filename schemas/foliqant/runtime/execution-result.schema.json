@@ -93,6 +93,138 @@
       "title": "ExecutionInfo",
       "type": "object"
     },
+    "FlowResult": {
+      "additionalProperties": false,
+      "description": "A flow's scoped step records and explicitly present projected result.",
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "needs_review"
+            }
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          }
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "result"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "skipped"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "error": {
+          "$ref": "#/$defs/SafeError",
+          "title": "Error"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "steps": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "$ref": "#/$defs/StepResult"
+            }
+          },
+          "title": "Steps",
+          "type": "object"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "status",
+        "steps"
+      ],
+      "title": "FlowResult",
+      "type": "object"
+    },
     "IdentityId": {
       "maxLength": 256,
       "minLength": 1,
@@ -415,6 +547,66 @@
       "title": "TraceCarrier",
       "type": "object"
     },
+    "TransitionResult": {
+      "additionalProperties": false,
+      "description": "One recorded workflow boundary with exactly one authored target.",
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "outcome"
+            ]
+          },
+          "required": [
+            "flow"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "flow"
+            ]
+          },
+          "required": [
+            "outcome"
+          ]
+        }
+      ],
+      "properties": {
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "completed",
+            "needs_review"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "completed",
+            "needs_review"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "source": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "reason"
+      ],
+      "title": "TransitionResult",
+      "type": "object"
+    },
     "Usage": {
       "additionalProperties": false,
       "properties": {
@@ -506,29 +698,37 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "decisions": {
-      "patternProperties": {
-        "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
-          "$ref": "#/$defs/StepResult"
-        }
-      },
-      "title": "Decisions",
-      "type": "object"
-    },
     "execution": {
       "$ref": "#/$defs/ExecutionInfo"
+    },
+    "flows": {
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+          "$ref": "#/$defs/FlowResult"
+        }
+      },
+      "title": "Flows",
+      "type": "object"
     },
     "metadata": {
       "$ref": "#/$defs/Metadata"
     },
     "payload": {
       "$ref": "#/$defs/JsonValue"
+    },
+    "transitions": {
+      "items": {
+        "$ref": "#/$defs/TransitionResult"
+      },
+      "title": "Transitions",
+      "type": "array"
     }
   },
   "required": [
     "payload",
     "metadata",
-    "decisions",
+    "flows",
+    "transitions",
     "execution"
   ],
   "title": "ExecutionResult",

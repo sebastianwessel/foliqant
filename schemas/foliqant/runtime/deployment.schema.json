@@ -1111,29 +1111,28 @@
       ],
       "default": null
     },
-    "version": {
-      "const": 1,
-      "title": "Version",
-      "type": "integer"
-    },
     "workflows": {
-      "maxProperties": 64,
-      "minProperties": 1,
-      "patternProperties": {
-        "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
-          "minLength": 1,
-          "pattern": ".*\\S.*",
-          "type": "string"
+      "anyOf": [
+        {
+          "maxProperties": 64,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
         }
-      },
-      "title": "Workflows",
-      "type": "object"
+      ],
+      "default": null,
+      "title": "Workflows"
     }
   },
-  "required": [
-    "version",
-    "workflows"
-  ],
   "title": "DeploymentConfig",
   "type": "object"
 }

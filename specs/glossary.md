@@ -13,3 +13,15 @@
 | Acceptance policy | Empirical threshold for choosing which validated outputs to accept; not a per-message correctness probability. |
 | Artifact | Finalized directory with closed manifest and verified inventory; immutable by convention and verification. |
 | Diagnostic | Evidence useful for toolchain checks, without a production financial-quality claim. |
+
+## In-memory execution
+
+| Term | Meaning |
+| --- | --- |
+| Workflow | Finite graph of explicitly configured flow instances; owns input, final projection and boundary routing. |
+| Flow | Ordered sequence of steps with its own bound payload and optional output projection; contains no step-level routes. |
+| Step | One configured decision, structured LLM, MCP call or trusted handler operation. IDs are local to a flow. |
+| Transition | Recorded flow-boundary choice of another flow or a terminal outcome; exact-match routing uses a configured pointer and default. |
+| Prompt template | Literal text with declared `{{ name }}` placeholders; values are JSON serialized once, never evaluated or recursively interpolated. |
+| Runtime result | Payload and metadata with `flows[flow_id].steps[step_id]`, ordered transitions and execution information; presence distinguishes missing from explicit null. |
+| Content revision | Identifier or fingerprint for a configuration, suite, scorer or measured variant; not a runtime format-version field. |

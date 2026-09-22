@@ -15,11 +15,11 @@ from .execution import ExecutionResult
 from .mcp import McpProfiles
 from .models import ModelProfiles
 from .telemetry import TelemetryConfig
-from .workflow import DeclaredToolCatalog, StepAuthoring, WorkflowAuthoring
+from .workflow import DeclaredToolCatalog, FlowDefinition, StepAuthoring, WorkflowAuthoring
 
 
 def runtime_schemas() -> dict[str, dict[str, JsonValue]]:
-    """Return versioned runtime schemas generated from the library boundary types."""
+    """Return runtime schemas generated from the library boundary types."""
     schemas = cast(
         dict[str, dict[str, JsonValue]],
         {
@@ -32,6 +32,7 @@ def runtime_schemas() -> dict[str, dict[str, JsonValue]]:
             "mcp-profiles.schema.json": McpProfiles.model_json_schema(),
             "telemetry.schema.json": TelemetryConfig.model_json_schema(),
             "workflow.schema.json": WorkflowAuthoring.model_json_schema(),
+            "flow.schema.json": FlowDefinition.model_json_schema(),
             "step.schema.json": TypeAdapter(StepAuthoring).json_schema(),
             "tool-catalog.schema.json": DeclaredToolCatalog.model_json_schema(),
         },

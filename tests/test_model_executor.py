@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any, Literal, cast
 
 import pytest
+from flow_fixtures import operation_flow
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.settings import ModelSettings
@@ -108,7 +109,6 @@ def _decision_step() -> DecisionStepPlan:
             ),
         ),
         instructions="Classify the ticket.",
-        on_answer=(("billing", "done"), ("technical", "done")),
     )
 
 
@@ -119,13 +119,13 @@ def _plan(step: DecisionStepPlan | LlmStepPlan | HandlerStepPlan) -> WorkflowPla
     return WorkflowPlan(
         name="test-workflow",
         revision="a" * 64,
-        start=step.name,
+        start="main",
         default_model=None,
         input_schema_path=None,
         input_schema=None,
         schema_resources=resources,
         output=None,
-        steps=(step,),
+        flows=(operation_flow(step),),
         location=SourceLocation("workflow.yaml", 1, 1),
     )
 
@@ -143,6 +143,7 @@ def _context(
         workflow="test-workflow",
         revision="a" * 64,
         step_id=step_name,
+        flow_id="main",
         caller=CallerContext(Identity("tenant", "principal"), _frozen_object({})),
         deadline=deadline if deadline is not None else loop.time() + 2,
         model_timeout=model_timeout,
@@ -197,7 +198,6 @@ def _decision_result(
 ) -> dict[str, object]:
     answerable = status == "answerable"
     return {
-        "schemaVersion": 3,
         "results": [
             {
                 "questionId": "classify",

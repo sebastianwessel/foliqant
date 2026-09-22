@@ -1,0 +1,26 @@
+start: extract
+input_schema: input.schema.json
+output:
+  pointer: /flows/lookup/result
+  optional: true
+  default:
+    status: needs_review
+flows:
+  extract:
+    input:
+      message:
+        pointer: /payload/message
+      language:
+        pointer: /payload/language
+    transition:
+      flow: lookup
+  lookup:
+    input:
+      reference:
+        pointer: /flows/extract/result/reference
+      language:
+        pointer: /flows/extract/result/language
+    transition:
+      outcome: completed
+defaults:
+  model: local_qwen

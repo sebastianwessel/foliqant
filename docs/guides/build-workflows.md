@@ -1,329 +1,316 @@
 # Build a workflow
 
-A workflow is a local, reviewed graph executed in memory. A deployment names
-its bundle directory; `workflow.yaml` defines its input, start step and output.
-Keep a small workflow in one file, or put larger steps in separate YAML or
-Markdown files. Both forms compile into the same immutable plan before clients
-open or a request runs.
+A workflow is a reviewed graph of flows executed in memory. Each flow receives
+explicit input, runs an ordered list of operations, projects a result, and routes
+to another flow or a terminal outcome. The compiler freezes the graph, schemas,
+bindings, prompts, and declared capabilities before clients open.
 
-## Run a small inline workflow
-
-Create a model-free project:
+## Start from the generated layout
 
 ```sh
 uv run --no-sync foliqant init /tmp/my-workflow
 ```
 
-Its `foliqant.yaml` contains:
-
-```yaml
-version: 1
-workflows:
-  demo: workflows/demo
-```
-
-Replace `/tmp/my-workflow/workflows/demo/workflow.yaml` with this complete
-workflow. It accepts an object containing a message and returns that message
-as the result payload:
-
-```yaml
-version: 1
-name: demo
-start: done
-input_schema:
-  type: object
-  properties:
-    message: {type: string}
-  required: [message]
-  additionalProperties: false
-output: {pointer: /payload/message}
-steps:
-  done:
-    type: finish
-    outcome: completed
-```
-
-Use the generated `envelope.json`, whose payload contains `message: hello`:
-
-```sh
-uv run --no-sync foliqant validate --config /tmp/my-workflow/foliqant.yaml
-uv run --no-sync foliqant explain --config /tmp/my-workflow/foliqant.yaml
-uv run --no-sync foliqant run --config /tmp/my-workflow/foliqant.yaml --workflow demo --input /tmp/my-workflow/envelope.json
-```
-
-The run returns `execution.status: completed` and `payload: "hello"`. It does not
-need a model, credentials or network access. Without `output`, the result keeps
-the accepted input payload.
-
-Deployment paths are relative to `foliqant.yaml` and must stay below its
-folder. Workflow schema paths are relative to the bundle directory. Names use
-lowercase snake case, beginning with a letter. YAML duplicate keys, aliases,
-custom tags and unknown configuration fields are rejected.
-
-## Choose one step source
-
-With inline steps, the keys below `steps` are the step IDs. Do not add a
-separate `name` field inside those steps. `start` is always explicit; the order
-of mapping keys or filenames never determines execution.
-
-For separate files, remove `steps` from `workflow.yaml`. The equivalent
-model-free bundle is:
+The generated project uses the conventional layout:
 
 ```text
-workflows/demo/
-  workflow.yaml
-  steps/
-    done.yaml
+config/
+  settings.yaml
+  .env.example
+  demo/
+    workflow.yaml
+    summarize/
+      flow.yaml
+      summarize.step.md
+envelope.json
 ```
 
-`workflow.yaml`:
+`config/settings.yaml` contains shared adapter and execution settings. Its
+`workflows` map is optional:
 
 ```yaml
-version: 1
-name: demo
-start: done
+models:
+  local:
+    provider: openai_compatible
+    model: $MODEL_ID
+    base_url: $MODEL_BASE_URL
+    allow_insecure_http: true
+    output_mode: native
+    supports_tools: false
 ```
 
-`steps/done.yaml`:
+When `workflows` is absent, Foliqant discovers only immediate nonhidden
+`config/*/workflow.yaml` files. The directory name becomes the workflow name.
+Use an explicit mapping such as `workflows: {public_name: another_directory}`
+when the public name or location must differ. Paths are relative to the settings
+file and must remain below its directory.
+
+Names use lowercase snake case and begin with a letter. YAML duplicate keys,
+aliases, custom tags, and unknown fields are rejected.
+
+## Define workflow and flow boundaries
+
+`config/demo/workflow.yaml` defines workflow input, its starting flow, flow
+instances, routing, and the public payload projection:
 
 ```yaml
-type: finish
-outcome: completed
-```
-
-The filename supplies the step ID; a file may use an explicit `name` to override
-it. Each ID must be unique. The compiler rejects a bundle that combines inline
-`steps` with `steps/*.yaml` or `steps/*.md`; choose one form for the whole bundle.
-
-| Step | Purpose | Successful transition |
-| --- | --- | --- |
-| `decision` | Ask native evidence-backed questions | `next`, or exhaustive `on_answer` routes for one choice, ordinal or predicate question |
-| `llm` | Produce text or JSON matching an authored schema | `next` |
-| `mcp` | Call a declared read-only tool | `next` |
-| `handler` | Call a registered async Python function | `next` |
-| `finish` | End with `completed` or `needs_review` | None |
-
-Every successful operation needs an explicit transition. A missing `next` is
-not an implicit successful finish. All targets must exist, every step must be
-reachable from `start`, and cycles are rejected. Use a `finish` step to state
-the intended terminal outcome.
-
-An operation reporting uncertainty follows `on_unresolved` before any success
-route. If `on_unresolved` is absent, it ends the run with `needs_review`. For a
-decision, this prevents an unresolved answer from falling through to `next`.
-
-## Classify with an explicit fallback
-
-Keep normal categories specific. Their multiline descriptions can include
-examples and exclusions; no separate example fields are needed. For a
-single-choice decision, an optional fallback is a separate category object:
-
-```yaml
-fallback:
-  category:
-    id: misc
-    description: |
-      Requests that need a person to select the next action.
-      This is a process fallback, not a model-selected business category.
-  on: [no_supported_answer]
-on_unresolved: review
-```
-
-Add the `review` finish step with `outcome: needs_review`. It marks the selected
-process branch; the embedding application implements any actual handoff.
-For issue-specific handling, use a map with `default` and any of the three issue
-keys: `no_supported_answer`, `conflicting_information`, `multiple_valid_options`.
-If several reported issues map to different targets, the map's required
-`default` wins. An undetermined result or unresolved non-decision operation also
-uses the default. Without a route, the run stops with `needs_review`.
-
-Fallback applies only to a validated `not_answerable` result with nonempty issues
-that are **all** listed in `fallback.on`. It never handles timeouts, invalid
-model output, or undetermined results. The fallback is not a selectable model
-option, does not make the answer valid, and does not take an `on_answer` route.
-The category ID uses the same normalization as the category catalog and cannot
-collide with a normal option. This feature is limited to single-choice decisions.
-
-The answer, issues, reason and evidence strength stay unchanged. The public
-step record adds a separate selection when there is a resolved choice or an
-applicable fallback:
-
-```json
-{"category": {"id": "misc", "description": "Requests needing review."}, "origin": "fallback"}
-```
-
-Its public path is `/decisions/classify/selection`; workflow bindings use
-`/steps/classify/selection`. An ordinary model choice uses `origin: model`.
-Uncovered unresolved cases have no selection. Score the native answer and this
-effective selection separately: a populated fallback is not model accuracy.
-
-## Share schemas and bind values
-
-A workflow's `input_schema` accepts a JSON Schema object, as above, or a local
-file path such as `schemas/input.json`. An LLM step's `output` accepts `text`
-or `{schema: ...}`, where the schema value is likewise an object or file path.
-Inline and file schemas use the same validation and frozen resource registry.
-
-For example, after declaring an `extractor` model profile in
-[deployment configuration](../reference/runtime-configuration.md), this complete
-`workflow.yaml` extracts a message subject:
-
-```yaml
-version: 1
-name: demo
-start: extract
-defaults: {model: extractor}
-input_schema:
-  type: object
-  properties:
-    message: {type: string}
-  required: [message]
-  additionalProperties: false
-output: {pointer: /steps/extract/result}
-steps:
-  extract:
-    type: llm
+defaults: {model: local}
+input_schema: input.schema.json
+output: {pointer: /flows/summarize/result}
+flows:
+  summarize:
     input:
       message: {pointer: /payload/message}
-    instructions: Extract a concise subject from the message.
-    output:
-      schema:
-        type: object
-        properties:
-          subject: {type: string}
-        required: [subject]
-        additionalProperties: false
-    next: done
-  done:
-    type: finish
-    outcome: completed
+    transition: {outcome: completed}
 ```
 
-To share its output schema, move the object under `output.schema` into
-`schemas/subject.json` and change that field to `schema: schemas/subject.json`.
-Schemas may refer to other local resources with `$ref`. References inside a
-schema file resolve relative to that file; references in an inline schema
-resolve relative to the bundle directory. A fragment such as `#/$defs/subject`
-refers to that schema's own definitions. Remote resources, escaping paths and
-schema `$id` declarations are rejected. Compilation freezes the resources and
-binds their exact file bytes to the revision; running a prepared workflow does
-not reread them.
+`name` defaults to the workflow directory. A workflow with one flow may omit
+`start`; a workflow with multiple flows must declare it.
 
-Bindings are explicitly tagged values:
-
-| Binding | Meaning |
-| --- | --- |
-| `{literal: "email"}` | Use a fixed JSON value |
-| `{pointer: /payload/message}` | Read accepted input |
-| `{pointer: /metadata/source}` | Read accepted metadata |
-| `{pointer: /steps/extract/result/subject}` | Read a step result |
-| `{pointer: /payload/language, optional: true, default: "en"}` | Use the default only when the pointer is missing |
-
-Pointers use RFC 6901: `~1` escapes `/` and `~0` escapes `~` in a key. JSON `null`
-is a present value, so it never activates a missing-value default. Optional
-pointers require an explicit `default`; a required pointer cannot have one.
-
-A required prior-step binding must name a step that runs on every graph path
-to its consumer. Use an optional binding when a branch may skip the producer.
-Similarly, an output projection must be available at every possible terminal,
-including an earlier operation's implicit `needs_review` outcome, or have an
-explicit default. Schemas may describe a property without requiring it; actual
-missing values still fail at runtime unless the binding has a default.
-
-## Pass only the context a step needs
-
-Use existing input bindings for previous results; there is no automatic history
-or full-envelope forwarding. For example, after an `extract` step produces
-`reference`, a declared MCP step can receive only that field:
+A flow definition owns an optional input schema, an ordered nonempty step list,
+and an optional output projection:
 
 ```yaml
-type: mcp
-server: requests
-tool: get_request_status
-arguments:
-  reference: {pointer: /steps/extract/result/reference}
-next: done
+# config/demo/summarize/flow.yaml
+input_schema: input.schema.json
+output: {pointer: /steps/summarize/result}
+steps:
+  - summarize
 ```
 
-The MCP server/tool names and argument schema must match the deployment's
-reviewed catalog. Keep the extraction before this step on every path, or use
-`optional: true` with an explicit default when the tool schema permits it.
-Optional means missing, not null: a present null must still satisfy the tool's
-schema. The compiler checks graph availability and known types; runtime validates
-the actual arguments. See the
-[extraction-to-MCP example](https://github.com/sebastianwessel/foliqant/blob/main/examples/extracted_request_mcp/README.md)
-for a complete runnable bundle and isolated-step evaluations.
+Omitting a flow `definition` resolves `<flow>/flow.yaml`. Each shorthand step
+ID resolves exactly one of `<id>.step.md`, `<id>.step.yaml`,
+`<id>/step.md`, or `<id>/step.yaml` beside the flow definition. Missing or
+ambiguous candidates are rejected.
 
-## Write instructions in Markdown
+Conventions resolve definitions only. The authored `steps` list fixes operation
+order, and authored flow transitions fix routing. Filesystem order never affects
+execution. An explicit `definition` path or inline definition remains available
+when the conventional layout is not appropriate.
 
-For a separate `steps/extract.md`, put step configuration in YAML frontmatter
-and instructions in the body. A complete step file replacing `extract` from the
-previous example is:
+A flow's successful `transition` names either another flow or a terminal
+outcome:
+
+```yaml
+transition: {flow: publish}
+# or
+transition: {outcome: completed}
+```
+
+Route on an exact scalar flow result with `binding`, `cases`, and a required
+`default`:
+
+```yaml
+transition:
+  binding: {pointer: /flows/classify/result/queue}
+  cases:
+    billing: {flow: billing}
+    cancel: {flow: cancellation}
+  default: {outcome: needs_review}
+```
+
+Unresolved operations stop with `needs_review` unless the flow instance defines
+`on_unresolved`. It may be one target or issue-specific targets with a required
+`default`. An unresolved route cannot complete the workflow directly.
+
+## Choose an operation
+
+Flows run their operations in list order. There are four operation types:
+
+| Type | Purpose |
+| --- | --- |
+| `decision` | Answer one or more evidence-backed typed questions |
+| `llm` | Produce text or JSON matching an authored schema |
+| `mcp` | Call one declared and allowed MCP tool |
+| `handler` | Call a trusted async Python handler registered by the host |
+
+Operations do not route or terminate a workflow. Flow boundaries own routing
+and outcomes.
+
+An LLM operation with a colocated output schema can be written as Markdown:
 
 ```markdown
 ---
 type: llm
-model: extractor
 input:
   message: {pointer: /payload/message}
-output: text
-next: done
+output:
+  schema: output.schema.json
 ---
-Extract a concise subject from the message.
+Extract the account reference from {{ message }}.
 ```
 
-Only `decision` and `llm` steps accept a Markdown body. Use either the body or an
-`instructions` field; providing both is an error. Keep the matching `done`
-finish step and remove the inline `steps` mapping when moving to step files.
+Only `decision` and `llm` definitions accept Markdown bodies. Use the body or
+an `instructions` field, not both. Keep a step's schemas beside that step when
+they are specific to it; keep workflow and flow boundary schemas beside those
+boundaries.
+
+## Classify with an explicit fallback
+
+A single-choice decision may define a process fallback for selected unresolved
+issue codes:
+
+```yaml
+fallback:
+  category:
+    id: review
+    description: Requests awaiting human review.
+  on: [no_supported_answer]
+```
+
+The fallback category is not presented to the model and must not duplicate a
+normal catalog ID. It applies only to a validated `not_answerable` result whose
+issues are all listed in `on`. It does not handle timeouts, invalid output, or
+undetermined results.
+
+The native answer and issues remain unresolved. The public step record adds a
+separate `selection` with `origin: fallback`; score native model correctness
+and process selection separately. Route the containing flow's unresolved result
+through `on_unresolved`.
+
+## Bind only the required context
+
+Bindings are explicitly tagged JSON values:
+
+| Binding | Meaning |
+| --- | --- |
+| `{literal: "email"}` | A fixed JSON value |
+| `{pointer: /payload/message}` | The current boundary's accepted input |
+| `{pointer: /metadata/source}` | Accepted metadata |
+| `{pointer: /steps/extract/result/reference}` | A prior operation in the current flow |
+| `{pointer: /flows/classify/result/queue}` | A completed flow result at workflow scope |
+| `{pointer: /payload/language, optional: true, default: "en"}` | A fallback only when the pointer is missing |
+
+Pointers use RFC 6901: `~1` escapes `/` and `~0` escapes `~`. JSON
+`null` is present, so it does not activate a missing-value default. Optional
+pointers require an explicit default; required pointers cannot have one.
+
+Each operation starts a fresh model conversation and receives only its declared
+inputs. Foliqant does not forward the full envelope, prior prompts, messages, or
+an implicit conversation history. A later operation can consume an earlier
+result only through an explicit binding.
+
+For a decision source, choose how its selected JSON value becomes evidence:
+
+```yaml
+sources:
+  message: {pointer: /payload/message}
+  account:
+    pointer: /payload/account
+    format: json
+```
+
+`format: text` is the default and requires a nonempty string. `format: json`
+renders the selected value as canonical JSON, preserving structure without
+inventing prose.
+
+## Use prompt substitution deliberately
+
+An LLM step may omit `prompt`; its declared inputs are then supplied as a JSON
+object. To place selected inputs into a user prompt, use exact
+`{{ name }}` placeholders:
+
+```yaml
+type: llm
+input:
+  message: {pointer: /payload/message}
+  language: {pointer: /payload/language}
+instructions: Return one concise sentence.
+prompt: |
+  Summarize {{ message }} in {{ language }}.
+output: text
+```
+
+Every placeholder must name a declared input. Values are inserted once as
+compact JSON: strings remain quoted, objects keep their structure, and template
+syntax inside a value is never evaluated. `{{{{` and `}}}}` render literal
+double braces. Expressions, missing names, and unmatched double braces are
+rejected during compilation.
+
+## Keep instructions and input separate
+
+Business instructions, decision questions and criteria, output schemas, route
+targets, and tool allowlists are authored configuration. Bound source values,
+prompt substitutions, metadata, filenames, URLs, and prior model or tool results
+are data.
+
+The model adapters add a fixed policy that tells the provider to keep those
+roles separate. Embedded requests in data cannot extend the task, permissions,
+tools, or output contract. The policy still permits legitimate extraction,
+classification, transformation, and quotation of instruction-like business
+content when the authored task requires it.
+
+For decisions, compiler-authored questions and criteria define the task.
+`state.sources[].text` remains untrusted evidence, and derived summaries or
+prior assessments remain claims rather than independent corroboration. This is a
+defense boundary, not proof that a particular model will always comply. Validate
+outputs and include adversarial cases in representative evaluations.
+
+## Share and resolve schemas
+
+`input_schema` and `output.schema` accept an inline JSON Schema object or a
+local file path. References inside a schema file resolve relative to that file;
+references in an inline schema resolve relative to the containing definition.
+Remote resources, escaping paths, and schema `$id` declarations are rejected.
+
+Compilation freezes the referenced files and binds their bytes to the compiled
+revision. Execution does not reread them. The compiler checks graph
+availability and provable type conflicts; runtime validation still handles
+dynamic values and the parts of JSON Schema that static checks cannot prove.
+
+## Inspect public results
+
+The returned `ExecutionResult` has five roots:
+
+```text
+/payload
+/metadata
+/flows
+/transitions
+/execution
+```
+
+Flow records are under `/flows/{flow}`; their operation records are under
+`/flows/{flow}/steps/{step}`. A projected flow value is
+`/flows/{flow}/result`. The workflow's own `output` binding becomes the
+top-level `payload`.
+
+Within a running flow, authored bindings use the local `/steps/{step}/...`
+scope. Workflow routing and output bindings use `/flows/{flow}/...`. Public
+results never expose a separate flat `decisions` map.
 
 ## Validate before opening clients
 
-The CLI's `validate`, `explain` and `doctor` commands are offline. `doctor` also
-reports whether selected optional dependencies are installed. In Python, use
-the public preparation entry point:
+```sh
+foliqant validate
+foliqant explain --workflow demo
+foliqant doctor
+```
+
+These commands compile offline. Preparation validates model capabilities,
+schema references, flow routes, bindings, MCP declarations, and trusted handler
+contracts without contacting model or MCP endpoints. Successful preparation
+does not establish endpoint availability, output quality, or future model
+behavior.
+
+In Python:
 
 ```python
 from pathlib import Path
 
 from foliqant import prepare_application
 
-prepared = prepare_application(Path("/tmp/my-workflow/foliqant.yaml"))
+prepared = prepare_application(Path("config/settings.yaml"))
 plan = prepared.plans["demo"]
 print(plan.name, plan.start, plan.revision)
 ```
 
-Preparation validates declared model capabilities, schema references, graph
-routes and bindings without contacting model or MCP endpoints. Registered
-handler schemas and declared MCP schemas also let it check required input keys,
-forbidden fields and obviously incompatible JSON types. It rejects mandatory
-paths proven impossible by known schemas, such as a missing property in a
-closed object or a child of a string. An optional binding to an absent path
-keeps its explicit fallback.
+Compilation failures report a safe source location, field, reason, and hint
+without echoing authored values or raw parser exceptions. Correct the explicit
+source file and prepare again.
 
-These are conservative checks, not a proof that arbitrary JSON Schemas are
-compatible. Open schemas, conditional/composite schemas, overlapping union
-types, value constraints and actual property presence still need runtime
-validation. Successful preparation does not establish endpoint availability,
-model quality or the validity of future responses. External tool and model
-outputs remain independently validated during execution.
-
-Compilation failures include a stable `reason`, bundle-relative source
-location, a field when available, and a corrective `hint`. For example,
-`missing_transition` points to `next`; `mixed_step_sources` points to `steps`.
-Diagnostics omit rejected values and raw parser or validation exceptions.
-A `*` in a field path represents an authored mapping key that was omitted from
-the diagnostic. Correct the source file and prepare again.
-
-The [support triage bundle](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/workflow.yaml)
-shows decision routing followed by schema extraction. The
-[public-request bundle](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/workflow.yaml)
-shows a declared MCP call. Continue with
-[testing and evaluation](testing-and-evaluation.md) to check your own workflow.
-
-## Keep policy outside prompts
-
-The workflow fixes route targets and tool allowlists. Models cannot create
-steps or grant tool permissions. The embedding application owns caller
-authentication and resource authorization. Current integrations are read-only;
-mutating business actions belong in the application's own authorization and
-reconciliation flow.
+The [support triage example](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/README.md)
+shows a decision followed by schema extraction. The
+[public-request example](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/README.md)
+shows a declared read-only MCP operation. Continue with
+[testing and evaluation](testing-and-evaluation.md).

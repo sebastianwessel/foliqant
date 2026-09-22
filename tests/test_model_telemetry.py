@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import pytest
+from flow_fixtures import operation_flow
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace import TracerProvider
@@ -63,13 +64,13 @@ def _plan(step: LlmStepPlan) -> WorkflowPlan:
     return WorkflowPlan(
         name="test-workflow",
         revision="a" * 64,
-        start=step.name,
+        start="main",
         default_model=None,
         input_schema_path=None,
         input_schema=None,
         schema_resources=(SchemaResourcePlan("schemas/result.json", step.output_schema),),
         output=None,
-        steps=(step,),
+        flows=(operation_flow(step),),
         location=SourceLocation("workflow.yaml", 1, 1),
     )
 
@@ -82,6 +83,7 @@ def _context(step: LlmStepPlan) -> StepContext:
         workflow="test-workflow",
         revision="a" * 64,
         step_id=step.name,
+        flow_id="main",
         caller=CallerContext(Identity("tenant", "principal"), _frozen({})),
         deadline=asyncio.get_running_loop().time() + 2,
         model_timeout=1,

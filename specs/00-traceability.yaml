@@ -313,7 +313,7 @@ paths:
   - REQ-PACKAGE-EVALUATION
   kind: success
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-EVALUATION
 - path_id: PATH-PACKAGE-EVALUATION-FAILURE
@@ -323,7 +323,7 @@ paths:
   - REQ-PACKAGE-EVALUATION
   kind: failure
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-EVALUATION
 - path_id: PATH-PACKAGE-CONTRACTS-SUCCESS
@@ -333,7 +333,7 @@ paths:
   - REQ-PACKAGE-CONTRACTS
   kind: success
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-CONTRACTS
 - path_id: PATH-PACKAGE-CONTRACTS-FAILURE
@@ -343,7 +343,7 @@ paths:
   - REQ-PACKAGE-CONTRACTS
   kind: failure
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-CONTRACTS
 - path_id: PATH-PACKAGE-COMPILER-SUCCESS
@@ -353,7 +353,7 @@ paths:
   - REQ-PACKAGE-COMPILER
   kind: success
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-COMPILER
 - path_id: PATH-PACKAGE-COMPILER-FAILURE
@@ -363,7 +363,7 @@ paths:
   - REQ-PACKAGE-COMPILER
   kind: failure
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-COMPILER
 - path_id: PATH-PACKAGE-RUNTIME-SUCCESS
@@ -373,7 +373,7 @@ paths:
   - REQ-PACKAGE-RUNTIME
   kind: success
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-RUNTIME
 - path_id: PATH-PACKAGE-RUNTIME-FAILURE
@@ -383,7 +383,7 @@ paths:
   - REQ-PACKAGE-RUNTIME
   kind: failure
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-RUNTIME
 - path_id: PATH-PACKAGE-MCP-SUCCESS
@@ -393,7 +393,7 @@ paths:
   - REQ-PACKAGE-MCP
   kind: success
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-MCP
 - path_id: PATH-PACKAGE-MCP-FAILURE
@@ -403,7 +403,7 @@ paths:
   - REQ-PACKAGE-MCP
   kind: failure
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-MCP
 - path_id: PATH-PACKAGE-PRIVACY-SUCCESS
@@ -413,7 +413,7 @@ paths:
   - REQ-PACKAGE-PRIVACY
   kind: success
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-PRIVACY
 - path_id: PATH-PACKAGE-PRIVACY-FAILURE
@@ -423,7 +423,7 @@ paths:
   - REQ-PACKAGE-PRIVACY
   kind: failure
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-PRIVACY
 - path_id: PATH-PACKAGE-DX-SUCCESS
@@ -433,7 +433,7 @@ paths:
   - REQ-PACKAGE-DX
   kind: success
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-DX
 - path_id: PATH-PACKAGE-DX-FAILURE
@@ -443,7 +443,7 @@ paths:
   - REQ-PACKAGE-DX
   kind: failure
   contract_refs:
-  - CONTRACT-PACKAGE-V1
+  - CONTRACT-PACKAGE
   acceptance_ids:
   - ACCEPT-PACKAGE-DX
 - path_id: PATH-BUSINESS-DECISIONS-SUCCESS
@@ -761,6 +761,7 @@ acceptance:
   - 11-python-package.md#evaluation-and-step-isolation
   - ../tests/test_evaluation.py
   - ../tests/test_step_execution.py
+  - ../tests/test_flow_boundaries.py
   - ../tests/test_example_evaluations.py
   - ../plans/reviews/python-package-evaluation.md
 - acceptance_id: ACCEPT-PACKAGE-CONTRACTS
@@ -781,6 +782,7 @@ acceptance:
   verification_refs:
   - 11-python-package.md#entry-points-example-and-acceptance
   - ../tests/test_compiler.py
+  - ../tests/test_prompt.py
 - acceptance_id: ACCEPT-PACKAGE-RUNTIME
   requirement_ids:
   - REQ-PACKAGE-RUNTIME
@@ -789,6 +791,8 @@ acceptance:
   - PATH-PACKAGE-RUNTIME-FAILURE
   verification_refs:
   - 11-python-package.md#entry-points-example-and-acceptance
+  - ../tests/test_flow_runner.py
+  - ../tests/test_flow_boundaries.py
 - acceptance_id: ACCEPT-PACKAGE-MCP
   requirement_ids:
   - REQ-PACKAGE-MCP

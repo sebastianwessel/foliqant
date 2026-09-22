@@ -14,7 +14,7 @@ from foliqant.decisions import (
 )
 from foliqant.decisions.category_catalog import CategoryDescription, CategoryKey
 
-from .base import BoundaryModel, Version1
+from .base import BoundaryModel
 from .identifiers import Id as Id
 from .models import StepModel
 
@@ -130,40 +130,42 @@ class DecisionFallback(BoundaryModel):
         return value
 
 
-class UnresolvedRouting(BoundaryModel):
-    """Issue-specific routes with a required default for ambiguity or no issue."""
+class SourcePointerBinding(PointerBinding):
+    """A selected decision source, rendered as nonempty text or canonical JSON."""
 
-    default: Id
-    no_supported_answer: Id | None = None
-    conflicting_information: Id | None = None
-    multiple_valid_options: Id | None = None
+    format: Literal["text", "json"] = "text"
+
+
+class SourceLiteralBinding(LiteralBinding):
+    """A literal decision source with explicit optional JSON rendering."""
+
+    format: Literal["text", "json"] = "text"
+
+
+SourceBinding = Annotated[
+    Annotated[SourcePointerBinding, Tag("pointer")]
+    | Annotated[SourceLiteralBinding, Tag("literal")],
+    Discriminator(_binding_kind),
+]
 
 
 class _CommonStep(BoundaryModel):
-    name: Id | None = None
     type: str
-    next: Id | None = None
-    on_unresolved: Id | UnresolvedRouting | None = None
 
 
 class DecisionStepAuthoring(_CommonStep):
     type: Literal["decision"]
     model: StepModel | None = None
-    sources: dict[Id, Binding]
+    sources: dict[Id, SourceBinding]
     question: QuestionShorthand | None = None
     questions: Annotated[list[DecisionQuestion], Field(min_length=2, max_length=64)] | None = None
     instructions: NonBlank
-    on_answer: dict[str, Id] | None = None
     fallback: DecisionFallback | None = None
 
     @model_validator(mode="after")
     def exactly_one_question_form(self) -> "DecisionStepAuthoring":
         if (self.question is None) == (self.questions is None):
             raise ValueError("exactly one question form is required")
-        if self.next is not None and self.on_answer is not None:
-            raise ValueError("next and on_answer are mutually exclusive")
-        if self.questions is not None and self.on_answer is not None:
-            raise ValueError("multi-question steps cannot route by answer")
         if self.fallback is not None:
             if not isinstance(self.question, ChoiceQuestionShorthand):
                 raise ValueError("fallback requires a single choice question")
@@ -207,6 +209,7 @@ class LlmStepAuthoring(_CommonStep):
     input: dict[Id, Binding]
     instructions: NonBlank
     output: Literal["text"] | SchemaOutput
+    prompt: NonBlank | None = None
     tools: ToolPolicy | None = None
 
 
@@ -223,30 +226,100 @@ class HandlerStepAuthoring(_CommonStep):
     input: dict[Id, Binding]
 
 
-class FinishStepAuthoring(BoundaryModel):
-    name: Id | None = None
-    type: Literal["finish"]
-    outcome: Literal["completed", "needs_review"]
-
-
 StepAuthoring = Annotated[
-    DecisionStepAuthoring
-    | LlmStepAuthoring
-    | McpStepAuthoring
-    | HandlerStepAuthoring
-    | FinishStepAuthoring,
+    DecisionStepAuthoring | LlmStepAuthoring | McpStepAuthoring | HandlerStepAuthoring,
     Field(discriminator="type"),
 ]
 
 
+class NamedStep(BoundaryModel):
+    """One ordered operation with an identity independent of its definition file."""
+
+    id: Id
+    definition: StepAuthoring | NonBlank | None = None
+
+
+class FlowDefinition(BoundaryModel):
+    """A reusable sequence; the containing workflow owns its instance identity."""
+
+    input_schema: NonBlank | dict[str, JsonValue] | None = None
+    output: Binding | None = None
+    steps: Annotated[list[NamedStep | Id], Field(min_length=1)]
+
+    @field_validator("steps")
+    @classmethod
+    def unique_steps(cls, value: list[NamedStep | str]) -> list[NamedStep | str]:
+        if len({step if isinstance(step, str) else step.id for step in value}) != len(value):
+            raise ValueError("step IDs must be unique within a flow")
+        return value
+
+
+class FlowTarget(BoundaryModel):
+    flow: Id
+
+
+class OutcomeTarget(BoundaryModel):
+    outcome: Literal["completed", "needs_review"]
+
+
+TransitionTarget = FlowTarget | OutcomeTarget
+
+
+class MatchRouting(BoundaryModel):
+    """Exact string matching with an explicit default, without coercion."""
+
+    binding: Binding
+    cases: Annotated[dict[str, TransitionTarget], Field(min_length=1)]
+    default: TransitionTarget
+
+
+class UnresolvedRouting(BoundaryModel):
+    """Issue-specific targets with a required default for ambiguity or no issue."""
+
+    default: TransitionTarget
+    no_supported_answer: TransitionTarget | None = None
+    conflicting_information: TransitionTarget | None = None
+    multiple_valid_options: TransitionTarget | None = None
+
+
+class FlowInstance(BoundaryModel):
+    """One named flow invocation with explicit boundary data and authored targets."""
+
+    definition: FlowDefinition | NonBlank | None = None
+    input: dict[Id, Binding]
+    transition: TransitionTarget | MatchRouting
+    on_unresolved: TransitionTarget | UnresolvedRouting | None = None
+
+    @model_validator(mode="after")
+    def unresolved_does_not_complete(self) -> "FlowInstance":
+        route = self.on_unresolved
+        targets = (
+            [
+                route.default,
+                route.no_supported_answer,
+                route.conflicting_information,
+                route.multiple_valid_options,
+            ]
+            if isinstance(route, UnresolvedRouting)
+            else [route]
+        )
+        if any(
+            isinstance(target, OutcomeTarget) and target.outcome == "completed"
+            for target in targets
+        ):
+            raise ValueError("unresolved flows cannot directly complete the workflow")
+        return self
+
+
 class WorkflowAuthoring(BoundaryModel):
-    version: Version1
-    name: Id
-    start: Id
+    """A finite graph of explicit, sequential flow instances."""
+
+    name: Id | None = None
+    start: Id | None = None
     defaults: WorkflowDefaults = Field(default_factory=WorkflowDefaults)
     input_schema: NonBlank | dict[str, JsonValue] | None = None
     output: Binding | None = None
-    steps: Annotated[dict[Id, StepAuthoring], Field(min_length=1)] | None = None
+    flows: Annotated[dict[Id, FlowInstance], Field(min_length=1)]
 
 
 class DeclaredTool(BoundaryModel):

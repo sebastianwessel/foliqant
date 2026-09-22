@@ -1,0 +1,110 @@
+[
+  {
+    "id": "two_requests_de",
+    "input": {
+      "payload": {
+        "message": "Sperren Sie meine Karte und senden Sie meinen Kontoauszug bis heute 17 Uhr. Ich beanstande keine Belastung."
+      },
+      "metadata": {
+        "language": "de",
+        "family": "two_positive_purposes",
+        "rationale": "German translation stays with its English family, including strong choice abstention."
+      }
+    },
+    "expectations": [
+      {
+        "name": "review",
+        "path": "/execution/status",
+        "expected": "completed",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_identity",
+        "path": "/flows/assessment/steps/assess/result/questionId",
+        "expected": "assess",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_status",
+        "path": "/flows/assessment/steps/assess/result/answerability/status",
+        "expected": "answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_issues",
+        "path": "/flows/assessment/steps/assess/result/answerability/issues",
+        "expected": [],
+        "comparison": "set"
+      },
+      {
+        "name": "dispute_strength",
+        "path": "/flows/assessment/steps/assess/result/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_answer",
+        "path": "/flows/assessment/steps/assess/result/answer",
+        "expected": {
+          "value": "false"
+        },
+        "comparison": "exact"
+      }
+    ]
+  },
+  {
+    "id": "explicit_missing",
+    "input": {
+      "payload": {
+        "message": "Please handle my issue. The intended card or statement action has not been supplied. No timing information is available. Whether I dispute a charge has not been stated."
+      },
+      "metadata": {
+        "language": "en",
+        "family": "explicitly_absent_facts",
+        "rationale": "The source explicitly establishes each essential information gap: strong abstentions."
+      }
+    },
+    "expectations": [
+      {
+        "name": "review",
+        "path": "/execution/status",
+        "expected": "needs_review",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_identity",
+        "path": "/flows/assessment/steps/assess/result/questionId",
+        "expected": "assess",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_status",
+        "path": "/flows/assessment/steps/assess/result/answerability/status",
+        "expected": "not_answerable",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_issues",
+        "path": "/flows/assessment/steps/assess/result/answerability/issues",
+        "expected": [
+          "no_supported_answer"
+        ],
+        "comparison": "set"
+      },
+      {
+        "name": "dispute_strength",
+        "path": "/flows/assessment/steps/assess/result/evidence_strength",
+        "expected": "strong",
+        "comparison": "exact"
+      },
+      {
+        "name": "dispute_answer",
+        "path": "/flows/assessment/steps/assess/result/answer",
+        "expected": {
+          "value": "unknown"
+        },
+        "comparison": "exact"
+      }
+    ]
+  }
+]

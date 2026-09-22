@@ -20,7 +20,7 @@ from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.json import JsonValue
 
 EXAMPLE_DIRECTORY = Path(__file__).resolve().parent
-CONFIG_PATH = EXAMPLE_DIRECTORY / "foliqant.yaml"
+CONFIG_PATH = EXAMPLE_DIRECTORY / "config" / "settings.yaml"
 DEMO_PAYLOAD: dict[str, JsonValue] = {
     "requestId": "support-2026-0042",
     "message": (

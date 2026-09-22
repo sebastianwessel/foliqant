@@ -1,0 +1,240 @@
+{
+  "name": "decision_evidence",
+  "revision": "5",
+  "suites": [
+    {
+      "name": "typed_support",
+      "workflow": "decision_evidence",
+      "flow": null,
+      "step": null,
+      "cases": "cases/typed_support.json",
+      "metrics": [
+        {
+          "name": "triage_strength",
+          "path": "/flows/assessment/steps/assess/result/results/0/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "labels_strength",
+          "path": "/flows/assessment/steps/assess/result/results/1/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "dispute_strength",
+          "path": "/flows/assessment/steps/assess/result/results/2/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "priority_strength",
+          "path": "/flows/assessment/steps/assess/result/results/3/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "requests_strength",
+          "path": "/flows/assessment/steps/assess/result/results/4/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "typed_support_flow",
+      "workflow": "decision_evidence",
+      "flow": "assessment",
+      "step": null,
+      "cases": "cases/typed_support.json",
+      "metrics": [
+        {
+          "name": "triage_strength",
+          "path": "/flows/assessment/steps/assess/result/results/0/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "labels_strength",
+          "path": "/flows/assessment/steps/assess/result/results/1/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "dispute_strength",
+          "path": "/flows/assessment/steps/assess/result/results/2/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "priority_strength",
+          "path": "/flows/assessment/steps/assess/result/results/3/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "requests_strength",
+          "path": "/flows/assessment/steps/assess/result/results/4/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "typed_support_step",
+      "workflow": "decision_evidence",
+      "flow": "assessment",
+      "step": "assess",
+      "cases": "cases/typed_support.json",
+      "metrics": [
+        {
+          "name": "triage_strength",
+          "path": "/flows/assessment/steps/assess/result/results/0/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "labels_strength",
+          "path": "/flows/assessment/steps/assess/result/results/1/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "dispute_strength",
+          "path": "/flows/assessment/steps/assess/result/results/2/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "priority_strength",
+          "path": "/flows/assessment/steps/assess/result/results/3/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        },
+        {
+          "name": "requests_strength",
+          "path": "/flows/assessment/steps/assess/result/results/4/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "isolated_predicate",
+      "workflow": "decision_predicate",
+      "flow": null,
+      "step": null,
+      "cases": "cases/isolated_predicate.json",
+      "metrics": [
+        {
+          "name": "dispute_strength",
+          "path": "/flows/assessment/steps/assess/result/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "isolated_predicate_flow",
+      "workflow": "decision_predicate",
+      "flow": "assessment",
+      "step": null,
+      "cases": "cases/isolated_predicate.json",
+      "metrics": [
+        {
+          "name": "dispute_strength",
+          "path": "/flows/assessment/steps/assess/result/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "isolated_predicate_step",
+      "workflow": "decision_predicate",
+      "flow": "assessment",
+      "step": "assess",
+      "cases": "cases/isolated_predicate.json",
+      "metrics": [
+        {
+          "name": "dispute_strength",
+          "path": "/flows/assessment/steps/assess/result/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        }
+      ]
+    }
+  ]
+}

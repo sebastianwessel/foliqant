@@ -6,13 +6,13 @@ Specification [11](../11-python-package.md) owns the in-memory library scope,
 entrypoints, contracts and acceptance families. Persistence, queue workers,
 application authentication and packaged transports are explicitly not capabilities.
 
-- `CAP-PACKAGE-CONTRACTS` → `ACCEPT-PACKAGE-CONTRACTS`.
-- `CAP-PACKAGE-COMPILER` → `ACCEPT-PACKAGE-COMPILER`.
-- `CAP-PACKAGE-RUNTIME` → `ACCEPT-PACKAGE-RUNTIME`.
+- `CAP-PACKAGE-CONTRACTS` → `ACCEPT-PACKAGE-CONTRACTS`: unversioned strict envelopes, nested flow/step results and explicit transitions.
+- `CAP-PACKAGE-COMPILER` → `ACCEPT-PACKAGE-COMPILER`: conventional lookup or explicit definitions, sequential flows, scoped binding checks, JSON-safe prompt templates and declared decision-source formats.
+- `CAP-PACKAGE-RUNTIME` → `ACCEPT-PACKAGE-RUNTIME`: bounded pipeline, flow and step execution, flow-boundary routing and explicit context projection.
 - `CAP-PACKAGE-MCP` → `ACCEPT-PACKAGE-MCP`.
 - `CAP-PACKAGE-PRIVACY` → `ACCEPT-PACKAGE-PRIVACY`.
 - `CAP-PACKAGE-DX` → `ACCEPT-PACKAGE-DX`.
-- `CAP-PACKAGE-EVALUATION` → `ACCEPT-PACKAGE-EVALUATION`: isolated steps and full pipelines, explicit golden expectations, measured latency/usage and honest coverage/failure denominators.
+- `CAP-PACKAGE-EVALUATION` → `ACCEPT-PACKAGE-EVALUATION`: isolated flows/steps and full pipelines, explicit golden expectations, measured latency/usage and honest coverage/failure denominators.
 
 ## Archived business-process concepts
 

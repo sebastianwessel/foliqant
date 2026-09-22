@@ -21,7 +21,7 @@ from foliqant import (
 )
 from foliqant.core.json import JsonValue
 
-CONFIG_PATH = Path(__file__).with_name("foliqant.yaml")
+CONFIG_PATH = Path(__file__).with_name("config") / "settings.yaml"
 DEMO_PAYLOAD: dict[str, JsonValue] = {
     "message": "Check the status of public request FOI-2026-0142 in English.",
     "language": "en",

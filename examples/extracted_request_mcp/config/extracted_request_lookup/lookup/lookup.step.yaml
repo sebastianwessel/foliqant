@@ -1,0 +1,8 @@
+type: mcp
+server: records_office
+tool: lookup_request
+arguments:
+  reference:
+    pointer: /payload/reference
+  language:
+    pointer: /payload/language

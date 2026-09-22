@@ -73,6 +73,7 @@ def _profiles(*, auth: str | None = None, concurrency: int = 1) -> McpProfiles:
 def _context(identity: Identity, *, tool_timeout: float = 0.5) -> StepContext:
     metadata = cast(FrozenObject, freeze_json({}))
     return StepContext(
+        flow_id="main",
         execution_id="execution",
         workflow="workflow",
         revision="a" * 64,

@@ -1,0 +1,1316 @@
+{
+  "name": "http_support_triage_examples",
+  "revision": "11",
+  "suites": [
+    {
+      "name": "support_triage",
+      "workflow": "support_triage",
+      "flow": null,
+      "step": null,
+      "cases": [
+        {
+          "id": "explicit_cancellation",
+          "input": {
+            "payload": {
+              "requestId": "eval-001",
+              "message": "Cancel renewal for account C-1049 by 30 September 2026."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "queue",
+              "path": "/flows/triage/steps/classify/result/answer/optionId",
+              "expected": "cancellation",
+              "comparison": "exact"
+            },
+            {
+              "name": "action",
+              "path": "/payload/requested_action",
+              "expected": {
+                "input_path": "/payload/message",
+                "required": [
+                  0,
+                  14
+                ],
+                "allowed": [
+                  0,
+                  33
+                ]
+              },
+              "comparison": "source_span"
+            },
+            {
+              "name": "account",
+              "path": "/payload/account_reference",
+              "expected": "C-1049",
+              "comparison": "exact"
+            },
+            {
+              "name": "deadline",
+              "path": "/payload/deadline",
+              "expected": "by 30 September 2026",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "cancellation",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "model",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_issues",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [],
+              "comparison": "set"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "billing_dispute",
+          "input": {
+            "payload": {
+              "requestId": "eval-002",
+              "message": "I dispute invoice INV-882. Please review the duplicate charge."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "queue",
+              "path": "/flows/triage/steps/classify/result/answer/optionId",
+              "expected": "billing_dispute",
+              "comparison": "exact"
+            },
+            {
+              "name": "action",
+              "path": "/payload/requested_action",
+              "expected": {
+                "input_path": "/payload/message",
+                "required": [
+                  34,
+                  61
+                ],
+                "allowed": [
+                  27,
+                  61
+                ]
+              },
+              "comparison": "source_span"
+            },
+            {
+              "name": "not_an_account",
+              "path": "/payload/account_reference",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "deadline_absent",
+              "path": "/payload/deadline",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "billing_dispute",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "model",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_issues",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [],
+              "comparison": "set"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "insufficient_information",
+          "input": {
+            "payload": {
+              "requestId": "eval-003",
+              "message": "Please help."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_supported_answer",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "no_supported_answer"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "misc",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "fallback",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "service_change",
+          "input": {
+            "payload": {
+              "requestId": "eval-004",
+              "message": "Add priority support to account A-2205 by 15 October 2026."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "queue",
+              "path": "/flows/triage/steps/classify/result/answer/optionId",
+              "expected": "service_change",
+              "comparison": "exact"
+            },
+            {
+              "name": "action",
+              "path": "/payload/requested_action",
+              "expected": {
+                "input_path": "/payload/message",
+                "required": [
+                  0,
+                  20
+                ],
+                "allowed": [
+                  0,
+                  38
+                ]
+              },
+              "comparison": "source_span"
+            },
+            {
+              "name": "account",
+              "path": "/payload/account_reference",
+              "expected": "A-2205",
+              "comparison": "exact"
+            },
+            {
+              "name": "deadline",
+              "path": "/payload/deadline",
+              "expected": "by 15 October 2026",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "service_change",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "model",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_issues",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [],
+              "comparison": "set"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "german_cancellation",
+          "input": {
+            "payload": {
+              "requestId": "eval-005",
+              "message": "Bitte stoppen Sie die automatische Verlängerung für Kundenkonto K-771 bis 31. Dezember 2026."
+            },
+            "metadata": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "de",
+              "comparison": "exact"
+            },
+            {
+              "name": "queue",
+              "path": "/flows/triage/steps/classify/result/answer/optionId",
+              "expected": "cancellation",
+              "comparison": "exact"
+            },
+            {
+              "name": "action",
+              "path": "/payload/requested_action",
+              "expected": {
+                "input_path": "/payload/message",
+                "required": [
+                  6,
+                  47
+                ],
+                "allowed": [
+                  6,
+                  69
+                ]
+              },
+              "comparison": "source_span"
+            },
+            {
+              "name": "account",
+              "path": "/payload/account_reference",
+              "expected": "K-771",
+              "comparison": "exact"
+            },
+            {
+              "name": "deadline",
+              "path": "/payload/deadline",
+              "expected": "bis 31. Dezember 2026",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "cancellation",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "model",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_issues",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [],
+              "comparison": "set"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "german_billing_dispute",
+          "input": {
+            "payload": {
+              "requestId": "eval-006",
+              "message": "Ich widerspreche der doppelten Belastung auf Rechnung RE-550. Bitte prüfen Sie die doppelte Belastung bis 15. Oktober 2026."
+            },
+            "metadata": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "de",
+              "comparison": "exact"
+            },
+            {
+              "name": "queue",
+              "path": "/flows/triage/steps/classify/result/answer/optionId",
+              "expected": "billing_dispute",
+              "comparison": "exact"
+            },
+            {
+              "name": "action",
+              "path": "/payload/requested_action",
+              "expected": {
+                "input_path": "/payload/message",
+                "required": [
+                  68,
+                  101
+                ],
+                "allowed": [
+                  62,
+                  101
+                ]
+              },
+              "comparison": "source_span"
+            },
+            {
+              "name": "not_an_account",
+              "path": "/payload/account_reference",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "deadline",
+              "path": "/payload/deadline",
+              "expected": "bis 15. Oktober 2026",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "billing_dispute",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "model",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_issues",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [],
+              "comparison": "set"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "multiple_active_intents",
+          "input": {
+            "payload": {
+              "requestId": "eval-007",
+              "message": "Please cancel renewal for account C-3300 and add priority support to the same account. Both requests are current."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "multiple_valid_options",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "multiple_valid_options"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "unresolved_contradiction",
+          "input": {
+            "payload": {
+              "requestId": "eval-008",
+              "message": "Please cancel renewal for account C-4400. Please also keep the renewal active. Neither instruction supersedes the other."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "conflicting_information",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "conflicting_information"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "explicit_correction",
+          "input": {
+            "payload": {
+              "requestId": "eval-009",
+              "message": "Earlier I asked to cancel renewal for account A-3100. Correction: do not cancel it. Please add priority support to account A-3100 by 1 November 2026."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "queue",
+              "path": "/flows/triage/steps/classify/result/answer/optionId",
+              "expected": "service_change",
+              "comparison": "exact"
+            },
+            {
+              "name": "action",
+              "path": "/payload/requested_action",
+              "expected": {
+                "input_path": "/payload/message",
+                "required": [
+                  91,
+                  111
+                ],
+                "allowed": [
+                  84,
+                  129
+                ]
+              },
+              "comparison": "source_span"
+            },
+            {
+              "name": "account",
+              "path": "/payload/account_reference",
+              "expected": "A-3100",
+              "comparison": "exact"
+            },
+            {
+              "name": "deadline",
+              "path": "/payload/deadline",
+              "expected": "by 1 November 2026",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "service_change",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "model",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_issues",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [],
+              "comparison": "set"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "out_of_catalog",
+          "input": {
+            "payload": {
+              "requestId": "eval-010",
+              "message": "I would like to apply for the advertised accountant position."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_supported_answer",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "no_supported_answer"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "misc",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "fallback",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "german_out_of_catalog",
+          "input": {
+            "payload": {
+              "requestId": "eval-011",
+              "message": "Ich möchte mich auf die ausgeschriebene Stelle als Buchhalter bewerben."
+            },
+            "metadata": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "de",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_supported_answer",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "no_supported_answer"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "misc",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "fallback",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "german_insufficient_information",
+          "input": {
+            "payload": {
+              "requestId": "eval-012",
+              "message": "Bitte helfen Sie mir."
+            },
+            "metadata": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "de",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_supported_answer",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "no_supported_answer"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "misc",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "fallback",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "category_words_without_request",
+          "input": {
+            "payload": {
+              "requestId": "eval-013",
+              "message": "Your help page lists cancellation and priority support. I am only confirming that I read it; I am not requesting either action."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_supported_answer",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "no_supported_answer"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "misc",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "fallback",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "german_category_words_without_request",
+          "input": {
+            "payload": {
+              "requestId": "eval-014",
+              "message": "Ihre Hilfeseite nennt Kündigung und Premium-Support. Ich bestätige nur, dass ich sie gelesen habe; ich beantrage keine dieser Änderungen."
+            },
+            "metadata": {
+              "language": "de"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "de",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_supported_answer",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "no_supported_answer"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "misc",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "fallback",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "withdrawn_request",
+          "input": {
+            "payload": {
+              "requestId": "eval-015",
+              "message": "Earlier message: 'Please cancel my renewal.' I withdraw that request. Please make no changes; I have no other request."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_supported_answer",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "no_supported_answer"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "misc",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "fallback",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "missing_referent",
+          "input": {
+            "payload": {
+              "requestId": "eval-016",
+              "message": "Please stop it. I have not specified what 'it' refers to."
+            },
+            "metadata": {
+              "language": "en"
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/metadata/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "not_answerable",
+              "path": "/flows/triage/steps/classify/result/answerability/status",
+              "expected": "not_answerable",
+              "comparison": "exact"
+            },
+            {
+              "name": "no_supported_answer",
+              "path": "/flows/triage/steps/classify/result/answerability/issues",
+              "expected": [
+                "no_supported_answer"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "no_answer",
+              "path": "/flows/triage/steps/classify/result/answer",
+              "expected": null,
+              "comparison": "exact"
+            },
+            {
+              "name": "safe_output",
+              "path": "/payload/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "selected_category",
+              "path": "/flows/triage/steps/classify/selection/category/id",
+              "expected": "misc",
+              "comparison": "exact"
+            },
+            {
+              "name": "selection_origin",
+              "path": "/flows/triage/steps/classify/selection/origin",
+              "expected": "fallback",
+              "comparison": "exact"
+            },
+            {
+              "name": "unresolved_route",
+              "path": "/flows/triage/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "evidence_strength",
+              "path": "/flows/triage/steps/classify/result/evidence_strength",
+              "expected": "strong",
+              "comparison": "exact"
+            }
+          ]
+        }
+      ],
+      "metrics": [
+        {
+          "name": "support_queue",
+          "path": "/flows/triage/steps/classify/result/answer/optionId",
+          "kind": "classification",
+          "labels": [
+            "cancellation",
+            "billing_dispute",
+            "service_change"
+          ]
+        },
+        {
+          "name": "execution_status",
+          "path": "/execution/status",
+          "kind": "classification",
+          "labels": [
+            "completed",
+            "needs_review",
+            "failed"
+          ]
+        },
+        {
+          "name": "effective_category",
+          "path": "/flows/triage/steps/classify/selection/category/id",
+          "kind": "classification",
+          "labels": [
+            "cancellation",
+            "billing_dispute",
+            "service_change",
+            "misc"
+          ]
+        },
+        {
+          "name": "selection_origin",
+          "path": "/flows/triage/steps/classify/selection/origin",
+          "kind": "classification",
+          "labels": [
+            "model",
+            "fallback"
+          ]
+        },
+        {
+          "name": "answerability_issues",
+          "path": "/flows/triage/steps/classify/result/answerability/issues",
+          "kind": "multilabel",
+          "labels": [
+            "no_supported_answer",
+            "conflicting_information",
+            "multiple_valid_options"
+          ]
+        },
+        {
+          "name": "evidence_strength",
+          "path": "/flows/triage/steps/classify/result/evidence_strength",
+          "kind": "classification",
+          "labels": [
+            "limited",
+            "strong",
+            null
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+mcp:
+  records_office:
+    transport:
+      type: stdio
+      command: $FOLIQANT_EXAMPLE_PYTHON
+      args:
+      - -m
+      - examples.public_request_mcp.server
+      cwd: $FOLIQANT_EXAMPLE_ROOT
+      env:
+        PYTHONUNBUFFERED: '1'
+    catalog:
+      tools:
+        lookup_request:
+          input_schema:
+            properties:
+              reference:
+                title: Reference
+                type: string
+            required:
+            - reference
+            title: lookup_requestArguments
+            type: object
+          output_schema:
+            additionalProperties: false
+            description: Status of a synthetic public-record request.
+            properties:
+              reference:
+                title: Reference
+                type: string
+              status:
+                const: in_review
+                title: Status
+                type: string
+              due_date:
+                title: Due Date
+                type: string
+              assigned_team:
+                title: Assigned Team
+                type: string
+            required:
+            - reference
+            - status
+            - due_date
+            - assigned_team
+            title: RequestStatus
+            type: object
+          effect: read
+    concurrency: 1
+    queue_limit: 0
+    request_timeout: 3
+    output_limit_bytes: 4096
+execution:
+  concurrency: 1
+  queue_limit: 0
+  run_timeout: 5
+  tool_timeout: 3

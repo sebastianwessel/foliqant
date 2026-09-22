@@ -18,6 +18,7 @@ from .analysis import compare_reports
 from .artifact import (
     MAX_REPORT_BYTES,
     default_artifact_path,
+    report_document,
     write_private_json,
     write_report,
 )
@@ -76,9 +77,7 @@ def _replay_targets(
     requested_repeat: int | None,
 ) -> tuple[dict[str, tuple[_SavedOutcome, ...]], int]:
     """Match saved inputs/configuration, permitting revised gold but never new inputs."""
-    raw = read_json(path, max_bytes=MAX_REPORT_BYTES)
-    if not isinstance(raw, dict) or type(raw.get("version")) is not int or raw["version"] != 1:
-        raise ValueError("invalid report version")
+    raw = report_document(read_json(path, max_bytes=MAX_REPORT_BYTES))
     identity = raw.get("dataset")
     if not isinstance(identity, dict) or identity.get("name") != dataset.name:
         raise ValueError("report belongs to another dataset")
@@ -98,13 +97,14 @@ def _replay_targets(
     for spec in dataset.suites:
         report = saved.get(spec.name)
         if report is None or (
-            report.get("target_step") != spec.step or report.get("target_workflow") != spec.workflow
+            report.get("target_step") != spec.step
+            or report.get("target_flow") != spec.flow
+            or report.get("target_workflow") != spec.workflow
         ):
-            # The report declares isolated targets; older reports cannot silently
-            # be interpreted as a different execution mode.
+            # Rescoring must preserve the exact execution scope.
             raise ValueError("report target differs")
         cases = report.get("cases")
-        repeat = report.get("repeat", 1)
+        repeat = report.get("repeat")
         if type(repeat) is not int or repeat < 1:
             raise ValueError("report repeat is invalid")
         if artifact_repeat is None:
@@ -123,7 +123,7 @@ def _replay_targets(
             if (
                 not isinstance(case, dict)
                 or case.get("id") != gold.id
-                or case.get("repetition", 1) != repetition
+                or case.get("repetition") != repetition
             ):
                 raise ValueError("report case order or identity differs")
             elapsed_value = case.get("elapsed_seconds")
@@ -218,6 +218,7 @@ async def evaluate_configuration(
                     run=run,
                     configuration_revision=prepared.configuration_digest,
                     step=spec.step,
+                    flow=spec.flow,
                     workflow=spec.workflow,
                 ),
                 max_concurrency=max_concurrency,
@@ -271,9 +272,15 @@ async def evaluate_configuration(
             for spec in dataset.suites:
 
                 async def invoke(envelope: Envelope, selected: SuiteSpec = spec) -> ExecutionResult:
-                    if selected.step is None:
+                    if selected.flow is None:
                         return await application.run(selected.workflow, envelope)
-                    return await application.run_step(selected.workflow, selected.step, envelope)
+                    if selected.step is None:
+                        return await application.run_flow(
+                            selected.workflow, selected.flow, envelope
+                        )
+                    return await application.run_step(
+                        selected.workflow, selected.flow, selected.step, envelope
+                    )
 
                 await measure(spec, invoke)
     await asyncio.to_thread(

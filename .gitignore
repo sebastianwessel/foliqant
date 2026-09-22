@@ -42,3 +42,6 @@ coverage/
 *.onnx
 *.h5
 *.bin
+
+# Public synthetic gold is tracked; generated evaluation reports are private.
+**/evaluation/results/

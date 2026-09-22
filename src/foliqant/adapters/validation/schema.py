@@ -79,26 +79,36 @@ class WorkflowSchemas:
                 plan.input_schema_path,
                 plan.input_schema,
             )
-            outputs: dict[str, Draft202012Validator] = {}
-            output_paths: dict[str, str] = {}
-            for step in plan.steps:
-                if not isinstance(step, LlmStepPlan):
-                    continue
-                if step.output_kind == "schema":
-                    if step.name in outputs:
-                        _fail(ErrorCode.INVALID_CONFIGURATION)
-                    validator = self._build_optional(
-                        step.output_schema_path,
-                        step.output_schema,
-                    )
-                    if validator is None:
-                        _fail(ErrorCode.INVALID_CONFIGURATION)
-                    outputs[step.name] = validator
-                    if step.output_schema_path is None:
-                        _fail(ErrorCode.INVALID_CONFIGURATION)
-                    output_paths[step.name] = step.output_schema_path
-                elif step.output_schema_path is not None or step.output_schema is not None:
+            self._flow_inputs: dict[str, Draft202012Validator | None] = {}
+            outputs: dict[tuple[str, str], Draft202012Validator] = {}
+            output_paths: dict[tuple[str, str], str] = {}
+            for flow in plan.flows:
+                if flow.name in self._flow_inputs:
                     _fail(ErrorCode.INVALID_CONFIGURATION)
+                self._flow_inputs[flow.name] = self._build_optional(
+                    flow.input_schema_path, flow.input_schema
+                )
+                step_ids: set[str] = set()
+                for step in flow.steps:
+                    if step.name in step_ids:
+                        _fail(ErrorCode.INVALID_CONFIGURATION)
+                    step_ids.add(step.name)
+                    if not isinstance(step, LlmStepPlan):
+                        continue
+                    key = (flow.name, step.name)
+                    if step.output_kind == "schema":
+                        validator = self._build_optional(
+                            step.output_schema_path,
+                            step.output_schema,
+                        )
+                        if validator is None:
+                            _fail(ErrorCode.INVALID_CONFIGURATION)
+                        outputs[key] = validator
+                        if step.output_schema_path is None:
+                            _fail(ErrorCode.INVALID_CONFIGURATION)
+                        output_paths[key] = step.output_schema_path
+                    elif step.output_schema_path is not None or step.output_schema is not None:
+                        _fail(ErrorCode.INVALID_CONFIGURATION)
             self._outputs = outputs
             self._output_paths = output_paths
         except ServiceError:
@@ -174,18 +184,26 @@ class WorkflowSchemas:
             return
         self._validate(self._input, payload, ErrorCode.INVALID_INPUT)
 
-    def validate_output(self, step_id: str, value: FrozenJson) -> None:
-        """Validate one schema-output LLM step by exact compiled step ID."""
+    def validate_flow_input(self, flow_id: str, payload: FrozenJson) -> None:
+        """Validate the exact flow's input, without borrowing another flow's schema."""
+        if flow_id not in self._flow_inputs:
+            _fail(ErrorCode.INVALID_CONFIGURATION)
+        validator = self._flow_inputs[flow_id]
+        if validator is not None:
+            self._validate(validator, payload, ErrorCode.INVALID_INPUT)
 
-        validator = self._outputs.get(step_id)
+    def validate_output(self, flow_id: str, step_id: str, value: FrozenJson) -> None:
+        """Validate one schema-output LLM step by exact compiled flow and step IDs."""
+
+        validator = self._outputs.get((flow_id, step_id))
         if validator is None:
             _fail(ErrorCode.INVALID_CONFIGURATION)
         self._validate(validator, value, ErrorCode.INVALID_OUTPUT)
 
-    def provider_output_schema(self, step_id: str) -> dict[str, JsonValue]:
+    def provider_output_schema(self, flow_id: str, step_id: str) -> dict[str, JsonValue]:
         """Return an independent schema bundle with no external references or I/O."""
         try:
-            path = self._output_paths[step_id]
+            path = self._output_paths[(flow_id, step_id)]
             return inline_provider_schema(self._resources[path], self._uri(path), self._registry)
         except ServiceError:
             raise

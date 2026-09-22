@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .json import FrozenJson, FrozenObject
+from .prompt import PromptTemplate
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,13 +79,28 @@ class FallbackPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class TransitionTargetPlan:
+    """Exactly one authored flow instance or terminal disposition."""
+
+    flow: str | None = None
+    outcome: Literal["completed", "needs_review"] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MatchRoutingPlan:
+    binding: BindingPlan
+    cases: tuple[tuple[str, TransitionTargetPlan], ...]
+    default: TransitionTargetPlan
+
+
+@dataclass(frozen=True, slots=True)
 class UnresolvedRoutingPlan:
     """Route agreeing issue targets, otherwise use the required default."""
 
-    default: str
-    issues: tuple[tuple[DecisionIssue, str], ...] = ()
+    default: TransitionTargetPlan
+    issues: tuple[tuple[DecisionIssue, TransitionTargetPlan], ...] = ()
 
-    def target(self, issues: tuple[DecisionIssue, ...]) -> str:
+    def target(self, issues: tuple[DecisionIssue, ...]) -> TransitionTargetPlan:
         routes = dict(self.issues)
         targets = {routes.get(issue, self.default) for issue in issues}
         return targets.pop() if len(targets) == 1 else self.default
@@ -92,19 +108,11 @@ class UnresolvedRoutingPlan:
 
 @dataclass(frozen=True, slots=True)
 class StepPlan:
-    """Common immutable step data.
-
-    ``unresolved_before_transition`` tells the runtime to evaluate decision
-    answerability before following ``next``. A missing unresolved target means
-    the workflow terminates with ``needs_review``.
-    """
+    """One operation in a flow's authored list order."""
 
     name: str
     type: str
     location: SourceLocation
-    next: str | None = None
-    on_unresolved: str | UnresolvedRoutingPlan | None = None
-    unresolved_before_transition: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +122,7 @@ class DecisionStepPlan(StepPlan):
     questions: tuple[DecisionQuestionPlan, ...] = ()
     question_mode: Literal["single", "multiple"] = "single"
     instructions: str = ""
-    on_answer: tuple[tuple[str, str], ...] = ()
+    source_formats: tuple[tuple[str, Literal["text", "json"]], ...] = ()
     fallback: FallbackPlan | None = None
 
 
@@ -127,6 +135,7 @@ class LlmStepPlan(StepPlan):
     output_schema_path: str | None = None
     output_schema: FrozenObject | None = None
     tools: ToolPolicyPlan | None = None
+    prompt: PromptTemplate | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,12 +151,7 @@ class HandlerStepPlan(StepPlan):
     input: tuple[tuple[str, BindingPlan], ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class FinishStepPlan(StepPlan):
-    outcome: Literal["completed", "needs_review"] = "completed"
-
-
-type CompiledStep = DecisionStepPlan | LlmStepPlan | McpStepPlan | HandlerStepPlan | FinishStepPlan
+type CompiledStep = DecisionStepPlan | LlmStepPlan | McpStepPlan | HandlerStepPlan
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +160,28 @@ class SchemaResourcePlan:
 
     path: str
     schema: FrozenObject
+
+
+@dataclass(frozen=True, slots=True)
+class FlowPlan:
+    """One configured flow instance with local steps and boundary projections."""
+
+    name: str
+    input: tuple[tuple[str, BindingPlan], ...]
+    steps: tuple[CompiledStep, ...]
+    input_schema_path: str | None
+    input_schema: FrozenObject | None
+    output: BindingPlan | None
+    transition: TransitionTargetPlan | MatchRoutingPlan
+    on_unresolved: TransitionTargetPlan | UnresolvedRoutingPlan | None
+    location: SourceLocation
+
+    def step(self, name: str) -> CompiledStep:
+        """Return an exact flow-local step ID or raise ``KeyError``."""
+        for step in self.steps:
+            if step.name == name:
+                return step
+        raise KeyError(name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,13 +196,12 @@ class WorkflowPlan:
     input_schema: FrozenObject | None
     schema_resources: tuple[SchemaResourcePlan, ...]
     output: BindingPlan | None
-    steps: tuple[CompiledStep, ...]
+    flows: tuple[FlowPlan, ...]
     location: SourceLocation
 
-    def step(self, name: str) -> CompiledStep:
-        """Return an exact step ID or raise ``KeyError``."""
-
-        for step in self.steps:
-            if step.name == name:
-                return step
+    def flow(self, name: str) -> FlowPlan:
+        """Return an exact flow instance ID or raise ``KeyError``."""
+        for flow in self.flows:
+            if flow.name == name:
+                return flow
         raise KeyError(name)

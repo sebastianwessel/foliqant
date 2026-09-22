@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "reference": {
+      "type": "string",
+      "pattern": "^FOI-[0-9]{4}-[0-9]{4}$"
+    },
+    "language": {
+      "enum": [
+        "en",
+        "de"
+      ]
+    },
+    "internal_summary": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "reference",
+    "language",
+    "internal_summary"
+  ],
+  "additionalProperties": false
+}

@@ -1,5 +1,11 @@
 # Model representation catalog
 
+This document covers model-tooling representations only. Unversioned runtime
+workflow, flow, step, result and evaluation representations are registered in
+[the combined catalog](representation-catalog.yaml) and
+[package generation map](package-generation-map.yaml); specification 11 owns
+their behavior. Model-data versions and immutable artifacts below are unchanged.
+
 Version `1`. This catalog maps every public or durable representation in the
 model lifecycle to one canonical owner and serialization. Exact field rules are
 in `model-contracts.md`; this file does not redefine them.

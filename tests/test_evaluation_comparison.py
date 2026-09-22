@@ -192,7 +192,7 @@ async def test_compare_rejects_catalog_or_gold_drift_and_reports_replay_timing_u
 
     document["mode"] = "invented"
     candidate.write_text(json.dumps(document))
-    with pytest.raises(ValueError, match="mode is invalid"):
+    with pytest.raises(ValueError, match="invalid evaluation report mode"):
         compare_reports(candidate, baseline)
 
 
@@ -233,6 +233,31 @@ async def test_compare_rejects_inconsistent_attempts_status_and_usage(tmp_path: 
     changed["reports"][0]["cases"][0]["usage"]["input_tokens"] = 999
     candidate.write_text(json.dumps(changed))
     with pytest.raises(ValueError, match="usage differs"):
+        compare_reports(candidate, baseline)
+
+
+async def test_compare_rejects_different_flow_targets(tmp_path: Path) -> None:
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+    await _artifact(
+        baseline,
+        {"label": "right", "reason": "expected"},
+        variant="baseline",
+        configuration="a",
+        input_tokens=2,
+    )
+    await _artifact(
+        candidate,
+        {"label": "right", "reason": "expected"},
+        variant="candidate",
+        configuration="b",
+        input_tokens=2,
+    )
+    changed = json.loads(candidate.read_text())
+    changed["reports"][0]["target_flow"] = "main"
+    candidate.write_text(json.dumps(changed))
+
+    with pytest.raises(ValueError, match="suite or target differs"):
         compare_reports(candidate, baseline)
 
 

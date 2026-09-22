@@ -1,0 +1,6 @@
+output:
+  pointer: /steps/assess/result
+  optional: true
+  default: null
+steps:
+- assess

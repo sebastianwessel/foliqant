@@ -3,6 +3,17 @@ default_allowed_classes:
   - D0
   - D1
 decisions:
+  - decision_id: DEC-WORKFLOW-FLOW-COMPOSITION
+    class: D2
+    authority: project-owner approved workflow composition and context refactor,
+      convention-based workflow/flow/step lookup with optional explicit definitions,
+      authored step order and sequential flows with boundary routing,
+      scoped context, JSON-safe prompt templates, and a clean first release without
+      runtime format versions or compatibility layers
+    scope_refs: [CAP-PACKAGE-CONTRACTS, CAP-PACKAGE-COMPILER, CAP-PACKAGE-RUNTIME,
+      CAP-PACKAGE-MCP, CAP-PACKAGE-PRIVACY, CAP-PACKAGE-EVALUATION, CAP-PACKAGE-DX]
+    source_refs: [11-python-package.md, ../plans/workflow-composition-and-context.md]
+    status: implementation mandate; native model-data formats and artifacts unchanged
   - decision_id: DEC-RUNTIME-REASON-STRENGTH
     class: D2
     authority: project-owner request to replace runtime explanation/citation output

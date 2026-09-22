@@ -26,11 +26,14 @@ from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import StepOutcome
 from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import DecisionStepPlan, HandlerStepPlan, LlmStepPlan, McpStepPlan
+from foliqant.core.prompt import render_prompt
+from foliqant.decisions.contracts import DecisionInput
 from foliqant.ports.execution import OperationStep, StepContext
 from foliqant.ports.tools import ToolInputRequired, ToolRuntime
 
 from .accounting import request_token_usage
 from .binding import ModelBinding
+from .instructions import model_instructions
 from .tools import ModelTools
 
 if TYPE_CHECKING:
@@ -136,6 +139,11 @@ def _prompt(value: object) -> str:
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     except (TypeError, ValueError):
         _fail(ErrorCode.INVALID_INPUT)
+
+
+def _decision_prompt(task: DecisionInput) -> str:
+    """Render the runtime request without changing native contract serialization."""
+    return task.model_dump_json(by_alias=True, exclude={"schemaVersion"})
 
 
 def _structured_output(
@@ -276,11 +284,16 @@ class ModelExecutor:
         agent = self._agent(
             binding,
             context,
-            instructions=step.instructions,
+            instructions=model_instructions(step.instructions),
             output_type=str,
             tools=tools,
         )
-        result = await agent.run(_prompt(thaw_json(inputs)), retries=0)
+        user_input = (
+            render_prompt(step.prompt, inputs)
+            if step.prompt is not None
+            else _prompt(thaw_json(inputs))
+        )
+        result = await agent.run(user_input, retries=0)
         if not isinstance(result.output, str):
             _fail(ErrorCode.INVALID_OUTPUT)
         return StepOutcome(result.output)
@@ -304,7 +317,7 @@ class ModelExecutor:
             instructions=decision_instructions(step.instructions),
             output_type=output_type,
         )
-        result = await agent.run(task.model_dump_json(by_alias=True), retries=0)
+        result = await agent.run(_decision_prompt(task), retries=0)
         validated = validate_decision_result(step, task, result.output)
         return StepOutcome(
             validated.value,
@@ -322,7 +335,7 @@ class ModelExecutor:
         binding: ModelBinding,
         tools: ModelTools | None = None,
     ) -> StepOutcome:
-        schema = self._schemas.provider_output_schema(step.name)
+        schema = self._schemas.provider_output_schema(context.flow_id, step.name)
         provider_schema: dict[str, object] = {
             "type": "object",
             "properties": {"value": schema},
@@ -339,16 +352,21 @@ class ModelExecutor:
         agent = self._agent(
             binding,
             context,
-            instructions=step.instructions,
+            instructions=model_instructions(step.instructions),
             output_type=output_type,
             tools=tools,
         )
-        result = await agent.run(_prompt(thaw_json(inputs)), retries=0)
+        user_input = (
+            render_prompt(step.prompt, inputs)
+            if step.prompt is not None
+            else _prompt(thaw_json(inputs))
+        )
+        result = await agent.run(user_input, retries=0)
         if not isinstance(result.output, Mapping) or set(result.output) != {"value"}:
             _fail(ErrorCode.INVALID_OUTPUT)
         try:
             frozen = freeze_json(result.output["value"])
         except ServiceError:
             _fail(ErrorCode.INVALID_OUTPUT)
-        self._schemas.validate_output(step.name, frozen)
+        self._schemas.validate_output(context.flow_id, step.name, frozen)
         return StepOutcome(frozen)

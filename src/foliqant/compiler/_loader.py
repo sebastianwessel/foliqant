@@ -62,10 +62,12 @@ def load_yaml(text: str, *, relative_path: str, line_offset: int = 0) -> object:
         ) from None
 
 
-def load_step(path: Path, *, bundle: Path) -> tuple[object, str | None, SourceLocation, bytes]:
+def load_step(
+    path: Path, *, bundle: Path, source: bytes | None = None
+) -> tuple[object, str | None, SourceLocation, bytes]:
     relative = path.relative_to(bundle).as_posix()
     try:
-        source = path.read_bytes()
+        source = path.read_bytes() if source is None else source
         text = source.decode("utf-8")
     except (OSError, UnicodeError):
         raise CompilationError("invalid_step_file", SourceLocation(relative, 1, 1)) from None

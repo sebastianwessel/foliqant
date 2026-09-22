@@ -27,6 +27,7 @@ _STRING_ATTRIBUTES = {
     "foliqant.model.id": "models",
     "foliqant.provider.name": "providers",
     "foliqant.step.name": "steps",
+    "foliqant.flow.name": "flows",
     "foliqant.tool.name": "tools",
     "foliqant.workflow.name": "workflows",
     "gen_ai.provider.name": "providers",
@@ -67,6 +68,7 @@ class TelemetryLabels:
     tools: frozenset[str] = frozenset()
     workflows: frozenset[str] = frozenset()
     steps: frozenset[str] = frozenset()
+    flows: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         for values in (
@@ -76,6 +78,7 @@ class TelemetryLabels:
             self.tools,
             self.workflows,
             self.steps,
+            self.flows,
         ):
             if type(values) is not frozenset or len(values) > 1024:
                 raise ValueError("invalid telemetry label allowlist")
@@ -103,7 +106,13 @@ def _safe_scope_name(span: ReadableSpan) -> str:
     scope = span.instrumentation_scope
     if scope is None:
         return "external"
-    if scope.name in {"foliqant.workflow", "foliqant.step", "mcp-python-sdk", "pydantic-ai"}:
+    if scope.name in {
+        "foliqant.workflow",
+        "foliqant.flow",
+        "foliqant.step",
+        "mcp-python-sdk",
+        "pydantic-ai",
+    }:
         return scope.name
     return "external"
 
@@ -114,6 +123,8 @@ def _safe_span_name(span: ReadableSpan, attributes: Mapping[str, AttributeValue]
         return "foliqant.workflow"
     if scope == "foliqant.step":
         return "foliqant.step"
+    if scope == "foliqant.flow":
+        return "foliqant.flow"
     if scope == "pydantic-ai":
         operation = attributes.get("gen_ai.operation.name")
         if type(operation) is str and operation in _GEN_AI_OPERATIONS:

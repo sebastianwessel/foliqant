@@ -126,10 +126,10 @@ async def test_metrics_distinguish_skipped_steps_and_zero_support():
         return result()
 
     report = await evaluate(
-        suite(Expectation("unused", "/decisions/unused/result", "a")),
+        suite(Expectation("unused", "/flows/main/steps/unused/result", "a")),
         variant(run),
         metrics=(
-            MetricSpec("skipped", "/decisions/unused/result", "classification", ("a",)),
+            MetricSpec("skipped", "/flows/main/steps/unused/result", "classification", ("a",)),
             MetricSpec("excluded", "/payload/other", "classification", ("a",)),
         ),
     )
@@ -235,7 +235,7 @@ async def test_depth64_payload_and_step_result_work_and_invalid_depth_is_per_cas
     for _ in range(64):
         deep = [deep]
     deep_result = result(deep)
-    deep_result.decisions["classify"] = StepResult(status="completed", result=deep)
+    deep_result.flows["main"].steps["classify"] = StepResult(status="completed", result=deep)
 
     async def run(envelope):
         if envelope.payload["index"] == 0:
@@ -260,7 +260,7 @@ async def test_explicit_step_attribution_and_compare_options():
     async def run(envelope):
         return result({"label": "a"})
 
-    target = EvaluationVariant("step", "r1", run, "config", step="classify")
+    target = EvaluationVariant("step", "r1", run, "config", step="classify", flow="main")
     reports = await compare_variants(
         suite(Expectation("label", "/payload/label", "a")),
         (target,),
@@ -269,6 +269,8 @@ async def test_explicit_step_attribution_and_compare_options():
     )
     report = reports[0]
     assert report.target_step == "classify"
+    assert report.target_flow == "main"
+    assert report.cases[0].checks[0].flow == "main"
     assert report.cases[0].checks[0].step == "classify"
     assert next(step for step in report.steps if step.name == "classify").checks.passed == 1
     assert report.metrics[0].accuracy == 1
@@ -386,16 +388,16 @@ async def test_step_measurement_summary_preserves_missing_and_partial_token_fiel
         returned = result("a")
         index = envelope.payload["index"]
         if index == 0:
-            returned.decisions["classify"] = StepResult(
+            returned.flows["main"].steps["classify"] = StepResult(
                 status="completed", result="a", elapsed_seconds=0.0, usage=usage
             )
             returned = returned.model_copy(
                 update={"execution": returned.execution.model_copy(update={"usage": usage})}
             )
         elif index == 1:
-            returned.decisions["classify"] = StepResult(status="skipped")
+            returned.flows["main"].steps["classify"] = StepResult(status="skipped")
         else:
-            del returned.decisions["classify"]
+            del returned.flows["main"].steps["classify"]
         return returned
 
     report = await evaluate(gold, variant(run))

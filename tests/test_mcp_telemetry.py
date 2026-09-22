@@ -100,18 +100,34 @@ def _profiles(tool: types.Tool) -> McpProfiles:
 
 def _write_workflow(directory: Path) -> None:
     (directory / "workflow.yaml").write_text(
-        "version: 1\nname: mcp_privacy\nstart: call\noutput: {pointer: /steps/call/result}\n"
+        json.dumps(
+            {
+                "name": "mcp_privacy",
+                "start": "main",
+                "output": {"pointer": "/flows/main/result"},
+                "flows": {
+                    "main": {
+                        "input": {"key": {"pointer": "/payload/key"}},
+                        "definition": {
+                            "output": {"pointer": "/steps/call/result"},
+                            "steps": [
+                                {
+                                    "id": "call",
+                                    "definition": {
+                                        "type": "mcp",
+                                        "server": "records",
+                                        "tool": "lookup",
+                                        "arguments": {"key": {"pointer": "/payload/key"}},
+                                    },
+                                }
+                            ],
+                        },
+                        "transition": {"outcome": "completed"},
+                    }
+                },
+            }
+        )
     )
-    steps = directory / "steps"
-    steps.mkdir()
-    (steps / "call.yaml").write_text(
-        "type: mcp\n"
-        "server: records\n"
-        "tool: lookup\n"
-        "arguments: {key: {pointer: /payload/key}}\n"
-        "next: done\n"
-    )
-    (steps / "done.yaml").write_text("type: finish\noutcome: completed\n")
 
 
 async def _child() -> None:
@@ -274,7 +290,8 @@ async def _child() -> None:
     trace_ids = {span.context.trace_id for span in spans}
     assert trace_ids == {int(parent.split("-")[1], 16) for parent in parents}
     assert sum(span.name == "foliqant.workflow" for span in spans) == 2
-    assert sum(span.name == "foliqant.step" for span in spans) == 3
+    assert sum(span.name == "foliqant.step" for span in spans) == 2
+    assert sum(span.name == "foliqant.flow" for span in spans) == 2
 
     captured_by_trace: dict[int, dict[str, object]] = {}
     for request in captured_calls:

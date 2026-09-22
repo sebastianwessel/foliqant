@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+import yaml
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 
@@ -26,18 +27,43 @@ from foliqant.core.identity import Identity
 from foliqant.core.json import FrozenObject, freeze_json
 
 
+async def _noop(inputs, context):
+    return StepOutcome(None)
+
+
+def _prepare(path, *, handlers=None):
+    registered = {"noop": HandlerRegistration(_noop, schema({}), schema({}))}
+    registered.update(handlers or {})
+    return prepare_application(path, handlers=registered)
+
+
 def settings(
-    tmp_path: Path, step: str = "type: finish\noutcome: completed\n", extra: str = ""
+    tmp_path: Path, step: str = "type: handler\nhandler: noop\ninput: {}\n", extra: str = ""
 ) -> Path:
     root = tmp_path / "workflows/demo"
     (root / "steps").mkdir(parents=True)
-    (root / "workflow.yaml").write_text("version: 1\nname: demo\nstart: first\n")
-    if "type: finish" not in step and "next:" not in step and "on_answer:" not in step:
-        step += "next: done\n"
-        (root / "steps/done.yaml").write_text("type: finish\noutcome: completed\n")
+    authored = yaml.safe_load(step)
+    inputs = {name: {"pointer": f"/payload/{name}"} for name in authored.get("input", {})}
+    (root / "workflow.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "demo",
+                "start": "main",
+                "flows": {
+                    "main": {
+                        "input": inputs,
+                        "transition": {"outcome": "completed"},
+                        "definition": {
+                            "steps": [{"id": "first", "definition": "steps/first.yaml"}]
+                        },
+                    }
+                },
+            }
+        )
+    )
     (root / "steps/first.yaml").write_text(step)
     config = tmp_path / "foliqant.yaml"
-    config.write_text("version: 1\nworkflows: {demo: workflows/demo}\n" + extra)
+    config.write_text("workflows: {demo: workflows/demo}\n" + extra)
     return config
 
 
@@ -47,7 +73,7 @@ def schema(value: object) -> FrozenObject:
 
 async def test_preparation_and_execution_share_effective_revision_without_mutable_config(tmp_path):
     path = settings(tmp_path)
-    prepared = prepare_application(path)
+    prepared = _prepare(path)
     prepared.config.workflows.clear()
     assert tuple(prepared.plans) == ("demo",)
     assert prepared.config.workflows == {"demo": "workflows/demo"}
@@ -71,7 +97,7 @@ async def test_preparation_and_execution_share_effective_revision_without_mutabl
     ({"tenant_id": "tenant-context"}, {"principal_id": "principal-context"}),
 )
 async def test_optional_identity_uses_validated_envelope_context(tmp_path, metadata):
-    prepared = prepare_application(settings(tmp_path))
+    prepared = _prepare(settings(tmp_path))
     async with open_application(prepared, environment={}) as app:
         result = await app.run("demo", Envelope(payload={}, metadata=metadata))
     assert result.metadata.model_dump(exclude_none=True) == metadata
@@ -79,9 +105,9 @@ async def test_optional_identity_uses_validated_envelope_context(tmp_path, metad
 
 def test_configuration_changes_update_effective_revision(tmp_path):
     path = settings(tmp_path)
-    before = prepare_application(path)
+    before = _prepare(path)
     path.write_text(path.read_text() + "execution: {concurrency: 2}\n")
-    after = prepare_application(path)
+    after = _prepare(path)
     assert before.configuration_digest != after.configuration_digest
     assert before.plans["demo"].revision != after.plans["demo"].revision
 
@@ -98,16 +124,16 @@ def test_environment_is_snapshot_process_wins_and_no_interpolation(tmp_path):
 @pytest.mark.parametrize(
     "invalid",
     [
-        "version: 1\nversion: 1\n",
-        "version: 1\nunknown: secret\n",
-        "version: 1\nworkflows: {demo: ../elsewhere}\n",
+        "",
+        "unknown: secret\n",
+        "workflows: {demo: ../elsewhere}\n",
     ],
 )
 def test_closed_deployment_and_confined_paths(tmp_path, invalid):
     path = tmp_path / "foliqant.yaml"
     path.write_text(invalid)
     with pytest.raises(CompilationError) as caught:
-        prepare_application(path)
+        _prepare(path)
     assert "secret" not in str(caught.value)
 
 
@@ -141,14 +167,14 @@ async def test_composed_model_factory_is_not_called_during_preparation(tmp_path)
         finally:
             events.append("close")
 
-    prepared = prepare_application(path)
+    prepared = _prepare(path)
     assert not events
     async with open_application(
         prepared, environment={}, plugins=RuntimePlugins(model_factory=factory)
     ) as app:
         assert events == ["open"]
         result = await app.run("demo", Envelope(payload={"text": "private"}), identity=Identity())
-        assert result.decisions["first"].result == "synthetic answer"
+        assert result.flows["main"].steps["first"].result == "synthetic answer"
         assert result.execution.usage.model_requests == 1
     assert events == ["open", "request", "close"]
 
@@ -164,7 +190,7 @@ async def test_handlers_keep_identity_and_validate_results_without_charging_mode
         await asyncio.sleep(0)
         return StepOutcome(inputs["value"])
 
-    prepared = prepare_application(
+    prepared = _prepare(
         path,
         handlers={
             "echo": HandlerRegistration(
@@ -183,7 +209,7 @@ async def test_handlers_keep_identity_and_validate_results_without_charging_mode
                 for user in ("alice", "bob")
             )
         )
-        assert [r.decisions["first"].result for r in results] == ["alice", "bob"]
+        assert [r.flows["main"].steps["first"].result for r in results] == ["alice", "bob"]
         assert all(r.execution.usage.model_requests == 0 for r in results)
         rejected = await app.run("demo", Envelope(payload={"value": 42}), identity=Identity())
         assert rejected.execution.error.code == ErrorCode.INVALID_OUTPUT
@@ -207,7 +233,7 @@ async def test_shared_admission_and_bounded_cancellation(tmp_path):
             cancelled.set()
         return StepOutcome(None)
 
-    prepared = prepare_application(
+    prepared = _prepare(
         path, handlers={"wait": HandlerRegistration(handle, schema({}), schema({}))}
     )
     async with open_application(prepared, environment={}) as app:
@@ -223,7 +249,7 @@ async def test_shared_admission_and_bounded_cancellation(tmp_path):
 
 
 async def test_context_does_not_reclassify_caller_exceptions_as_configuration(tmp_path):
-    prepared = prepare_application(settings(tmp_path))
+    prepared = _prepare(settings(tmp_path))
     with pytest.raises(RuntimeError, match="caller"):
         async with open_application(prepared, environment={}):
             raise RuntimeError("caller")
@@ -279,7 +305,7 @@ async def test_client_cleanup_failure_does_not_replace_outcome_or_caller_error(
 
     async def run():
         async with open_application(
-            prepare_application(path), environment={}, plugins=RuntimePlugins(model_factory=factory)
+            _prepare(path), environment={}, plugins=RuntimePlugins(model_factory=factory)
         ) as app:
             result = await app.run("demo", Envelope(payload={}), identity=Identity())
             assert result.execution.status == "completed"
@@ -300,7 +326,7 @@ def test_write_handler_cannot_be_activated_in_read_only_pipeline(tmp_path):
 
     path = settings(tmp_path, "type: handler\nhandler: write\ninput: {}\n")
     with pytest.raises(CompilationError):
-        prepare_application(
+        _prepare(
             path,
             handlers={"write": HandlerRegistration(write, schema({}), schema({}), effect="write")},
         )

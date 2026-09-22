@@ -1,0 +1,157 @@
+{
+  "name": "extracted_request_mcp_examples",
+  "revision": "3",
+  "suites": [
+    {
+      "name": "extracted_request_lookup",
+      "workflow": "extracted_request_lookup",
+      "flow": null,
+      "step": null,
+      "cases": [
+        {
+          "id": "english_request",
+          "input": {
+            "payload": {
+              "message": "Check the status of public request FOI-2026-0142 in English.",
+              "language": "en",
+              "contact_email": "private-en@example.test"
+            },
+            "metadata": {}
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "reference",
+              "path": "/payload/reference",
+              "expected": "FOI-2026-0142",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/payload/language",
+              "expected": "en",
+              "comparison": "exact"
+            },
+            {
+              "name": "status",
+              "path": "/payload/status",
+              "expected": "in_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "due_date",
+              "path": "/payload/due_date",
+              "expected": "2026-10-05",
+              "comparison": "exact"
+            },
+            {
+              "name": "one_model",
+              "path": "/execution/usage/model_requests",
+              "expected": 1,
+              "comparison": "exact"
+            },
+            {
+              "name": "one_tool",
+              "path": "/execution/usage/tool_calls",
+              "expected": 1,
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "german_request",
+          "input": {
+            "payload": {
+              "message": "Bitte Status für Antrag FOI-2026-0310 auf Deutsch prüfen.",
+              "language": "de",
+              "contact_email": "private-de@example.test"
+            },
+            "metadata": {}
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "reference",
+              "path": "/payload/reference",
+              "expected": "FOI-2026-0310",
+              "comparison": "exact"
+            },
+            {
+              "name": "language",
+              "path": "/payload/language",
+              "expected": "de",
+              "comparison": "exact"
+            },
+            {
+              "name": "status",
+              "path": "/payload/status",
+              "expected": "in_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "due_date",
+              "path": "/payload/due_date",
+              "expected": "05.10.2026",
+              "comparison": "exact"
+            },
+            {
+              "name": "one_model",
+              "path": "/execution/usage/model_requests",
+              "expected": 1,
+              "comparison": "exact"
+            },
+            {
+              "name": "one_tool",
+              "path": "/execution/usage/tool_calls",
+              "expected": 1,
+              "comparison": "exact"
+            }
+          ]
+        }
+      ],
+      "metrics": []
+    },
+    {
+      "name": "extracted_request_extract_flow",
+      "workflow": "extracted_request_lookup",
+      "flow": "extract",
+      "step": null,
+      "cases": "cases/extract.json",
+      "metrics": []
+    },
+    {
+      "name": "extracted_request_lookup_flow",
+      "workflow": "extracted_request_lookup",
+      "flow": "lookup",
+      "step": null,
+      "cases": "cases/lookup.json",
+      "metrics": []
+    },
+    {
+      "name": "extracted_request_extract",
+      "workflow": "extracted_request_lookup",
+      "flow": "extract",
+      "step": "extract",
+      "cases": "cases/extract.json",
+      "metrics": []
+    },
+    {
+      "name": "extracted_request_lookup_step",
+      "workflow": "extracted_request_lookup",
+      "flow": "lookup",
+      "step": "lookup",
+      "cases": "cases/lookup.json",
+      "metrics": []
+    }
+  ]
+}

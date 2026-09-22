@@ -20,6 +20,7 @@ from foliqant.contracts.execution import (
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import (
     Failure,
+    FlowRecord,
     RunResult,
     StepRecord,
     TokenUsage,
@@ -194,7 +195,8 @@ def test_existing_mutated_metadata_instance_is_revalidated() -> None:
     raw = {
         "payload": None,
         "metadata": metadata,
-        "decisions": {},
+        "flows": {},
+        "transitions": [],
         "execution": _info(),
     }
     with pytest.raises(ValidationError):
@@ -234,7 +236,8 @@ def test_selected_choice_assessment_is_independent_but_answerability_stays_stric
             {
                 "payload": None,
                 "metadata": {},
-                "decisions": {"classify": raw},
+                "flows": {"main": {"status": status, "result": None, "steps": {"classify": raw}}},
+                "transitions": [],
                 "execution": _info(status=status),
             },
             strict=True,
@@ -293,14 +296,22 @@ def test_core_mapping_preserves_german_json_identity_presence_and_usage(
         status="completed",
         payload=freeze_json({"nachricht": "Bitte Gebühr zurückzahlen."}),
         metadata=cast(FrozenObject, freeze_json(metadata)),
-        decisions=(
-            ("finish", StepRecord(status="completed", result=None, has_result=True)),
+        flows=(
             (
-                "classify",
-                StepRecord(
+                "main",
+                FlowRecord(
                     status="needs_review",
-                    result=freeze_json({"erklärung": "Beleg fehlt", "answer": None}),
-                    has_result=True,
+                    steps=(
+                        ("finish", StepRecord(status="completed", result=None, has_result=True)),
+                        (
+                            "classify",
+                            StepRecord(
+                                status="needs_review",
+                                result=freeze_json({"erklärung": "Beleg fehlt", "answer": None}),
+                                has_result=True,
+                            ),
+                        ),
+                    ),
                 ),
             ),
         ),
@@ -315,8 +326,8 @@ def test_core_mapping_preserves_german_json_identity_presence_and_usage(
 
     assert dumped["payload"] == {"nachricht": "Bitte Gebühr zurückzahlen."}
     assert dumped["metadata"] == metadata
-    assert dumped["decisions"]["finish"] == {"status": "completed", "result": None}
-    assert dumped["decisions"]["classify"]["result"] == {
+    assert dumped["flows"]["main"]["steps"]["finish"] == {"status": "completed", "result": None}
+    assert dumped["flows"]["main"]["steps"]["classify"]["result"] == {
         "erklärung": "Beleg fehlt",
         "answer": None,
     }
@@ -335,12 +346,20 @@ def test_failed_mapping_uses_only_canonical_core_error() -> None:
         status="failed",
         payload=freeze_json(None),
         metadata=cast(FrozenObject, freeze_json({})),
-        decisions=(
+        flows=(
             (
-                "classify",
-                StepRecord(
-                    status="failed",
-                    error=Failure(ErrorCode.DEPENDENCY_FAILURE, retryable=True),
+                "main",
+                FlowRecord(
+                    status="needs_review",
+                    steps=(
+                        (
+                            "classify",
+                            StepRecord(
+                                status="failed",
+                                error=Failure(ErrorCode.DEPENDENCY_FAILURE, retryable=True),
+                            ),
+                        ),
+                    ),
                 ),
             ),
         ),
@@ -353,7 +372,7 @@ def test_failed_mapping_uses_only_canonical_core_error() -> None:
         "message": "A required dependency is unavailable.",
         "retryable": True,
     }
-    assert dumped["decisions"]["classify"]["error"] == expected
+    assert dumped["flows"]["main"]["steps"]["classify"]["error"] == expected
     assert dumped["execution"]["error"] == expected
 
 
@@ -368,7 +387,7 @@ def test_invalid_or_duplicate_core_records_fail_with_safe_invalid_output() -> No
             status="completed",
             payload=freeze_json(None),
             metadata=cast(FrozenObject, freeze_json({})),
-            decisions=decisions,
+            flows=(("main", FlowRecord(status="needs_review", steps=decisions)),),
             usage=Usage(tokens=TokenUsage.zero()),
         )
         with pytest.raises(ServiceError) as error:
@@ -389,7 +408,7 @@ def test_malformed_core_token_subsets_fail_with_safe_invalid_output() -> None:
         status="completed",
         payload=freeze_json(None),
         metadata=cast(FrozenObject, freeze_json({})),
-        decisions=(),
+        flows=(),
         usage=Usage(tokens=tokens),
     )
     with pytest.raises(ServiceError) as error:
@@ -409,7 +428,7 @@ def test_malformed_core_error_code_fails_without_exposing_its_value() -> None:
         status="failed",
         payload=freeze_json(None),
         metadata=cast(FrozenObject, freeze_json({})),
-        decisions=(),
+        flows=(),
         usage=Usage(tokens=TokenUsage.zero()),
         error=failure,
     )

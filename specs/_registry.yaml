@@ -1,7 +1,7 @@
 # BUSINESS-PROCESS-TARGET and its capability IDs are archived concept references.
 registry_version: 1
 contracts:
-- id: CONTRACT-PACKAGE-V1
+- id: CONTRACT-PACKAGE
   path: 11-python-package.md
 - id: CONTRACT-BUSINESS-PROCESS-TARGET
   path: 10-business-decisions-and-processes.md
