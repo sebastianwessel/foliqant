@@ -24,6 +24,11 @@ Examples use public lifecycle APIs and commit independent synthetic golden cases
 Scripted runs verify wiring; explicit live runs measure a model. Generated reports
 remain private. Skills and docs describe supported usage without development history.
 
+For public documentation changes, follow the reader paths and page responsibilities
+in [Documentation architecture](documentation-architecture.md). Keep setup,
+configuration, step guides, evaluation, tutorials, and reference linked without
+duplicating complete manuals. Check code fences with Ruff after the final edit.
+
 ## Offline checks
 
 From the repository root after `uv sync --locked --all-extras --group dev --group docs`:

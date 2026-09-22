@@ -1,4 +1,9 @@
-# Runtime configuration and CLI
+# Deployment and CLI reference
+
+Start with [Configuration and folder layout](../configuration/index.md) for
+the authoring sequence. The focused guides explain [model profiles](../configuration/models.md)
+and [MCP connections](../configuration/mcp.md). This page collects deployment
+settings, limits, retry behavior, telemetry, and commands for lookup.
 
 For the data passed to a workflow and returned by execution, see
 [Inputs, results, and errors](inputs-and-results.md). That reference also
@@ -90,7 +95,8 @@ models:
 ```
 
 Supported providers are `openai`, `openai_compatible`, `azure_openai`,
-and `anthropic`. Provider-specific fields are validated before a client opens.
+and `anthropic`. Structural fields are validated offline; some provider-specific
+option combinations are checked when the application opens, before any request.
 A workflow can set `defaults.model`; an individual decision or LLM operation
 can select a profile, apply an explicit model/options override, or provide a
 complete compatible profile.
@@ -137,7 +143,8 @@ The application loads `.env` beside the selected settings file and then
 overlays the environment passed by the host; process values win. Preparation
 and the offline CLI commands do not read environment values.
 
-Model API keys must be environment references. Keep secrets out of YAML, source
+Use environment references for model API keys; inline step profiles require them.
+Named deployment profiles also accept literals. Keep secrets out of YAML, source
 control, logs, telemetry, errors, and evaluation artifacts.
 
 ## MCP profiles
@@ -259,7 +266,7 @@ The path is relative to `config/settings.yaml`. Normal preparation, startup,
 configured gold. Only evaluation commands load it, and the selection does not
 affect the compiled runtime configuration digest.
 
-Use [testing and evaluation](../guides/testing-and-evaluation.md) for the dataset
+Use [evaluation](../evaluation/index.md) for the dataset
 shape and pipeline, flow, and operation scopes.
 
 ## CLI reference

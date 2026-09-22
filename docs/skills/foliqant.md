@@ -1,4 +1,4 @@
-# Build with an AI agent
+# Build with Claude or Codex
 
 The repository skill at
 [`skills/foliqant`](https://github.com/sebastianwessel/foliqant/blob/main/skills/foliqant/SKILL.md) helps an agent build and
@@ -18,7 +18,15 @@ npx skills add sebastianwessel/foliqant --skill foliqant
 ```
 
 Select your coding agent when prompted. This installs the `foliqant` skill and
-its bundled references for the current project. To select Codex explicitly:
+its bundled references for the current project. Choose either explicit command:
+
+**Claude Code**
+
+```sh
+npx skills add sebastianwessel/foliqant --skill foliqant --agent claude-code
+```
+
+**Codex**
 
 ```sh
 npx skills add sebastianwessel/foliqant --skill foliqant --agent codex
@@ -40,12 +48,36 @@ Complete [runtime setup](../getting-started/runtime.md) separately, or ask the
 agent to follow it. Keep credentials in the configured environment, never in
 your prompt. Review the skill before allowing an agent to act on your project.
 
+## Open your application project
+
+Open the same directory in Claude Code or Codex after installation. Start a new
+conversation and explicitly ask it to use the `foliqant` skill. If the skill is
+not visible, confirm the installer targeted the correct agent and project with
+`npx skills list`, then start a fresh agent session.
+
+The skill guides the coding agent; it is not an agent running inside your
+workflow. Your finished application needs the Python package, configuration,
+and selected adapters, not Claude Code, Codex, Node.js, or the Skills CLI.
+
+The agent should start with the [configuration layout](../configuration/index.md),
+then use [workflow](../configuration/workflows.md), [flow](../configuration/flows.md),
+and [step](../steps/index.md) definitions to encode your process.
+
 ## Build a solution with the skill
 
 Give the agent a small business brief: the incoming data, desired result,
 category meanings, required fields, routing rules, and cases that require human
 review. Include reviewed examples of both ordinary and ambiguous inputs. State
 which model endpoint and external tools it may use, without sharing secrets.
+
+| Provide | Why the agent needs it |
+| --- | --- |
+| Input and expected final output | Defines workflow boundaries and schemas |
+| Category descriptions, exclusions, and overlap rules | Separates single-choice triage from multilabel tagging |
+| Exact business routes and review policy | Keeps process decisions authored rather than invented |
+| Tool descriptions and permitted operations | Defines MCP catalog and allowlists |
+| Reviewed positive, ambiguous, and negative examples | Supplies ground truth independent of generated answers |
+| Runtime and cost constraints | Bounds model requests, tools, deadlines, and concurrency |
 
 For example, adapt this prompt to your process:
 
@@ -70,6 +102,7 @@ Use the conventional config/ structure and environment references for the model.
 Add offline tests and evaluation cases from the reviewed examples I provide.
 Keep any additional synthetic cases clearly identified for my review.
 Validate and explain the compiled plan. Do not call model endpoints until I ask.
+Use the installed public APIs. Add only the dependencies needed by this process.
 Finish with commands to run the application and evaluate it, plus any open gaps.
 ```
 
@@ -116,6 +149,8 @@ label catalogs, and run offline validation. It does not invent expected business
 outcomes, score thresholds, or implicit judge calls. See the evaluation guide for
 the difference between offline checks, saved-result replay, and model execution.
 
-Start with [runtime setup](../getting-started/runtime.md), then continue with
-[workflow authoring](../guides/build-workflows.md) and
-[testing and evaluation](../guides/testing-and-evaluation.md).
+For the human review checklist, follow [configuration](../configuration/index.md),
+[ground-truth authoring](../evaluation/ground-truth.md), and
+[running evaluations](../evaluation/running.md). Keep the reviewed rules and
+gold in the application project so future agent changes can be checked against
+the same expectations.

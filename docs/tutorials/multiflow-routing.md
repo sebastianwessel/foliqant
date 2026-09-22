@@ -4,6 +4,10 @@ Use a new flow when a result selects a different business boundary. In this
 example, classification chooses between billing and cancellation preparation;
 the workflow, not the model, owns the allowed destinations.
 
+The [workflow guide](../configuration/workflows.md) explains transitions and
+review routes. The [handler guide](../steps/handler.md) explains the trusted
+Python functions used after classification.
+
 ## Add branch flows
 
 Declare the start and match its projected scalar result exactly:

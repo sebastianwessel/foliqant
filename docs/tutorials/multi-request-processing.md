@@ -5,6 +5,10 @@ and dependencies. Model this as assessment, policy planning, bounded collection,
 and final disposition. Do not make a model-selected list equivalent to
 permission to run work.
 
+See [flow collections](../steps/flow-collection.md) for configuration and ledger
+semantics, and [task scoring](../evaluation/task-types.md) for checking each
+request, child result, and final disposition.
+
 ## Map the business boundaries
 
 The example uses four routed flows and two callable flows:

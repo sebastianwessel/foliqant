@@ -3,6 +3,9 @@
 Use this path to create a workflow project, compile it offline, run one
 envelope, and embed the runtime in an application.
 
+Prefer to start with a coding agent? [Install the skill and build with Claude or
+Codex](../skills/foliqant.md), then use this page to review its setup.
+
 ## Install the runtime
 
 Foliqant supports CPython 3.12. These source-checkout instructions use
@@ -111,7 +114,9 @@ The host owns authentication and supplies trusted `Identity` values when needed.
 Envelope metadata alone does not authenticate a tenant or principal. Keep the
 application context open until active model and tool calls have drained.
 
-Continue with [workflow authoring](../guides/build-workflows.md) or the
+Next, read [Configuration and folder layout](../configuration/index.md) to learn
+which files you edit and how workflows, flows, and steps connect. Then follow
+[the first tutorial](../tutorials/decision-basics.md) or the
 [support triage](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_triage/README.md)
 and [public-request MCP](https://github.com/sebastianwessel/foliqant/blob/main/examples/public_request_mcp/README.md)
 examples.

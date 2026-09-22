@@ -4,6 +4,10 @@ Use an LLM step with `tools` when the model must derive tool arguments from a
 message, see the validated result, and produce a structured answer. Keep the
 server and tool allowlist authored.
 
+The [model guide](../configuration/models.md) explains capability declarations.
+[Bounded agent loops](../steps/agent-loops.md) explains tool choice, budgets,
+conversation state, and failure behavior.
+
 ## Enable only the required capability
 
 The selected model profile must declare tool support, and the MCP catalog must

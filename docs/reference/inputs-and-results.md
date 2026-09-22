@@ -376,9 +376,10 @@ public `StepResult.result` then depends on how the step was authored:
 - A step authored with singular `question` exposes that one result object
   directly. The **complete result value** is one object such as the choice
   result in the previous example, without `{"results": [...]}`.
-- A step authored with plural `questions` exposes the complete
-  `{"results": [...]}` object, even when the list happens to contain one
-  question.
+- A step authored with plural `questions` requires 2–64 questions and exposes
+  the complete `{"results": [...]}` object. Use singular `question` for a
+  one-question configured step. The native `DecisionInput` has its own broader
+  question-count bounds; it is not the step-authoring format.
 
 A multi-question decision step is `completed` only when every question is
 `answerable`. If any question is unresolved, the step is `needs_review`. Only a
@@ -754,5 +755,5 @@ Do not expose validation exception text to untrusted callers; use the bounded
 decoder for request bytes as shown above.
 
 For workflow authoring and binding scopes, continue with
-[Build workflows](../guides/build-workflows.md). For criteria design and
+[Define a workflow](../configuration/workflows.md). For criteria design and
 application policy, see [Use decision contracts](../guides/decision-contracts.md).

@@ -9,6 +9,10 @@ and answerability issues mean.
 
 ## Create the boundaries
 
+For the conventions behind these files, read [Configuration and folder
+layout](../configuration/index.md). The [decision guide](../steps/decision.md)
+explains the available question types and their settings.
+
 Use one workflow, one flow, and one decision step:
 
 ```text

@@ -14,7 +14,7 @@ hide:
 <div class="docs-actions" markdown>
 
 [Install and run](getting-started/runtime.md){ .md-button .md-button--primary }
-[Follow the tutorials](tutorials/index.md){ .md-button }
+[Build with Claude or Codex](skills/foliqant.md){ .md-button }
 
 </div>
 </div>
@@ -53,7 +53,7 @@ the host application to handle.
 
 Deterministic routing means the same validated result follows the same authored
 rules. It does **not** mean a model always returns the same or a correct answer.
-Use [evaluation against reviewed examples](guides/testing-and-evaluation.md)
+Use [evaluation against reviewed examples](evaluation/index.md)
 to measure that separately.
 
 ## Workflow → flows → steps
@@ -84,7 +84,21 @@ Start with one flow and one step. Add other capabilities only when the process
 needs them. See [runtime concepts](concepts/runtime.md) for the architecture
 and execution boundaries.
 
-## Start building
+## Follow the guide
+
+| Stage | What you will do |
+| --- | --- |
+| [1. Get started](getting-started/runtime.md) | Install, scaffold, and run one request, manually or [with a coding agent](skills/foliqant.md) |
+| [2. Understand the configuration](configuration/index.md) | Learn the folder layout and what belongs in settings, workflow, flow, and step files |
+| [3. Define the process](configuration/workflows.md) | Set boundaries, ordered steps, data bindings, routes, and review handling |
+| [4. Add capabilities](steps/index.md) | Choose decision, extraction, Python, MCP, agent-loop, or collection behavior |
+| [5. Evaluate your solution](evaluation/index.md) | Author ground truth and measure individual steps, flows, and the complete workflow |
+
+The **Guide** teaches configuration. **Tutorials** apply it to worked examples.
+**Evaluation** teaches measurement. **Reference** supplies exact contracts and
+settings when you need a lookup.
+
+## Explore by task
 
 <div class="docs-grid" markdown>
 
@@ -115,7 +129,7 @@ tool calls, and processing several requests.
 Define prompts, schemas, selected context, and routes using a conventional
 file structure and explicit configuration.
 
-[Build a workflow →](guides/build-workflows.md)
+[Start with the folder layout →](configuration/index.md)
 
 </div>
 <div class="docs-card" markdown>
@@ -125,7 +139,7 @@ file structure and explicit configuration.
 Check wiring offline, evaluate against reviewed ground truth, and inspect
 results, confusion matrices, and operational failures.
 
-[Test and evaluate →](guides/testing-and-evaluation.md)
+[Create gold and evaluate →](evaluation/index.md)
 
 </div>
 </div>
@@ -138,9 +152,9 @@ results, confusion matrices, and operational failures.
   answerability, evidence, and application policy.
 - [Configuration and CLI](reference/runtime-configuration.md) — providers,
   environment values, tools, limits, telemetry, and commands.
-- [Evaluation results](guides/evaluation-results.md) — understand measurements
+- [Evaluation results](evaluation/results.md) — understand measurements
   and compare runs.
-- [Configure with an AI agent](skills/foliqant.md) — a self-contained skill for
+- [Build with Claude or Codex](skills/foliqant.md) — a self-contained skill for
   translating a business process into a working configuration.
 
 !!! note "A library inside your application"

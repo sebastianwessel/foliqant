@@ -66,9 +66,26 @@ validation:
     unrecognized_links: warn
 nav:
   - Overview: index.md
-  - Getting started:
-      - Install and run: getting-started/runtime.md
-      - Understand the runtime: concepts/runtime.md
+  - Guide:
+      - Getting started:
+          - Install and run: getting-started/runtime.md
+          - Build with Claude or Codex: skills/foliqant.md
+          - Understand the runtime: concepts/runtime.md
+      - Configure your application:
+          - Configuration and folder layout: configuration/index.md
+          - Define a workflow: configuration/workflows.md
+          - Define sequential flows: configuration/flows.md
+          - Pass data and write prompts: configuration/context.md
+          - Configure models: configuration/models.md
+          - Connect MCP servers: configuration/mcp.md
+      - Step types:
+          - Choose a step type: steps/index.md
+          - Decisions and classification: steps/decision.md
+          - Extraction and text: steps/llm.md
+          - Python handlers: steps/handler.md
+          - Direct MCP calls: steps/mcp.md
+          - Bounded agent loops: steps/agent-loops.md
+          - Callable flow collections: steps/flow-collection.md
   - Tutorials:
       - Learning path: tutorials/index.md
       - Decisions and control flow:
@@ -79,14 +96,14 @@ nav:
           - 4. Call a read-only MCP tool: tutorials/read-only-mcp.md
           - 5. Let a model use a tool: tutorials/model-tool-loop.md
           - 6. Process several requests: tutorials/multi-request-processing.md
-  - Guides:
-      - Build:
-          - Build workflows: guides/build-workflows.md
-          - Decision contracts: guides/decision-contracts.md
-      - Verify:
-          - Test and evaluate: guides/testing-and-evaluation.md
-          - Understand evaluation results: guides/evaluation-results.md
+  - Evaluation:
+      - Plan your evaluation: evaluation/index.md
+      - Create ground truth: evaluation/ground-truth.md
+      - Score different task types: evaluation/task-types.md
+      - Run, replay, and compare: evaluation/running.md
+      - Read reports and confusion matrices: evaluation/results.md
+      - Unit test with local fakes: evaluation/unit-testing.md
   - Reference:
       - Inputs, results, and errors: reference/inputs-and-results.md
-      - Configuration and CLI: reference/runtime-configuration.md
-      - Configure with an AI agent: skills/foliqant.md
+      - Decision criteria and policy: guides/decision-contracts.md
+      - Deployment and CLI: reference/runtime-configuration.md

@@ -129,7 +129,7 @@ safety of an external action remain application responsibilities.
 A single-question `choice` decision step can map `no_supported_answer` to a
 configured fallback category such as `misc`. Configure the category object and
 allowed issues as shown in
-[workflow routing](build-workflows.md#classify-with-an-explicit-fallback).
+[decision-step configuration](../steps/decision.md).
 The model answer stays unresolved; `selection.origin: fallback` records the
 policy choice separately. Contradictions or multiple valid options remain
 unresolved unless explicitly covered by that policy. A fallback cannot hide an

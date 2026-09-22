@@ -121,6 +121,6 @@ See [Inputs, results, and errors](../reference/inputs-and-results.md) for the
 complete public shapes and the distinction between an unresolved decision and
 an execution failure.
 
-Continue with [workflow authoring](../guides/build-workflows.md), then add
-[reviewed evaluation cases](../guides/testing-and-evaluation.md) at the full
+Continue with [workflow authoring](../configuration/workflows.md), then add
+[reviewed evaluation cases](../evaluation/index.md) at the full
 pipeline and any useful flow or step boundaries.

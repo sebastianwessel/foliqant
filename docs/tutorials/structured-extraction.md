@@ -3,6 +3,9 @@
 A queue decision and an extraction answer different questions. Keep them as two
 steps so each contract, prompt, and evaluation can be inspected independently.
 
+See [LLM steps](../steps/llm.md) for the output and prompt configuration and
+[task scoring](../evaluation/task-types.md) for field and source-span checks.
+
 ## Extend the flow
 
 Order classification before extraction and project the structured extraction:

@@ -3,6 +3,9 @@
 Use an `mcp` step when application policy already knows which operation to call.
 This stage looks up a synthetic public-request reference without a model call.
 
+Read [MCP connections](../configuration/mcp.md) for transport, catalog, and
+authentication setup, and [MCP steps](../steps/mcp.md) for argument and result handling.
+
 ## Declare the server and catalog
 
 The runtime never discovers permission from a remote server. Configure a

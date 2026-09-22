@@ -15,6 +15,11 @@ are new to the runtime.
 New here? [Install the runtime](../getting-started/runtime.md) first. Each tutorial
 links its runnable example and explains the capability it adds.
 
+Read [Configuration and folder layout](../configuration/index.md) before editing
+the examples. The [step guides](../steps/index.md) explain each configuration
+in depth; [ground-truth authoring](../evaluation/ground-truth.md) explains how
+to replace the small synthetic datasets with your own reviewed cases.
+
 <div class="docs-grid" markdown>
 
 <div class="docs-card" markdown>
