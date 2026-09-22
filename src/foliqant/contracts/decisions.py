@@ -1,8 +1,18 @@
 """Runtime decision responses, separate from immutable native V2 training contracts."""
 
+from copy import deepcopy
 from typing import Annotated, Literal, Self
 
-from pydantic import BeforeValidator, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    GetJsonSchemaHandler,
+    StringConstraints,
+    model_validator,
+)
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 from foliqant.decisions.base import ContractModel, Id, NonEmptyStr
 from foliqant.decisions.contracts import (
@@ -30,17 +40,9 @@ def _runtime_version(value: object) -> object:
 
 
 type EvidenceStrength = Literal["limited", "strong"]
-"""Supplied support for a returned value, not model confidence or correctness."""
+"""Supplied support for the whole assessment, including a justified abstention."""
 
 Reason = Annotated[str, StringConstraints(strict=True, min_length=1, max_length=400, pattern=r"\S")]
-
-
-def _support_problem(substantive: bool, strength: EvidenceStrength | None) -> str | None:
-    if substantive and strength is None:
-        return "evidence-strength-required"
-    if not substantive and strength is not None:
-        return "evidence-strength-must-be-null"
-    return None
 
 
 class RequestUnit(ContractModel):
@@ -66,52 +68,93 @@ class _Result(ContractModel):
     questionId: Id
     answerability: Answerability
     reason: Reason
-    evidence_strength: EvidenceStrength | None
+    evidence_strength: EvidenceStrength | None = Field(
+        description=(
+            "Support for the whole reported assessment, including answerability and any "
+            "abstention. Strong or limited may accompany any answerability status. "
+            "Null means support was not assessed; it does not mean the answer is absent. "
+            "This is not model confidence or a correctness probability."
+        )
+    )
 
     @model_validator(mode="after")
-    def support_matches_answer(self) -> Self:
-        if isinstance(self, PredicateResult):
-            substantive = self.answer.value != "unknown"
-        elif isinstance(self, (ChoiceResult, MultiselectResult, OrdinalResult, RequestUnitsResult)):
-            substantive = self.answer is not None
-        else:
+    def answer_matches_answerability(self) -> Self:
+        if not isinstance(
+            self,
+            (ChoiceResult, MultiselectResult, PredicateResult, OrdinalResult, RequestUnitsResult),
+        ):
             return self
-        problem = _support_problem(substantive, self.evidence_strength)
-        if problem is not None:
-            raise ValueError(problem)
+        problems = validate_answerability(
+            prefix="result",
+            task_type=self.type,
+            answerability=self.answerability,
+            has_answer=self.answer is not None,
+            predicate_value=self.answer.value if isinstance(self, PredicateResult) else None,
+        )
+        if problems:
+            raise ValueError("; ".join(problems))
         return self
 
 
 class ChoiceResult(_Result):
-    """One selected option, or an explained abstention with null support."""
+    """One selected option or an explained abstention, with assessment support."""
 
     type: Literal["choice"]
     answer: ChoiceAnswer | None
 
 
 class MultiselectResult(_Result):
-    """Selected options; strength describes the weakest returned constituent."""
+    """Selected options; strength covers the collection and its answerability."""
 
     type: Literal["multiselect"]
     answer: MultiselectAnswer | None
 
 
 class PredicateResult(_Result):
-    """A supported true/false answer, or unknown with null support."""
+    """A true/false answer or unknown, with support for the whole assessment."""
 
     type: Literal["predicate"]
     answer: PredicateAnswer
 
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Expose predicate/status consistency through provider-compatible branches.
+
+        Complete object branches survive strict providers that close every object.
+        Python validation still uses the shared native answerability rules.
+        """
+        base = handler(core_schema)
+        branches = []
+        for values, statuses in (
+            (["true", "false"], ["answerable"]),
+            (["unknown"], ["not_answerable", "undetermined"]),
+        ):
+            branch = deepcopy(base)
+            properties = branch["properties"]
+            for name in ("answer", "answerability"):
+                properties[name] = deepcopy(handler.resolve_ref_schema(properties[name]))
+            properties["answer"]["properties"]["value"] = {"type": "string", "enum": values}
+            properties["answerability"]["properties"]["status"] = {
+                "type": "string",
+                "enum": statuses,
+            }
+            if values == ["unknown"]:
+                properties["answerability"]["properties"]["issues"]["minItems"] = 1
+            branches.append(branch)
+        return {"anyOf": branches}
+
 
 class OrdinalResult(_Result):
-    """One rubric level, or an explained abstention with null support."""
+    """One rubric level or an explained abstention, with assessment support."""
 
     type: Literal["ordinal"]
     answer: OrdinalAnswer | None
 
 
 class RequestUnitsResult(_Result):
-    """Request collection; completeness is expressed by answerability separately."""
+    """Request collection with support for the reported items and answerability."""
 
     type: Literal["request_units"]
     answer: RequestUnitsAnswer | None
@@ -126,7 +169,8 @@ type DecisionResult = Annotated[
 class DecisionOutput(ContractModel):
     """Runtime V3 output for unchanged native V2 questions and sources.
 
-    ``evidence_strength`` is required and null only for abstentions. Ratings do
+    ``evidence_strength`` is required; null means support was not assessed.
+    Ratings cover the whole assessment, including justified abstentions, and do
     not override answerability, catalog membership, or configured routing.
     """
 
@@ -137,8 +181,8 @@ class DecisionOutput(ContractModel):
 def validate_decision_output(task: DecisionInput, result: DecisionOutput) -> list[str]:
     """Check runtime structure and source-bound subjects, not semantic support.
 
-    Call after strict model validation. An empty returned collection and a false
-    predicate are substantive answers and require a non-null support assessment.
+    Call after strict model validation. Assessment support is independent of
+    answer presence and does not change deterministic routing.
     """
     problems: list[str] = []
     questions = {question.id: question for question in task.questions}
@@ -167,11 +211,6 @@ def validate_decision_output(task: DecisionInput, result: DecisionOutput) -> lis
                 predicate_value=predicate_value,
             )
         )
-        substantive = item.answer is not None and predicate_value != "unknown"
-        support_problem = _support_problem(substantive, item.evidence_strength)
-        if support_problem is not None:
-            problems.append(f"{prefix}:{support_problem}")
-
         if isinstance(question, ChoiceQuestion) and isinstance(item, ChoiceResult):
             if item.answer is not None and item.answer.optionId not in {
                 option.id for option in question.options

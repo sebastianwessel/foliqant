@@ -144,7 +144,7 @@ async def test_invalid_native_results_never_receive_fallback(tmp_path, kind):
     elif kind == "invalid_option":
         raw = _raw("answerable", [], option="misc_queue")
     else:
-        raw["results"][0]["evidence_strength"] = "strong"
+        raw["results"][0]["evidence_strength"] = "none"
     app = _app(_compiled(tmp_path), raw)
     result = await app.run("inbox", Envelope(payload={"ticket": "Billing failed"}))
     assert result.execution.status == "failed"

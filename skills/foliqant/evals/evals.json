@@ -59,7 +59,7 @@
     {
       "id": 12,
       "prompt": "Add evidence strength to our workflow result and evaluate limited, strong, and no-answer cases. Will strong bypass review?",
-      "expected_output": "Uses runtime DecisionOutput v3 reason and evidence_strength with unchanged DecisionInput v2; preserves model tooling native v2. Explains supplied support including inference, weakest-member collection strength versus completeness, and null for null answers/unknown predicates. Does not introduce citation arrays, confidence claims, automatic thresholds, or routing changes. Uses independent gold with explicit classification labels [limited, strong, null] so actual null is an observed outcome; missing and failures remain distinct. A string-only catalog retains null-as-abstention behavior."
+      "expected_output": "Uses runtime DecisionOutput v3 reason and evidence_strength with unchanged DecisionInput v2; preserves model tooling native v2. Explains support for the whole assessment including justified abstention and valid inference; collection ratings include all material claims and null means unassessed, never mechanically unanswered. Separates signal support from urgency/severity. Does not introduce citation arrays, confidence claims, automatic thresholds, or routing changes. Uses independent gold with explicit classification labels [limited, strong, null] so actual null is an observed outcome; missing and failures remain distinct. A string-only catalog retains null-as-abstention behavior."
     }
   ]
 }

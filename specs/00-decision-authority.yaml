@@ -8,7 +8,9 @@ decisions:
     authority: project-owner request to replace runtime explanation/citation output
       with a short reason and nullable limited/strong evidence strength, retaining
       native v2 model tooling, existing answerability and routing, and measuring
-      strength including null outcomes without confidence guarantees or thresholds
+      strength including null outcomes without confidence guarantees or thresholds;
+      subsequent owner clarification defines strength over the whole assessment,
+      including strongly justified abstention, with null meaning unassessed
     scope_refs: [CAP-PACKAGE-CONTRACTS, CAP-PACKAGE-RUNTIME, CAP-PACKAGE-EVALUATION, CAP-PACKAGE-DX]
     source_refs: [11-python-package.md]
     status: implementation mandate; no model generation, training or artifact conversion

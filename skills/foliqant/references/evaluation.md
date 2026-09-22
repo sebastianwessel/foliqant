@@ -60,7 +60,10 @@ and explicit ordered `labels`. Match the path to authored case expectations.
 Classification uses string labels and may explicitly declare JSON null as a
 label; multilabel uses string-only labels and arrays. Gold must satisfy the
 catalog. For `evidence_strength`, use `["limited", "strong", null]` and independent
-gold for all outcomes. Declared null is observed in the confusion matrix;
+gold for the outcomes present in the task. For strength, null means unassessed,
+not unanswered; strong abstentions are valid. Do not invent a business case merely
+to populate every label. Exercise unassessed values in contract-boundary tests.
+Declared null is observed in the confusion matrix;
 otherwise actual null remains an abstention and null gold is invalid. Missing
 predictions, invalid predictions and execution failures remain distinct and are
 never converted into null labels. Accuracy uses all cases with matching

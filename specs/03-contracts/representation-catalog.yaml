@@ -600,7 +600,7 @@ mappings:
   - questionId-and-type:preserve-and-validate
   - answerability-and-answer:validate-against-question
   - reason:require-nonblank-at-most-400-characters
-  - evidence_strength:require-substantive-or-null-consistency
+  - evidence_strength:require-nullable-assessment-support-independent-of-answerability
   - request-unit-subject:require-verbatim-occurrence-in-allowed-source
   verification:
   - ../tests/test_native_adapter.py

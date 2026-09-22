@@ -81,7 +81,7 @@ that file without opening a model client:
 
 ```sh
 uv run --no-sync python -m examples.support_triage.evaluate \
-  --write-dataset .foliqant/evaluation/support-triage-r9.json
+  --write-dataset .foliqant/evaluation/support-triage-r10.json
 uv run --no-sync foliqant evaluate --config examples/support_triage/foliqant.yaml --check
 ```
 
@@ -108,8 +108,9 @@ and German gold scenarios, but both use `no_supported_answer` and the same revie
 route. Isolated reports identify `classify` or `extract` explicitly.
 
 The evidence-strength metric includes explicit `null` alongside `limited` and
-`strong`. All supported classifications in this example have explicit requests
-and strong support; this suite does not test a limited classification. See
+`strong`. The reviewed messages clearly establish either a category or a reason
+to abstain, so all sixteen assessments expect strong support. This suite does
+not test the limited/unassessed boundary, and strong abstention still needs review. See
 [typed decisions and evidence](../decision_evidence/README.md) for a permissible
 limited interpretation, multiple labels, false predicates, and empty collections.
 A strength rating is a model assessment, not a correctness guarantee.

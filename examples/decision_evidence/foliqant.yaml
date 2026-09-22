@@ -1,6 +1,7 @@
 version: 1
 workflows:
   decision_evidence: .
+  decision_predicate: predicate
 models:
   local_qwen:
     provider: openai_compatible
@@ -22,4 +23,4 @@ execution:
   model_timeout: 300
   run_timeout: 610
 evaluation:
-  dataset: ../../.foliqant/evaluation/decision-evidence-r2.json
+  dataset: ../../.foliqant/evaluation/decision-evidence-r4.json

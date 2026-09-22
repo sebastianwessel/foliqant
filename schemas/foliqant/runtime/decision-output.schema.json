@@ -58,7 +58,7 @@
     },
     "ChoiceResult": {
       "additionalProperties": false,
-      "description": "One selected option, or an explained abstention with null support.",
+      "description": "One selected option or an explained abstention, with assessment support.",
       "properties": {
         "answer": {
           "anyOf": [
@@ -81,7 +81,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Support for the whole reported assessment, including answerability and any abstention. Strong or limited may accompany any answerability status. Null means support was not assessed; it does not mean the answer is absent. This is not model confidence or a correctness probability."
         },
         "questionId": {
           "maxLength": 128,
@@ -213,7 +214,7 @@
     },
     "MultiselectResult": {
       "additionalProperties": false,
-      "description": "Selected options; strength describes the weakest returned constituent.",
+      "description": "Selected options; strength covers the collection and its answerability.",
       "properties": {
         "answer": {
           "anyOf": [
@@ -236,7 +237,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Support for the whole reported assessment, including answerability and any abstention. Strong or limited may accompany any answerability status. Null means support was not assessed; it does not mean the answer is absent. This is not model confidence or a correctness probability."
         },
         "questionId": {
           "maxLength": 128,
@@ -316,7 +318,7 @@
     },
     "OrdinalResult": {
       "additionalProperties": false,
-      "description": "One rubric level, or an explained abstention with null support.",
+      "description": "One rubric level or an explained abstention, with assessment support.",
       "properties": {
         "answer": {
           "anyOf": [
@@ -339,7 +341,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Support for the whole reported assessment, including answerability and any abstention. Strong or limited may accompany any answerability status. Null means support was not assessed; it does not mean the answer is absent. This is not model confidence or a correctness probability."
         },
         "questionId": {
           "maxLength": 128,
@@ -403,75 +406,186 @@
       "title": "PrecedesRelation",
       "type": "object"
     },
-    "PredicateAnswer": {
-      "additionalProperties": false,
-      "properties": {
-        "value": {
-          "enum": [
-            "true",
-            "false",
-            "unknown"
-          ],
-          "title": "Value",
-          "type": "string"
-        }
-      },
-      "required": [
-        "value"
-      ],
-      "title": "PredicateAnswer",
-      "type": "object"
-    },
     "PredicateResult": {
-      "additionalProperties": false,
-      "description": "A supported true/false answer, or unknown with null support.",
-      "properties": {
-        "answer": {
-          "$ref": "#/$defs/PredicateAnswer"
-        },
-        "answerability": {
-          "$ref": "#/$defs/Answerability"
-        },
-        "evidence_strength": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/EvidenceStrength"
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "A true/false answer or unknown, with support for the whole assessment.",
+          "properties": {
+            "answer": {
+              "additionalProperties": false,
+              "properties": {
+                "value": {
+                  "enum": [
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "value"
+              ],
+              "title": "PredicateAnswer",
+              "type": "object"
             },
-            {
-              "type": "null"
+            "answerability": {
+              "additionalProperties": false,
+              "properties": {
+                "issues": {
+                  "items": {
+                    "$ref": "#/$defs/AnswerabilityIssue"
+                  },
+                  "maxItems": 3,
+                  "title": "Issues",
+                  "type": "array"
+                },
+                "status": {
+                  "enum": [
+                    "answerable"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "issues"
+              ],
+              "title": "Answerability",
+              "type": "object"
+            },
+            "evidence_strength": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EvidenceStrength"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Support for the whole reported assessment, including answerability and any abstention. Strong or limited may accompany any answerability status. Null means support was not assessed; it does not mean the answer is absent. This is not model confidence or a correctness probability."
+            },
+            "questionId": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+              "title": "Questionid",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 400,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Reason",
+              "type": "string"
+            },
+            "type": {
+              "const": "predicate",
+              "title": "Type",
+              "type": "string"
             }
-          ]
+          },
+          "required": [
+            "questionId",
+            "answerability",
+            "reason",
+            "evidence_strength",
+            "type",
+            "answer"
+          ],
+          "title": "PredicateResult",
+          "type": "object"
         },
-        "questionId": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
-          "title": "Questionid",
-          "type": "string"
-        },
-        "reason": {
-          "maxLength": 400,
-          "minLength": 1,
-          "pattern": "\\S",
-          "title": "Reason",
-          "type": "string"
-        },
-        "type": {
-          "const": "predicate",
-          "title": "Type",
-          "type": "string"
+        {
+          "additionalProperties": false,
+          "description": "A true/false answer or unknown, with support for the whole assessment.",
+          "properties": {
+            "answer": {
+              "additionalProperties": false,
+              "properties": {
+                "value": {
+                  "enum": [
+                    "unknown"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "value"
+              ],
+              "title": "PredicateAnswer",
+              "type": "object"
+            },
+            "answerability": {
+              "additionalProperties": false,
+              "properties": {
+                "issues": {
+                  "items": {
+                    "$ref": "#/$defs/AnswerabilityIssue"
+                  },
+                  "maxItems": 3,
+                  "minItems": 1,
+                  "title": "Issues",
+                  "type": "array"
+                },
+                "status": {
+                  "enum": [
+                    "not_answerable",
+                    "undetermined"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "issues"
+              ],
+              "title": "Answerability",
+              "type": "object"
+            },
+            "evidence_strength": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EvidenceStrength"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Support for the whole reported assessment, including answerability and any abstention. Strong or limited may accompany any answerability status. Null means support was not assessed; it does not mean the answer is absent. This is not model confidence or a correctness probability."
+            },
+            "questionId": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+              "title": "Questionid",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 400,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Reason",
+              "type": "string"
+            },
+            "type": {
+              "const": "predicate",
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "questionId",
+            "answerability",
+            "reason",
+            "evidence_strength",
+            "type",
+            "answer"
+          ],
+          "title": "PredicateResult",
+          "type": "object"
         }
-      },
-      "required": [
-        "questionId",
-        "answerability",
-        "reason",
-        "evidence_strength",
-        "type",
-        "answer"
-      ],
-      "title": "PredicateResult",
-      "type": "object"
+      ]
     },
     "RequestRelation": {
       "discriminator": {
@@ -591,7 +705,7 @@
     },
     "RequestUnitsResult": {
       "additionalProperties": false,
-      "description": "Request collection; completeness is expressed by answerability separately.",
+      "description": "Request collection with support for the reported items and answerability.",
       "properties": {
         "answer": {
           "anyOf": [
@@ -614,7 +728,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Support for the whole reported assessment, including answerability and any abstention. Strong or limited may accompany any answerability status. Null means support was not assessed; it does not mean the answer is absent. This is not model confidence or a correctness probability."
         },
         "questionId": {
           "maxLength": 128,
@@ -682,7 +797,7 @@
   "$id": "https://foliqant.local/schemas/foliqant/runtime/decision-output.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Runtime V3 output for unchanged native V2 questions and sources.\n\n``evidence_strength`` is required and null only for abstentions. Ratings do\nnot override answerability, catalog membership, or configured routing.",
+  "description": "Runtime V3 output for unchanged native V2 questions and sources.\n\n``evidence_strength`` is required; null means support was not assessed.\nRatings cover the whole assessment, including justified abstentions, and do\nnot override answerability, catalog membership, or configured routing.",
   "properties": {
     "results": {
       "items": {

@@ -83,7 +83,7 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
     assert issues["accuracy"] == 1
     assert evidence["labels"] == ["limited", "strong", None]
     assert evidence["support"] == evidence["observed"] == 16
-    assert evidence["confusion_matrix"] == [[0, 0, 0], [0, 6, 0], [0, 0, 10]]
+    assert evidence["confusion_matrix"] == [[0, 0, 0], [0, 16, 0], [0, 0, 0]]
     classify_summary = next(step for step in pipeline["steps"] if step["name"] == "classify")
     assert classify_summary["model_selected_cases"] == 6
     assert classify_summary["fallback_selected_cases"] == 8
@@ -104,9 +104,7 @@ async def test_support_reports_include_matrices_and_isolated_step_details(tmp_pa
         decision = details["result"]["decisions"]["classify"]["result"]
         assert decision["reason"].strip() and len(decision["reason"]) <= 400
         assert "explanation" not in decision
-        assert decision["evidence_strength"] == (
-            "strong" if case["status"] == "completed" else None
-        )
+        assert decision["evidence_strength"] == "strong"
         step_result = details["result"]["decisions"]["classify"]
         if case["id"] in {"multiple_active_intents", "unresolved_contradiction"}:
             assert "selection" not in step_result

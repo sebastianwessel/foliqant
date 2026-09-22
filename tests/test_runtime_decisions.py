@@ -3,7 +3,9 @@
 from copy import deepcopy
 
 import pytest
+from jsonschema import Draft202012Validator
 from pydantic import ValidationError
+from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer
 
 from foliqant.contracts.decisions import (
     ChoiceResult,
@@ -89,7 +91,7 @@ def _output():
     }
 
 
-@pytest.mark.parametrize("strength", ["limited", "strong"])
+@pytest.mark.parametrize("strength", [None, "limited", "strong"])
 def test_every_task_accepts_support_without_turning_it_into_a_routing_threshold(strength):
     raw = _output()
     for result in raw["results"]:
@@ -97,33 +99,70 @@ def test_every_task_accepts_support_without_turning_it_into_a_routing_threshold(
     assert validate_decision_output(_task(), DecisionOutput.model_validate(raw)) == []
 
 
+@pytest.fixture(scope="module")
+def predicate_schemas():
+    schema = DecisionOutput.model_json_schema()
+    strict_schema = OpenAIJsonSchemaTransformer(deepcopy(schema), strict=True).walk()
+    for candidate in (schema, strict_schema):
+        Draft202012Validator.check_schema(candidate)
+    return (Draft202012Validator(schema), Draft202012Validator(strict_schema))
+
+
+@pytest.mark.parametrize("value", ["true", "false", "unknown"])
+@pytest.mark.parametrize(
+    "status", ["answerable", "partially_answerable", "not_answerable", "undetermined"]
+)
+@pytest.mark.parametrize("strength", [None, "limited", "strong"])
+@pytest.mark.parametrize("issues", [[], ["no_supported_answer"]])
+def test_predicate_schema_and_strict_provider_conversion_preserve_answerability_rules(
+    predicate_schemas, value, status, strength, issues
+):
+    result = _output()["results"][2]
+    result["answer"] = {"value": value}
+    result["answerability"] = {"status": status, "issues": issues}
+    result["evidence_strength"] = strength
+    raw = {"schemaVersion": 3, "results": [result]}
+    # Use the native semantic authority rather than maintaining a second truth table.
+    from foliqant.decisions.contracts import Answerability, validate_answerability
+
+    expected = not validate_answerability(
+        prefix="predicate",
+        task_type="predicate",
+        answerability=Answerability.model_validate(result["answerability"]),
+        has_answer=True,
+        predicate_value=value,
+    )
+    for schema in predicate_schemas:
+        assert schema.is_valid(raw) is expected
+    if expected:
+        assert PredicateResult.model_validate(result).evidence_strength == strength
+        assert DecisionOutput.model_validate(raw).results[0].answer.value == value
+    else:
+        with pytest.raises(ValidationError):
+            PredicateResult.model_validate(result)
+        with pytest.raises(ValidationError):
+            DecisionOutput.model_validate(raw)
+
+
 @pytest.mark.parametrize("status", ["not_answerable", "undetermined"])
-def test_every_task_requires_null_support_for_abstentions(status):
+@pytest.mark.parametrize("strength", [None, "limited", "strong"])
+def test_whole_assessment_strength_is_independent_of_abstention(status, strength):
     raw = _output()
     for result in raw["results"]:
         result["answerability"] = {"status": status, "issues": ["no_supported_answer"]}
         result["answer"] = {"value": "unknown"} if result["type"] == "predicate" else None
-        result["evidence_strength"] = None
+        result["evidence_strength"] = strength
     assert validate_decision_output(_task(), DecisionOutput.model_validate(raw)) == []
-    for result in raw["results"]:
-        result["evidence_strength"] = "strong"
-    with pytest.raises(ValidationError) as error:
-        DecisionOutput.model_validate(raw)
-    assert len(error.value.errors()) == 5
-    assert all("evidence-strength-must-be-null" in item["msg"] for item in error.value.errors())
 
 
-def test_false_and_empty_collections_are_substantive():
+@pytest.mark.parametrize("strength", [None, "limited", "strong"])
+def test_false_and_empty_collections_allow_an_independent_assessment(strength):
     raw = _output()
     raw["results"][1]["answer"]["optionIds"] = []
     raw["results"][4]["answer"]["units"] = []
-    assert validate_decision_output(_task(), DecisionOutput.model_validate(raw)) == []
     for result in raw["results"]:
-        result["evidence_strength"] = None
-    with pytest.raises(ValidationError) as error:
-        DecisionOutput.model_validate(raw)
-    assert len(error.value.errors()) == 5
-    assert all("evidence-strength-required" in item["msg"] for item in error.value.errors())
+        result["evidence_strength"] = strength
+    assert validate_decision_output(_task(), DecisionOutput.model_validate(raw)) == []
 
 
 @pytest.mark.parametrize(
@@ -136,14 +175,14 @@ def test_false_and_empty_collections_are_substantive():
         (RequestUnitsResult, 4),
     ],
 )
-def test_standalone_results_reject_mutated_or_constructed_support_inconsistency(model, index):
+def test_standalone_results_reject_mutated_or_constructed_answerability_inconsistency(model, index):
     raw = _output()["results"][index]
     valid = model.model_validate(raw)
-    valid.evidence_strength = None
-    with pytest.raises(ValidationError, match="evidence-strength-required"):
+    valid.answerability.status = "not_answerable"
+    with pytest.raises(ValidationError):
         model.model_validate(valid)
-    raw["evidence_strength"] = None
-    with pytest.raises(ValidationError, match="evidence-strength-required"):
+    raw["answerability"]["status"] = "not_answerable"
+    with pytest.raises(ValidationError):
         model.model_validate(raw)
     with pytest.raises(ValidationError):
         model.model_validate(model.model_construct(reason="Incomplete unvalidated value"))

@@ -311,10 +311,11 @@ support on a decision step with:
 ```
 
 Author an expectation at that path for every case, including `expected: null`
-when no substantive answer is supported. A declared null is an observed label
-in the confusion matrix, so unsupported `strong` predictions can be compared
-with legitimate unresolved answers. Missing paths, skipped steps, and errors
-remain separate; they never become null labels.
+when no strength assessment was made. A clearly justified abstention can instead
+have expected strength `strong`. A declared null is an observed label in the
+confusion matrix, so unjustified ratings can be compared with unassessed outcomes.
+Missing paths, skipped steps, and errors remain separate; they never become null
+labels.
 
 Without null in the catalog, a null prediction remains an abstention and null
 gold is invalid. Assert review status separately when it has no categorical

@@ -1,5 +1,5 @@
 spec_manifest_version: 1
-content_digest: sha256:c59caf61524544d1507d215c7cc151e3955e44b02b42381a3e86b4760b6b23c4
+content_digest: sha256:684117f47c4d339242ce9cd16b76d0b5a472007ee249e55f50baa353c5bbd167
 artifacts:
   - path: 00-applicability.yaml
     sha256: sha256:f4f27579afa175878b0f9202ebd507291e5791523a08ad1394f790ff91cce975
@@ -8,7 +8,7 @@ artifacts:
   - path: 00-conventions.md
     sha256: sha256:f4032cd2d4b481434c62df7241414209be32740036230a351d0b8479c61c05bd
   - path: 00-decision-authority.yaml
-    sha256: sha256:2437fcc43989902bc6ce70db132d660ce04a5a39028a661202378c036bbf278c
+    sha256: sha256:a2881ec07a4bfbb0e46b5e9e1ef7c95c6df0a1bbfeba207add2039afbc5432c0
   - path: 00-file-structure.md
     sha256: sha256:753c8851632274474cc088832bc1d605944bc2e720a85e36c91c50d7ac497888
   - path: 00-module-boundaries.yaml
@@ -36,7 +36,7 @@ artifacts:
   - path: 03-contracts/representation-catalog.md
     sha256: sha256:5add4d2a908d7defff5116d3d547443d8ad621b07261a2e5650f96c7fb1c502d
   - path: 03-contracts/representation-catalog.yaml
-    sha256: sha256:512e175bf9c0bd7159db2f3e1a0525829f1d9a927a9be399e4c187d805e076ce
+    sha256: sha256:c6162f4f136774044b5274dcd8ca74f04c62c73616f9e905b6997445b1149ec5
   - path: 03-flows/e2e-coverage.md
     sha256: sha256:ed1ddc041795e276bb5c0af6b01b9fb7ab85b689de83e0fe122a192d769db81c
   - path: 04-operations/security-release.md
@@ -54,7 +54,7 @@ artifacts:
   - path: 10-business-decisions-and-processes.md
     sha256: sha256:df63330fb788198a65c2d44be419cd2129fa6d97a8bf066ff910e95837824de4
   - path: 11-python-package.md
-    sha256: sha256:58c6e3a424ee602edfd2a24adfba0f66f53afbf337b55e5af9ac08931a0dc1e4
+    sha256: sha256:7ad59e6a9aa6fe3328b9d7a871e4e62c2d548d245b0c98f496503937d04c8b43
   - path: README.md
     sha256: sha256:f72175c81ccb37266fb93f1c380cff22969897d327769e4856838600505ece06
   - path: _registry.yaml
@@ -94,6 +94,6 @@ artifacts:
   - path: research/workflow-service-proposal.md
     sha256: sha256:6114e68214a130ffdd8df207e31144228638152debf1736e13ce7ae44e6da80d
 provenance:
-  source_revision: working-tree-626fecd-runtime-evidence-2026-09-22
-  generated_at: 2026-09-22T00:53:40.776Z
+  source_revision: working-tree-5a214eb-assessment-strength-2026-09-22
+  generated_at: 2026-09-22T07:52:11.356Z
   generator: spec-manifest/v1

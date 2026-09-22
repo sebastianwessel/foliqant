@@ -40,7 +40,9 @@ Do not interpret an unsupported label's score as evidence of quality.
 
 A classification catalog can explicitly include `null`, for example
 `["limited", "strong", null]` for `evidence_strength`. Then null is an observed
-answer category in the confusion matrix, not an abstention. With string-only
+category meaning "unassessed" in the confusion matrix, not an abstention. Strong
+support for a justified abstention is valid and must be evaluated separately from
+whether a substantive answer was returned. With string-only
 labels, a null prediction retains its abstention meaning. Missing, skipped and
 failed observations always stay separate. Assess reason correctness with an
 explicit reviewed rubric; strength labels alone do not score the reason.

@@ -94,7 +94,7 @@ def _gold_suite() -> EvaluationSuite:
     """Independent gold for clear, incomplete, competing, and corrected requests."""
     original = EvaluationSuite(
         name="support_triage",
-        revision="9",
+        revision="10",
         cases=(
             EvaluationCase(
                 "explicit_cancellation",
@@ -404,7 +404,7 @@ def _with_selection_gold(case: EvaluationCase) -> EvaluationCase:
     support = Expectation(
         "evidence_strength",
         "/decisions/classify/result/evidence_strength",
-        "strong" if category is not None else None,
+        "strong",
     )
     return EvaluationCase(case.id, case.envelope(), case.expectations + extra + (support,))
 
@@ -438,7 +438,7 @@ def _gold_step_suite(step: str) -> EvaluationSuite:
                 checks,
             )
         )
-    return EvaluationSuite(name=f"support_{step}", revision="9", cases=tuple(cases))
+    return EvaluationSuite(name=f"support_{step}", revision="10", cases=tuple(cases))
 
 
 def dataset() -> EvaluationDataset:

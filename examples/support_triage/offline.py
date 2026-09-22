@@ -112,7 +112,7 @@ def scripted_response(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
                     },
                     "answer": {"optionId": option} if option else None,
                     "reason": reason,
-                    "evidence_strength": "strong" if option else None,
+                    "evidence_strength": "strong",
                 }
             ],
         }

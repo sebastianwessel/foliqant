@@ -22,4 +22,4 @@ execution:
   model_timeout: 300
   run_timeout: 610
 evaluation:
-  dataset: ../../.foliqant/evaluation/support-triage-r9.json
+  dataset: ../../.foliqant/evaluation/support-triage-r10.json

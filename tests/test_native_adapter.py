@@ -317,6 +317,44 @@ def test_limited_support_does_not_override_answerability_or_choice_routing() -> 
     assert result.route_key == "billing.queue-v2"
 
 
+@pytest.mark.parametrize("kind", ["choice", "predicate"])
+@pytest.mark.parametrize("status", ["not_answerable", "undetermined"])
+@pytest.mark.parametrize("strength", [None, "limited", "strong"])
+def test_assessed_abstention_keeps_unresolved_routing(kind, status, strength) -> None:
+    step = _step(_choice() if kind == "choice" else _predicate("classify"))
+    result = _choice_result(status=status, option_id=None)
+    result["type"] = kind
+    result["answer"] = None if kind == "choice" else {"value": "unknown"}
+    result["evidence_strength"] = strength
+    validated = validate_decision_result(
+        step,
+        build_decision_input(step, _sources()),
+        {"schemaVersion": 3, "results": [result]},
+    )
+    assert validated.answerable is False
+    assert validated.route_key is None
+    assert thaw_json(validated.value)["evidence_strength"] == strength
+
+
+def test_predicate_unknown_cannot_claim_answerable_at_adapter_boundary() -> None:
+    step = _step(_predicate("classify"))
+    result = {
+        "questionId": "classify",
+        "type": "predicate",
+        "answerability": {"status": "answerable", "issues": []},
+        "answer": {"value": "unknown"},
+        "reason": "The relevant information is absent.",
+        "evidence_strength": "strong",
+    }
+    with pytest.raises(ServiceError) as error:
+        validate_decision_result(
+            step,
+            build_decision_input(step, _sources()),
+            {"schemaVersion": 3, "results": [result]},
+        )
+    assert error.value.code == ErrorCode.INVALID_OUTPUT
+
+
 @pytest.mark.parametrize("constructed", [False, True])
 def test_mutated_or_constructed_model_cannot_bypass_validation_without_warning(
     constructed: bool,

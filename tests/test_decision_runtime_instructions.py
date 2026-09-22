@@ -198,9 +198,11 @@ async def test_multiple_decisions_receive_shared_contract_in_both_modes(
     assert "missing_information" not in seen_instructions
     assert "no_matching_option" not in seen_instructions
     assert "categoryId null only when allowNoMatch permits it, and report" in seen_instructions
-    assert "evidence_strength assesses support for the returned value" in seen_instructions
-    assert "Use null when answer is null" in seen_instructions
-    assert "For collections assess the weakest returned" in seen_instructions
+    assert (
+        "evidence_strength assesses support for the whole reported conclusion" in seen_instructions
+    )
+    assert "Use null only when no strength assessment can be made" in seen_instructions
+    assert "For collections assess all material claims" in seen_instructions
     assert "Aim for 160 characters or fewer and never exceed 400 characters" in seen_instructions
     assert "hidden/internal reasoning" in seen_instructions
     assert "First label" not in seen_instructions

@@ -202,7 +202,7 @@ def test_existing_mutated_metadata_instance_is_revalidated() -> None:
 
 
 @pytest.mark.parametrize("origin", ["model", "fallback"])
-def test_selected_choice_support_consistency_is_revalidated_at_public_boundaries(origin) -> None:
+def test_selected_choice_assessment_is_independent_but_answerability_stays_strict(origin) -> None:
     answered = origin == "model"
     status = "completed" if answered else "needs_review"
     raw = {
@@ -224,10 +224,12 @@ def test_selected_choice_support_consistency_is_revalidated_at_public_boundaries
         },
     }
     StepResult.model_validate(raw, strict=True)
-    raw["result"]["evidence_strength"] = None if answered else "limited"
-    with pytest.raises(ValidationError, match="evidence-strength"):
+    raw["result"]["evidence_strength"] = None if answered else "strong"
+    StepResult.model_validate(raw, strict=True)
+    raw["result"]["answerability"]["status"] = "not_answerable" if answered else "answerable"
+    with pytest.raises(ValidationError):
         StepResult.model_validate(raw, strict=True)
-    with pytest.raises(ValidationError, match="evidence-strength"):
+    with pytest.raises(ValidationError):
         ExecutionResult.model_validate(
             {
                 "payload": None,

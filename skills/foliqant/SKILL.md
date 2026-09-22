@@ -24,13 +24,18 @@ Keep model tooling's native v2 output unchanged; it is a separate contract.
 The issue codes remain `no_supported_answer`, `conflicting_information`, and
 `multiple_valid_options`. Missing information and catalog gaps share the first
 code; do not recreate that split with extra flags or parse reasons to route.
-Strength is supplied support, including valid inference, never confidence or an
-automatic route threshold. Limited support must still satisfy the authored
-criteria; essential missing facts remain unresolved. Collections report the
-weakest returned member separately from completeness. Null answers and unknown
-predicates require null strength; substantive false predicates and permitted
-empty collections require non-null strength. Request units have no evidence
-array; non-null subjects must occur verbatim in allowed input text.
+Strength is support for the whole reported assessment: answerability, issues
+and any substantive answer. Strongly justified abstentions and unknown predicates
+are valid; null means unassessed, not unanswered. Never assess urgency/severity
+instead of support, or treat strength as confidence or an automatic route threshold.
+Limited interpretations must satisfy the authored criteria without inventing
+essential missing facts. Collections include material claims about members and
+unresolved parts; many clear items cannot compensate for a weak material claim.
+Request units have no evidence array; non-null subjects must occur verbatim in
+allowed input text.
+Keep the assessed construct precise: an undecided remedy need not weaken a clear
+purpose classification. Absence of information about a fact is not evidence that
+the fact is false; an unknown set is not an established empty collection.
 Runtime code never imports model training/curation. Importing contracts must not
 initialize model clients or telemetry. Core depends on standard-library values and ports; SDKs and
 Pydantic adapters stay outside it.

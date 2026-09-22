@@ -89,6 +89,9 @@ options prevent selection; an additional issue needs an independent obstacle.
 Several clear requests are valid when a collection question permits them. A
 predicate uses `unknown` when the evidence establishes neither true nor false;
 an explicit absence can support `false` for a presence predicate.
+“No dispute was raised” can support false for a dispute predicate; “whether a
+dispute was raised is not stated” cannot. Likewise, an empty collection asserts
+that there are no qualifying members; it is not a substitute for an unknown set.
 
 A partially answerable collection must contain at least one supported item. A
 missing requested item keeps the collection partial even when every returned
@@ -127,19 +130,37 @@ invalid response or turn a request needing review into a successful model answer
 
 ## Read evidence strength
 
-`evidence_strength` describes the supplied support for the returned answer:
+`evidence_strength` describes how strongly the allowed input supports the reported
+assessment: answerability, issues, and any selected answer. It does not measure
+how urgent, severe, or emotionally worded the input is:
 
 | Value | Meaning |
 | --- | --- |
-| `strong` | Decisive support under the question's criteria, including a valid inference from supplied facts. |
+| `strong` | Decisive support for the assessment, including a valid inference or a clearly justified inability to answer. |
 | `limited` | Weaker support for a permissible interpretation that still satisfies the criteria. |
-| `null` | No substantive answer: the answer is null, or a predicate is `unknown`. |
+| `null` | No strength assessment was made. This does not mean the answer is absent. |
 
-`limited` never permits inventing an essential missing fact. A substantive
-predicate `false` and an allowed empty collection still need a non-null strength.
-For a collection, strength describes its weakest returned member. Answerability
-separately describes completeness: a partial collection can have strong support
-for every returned item.
+`limited` never permits inventing an essential missing fact. Two explicit,
+incompatible instructions can strongly support `not_answerable` with
+`conflicting_information`. Two clearly requested actions can strongly support
+single-choice abstention while also supporting both multiselect values.
+An explicitly undecided required fact can strongly support an `unknown` predicate.
+Assess the question actually asked: a message can clearly establish its topic or
+purpose while leaving the action to take undecided. That does not automatically
+weaken a purpose classification. Conversely, an uncertain category-bearing fact
+may support only a limited interpretation when the question permits a best fit.
+
+Keep strength separate from whether the workflow may act. A strong abstention
+still follows the configured review or fallback policy. Do not replace its
+strength with null simply because no category was selected. Conversely, a
+well-supported conclusion that information is absent is not evidence that the
+underlying fact is false.
+
+For a collection, assess all material claims, including the returned members
+and any unresolved part. Many clear members cannot compensate for a weak claim.
+A partial collection can have strong support when both its supported subset and
+its remaining obstacle are clear. Whether a particular assessment deserves a
+rating is evaluated against reviewed gold; JSON validation alone cannot decide it.
 
 Each result also requires a nonblank `reason` of at most 400 characters. Aim for
 one concise sentence explaining the applied criterion, relevant facts, and any

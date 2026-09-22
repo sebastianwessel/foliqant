@@ -161,14 +161,18 @@ There are no runtime explanation, citation, contrary-evidence or missing-fact
 arrays. A non-null request-unit subject must occur verbatim in an allowed input
 source; source IDs remain part of the input contract.
 
-`strong` means decisive supplied support under the authored criteria, including
-valid inference. `limited` means weaker support for a permissible interpretation
-that still satisfies those criteria. It never licenses inventing an essential
-missing fact. A collection's strength is the weakest returned member; completeness
-is represented independently by answerability. An allowed empty collection and
-a substantive predicate `false` require non-null strength. A null answer or
-`unknown` predicate requires null strength. Reason/strength are qualitative model
-assessments, not confidence, calibrated probability or a correctness guarantee.
+Strength assesses support for the whole reported conclusion: its answerability,
+issues and any substantive answer. `strong` means decisive supplied support under
+the authored criteria, including valid inference or a demonstrated inability to
+answer. `limited` means weaker support for a permissible interpretation, without
+inventing an essential missing fact. For collections, include material claims
+about returned members and unresolved parts; many clear members cannot compensate
+for a weak material claim. `null` means no strength assessment was made, not that
+an answer is absent. The required strength field is independent of answer/status;
+strong abstentions and unknown predicates are valid. Prompts request an assessment
+whenever possible; validators cannot prove its semantic quality. Reason/strength
+are qualitative model assessments, not confidence, calibrated probability or a
+correctness guarantee. Rating urgency or severity itself is not rating support.
 No automatic evidence threshold, fallback or review transition is added.
 
 The issue domain remains exactly `no_supported_answer`, `conflicting_information`,
@@ -263,6 +267,10 @@ authored business instructions: allowed IDs, answerability/null rules, the
 unchanged status/issue meanings, concise reasons (aim 160 characters, hard maximum
 400), and evidence-strength semantics. This does not truncate responses, change
 criteria, retry invalid answers, or weaken validation.
+The generated predicate schema expresses true/false with answerable and unknown
+with not_answerable/undetermined through complete object alternatives. Independent
+Python validation retains the same answerability rules; provider schema support
+alone does not establish semantic correctness.
 Authored JSON Schemas are fully inlined from frozen local resources for providers,
 then results are checked against the original host schema. Unsupported recursive
 or dynamic schemas and unsupported provider/mode combinations fail before I/O;
