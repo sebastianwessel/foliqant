@@ -42,8 +42,9 @@ git diff --check
 
 Use `python scripts/generate_schemas.py` through the same uv environment to
 regenerate schemas deliberately. Default tests exclude `live_model`; no model
-endpoint or downloads are needed. Installed-wheel tests use cached dependencies.
+endpoint is needed. Isolated installed-wheel tests may download dependencies
+that are not available in the local cache.
 
 Preview docs with `uv run --group docs mkdocs serve --dev-addr 127.0.0.1:8001`.
-CI builds them strictly. GitHub Pages publishing is opt-in via `PUBLISH_DOCS=true`
-after the repository's Pages source is configured as GitHub Actions.
+CI builds them strictly and publishes successful pushes to `main` to GitHub
+Pages after the repository's Pages source is configured as GitHub Actions.

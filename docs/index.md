@@ -132,6 +132,8 @@ results, confusion matrices, and operational failures.
 
 ## Keep the reference close
 
+- [Inputs, results, and errors](reference/inputs-and-results.md) — request and
+  response shapes, reasons, evidence strength, issue codes, and execution failures.
 - [Decision contracts](guides/decision-contracts.md) — typed questions,
   answerability, evidence, and application policy.
 - [Configuration and CLI](reference/runtime-configuration.md) — providers,

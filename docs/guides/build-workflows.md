@@ -336,6 +336,9 @@ dynamic values and the parts of JSON Schema that static checks cannot prove.
 
 ## Inspect public results
 
+See [Inputs, results, and errors](../reference/inputs-and-results.md) for complete
+examples, field definitions, decision semantics, and failure codes.
+
 The returned `ExecutionResult` has five roots:
 
 ```text

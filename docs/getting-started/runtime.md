@@ -90,6 +90,10 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+See [Inputs, results, and errors](../reference/inputs-and-results.md) for the
+`Envelope` you supply and the `ExecutionResult` returned by `run`, including
+decision reasons, evidence strength, and failure handling.
+
 Use `application.run_flow(workflow, flow, envelope)` to execute one flow with
 already-resolved flow input, or
 `application.run_step(workflow, flow, step, envelope)` to execute one operation

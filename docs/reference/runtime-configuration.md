@@ -1,5 +1,9 @@
 # Runtime configuration and CLI
 
+For the data passed to a workflow and returned by execution, see
+[Inputs, results, and errors](inputs-and-results.md). That reference also
+separates decision issues from operational error codes and CLI exit codes.
+
 The default configuration is `config/settings.yaml`. It is strict YAML. With
 the conventional layout it can contain only shared settings:
 

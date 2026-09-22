@@ -3,6 +3,10 @@
 Start with one business question: does a message concern billing or an active
 cancellation? Unsupported or ambiguous evidence must reach human review.
 
+Keep [Inputs, results, and errors](../reference/inputs-and-results.md) nearby for
+the envelope and decision shapes, including what `reason`, `evidence_strength`,
+and answerability issues mean.
+
 ## Create the boundaries
 
 Use one workflow, one flow, and one decision step:

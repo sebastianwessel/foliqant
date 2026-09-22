@@ -123,6 +123,7 @@ loop:
 | Understand workflows, flows, steps, and results | [Runtime concepts](docs/concepts/runtime.md) |
 | Author files, bindings, prompts, routes, and schemas | [Build a workflow](docs/guides/build-workflows.md) |
 | Author typed evidence-backed decisions | [Decision contracts](docs/guides/decision-contracts.md) |
+| Understand input/output shapes, reasons, evidence strength, and errors | [Inputs, results, and errors](docs/reference/inputs-and-results.md) |
 | Configure providers, MCP, limits, telemetry, and CLI behavior | [Runtime configuration](docs/reference/runtime-configuration.md) |
 | Test pipelines, flows, and steps against reviewed gold | [Testing and evaluation](docs/guides/testing-and-evaluation.md) |
 | Install the skill and build with a coding agent | [Build with the skill](docs/skills/foliqant.md) |

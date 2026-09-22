@@ -88,6 +88,10 @@ Work through three checkpoints:
    review outcomes, reasons, and evidence strength before changing prompts or
    rules. Synthetic wiring tests do not establish model accuracy.
 
+Use [Inputs, results, and errors](../reference/inputs-and-results.md) when
+reviewing the generated integration. It explains which fields are for
+deterministic routing and which are assessments for people to inspect.
+
 From the generated application directory, the agent can check the result with:
 
 ```sh

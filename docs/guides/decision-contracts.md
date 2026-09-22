@@ -4,6 +4,10 @@ Decision steps answer typed questions over supplied state. Each result carries
 an answerability status, stable issue codes, a short `reason`, and
 `evidence_strength`. Validate the complete result before applying application policy.
 
+This guide focuses on authoring categories and applying decision policy. Use
+[Inputs, results, and errors](../reference/inputs-and-results.md) as the full
+field reference, with request/response examples and all operational error codes.
+
 ## Define category boundaries
 
 Use `choice` for one category and `multiselect` for several independently valid
@@ -122,9 +126,10 @@ safety of an external action remain application responsibilities.
 
 ## Keep fallback separate from evidence
 
-A single-choice workflow can map `no_supported_answer` to a configured fallback
-category such as `misc`. Configure the category object and allowed issues as shown
-in [workflow routing](build-workflows.md#classify-with-an-explicit-fallback).
+A single-question `choice` decision step can map `no_supported_answer` to a
+configured fallback category such as `misc`. Configure the category object and
+allowed issues as shown in
+[workflow routing](build-workflows.md#classify-with-an-explicit-fallback).
 The model answer stays unresolved; `selection.origin: fallback` records the
 policy choice separately. Contradictions or multiple valid options remain
 unresolved unless explicitly covered by that policy. A fallback cannot hide an

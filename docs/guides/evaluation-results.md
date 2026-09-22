@@ -5,6 +5,11 @@ gold. A report records suite and configuration identities, target scope, every
 attempt, every declared check, complete public results when details are enabled,
 and aggregate latency and usage.
 
+Use [Inputs, results, and errors](../reference/inputs-and-results.md) to interpret
+the public results inside each attempt: answers, reasons, evidence strength,
+review statuses, and operational errors. Evaluation agreement is measured against
+your gold; it is separate from the model's evidence-strength assessment.
+
 ## Read agreement and execution separately
 
 | Measure | Meaning |

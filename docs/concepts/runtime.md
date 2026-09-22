@@ -106,8 +106,9 @@ adversarial cases when the business process handles untrusted text.
 
 ## Treat unresolved results as process state
 
-A decision can return `answered`, `not_answerable`, or `undetermined` with
-stable issue codes and evidence strength. A validated fallback may supply a
+Each decision result reports `answerable`, `partially_answerable`,
+`not_answerable`, or `undetermined`, with stable issue codes and evidence strength.
+A validated fallback may supply a
 separate process selection for a single-choice question, but it does not rewrite
 the native answer.
 
@@ -115,6 +116,10 @@ Flows route unresolved work explicitly through `on_unresolved`; it cannot fall
 through to a successful downstream action. The public result keeps transitions,
 native observations, fallback selections, and terminal status available for
 review.
+
+See [Inputs, results, and errors](../reference/inputs-and-results.md) for the
+complete public shapes and the distinction between an unresolved decision and
+an execution failure.
 
 Continue with [workflow authoring](../guides/build-workflows.md), then add
 [reviewed evaluation cases](../guides/testing-and-evaluation.md) at the full
