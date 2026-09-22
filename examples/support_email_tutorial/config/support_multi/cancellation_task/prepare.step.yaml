@@ -1,0 +1,7 @@
+type: handler
+handler: prepare_support_task
+input:
+  queue:
+    literal: cancellation
+  account:
+    pointer: /steps/lookup/result

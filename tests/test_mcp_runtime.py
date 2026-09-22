@@ -305,6 +305,170 @@ async def test_model_calls_real_mcp_tool_then_returns_final_answer(
     assert factory.opened == factory.closed == 1
 
 
+@pytest.mark.parametrize("output_kind", ["text", "schema"])
+@pytest.mark.parametrize("max_iterations, succeeds", [(1, False), (2, True)])
+async def test_llm_iteration_limit_counts_final_turn_and_resets_per_invocation(
+    output_kind: str, max_iterations: int, succeeds: bool
+) -> None:
+    import json
+
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from foliqant.adapters.models import ModelBinding, ModelExecutor
+    from foliqant.adapters.validation import WorkflowSchemas
+    from foliqant.core.admission import CapacityLimiter
+    from foliqant.core.plan import (
+        LlmStepPlan,
+        SchemaResourcePlan,
+        ToolPolicyPlan,
+        WorkflowPlan,
+    )
+
+    runtime, _, _ = await fixture_runtime()
+    schema = cast(
+        FrozenObject,
+        freeze_json(
+            {
+                "type": "object",
+                "properties": {"answer": {"type": "string"}},
+                "required": ["answer"],
+                "additionalProperties": False,
+            }
+        ),
+    )
+    step = LlmStepPlan(
+        "lookup",
+        "llm",
+        SourceLocation("steps/lookup.yaml", 1, 1),
+        model="deciding",
+        instructions="Consult records and answer.",
+        output_kind=cast(Any, output_kind),
+        output_schema_path="answer.json" if output_kind == "schema" else None,
+        output_schema=schema if output_kind == "schema" else None,
+        tools=ToolPolicyPlan("records", ("lookup",), "required"),
+        max_iterations=max_iterations,
+    )
+    resources = (SchemaResourcePlan("answer.json", schema),) if output_kind == "schema" else ()
+    plan = WorkflowPlan(
+        "test",
+        "a" * 64,
+        "main",
+        None,
+        None,
+        None,
+        resources,
+        None,
+        (operation_flow(step),),
+        step.location,
+    )
+    turns = 0
+
+    async def model(_messages: Any, info: Any) -> ModelResponse:
+        nonlocal turns
+        turns += 1
+        if turns == 1:
+            return ModelResponse(parts=[ToolCallPart("lookup", {"key": "one"}, tool_call_id="1")])
+        if output_kind == "text":
+            return ModelResponse(parts=[TextPart("Found ONE")])
+        assert info.model_request_parameters.output_mode == "native"
+        return ModelResponse(parts=[TextPart(json.dumps({"value": {"answer": "ONE"}}))])
+
+    executor = ModelExecutor(
+        {
+            "deciding": ModelBinding(
+                FunctionModel(model), {}, CapacityLimiter(concurrency=1, queue_limit=1), "native"
+            )
+        },
+        WorkflowSchemas(plan),
+        tools=runtime,
+    )
+    for _ in range(2):
+        turns = 0
+        ctx = context()
+        if succeeds:
+            outcome = await executor.execute(step, {"question": "one"}, ctx)
+            assert thaw_json(outcome.result) == (
+                "Found ONE" if output_kind == "text" else {"answer": "ONE"}
+            )
+            assert ctx.budget.snapshot().model_requests == 2
+        else:
+            with pytest.raises(ServiceError) as error:
+                await executor.execute(step, {"question": "one"}, ctx)
+            assert error.value.code == ErrorCode.BUDGET_EXHAUSTED
+            assert ctx.budget.snapshot().model_requests == 1
+        assert ctx.budget.snapshot().tool_calls == 1
+
+
+@pytest.mark.parametrize("provider_attempt_limit, succeeds", [(2, False), (3, True)])
+async def test_llm_iterations_exclude_provider_retries_but_attempt_budget_counts_them(
+    provider_attempt_limit: int, succeeds: bool
+) -> None:
+    from pydantic_ai.exceptions import ModelHTTPError
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from foliqant.adapters.models import ModelBinding, ModelExecutor
+    from foliqant.adapters.validation import WorkflowSchemas
+    from foliqant.core.admission import CapacityLimiter
+    from foliqant.core.plan import LlmStepPlan, ToolPolicyPlan, WorkflowPlan
+    from foliqant.core.retry import RetryPolicy
+
+    runtime, _, _ = await fixture_runtime()
+    step = LlmStepPlan(
+        "lookup",
+        "llm",
+        SourceLocation("steps/lookup.yaml", 1, 1),
+        model="deciding",
+        instructions="Consult records.",
+        output_kind="text",
+        tools=ToolPolicyPlan("records", ("lookup",), "required"),
+        max_iterations=2,
+    )
+    plan = WorkflowPlan(
+        "test",
+        "a" * 64,
+        "main",
+        None,
+        None,
+        None,
+        (),
+        None,
+        (operation_flow(step),),
+        step.location,
+    )
+    calls = 0
+
+    async def model(_messages: Any, _info: Any) -> ModelResponse:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ModelHTTPError(503, "test", headers={"Retry-After": "0"})
+        if calls == 2:
+            return ModelResponse(parts=[ToolCallPart("lookup", {"key": "one"}, tool_call_id="1")])
+        return ModelResponse(parts=[TextPart("Found ONE")])
+
+    binding = ModelBinding(
+        FunctionModel(model),
+        {},
+        CapacityLimiter(concurrency=1, queue_limit=1),
+        "native",
+        retry=RetryPolicy(2, 0, 0),
+    )
+    executor = ModelExecutor({"deciding": binding}, WorkflowSchemas(plan), tools=runtime)
+    ctx = replace(context(), budget=StepBudget(model_requests=provider_attempt_limit, tool_calls=3))
+    if succeeds:
+        assert (await executor.execute(step, {}, ctx)).result == "Found ONE"
+        assert calls == 3
+    else:
+        with pytest.raises(ServiceError) as error:
+            await executor.execute(step, {}, ctx)
+        assert error.value.code == ErrorCode.BUDGET_EXHAUSTED
+        assert calls == 2
+    assert ctx.budget.snapshot().model_requests == provider_attempt_limit
+    assert ctx.budget.snapshot().tool_calls == 1
+
+
 async def test_required_tool_cannot_be_satisfied_by_model_text_alone() -> None:
     from pydantic_ai.messages import ModelResponse, TextPart
     from pydantic_ai.models.function import FunctionModel

@@ -1,0 +1,9 @@
+type: handler
+handler: assemble_reply
+input:
+  queue:
+    literal: cancellation
+  account_reference:
+    pointer: /steps/require_reference/result/account_reference
+  reply:
+    pointer: /steps/draft/result/reply

@@ -1,9 +1,11 @@
 # Configure an application
 
-Foliqant reads one deployment file, compiles the workflow bundles it selects,
-and freezes their flows, steps, prompts, bindings, and schemas before any model
-or tool client opens. Configuration is local data. It cannot import Python or
-discover remote capabilities.
+Define what your application should do in a small set of files: which input it
+accepts, which operations run, and where each result goes next. Keep provider
+connections separate so the same process can run locally or in a deployment.
+
+The runtime validates these files before opening model or tool clients. You can
+check the process offline while you build it.
 
 ## Know what owns what
 

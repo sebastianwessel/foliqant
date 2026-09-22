@@ -1,0 +1,10 @@
+steps:
+  - extract
+  - require_reference
+  - lookup
+  - draft
+  - assemble
+output:
+  pointer: /steps/assemble/result
+  optional: true
+  default: null

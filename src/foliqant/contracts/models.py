@@ -148,8 +148,33 @@ class AnthropicModelConfig(_ModelConfig):
     options: AnthropicOptions = Field(default_factory=AnthropicOptions)
 
 
+class GoogleModelConfig(_ModelConfig):
+    """Gemini Developer API profile with an explicit API key."""
+
+    provider: Literal["google"]
+    api_key: EnvironmentCredential = Field(
+        default_factory=lambda: SecretStr("$GOOGLE_API_KEY"), json_schema_extra=ENVIRONMENT_FIELD
+    )
+    options: GenerationOptions = Field(default_factory=GenerationOptions)
+
+
+class BedrockModelConfig(_ModelConfig):
+    """Bedrock Converse profile using the host's AWS credential chain."""
+
+    provider: Literal["bedrock"]
+    region: Annotated[EnvironmentText, Field(min_length=1, pattern=r"\S")] = Field(
+        json_schema_extra=ENVIRONMENT_FIELD
+    )
+    options: GenerationOptions = Field(default_factory=GenerationOptions)
+
+
 ModelConfig = Annotated[
-    OpenAIModelConfig | CompatibleModelConfig | AzureModelConfig | AnthropicModelConfig,
+    OpenAIModelConfig
+    | CompatibleModelConfig
+    | AzureModelConfig
+    | AnthropicModelConfig
+    | GoogleModelConfig
+    | BedrockModelConfig,
     Field(discriminator="provider"),
 ]
 
@@ -200,6 +225,8 @@ class ModelProfileOverride(BoundaryModel):
 
 
 def _inline_credentials_are_references(config: ModelConfig) -> ModelConfig:
+    if isinstance(config, BedrockModelConfig):
+        return config
     if config.api_key is not None and not is_environment_reference(
         config.api_key.get_secret_value()
     ):

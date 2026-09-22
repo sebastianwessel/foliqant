@@ -1,7 +1,7 @@
 # Configure an MCP step
 
 An `mcp` step calls one predetermined tool on one declared MCP server. Use it
-when workflow configuration, rather than a model, should select the operation.
+when a support workflow already knows which record lookup to perform.
 The current runtime permits only tools declared with `effect: read`.
 
 ## Declare the server and tool first
@@ -15,17 +15,20 @@ authorization hooks, retries, and limits.
 The step then refers to the aliases:
 
 ```yaml
-# config/public_request_lookup/lookup/lookup.step.yaml
+# config/support_email/billing/lookup.step.yaml
 type: mcp
-server: records_office
-tool: lookup_request
+server: account_records
+tool: lookup_account
 arguments:
-  reference:
-    pointer: /payload/reference
+  account_reference:
+    pointer: /steps/require_reference/result/account_reference
 ```
 
 `server` and `tool` are required. `arguments` is a required mapping of literal
 or pointer bindings. The resolved object must match the catalog's input schema.
+List `lookup` after `require_reference` in
+`config/support_email/billing/flow.yaml`. That trusted step ensures the
+extracted account reference is present before the lookup.
 
 ## Follow the call lifecycle
 
@@ -50,7 +53,7 @@ A host may inject a stricter resource-aware authorizer:
 ```python
 plugins = RuntimePlugins(tool_authorizer=my_authorizer)
 async with open_application(prepared, environment=environment, plugins=plugins) as app:
-    result = await app.run("public_request_lookup", envelope)
+    result = await app.run("support_email", envelope)
 ```
 
 Caller authentication and business permission remain host responsibilities.
@@ -64,7 +67,13 @@ If the catalog declares `output_schema`, the server must return structured
 content that validates against it. The step result is that JSON value. Without
 an output schema, the server must return only text blocks; the runtime joins
 them with newlines and records one string. `output_limit_bytes` bounds either
-form.
+form. For an account lookup whose output schema requires
+`account_reference`, `plan`, and `renewal_date` strings, a successful
+`/flows/billing/steps/lookup` record may contain
+`{"status": "completed", "result": {"account_reference": "A-100", "plan": "Basic", "renewal_date": "2026-12-01"}}`. Without an
+output schema, its `result` is a string such as
+`"Account A-100 is on Basic."`. The declared catalog decides which form
+is valid.
 
 An MCP `InputRequiredResult` becomes a `needs_review` step with `result: null`.
 The enclosing flow handles it through `on_unresolved`. Other outcomes are
@@ -81,7 +90,10 @@ technical failures:
 
 The operation has one deadline across connection, discovery, authorization, and
 call. Configured retries apply only to safely observed transient responses; the
-runtime does not retry ambiguous timeouts or the whole step.
+runtime does not retry ambiguous timeouts or the whole step. The default
+`execution.tool_calls_per_step` is 3, though a direct step normally uses
+one call. `tool_timeout` defaults to 30 seconds; the root run deadline
+also applies. See [execution limits](../configuration/limits.md).
 
 Run the [read-only MCP tutorial](../tutorials/read-only-mcp.md) for a real local
 stdio server with no model request. For model-selected tool use, continue with

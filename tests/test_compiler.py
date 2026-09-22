@@ -35,6 +35,25 @@ def _llm(**extra: Any) -> dict[str, Any]:
     return {"type": "llm", "instructions": "Summarize.", "input": {}, "output": "text", **extra}
 
 
+def test_llm_iteration_limit_compiles_and_changes_revision(tmp_path: Path) -> None:
+    _workflow(tmp_path, {"first": _flow(_llm())})
+    default_plan = _compile(tmp_path)
+    default_step = default_plan.flow("first").steps[0]
+    assert isinstance(default_step, LlmStepPlan)
+    assert default_step.max_iterations == 4
+
+    _workflow(tmp_path, {"first": _flow(_llm(max_iterations=2))})
+    limited_plan = _compile(tmp_path)
+    limited_step = limited_plan.flow("first").steps[0]
+    assert isinstance(limited_step, LlmStepPlan)
+    assert limited_step.max_iterations == 2
+    assert limited_plan.revision != default_plan.revision
+
+    for invalid in (0, 1025, True, 1.5):
+        _workflow(tmp_path, {"first": _flow(_llm(max_iterations=invalid))})
+        _fails(tmp_path)
+
+
 def _decision(**extra: Any) -> dict[str, Any]:
     return {
         "type": "decision",

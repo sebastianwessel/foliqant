@@ -5,6 +5,9 @@ served model. Define profiles once in `config/settings.yaml`, select a default
 in each workflow, and override it only where a step needs different behavior.
 Profile names such as `local` or `extractor` are your names; none is reserved.
 
+Choose a [provider](providers.md) first if you are connecting to OpenAI, Azure,
+Anthropic, Google Gemini, or AWS Bedrock. The example below uses a local server.
+
 ## Start with an OpenAI-compatible endpoint
 
 From the Foliqant source checkout, install the adapter into the locked environment:
@@ -24,13 +27,6 @@ models:
     allow_insecure_http: true
     output_mode: native
     supports_tools: false
-    concurrency: 1
-    queue_limit: 0
-    request_timeout: 300
-    options:
-      max_tokens: 4096
-      temperature: 0.1
-      reasoning_effort: low
 ```
 
 In `config/.env`, set the model ID and the full base URL exposed by your server:
@@ -42,13 +38,14 @@ MODEL_BASE_URL=http://127.0.0.1:1234/v1
 
 The local Qwen examples use this adapter. The package does not download, start,
 or discover a model; start your inference server separately. This profile assumes
-it supports native structured output and the specified generation options. Omit
-options your server does not support. `allow_insecure_http: true` is an explicit
+it supports native structured output. Generation options can be added after
+checking your model's requirements. `allow_insecure_http: true` is an explicit
 local-development choice; use HTTPS for remote deployments.
 
 `request_timeout` is one model request's upper bound. It does not extend the
 workflow deadline. A slow local model may also need larger `execution.run_timeout`
-and `execution.model_timeout`; see [execution limits](../reference/runtime-configuration.md#execution-limits).
+and `execution.model_timeout`; use the complete [slow local model configuration](limits.md#configure-a-slow-local-model)
+to keep one request active at a time and give it a coherent timeout budget.
 
 ## Select the profile
 
@@ -90,6 +87,8 @@ The table lists additional fields beyond the shared required `model` and
 | `openai` | `openai` | Required `api: chat` or `api: responses`; API key defaults to `$OPENAI_API_KEY` |
 | `azure_openai` | `azure` | Required `api`, `api_flavor`, and HTTPS `endpoint`; key defaults to `$AZURE_OPENAI_API_KEY` |
 | `anthropic` | `anthropic` | Key defaults to `$ANTHROPIC_API_KEY`; no `api` selector |
+| `google` | `google` | Native Gemini Developer API; key defaults to `$GOOGLE_API_KEY` |
+| `bedrock` | `bedrock` | Native Converse; required `region`; host AWS credential chain |
 
 For example, this is a complete OpenAI profile inside `models`:
 
@@ -105,6 +104,10 @@ cloud:
 For Azure, `api_flavor: versioned` requires a resource-root endpoint and an
 `api_version`. `api_flavor: v1` requires an endpoint ending in `/openai/v1` and
 forbids `api_version`. Choose the combination supported by your deployment.
+
+For connection examples and the difference between native and compatible APIs,
+see [choose a provider](providers.md). Google and Bedrock currently expose the
+common generation options, not OpenAI- or Anthropic-specific option fields.
 
 ## Match output mode and capabilities
 
@@ -168,6 +171,10 @@ increasing it.
 Retries default to one attempt. An explicit profile `retry` can retry a limited
 set of completed transient HTTP responses; ambiguous timeouts are not retried.
 See the exact [retry policy](../reference/runtime-configuration.md#provider-retries).
+
+The defaults cap short request processing; a local model or a longer agent loop
+may need explicit overrides. [Limits](limits.md) explains how the deadlines,
+iteration ceiling, and model/tool request counts interact.
 
 ## Check the configuration
 

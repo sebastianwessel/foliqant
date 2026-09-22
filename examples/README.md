@@ -2,6 +2,9 @@
 
 ## Learning sequence
 
+For a from-scratch scenario that combines these capabilities, build the
+[support email tutorial](support_email_tutorial/README.md).
+
 Work through these in order. Each stage adds one runtime capability and keeps
 model-backed commands offline unless `--live` is explicit.
 

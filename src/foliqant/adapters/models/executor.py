@@ -55,6 +55,7 @@ class _InvocationModel(WrapperModel):
         context: StepContext,
         tools: ModelTools | None = None,
         telemetry: ModelTelemetry | None = None,
+        max_iterations: int | None = None,
     ) -> None:
         super().__init__(binding.model)
         self._binding = binding
@@ -62,6 +63,8 @@ class _InvocationModel(WrapperModel):
         self._tools = tools
         self._telemetry = telemetry
         self._request_model = binding.model
+        self._max_iterations = max_iterations
+        self._iterations = 0
         if telemetry is not None:
             self.wrapped = telemetry.instrument(binding.model)
 
@@ -71,6 +74,10 @@ class _InvocationModel(WrapperModel):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
+        if self._max_iterations is not None:
+            if self._iterations >= self._max_iterations:
+                _fail(ErrorCode.BUDGET_EXHAUSTED)
+            self._iterations += 1
         if self._tools is not None:
             model_settings = self._tools.settings(model_settings)
         loop = asyncio.get_running_loop()
@@ -130,6 +137,11 @@ class _InvocationModel(WrapperModel):
                     if transient is not None:
                         raise transient from None
                     raise
+                except self._binding.timeout_errors:
+                    # Some native SDKs let a typed transport timeout escape
+                    # without wrapping it in ModelAPIError.
+                    telemetry_error = ErrorCode.TIMEOUT
+                    raise ServiceError(ErrorCode.TIMEOUT) from None
                 except ModelAPIError as error:
                     # PydanticAI wraps SDK connection errors; only a configured,
                     # typed timeout cause establishes a provider request timeout.
@@ -288,13 +300,20 @@ class ModelExecutor:
         instructions: str,
         output_type: OutputSpec[Any],
         tools: ModelTools | None = None,
+        max_iterations: int | None = None,
     ) -> Agent[None, Any]:
         try:
             settings = copy.deepcopy(binding.settings)
         except Exception:
             _fail(ErrorCode.INVALID_CONFIGURATION)
         agent: Agent[None, Any] = Agent(
-            _InvocationModel(binding, context, tools, self._telemetry),
+            _InvocationModel(
+                binding,
+                context,
+                tools,
+                self._telemetry,
+                max_iterations=max_iterations,
+            ),
             name="foliqant_workflow_model",
             instructions=instructions,
             output_type=output_type,
@@ -319,6 +338,7 @@ class ModelExecutor:
             instructions=model_instructions(step.instructions),
             output_type=str,
             tools=tools,
+            max_iterations=step.max_iterations,
         )
         user_input = (
             render_prompt(step.prompt, inputs)
@@ -387,6 +407,7 @@ class ModelExecutor:
             instructions=model_instructions(step.instructions),
             output_type=output_type,
             tools=tools,
+            max_iterations=step.max_iterations,
         )
         user_input = (
             render_prompt(step.prompt, inputs)

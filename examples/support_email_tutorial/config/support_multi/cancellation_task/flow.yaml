@@ -1,0 +1,8 @@
+input_schema: input.schema.json
+steps:
+  - lookup
+  - prepare
+output:
+  pointer: /steps/prepare/result
+  optional: true
+  default: null

@@ -1,0 +1,5 @@
+type: handler
+handler: plan_support_requests
+input:
+  assessment:
+    pointer: /payload/assessment

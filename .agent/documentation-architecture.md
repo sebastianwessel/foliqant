@@ -4,9 +4,11 @@ Public docs follow the reader's path from a working installation to a configured
 tested process. Verify examples against public contracts and runnable examples;
 do not infer new capabilities from the desired documentation structure.
 
-Top-level navigation is Overview, Guide, Tutorials, Evaluation, and Reference.
-Guide contains Getting started (including Claude/Codex skill setup), Configure,
-and Step types. Getting started is a topic within Guide, not a separate tab.
+Top-level navigation is Overview, Guide, Tutorials, and Evaluation. Getting
+started and exact reference material are topics inside Guide, not separate tabs.
+Organize by the user's required outcome, not internal step type names. Guide
+progresses through setup, process design, decisions, generation/tools, connection
+configuration, application integration, deployment, and exact lookup details.
 
 ## Reading order and page ownership
 
@@ -19,11 +21,13 @@ and Step types. Getting started is a topic within Guide, not a separate tab.
 | Workflows (`configuration/workflows.md`) | Input schema → defaults/start → flow instances → output → transition/review rules → validation |
 | Flows (`configuration/flows.md`) | Resolved input → ordered steps → output projection → definition reuse/callable distinction → worked example |
 | Context (`configuration/context.md`) | Binding scopes → literals/pointers/defaults → earlier outputs → prompt placeholders → schema paths → prompt trust |
-| Models (`configuration/models.md`) | Install adapter → profile/provider choice → environment → workflow default and step overrides → output/capability settings → limits/retries |
+| Models (`configuration/models.md`, `providers.md`) | Minimal profile → provider choice and actual native support → workflow default and step overrides → output/capability settings |
+| Environment and limits (`configuration/environment.md`, `limits.md`) | Variable source/precedence → secrets → default values, units, scopes and interactions → practical overrides/retries |
 | MCP (`configuration/mcp.md`) | Read-only runtime boundary → HTTP/stdio profile → declared catalog → direct step versus loop → host credentials/authorization → validation/troubleshooting |
-| Step overview (`steps/index.md`) | Choose a step type → common configuration → file formats → execution/review semantics → per-type links |
-| Decision (`steps/decision.md`) | Sources → single/multiple typed questions → catalogs/criteria → result/selection/fallback → evaluation pointers |
-| LLM (`steps/llm.md`) | Text → schema extraction → prompts/context → output modes/validation → focused example |
+| Capability overview (`steps/index.md`) | Match a business requirement to a capability → smallest configuration → focused links |
+| Decisions (`steps/yes-no.md`, `classification.md`, `labeling.md`, `ranking.md`, `request-extraction.md`) | Business question → minimal step → expected result → boundary/ambiguity cases → advanced options and evaluation |
+| Shared decision behavior (`steps/decision.md`) | Selected evidence → one/multiple questions → reason/strength/review → policy links |
+| Generation (`steps/llm.md`, `text.md`) | Extract JSON or generate text → selected context → output validation → advanced prompts |
 | Handler (`steps/handler.md`) | Trusted async function → input/output schemas → registration → step config → result/failure → testing |
 | MCP step (`steps/mcp.md`) | Declared server/tool → arguments → output/schema → authorization/failure → focused example |
 | Agent loop (`steps/agent-loops.md`) | Bounded LLM step, not a separate workflow type → model/tool prerequisites → allowlists → tool/result loop → budgets/failure → tests |
@@ -34,8 +38,9 @@ and Step types. Getting started is a topic within Guide, not a separate tab.
 | Running (`evaluation/running.md`) | Discovery/config path → offline check → scoped/live execution → concurrency/repeat/timeouts → Python embedding → replay/compare → CI |
 | Reports (`evaluation/results.md`) | Full observations → confusion and label metrics → review/error/missing denominators → latency/usage → comparison/privacy |
 | Unit tests (`evaluation/unit-testing.md`) | Public lifecycle with local fakes → handler/model/tool isolation → assertions → what mocks do not prove |
-| Tutorials (`tutorials/`) | Six focused runnable use cases; link to configuration and evaluation details rather than duplicating reference tables |
-| Reference (`reference/`) | Exact input/output/evidence/error contracts and deployment/CLI lookup |
+| Integration (`integration/`) | Python lifecycle → HTTP endpoint → use results → errors/review → multi-intent disposition → deployment → observability |
+| Tutorials (`tutorials/`) | Build a support-email solution: setup → classify → extract → route → lookup → tool-assisted draft → multiple requests → evaluate → integrate; runnable files and synthetic gold in examples/support_email_tutorial |
+| Reference (`reference/`, inside Guide) | Advanced exact input/output and settings/CLI lookup, after user-facing integration guides |
 | AI-assisted setup (`skills/foliqant.md`) | Install skill → provide business rules and examples → review configuration → validate and evaluate |
 
 ## Authoring and verification
@@ -46,6 +51,12 @@ Use runnable repository examples as evidence; mark fragments explicitly. Keep
 YAML block style, use tables for choices and fields, and add Mermaid diagrams
 where they explain ownership, data flow, or lifecycle. Do not claim that structural
 validation proves model correctness or security.
+
+Every configurable bound has a documented default, unit, scope, and interaction
+with other limits. Distinguish actual defaults from tutorial overrides. Illustrative
+interactive examples are labeled and never presented as live inference. Keep
+editable draw.io sources with local rendered assets, visible keyboard focus,
+light/dark contrast, responsive layouts, and reduced-motion support.
 
 The old broad workflow/evaluation guides are replaced by focused sections, not
 retained as duplicate manuals. Update all local links and navigation together.

@@ -142,7 +142,51 @@ def test_thinking_budget_and_sampling_are_not_silently_rewritten() -> None:
             validate({**base, "options": options})
 
 
-def test_unimplemented_bedrock_provider_is_rejected_at_validation() -> None:
+def test_native_google_and_bedrock_profiles_are_explicit_and_closed() -> None:
+    google = validate(
+        {
+            "provider": "google",
+            "model": "gemini-2.5-flash",
+            "output_mode": "native",
+        }
+    ).models["deciding"]
+    assert google.api_key.get_secret_value() == "$GOOGLE_API_KEY"
+    assert google.options.max_tokens == 4096
+
+    bedrock = validate(
+        {
+            "provider": "bedrock",
+            "region": "$AWS_REGION",
+            "model": "amazon.nova-lite-v1:0",
+            "output_mode": "tool",
+            "options": {"max_tokens": 512, "temperature": 0.2},
+        }
+    ).models["deciding"]
+    assert bedrock.region == "$AWS_REGION"
+    assert bedrock.options.temperature == 0.2
+
+    for bad in (
+        {"provider": "bedrock", "model": "amazon.nova-lite-v1:0", "output_mode": "tool"},
+        {"provider": "bedrock", "region": " ", "model": "x", "output_mode": "native"},
+        {
+            "provider": "bedrock",
+            "region": "us-east-1",
+            "model": "x",
+            "output_mode": "tool",
+            "options": {"reasoning_effort": "high"},
+        },
+        {
+            "provider": "google",
+            "model": "gemini-2.5-flash",
+            "output_mode": "native",
+            "options": {"thinking_budget": 1024},
+        },
+    ):
+        with pytest.raises(ValidationError):
+            validate(bad)
+
+
+def test_bedrock_unknown_fields_are_rejected_at_validation() -> None:
     with pytest.raises(ValidationError):
         validate(
             {
@@ -150,5 +194,6 @@ def test_unimplemented_bedrock_provider_is_rejected_at_validation() -> None:
                 "region": "eu-central-1",
                 "model": "configured-model",
                 "output_mode": "tool",
+                "api_key": "$AWS_SECRET_ACCESS_KEY",
             }
         )

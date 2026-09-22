@@ -357,6 +357,7 @@ input:
   message:
     pointer: /payload/message
 instructions: Return a concise structured extraction.
+max_iterations: 4                 # logical model turns, including final answer
 prompt: Extract from {{ message }}.   # optional
 output:
   schema: output.schema.json         # or output: text
@@ -370,6 +371,12 @@ tools:                               # optional
 Prompt placeholders must exactly name declared inputs. Values render as compact
 JSON once. `{{{{` and `}}}}` produce literal double braces; expressions are
 invalid.
+`max_iterations` defaults to 4 and accepts 1–1024. It limits model turns in
+one LLM step, including the final answer; retries of the same provider request
+do not consume another iteration. Going past it fails with
+`budget_exhausted`. The limit applies without tools too. Execution
+`model_requests_per_step` separately caps provider attempts, including
+retries, and `tool_calls_per_step` caps tool attempts.
 
 ### MCP
 

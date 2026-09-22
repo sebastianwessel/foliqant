@@ -1,0 +1,5 @@
+type: handler
+handler: require_reference
+input:
+  account_reference:
+    pointer: /steps/extract/result/account_reference

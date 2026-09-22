@@ -616,6 +616,7 @@ def _compile_step(
             output_schema=output_schema,
             tools=policy,
             prompt=prompt,
+            max_iterations=authored.max_iterations,
         )
     if isinstance(authored, McpStepAuthoring):
         catalog = catalogs.get(authored.server)

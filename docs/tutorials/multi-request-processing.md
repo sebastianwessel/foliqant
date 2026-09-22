@@ -1,201 +1,126 @@
-# 6. Process several requests conservatively
+# 6. Process several requests in one email
 
-A message can contain several independent requests, duplicates, withdrawals,
-and dependencies. Model this as assessment, policy planning, bounded collection,
-and final disposition. Do not make a model-selected list equivalent to
-permission to run work.
-
-See [flow collections](../steps/flow-collection.md) for configuration and ledger
-semantics, and [task scoring](../evaluation/task-types.md) for checking each
-request, child result, and final disposition.
-
-## Map the business boundaries
-
-The example uses four routed flows and two callable flows:
+The single-choice `support_email` workflow deliberately reviews an email with
+two active queues. Build a separate `support_multi` workflow when you need to
+prepare both tasks. It keeps model assessment, trusted planning, read-only
+child work, and final disposition distinct:
 
 ```text
 assess -> plan -> process -> finalize
                     |
-                    +-> lookup_status      callable
-                    +-> prepare_guidance   callable
+                    +-> billing_task       callable
+                    +-> cancellation_task  callable
 ```
 
-- `assess` returns typed request units with status, category, subject, and
-  relations.
-- `plan` is a trusted handler that applies application policy.
-- `process` invokes only allowlisted callable flows, sequentially.
-- `finalize` decides `ready`, `partial_review`, `review`, or `no_action` from the
-  plan and complete collection ledger.
+The [completed configuration](https://github.com/sebastianwessel/foliqant/tree/main/examples/support_email_tutorial/config/support_multi)
+is runnable offline. Add these directories under
+`my_support/config/support_multi/`, each with a `flow.yaml`: `assess/`,
+`plan/`, `process/`, `finalize/`, `billing_task/`, and
+`cancellation_task/`. Give `support_multi/input.schema.json` the same
+message-only schema as `support_email/input.schema.json`. In
+`support_multi/workflow.yaml`, set `start: assess`, route the four ordinary
+flows in order, and declare the two child flows with `callable: true`. The
+[workflow file](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/support_multi/workflow.yaml)
+shows the required cross-flow input bindings. `plan` receives only
+`/flows/assess/result`; `process` receives `/flows/plan/result/items`;
+`finalize` receives both the plan and `/flows/process/result`.
 
-Create these definitions below `config/intake/`: `workflow.yaml`, routed flow
-directories `assess/`, `plan/`, `process/`, and `finalize/`, plus callable flow
-directories `lookup_status/` and `prepare_guidance/`. The workflow binds each
-completed result explicitly into the next flow.
+## Assess the email
 
-Callable flows cannot be workflow route targets:
+Create `assess/identify.step.yaml` as a `decision` with
+`question.type: request_units`, a named `message` source, and a catalog of
+`billing` and `cancellation`. Its criteria require one unit per active action,
+source-order IDs, explicit account references as subjects, and preservation
+of withdrawn, conditional, or related requests. The
+[complete step](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/support_multi/assess/identify.step.yaml)
+is short enough to use directly. `assess/flow.yaml` lists `identify` and
+projects its result. For the two-account email, the result has two active
+units. No lookup happens during assessment.
 
-```yaml
-flows:
-  lookup_status:
-    callable: true
-  prepare_guidance:
-    callable: true
-```
+## Plan allowed work in trusted code
 
-## Keep planning in trusted code
-
-The planner receives the complete assessment and language. Its handler validates
-typed input, merges exact duplicates, ignores withdrawals and quoted requests,
-and holds unsupported, conditional, related, or incomplete work for review. It
-emits ordered items shaped as `id`, `flow`, and `input`.
+Create `plan/plan.step.yaml`:
 
 ```yaml
 type: handler
-handler: plan_requests
+handler: plan_support_requests
 input:
   assessment:
     pointer: /payload/assessment
-  language:
-    pointer: /payload/language
 ```
 
-Collection task IDs use `task_1`, `task_2`, and so on; a `request_ids` map
-correlates each task to the original request-unit ID without rewriting the
-assessment. That policy is application-specific. Change it deliberately in host code and
-update gold; do not hide it in a prompt.
+Register the handler before `prepare_application`. The
+[support policy](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/multi_policy.py)
+validates the typed `RequestUnitsResult`, holds uncertainty and related or
+conditional work, ignores withdrawn units and exact repeats of category,
+account reference, and description, and requires an
+explicit `A-<digits>` account reference. It emits at most eight ordered
+`{id, flow, input}` items. This is application policy, so review these rules
+for your own account IDs before adapting it. For the sample message, the plan
+contains:
 
-The planner keeps policy in ordinary Python. Its guards record why a request
-is held or ignored before creating any allowed work:
-
-```python
-def plan_requests(value: PlanningInput) -> RequestPlan:
-    assessment = value.assessment
-    plan = RequestPlan(items=[], request_ids={}, held=[], ignored=[], assessment=assessment)
-    if assessment.answerability.status != "answerable" or assessment.answer is None:
-        plan.held.append(HeldRequest(id="assessment", reason="incomplete_assessment"))
-        return plan
-    if assessment.answer.relations:
-        plan.held.append(HeldRequest(id="assessment", reason="related_requests"))
-        return plan
-    seen: set[tuple[str, str | None]] = set()
-    for unit in assessment.answer.units:
-        if unit.status in {"withdrawn", "quoted"}:
-            plan.ignored.append(IgnoredRequest(id=unit.id, reason=unit.status))
-            continue
-        if unit.status == "conditional":
-            plan.held.append(HeldRequest(id=unit.id, reason="conditional_request"))
-            continue
-        if unit.categoryId not in {"request_status", "guidance"}:
-            plan.held.append(HeldRequest(id=unit.id, reason="unsupported_request"))
-            continue
-        if unit.categoryId == "request_status" and (
-            unit.subject is None or re.fullmatch(r"FOI-[0-9]{4}-[0-9]{4}", unit.subject) is None
-        ):
-            plan.held.append(HeldRequest(id=unit.id, reason="missing_reference"))
-            continue
-        key = (
-            unit.categoryId,
-            unit.subject if unit.categoryId == "request_status" else None,
-        )
-        if key in seen:
-            plan.ignored.append(IgnoredRequest(id=unit.id, reason="duplicate"))
-            continue
-        seen.add(key)
-        if len(plan.items) >= 8:
-            plan.held.append(HeldRequest(id=unit.id, reason="too_many_requests"))
-            continue
-        inputs: dict[str, JsonValue] = {"language": value.language}
-        flow = "prepare_guidance"
-        if unit.categoryId == "request_status":
-            inputs["reference"] = unit.subject
-            flow = "lookup_status"
-        item_id = f"task_{len(plan.items) + 1}"
-        plan.items.append(FlowCollectionItem(id=item_id, flow=flow, input=inputs))
-        plan.request_ids[item_id] = unit.id
-    return plan
+```yaml
+items:
+  - id: task_1
+    flow: billing_task
+    input:
+      account_reference: A-100
+  - id: task_2
+    flow: cancellation_task
+    input:
+      account_reference: A-200
 ```
 
-The async wrappers validate strict Pydantic input, freeze the returned value,
-and register schemas for all three handlers. Reuse the complete registration
-when preparing the example:
+`request_ids` correlates task IDs to assessment units. `held` and `ignored`
+stay in the plan for final disposition. The planner does not perform work.
 
-```python
-from pathlib import Path
+## Run a bounded read-only collection
 
-from examples.multi_request_processing.policy import HANDLERS
-from foliqant import prepare_application
-
-prepared = prepare_application(Path("config/settings.yaml"), handlers=HANDLERS)
-```
-
-## Invoke the bounded collection
-
-The process flow contains one collection step:
+Create `process/requests.step.yaml`:
 
 ```yaml
 type: flow_collection
 items:
   pointer: /payload/items
 flows:
-  - lookup_status
-  - prepare_guidance
+  - billing_task
+  - cancellation_task
 max_items: 8
 ```
 
-Each item chooses only one allowlisted callable flow. The runtime rejects
-invalid or duplicate item IDs, invalid child input, and more than the compiled
-limit. It executes items sequentially with the shared root deadline and budgets;
-this is not parallel fan-out or a second workflow.
+Each callable flow has a closed `input.schema.json` requiring
+`account_reference`, a direct `lookup.step.yaml` calling the same reviewed
+`account_records.lookup_account` tool from chapter 4, and a
+`prepare.step.yaml` bound to the validated lookup result. That trusted
+`prepare_support_task` handler returns a queue, reference, plan, and a
+`next_step` for a human to review. The
+[billing child](https://github.com/sebastianwessel/foliqant/tree/main/examples/support_email_tutorial/config/support_multi/billing_task)
+and [cancellation child](https://github.com/sebastianwessel/foliqant/tree/main/examples/support_email_tutorial/config/support_multi/cancellation_task)
+show the exact files. Neither child changes an account or sends an email.
+The collection executes its items sequentially under the parent budget and
+keeps their ordered ledger at `/flows/process/result/items`.
 
-A collection step has `kind: flow_collection`. Completed or review results keep
-the ordered child ledger under `result.items`; a failed collection preserves the
-records produced through failure under `partial_result.items`, including failed
-and skipped items. Each item records its `id`, `flow`, steps, status, result when
-present, and usage.
+## Decide from the ledger
 
-## Decide from the full ledger
+Create `finalize/disposition.step.yaml` as a handler bound to the plan and
+collection. The example's `decide_support_disposition` checks that every
+planned `(id, flow)` appears in the ledger in order. It maps completed tasks
+back to request-unit IDs and carries held work into `review`. It projects
+`ready`, `partial_review`, `review`, or `no_action`. A technical collection
+failure stops before this handler; it retains a partial ledger rather than
+inventing a business result.
 
-The disposition handler receives both the original plan and collection result.
-This makes held and ignored units visible alongside completed child work and
-prevents partial success from silently becoming full completion. A technical
-collection failure stops the workflow before this handler; the caller receives
-the failure and partial ledger, without a fabricated business disposition.
-
-It first verifies that `(id, flow)` pairs in the ledger exactly equal the plan
-in order. It maps completed task IDs back through `request_ids`, adds held or
-noncompleted requests to review, then selects disposition with this policy:
-
-```python
-disposition = (
-    "partial_review"
-    if review and prepared
-    else "review"
-    if review
-    else "ready"
-    if prepared
-    else "no_action"
-)
-return StepOutcome(result, needs_review=bool(review))
-```
-
-For the demo input
-`{"message":"Check FOI-2026-0142 and explain how to apply.","language":"en"}`,
-the offline checkpoint is a completed workflow with disposition `ready`, two
-ordered collection items, three model requests, and one tool call.
-
-Run the end-to-end scripted example and its English/German gold:
+Try both checkpoints from the repository root:
 
 ```sh
-python -m examples.multi_request_processing.run
-python -m examples.multi_request_processing.evaluate
+uv run --no-sync python -m examples.support_email_tutorial.run --multi
+uv run --no-sync python -m examples.support_email_tutorial.evaluate
 ```
 
-The evaluator can target the pipeline, routed flows, callable flows, collection
-step, and nested child operations. Nested checks carry `invocation_path` so
-repeated calls to the same flow and step remain distinguishable. Parent run usage
-is counted once; grouped child summaries are diagnostic views and must not be
-added to it.
-
-Study
-[`examples/multi_request_processing`](https://github.com/sebastianwessel/foliqant/tree/main/examples/multi_request_processing)
-before adapting its conservative public-record policy to another domain.
+The first result is `ready` with two ordered child items and two tool calls.
+The synthetic partial case, `Review invoice INV-7 for account A-100 and cancel
+renewal for my other account.`, prepares billing, holds cancellation for a
+missing reference, returns `partial_review`, and makes one tool call. The
+[evaluation gold](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/evaluation/dataset.json)
+checks both cases. See [flow collections](../steps/flow-collection.md) for
+ledger semantics, then [evaluate and integrate](evaluate.md).

@@ -1,0 +1,66 @@
+models:
+  local_qwen:
+    provider: openai_compatible
+    model: $MODEL_ID
+    base_url: $MODEL_BASE_URL
+    allow_insecure_http: true
+    output_mode: native
+    supports_tools: true
+    concurrency: 1
+    queue_limit: 0
+    request_timeout: 300
+    options:
+      max_tokens: 2048
+      temperature: 0.1
+mcp:
+  account_records:
+    transport:
+      type: stdio
+      command: $FOLIQANT_EXAMPLE_PYTHON
+      args:
+        - -m
+        - examples.support_email_tutorial.server
+      cwd: $FOLIQANT_EXAMPLE_ROOT
+      env:
+        PYTHONUNBUFFERED: '1'
+    catalog:
+      tools:
+        lookup_account:
+          input_schema:
+            type: object
+            properties:
+              account_reference:
+                title: Account Reference
+                type: string
+            required:
+              - account_reference
+            title: lookup_accountArguments
+          output_schema:
+            type: object
+            additionalProperties: false
+            properties:
+              account_reference:
+                title: Account Reference
+                type: string
+              plan:
+                title: Plan
+                type: string
+              renewal_date:
+                title: Renewal Date
+                type: string
+            required:
+              - account_reference
+              - plan
+              - renewal_date
+            title: AccountRecord
+          effect: read
+    concurrency: 1
+    queue_limit: 0
+    request_timeout: 3
+    output_limit_bytes: 4096
+execution:
+  concurrency: 1
+  queue_limit: 0
+  run_timeout: 620
+  model_timeout: 300
+  tool_timeout: 3

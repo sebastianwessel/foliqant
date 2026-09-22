@@ -3,20 +3,25 @@
 import asyncio
 import os
 import sys
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from types import MappingProxyType
 from typing import Protocol, cast
 
+import anyio
 from pydantic import SecretStr
-from pydantic_ai.models import Model
+from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.models import Model, ModelRequestParameters
+from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.profiles import ModelProfile, merge_profile
 from pydantic_ai.settings import ModelSettings
 
 from foliqant.contracts.models import (
     AnthropicModelConfig,
     AzureModelConfig,
+    BedrockModelConfig,
     CompatibleModelConfig,
+    GoogleModelConfig,
     ModelConfig,
     ModelProfiles,
     OpenAIModelConfig,
@@ -36,10 +41,69 @@ _OPENAI_AMBIENT_REQUEST_ENV = frozenset(
     }
 )
 _ANTHROPIC_AMBIENT_REQUEST_ENV = frozenset({"ANTHROPIC_CUSTOM_HEADERS"})
+_GOOGLE_AMBIENT_REQUEST_ENV = frozenset(
+    {"GOOGLE_GENAI_CLIENT_MODE", "GOOGLE_GENAI_REPLAYS_DIRECTORY", "GOOGLE_GENAI_REPLAY_ID"}
+)
+_BEDROCK_AMBIENT_ENDPOINT_ENV = frozenset({"AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_BEDROCK_RUNTIME"})
 
 
 class _AsyncCloseable(Protocol):
     async def close(self) -> None: ...
+
+
+class _ClientOwner:
+    """Close optional async and blocking SDK resources without blocking the loop."""
+
+    def __init__(
+        self,
+        *,
+        async_close: Callable[[], Awaitable[None]] | None = None,
+        sync_close: Callable[[], None] | None = None,
+    ) -> None:
+        self._async_close = async_close
+        self._sync_close = sync_close
+
+    async def close(self) -> None:
+        try:
+            if self._async_close is not None:
+                await self._async_close()
+        finally:
+            if self._sync_close is not None:
+                # Closing a blocking SDK client has no interrupt primitive. The
+                # outer cleanup deadline must still return a safe incomplete
+                # status rather than wait indefinitely for a stuck close.
+                await anyio.to_thread.run_sync(self._sync_close, abandon_on_cancel=True)
+
+
+class _DrainBlockingRequest(WrapperModel):
+    """Keep model admission owned until a started Bedrock thread has stopped."""
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        operation = asyncio.create_task(
+            self.wrapped.request(messages, model_settings, model_request_parameters)
+        )
+        cancelled = False
+        while not operation.done():
+            try:
+                await asyncio.shield(operation)
+            except asyncio.CancelledError:
+                cancelled = True
+            except Exception:
+                break
+        if cancelled:
+            # Consume a late SDK exception without exposing private diagnostics;
+            # the caller still receives cancellation after real work stops.
+            try:
+                operation.result()
+            except Exception:
+                pass
+            raise asyncio.CancelledError
+        return operation.result()
 
 
 def _invalid_configuration() -> ServiceError:
@@ -360,7 +424,134 @@ def _build_anthropic(
     return _binding(config, model, settings, timeout_errors=(APITimeoutError,))
 
 
-def _build_one(
+def _validate_provider_capabilities(config: ModelConfig, profile: ModelProfile) -> None:
+    for claimed, field in (
+        (config.supports_text, "supports_text_output"),
+        (config.supports_tools, "supports_tools"),
+    ):
+        if claimed and profile.get(field) is False:
+            raise _invalid_configuration()
+    # ToolOutput supplies a JSON Schema through a forced function tool. Native
+    # structured-output support is required only for native mode.
+    if (
+        config.output_mode == "native"
+        and config.supports_json_schema
+        and profile.get("supports_json_schema_output") is False
+    ):
+        raise _invalid_configuration()
+
+
+def _build_google(
+    config: GoogleModelConfig,
+    owned_clients: list[_AsyncCloseable],
+) -> ModelBinding:
+    import httpx2
+    from google.genai.types import HttpRetryOptions
+    from pydantic_ai.models.google import GoogleModel
+    from pydantic_ai.providers.google import GoogleProvider
+
+    _reject_ambient_request_configuration(_GOOGLE_AMBIENT_REQUEST_ENV)
+    http_client = httpx2.AsyncClient(timeout=config.request_timeout, trust_env=False)
+    owner = _ClientOwner(async_close=http_client.aclose)
+    owned_clients.append(owner)
+    provider = GoogleProvider(
+        api_key=_secret(config.api_key, required=True),
+        http_client=http_client,
+        # Pin the official Gemini API host. The Google SDK otherwise accepts
+        # GOOGLE_GEMINI_BASE_URL or a process-global default set by other code.
+        base_url="https://generativelanguage.googleapis.com/",
+        retry_options=HttpRetryOptions(attempts=1),
+    )
+    # The SDK constructs a sync client too, even though Foliqant only calls its
+    # async API. Close both at shutdown.
+    owner._sync_close = provider.client.close
+    _validate_provider_capabilities(config, provider.model_profile(config.model) or {})
+    model = GoogleModel(config.model, provider=provider, profile=_profile(config))
+    return _binding(
+        config, model, _common_settings(config), timeout_errors=(httpx2.TimeoutException,)
+    )
+
+
+async def _build_bedrock(
+    config: BedrockModelConfig,
+    owned_clients: list[_AsyncCloseable],
+) -> ModelBinding:
+    import boto3  # type: ignore[import-untyped]
+    from botocore.config import Config  # type: ignore[import-untyped]
+    from botocore.exceptions import (  # type: ignore[import-untyped]
+        ConnectTimeoutError,
+        ReadTimeoutError,
+    )
+    from pydantic_ai.models.bedrock import BedrockConverseModel
+    from pydantic_ai.providers.bedrock import BedrockProvider
+
+    _reject_ambient_request_configuration(_BEDROCK_AMBIENT_ENDPOINT_ENV)
+
+    def create_client() -> object:
+        # Credential discovery may perform blocking I/O (including metadata
+        # service access). Keep all of it off the event loop. The host's AWS
+        # credential chain remains authoritative; no workflow secret is stored.
+        session = boto3.Session(region_name=config.region)
+        return session.client(
+            "bedrock-runtime",
+            config=Config(
+                connect_timeout=config.request_timeout,
+                read_timeout=config.request_timeout,
+                # A profile in ~/.aws/config may declare endpoint_url. Region
+                # selection must not silently redirect the model request.
+                ignore_configured_endpoint_urls=True,
+                retries={"total_max_attempts": 1, "mode": "standard"},
+            ),
+        )
+
+    # Raw asyncio cancellation can interrupt an AnyIO worker await even when
+    # the worker itself cannot stop. Keep the creator task owned until it
+    # returns, then register the client before cancellation propagates.
+    creation = asyncio.create_task(anyio.to_thread.run_sync(create_client))
+    cancelled = False
+    while not creation.done():
+        try:
+            await asyncio.shield(creation)
+        except asyncio.CancelledError:
+            cancelled = True
+        except Exception:
+            break
+    if cancelled and creation.exception() is not None:
+        raise asyncio.CancelledError
+    client = creation.result()
+    # boto3's close method is synchronous. Register ownership before any model
+    # construction that could fail.
+    sync_close = cast(Callable[[], None], client.close)  # type: ignore[attr-defined]
+    owned_clients.append(_ClientOwner(sync_close=sync_close))
+    if cancelled:
+        raise asyncio.CancelledError
+    provider = BedrockProvider(bedrock_client=client)
+    discovered = provider.model_profile(config.model) or {}
+    _validate_provider_capabilities(config, discovered)
+    if (
+        config.options.temperature is not None or config.options.top_p is not None
+    ) and discovered.get("anthropic_disallows_sampling_settings", False):
+        # The locked PydanticAI Bedrock adapter otherwise drops these fields
+        # with a warning, so authored options would not reach Converse.
+        raise _invalid_configuration()
+    if (
+        config.output_mode == "native"
+        and config.supports_json_schema
+        and discovered.get("supports_json_schema_output") is not True
+    ):
+        raise _invalid_configuration()
+    if config.output_mode == "tool" and not discovered.get("bedrock_supports_tool_choice", False):
+        raise _invalid_configuration()
+    model = BedrockConverseModel(config.model, provider=provider, profile=_profile(config))
+    return _binding(
+        config,
+        _DrainBlockingRequest(model),
+        _common_settings(config),
+        timeout_errors=(ConnectTimeoutError, ReadTimeoutError),
+    )
+
+
+async def _build_one(
     config: ModelConfig,
     owned_clients: list[_AsyncCloseable],
 ) -> ModelBinding:
@@ -372,6 +563,10 @@ def _build_one(
         return _build_azure(config, owned_clients)
     if isinstance(config, AnthropicModelConfig):
         return _build_anthropic(config, owned_clients)
+    if isinstance(config, GoogleModelConfig):
+        return _build_google(config, owned_clients)
+    if isinstance(config, BedrockModelConfig):
+        return await _build_bedrock(config, owned_clients)
     raise _invalid_configuration()
 
 
@@ -422,7 +617,7 @@ async def open_model_bindings(
         try:
             validated = EnvironmentResolver(environment).resolve(profiles)
             bindings = {
-                alias: _build_one(config, owned_clients)
+                alias: await _build_one(config, owned_clients)
                 for alias, config in validated.models.items()
             }
         except ServiceError:

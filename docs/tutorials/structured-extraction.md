@@ -1,28 +1,22 @@
-# 2. Add structured extraction
+# 2. Extract action and account context
 
-A queue decision and an extraction answer different questions. Keep them as two
-steps so each contract, prompt, and evaluation can be inspected independently.
+Classification and extraction answer different questions. The decision
+selects a queue; extraction records the details a later lookup needs.
 
-See [LLM steps](../steps/llm.md) for the output and prompt configuration and
-[task scoring](../evaluation/task-types.md) for field and source-span checks.
-
-## Extend the flow
-
-Order classification before extraction and project the structured extraction:
+Add `extract` after `classify` in
+`my_support/config/support_email/classify/flow.yaml`:
 
 ```yaml
-output:
-  pointer: /steps/extract/result
-  optional: true
-  default:
-    status: needs_review
 steps:
   - classify
   - extract
+output:
+  pointer: /steps/classify/selection/category/id
+  optional: true
+  default: null
 ```
 
-The extraction step receives only the original message. It does not receive the
-classification conversation or result implicitly:
+Create `my_support/config/support_email/classify/extract.step.md`:
 
 ```markdown
 ---
@@ -30,40 +24,42 @@ type: llm
 input:
   message:
     pointer: /payload/message
-prompt: "{{ message }}"
 output:
-  schema: output.schema.json
+  schema: extract.schema.json
 ---
-Extract the currently active requested action, any deadline, and the account
-reference. Return null for details the message does not state.
+Extract the active requested action as a short verbatim span. Copy only a
+customer account reference explicitly stated in the email. Return null when
+there is none. An invoice number is not an account reference.
 ```
 
-Exact `{{ name }}` substitutions serialize the selected value as compact JSON.
-A value containing template syntax is inserted once and is never evaluated as a
-second template. The Markdown body remains stable trusted instructions; only the
-frontmatter `prompt` substitutes input. Keep `output.schema.json` beside the step so the output shape
-is reviewed with the prompt.
+Create `my_support/config/support_email/classify/extract.schema.json`:
 
-## Keep the workflow route conservative
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "requested_action": {"type": "string", "minLength": 1},
+    "account_reference": {"type": ["string", "null"]}
+  },
+  "required": ["requested_action", "account_reference"],
+  "additionalProperties": false
+}
+```
 
-The workflow still owns completion and review. If classification is unresolved,
-`on_unresolved` prevents the next step from inventing a category. A fallback can
-select an application review bucket, but it does not turn an unresolved native
-answer into model correctness.
+The LLM receives its named `message` binding. It does not inherit the
+classifier's conversation. The schema checks shape; your evaluation cases
+must check whether the fields are grounded in the email. For the synthetic
+invoice email, expect `A-100`. Without an explicit account reference, expect
+`null` and hold the later lookup for review.
 
-## Evaluate the seam
-
-Use a pipeline suite for business behavior, a flow suite for the two-step
-boundary, and separate step suites for classification and extraction. Step cases
-supply already-resolved direct inputs; they do not execute upstream bindings.
-
-Run the complete offline example:
+From the repository root, validate the updated files:
 
 ```sh
-python -m examples.support_triage.run
-python -m examples.support_triage.evaluate
+uv run --no-sync foliqant validate --config my_support/config/settings.yaml
 ```
 
-Study
-[`examples/support_triage`](https://github.com/sebastianwessel/foliqant/tree/main/examples/support_triage),
-then [route the selected category between flows](multiflow-routing.md).
+The flow still projects the category; extraction is visible in its step record.
+The next chapter moves extraction into each branch after routing. Continue to
+[deterministic routing](multiflow-routing.md). See [LLM steps](../steps/llm.md)
+for binding and output options.

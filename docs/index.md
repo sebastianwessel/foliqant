@@ -4,160 +4,120 @@ hide:
 ---
 
 <div class="docs-hero" markdown>
+<p class="docs-eyebrow">The workflow is yours. AI handles the interpretation.</p>
 
-<p class="docs-eyebrow">Foliqant · Developer documentation</p>
+# Turn unstructured input into a process you control.
 
-# Model decisions. Explicit control flow.
-
-<p class="docs-lead">Build typed Python workflows that use AI for interpretation and deterministic rules for what happens next.</p>
+<p class="docs-lead">Classify an email. Extract the facts. Look up a record. Return a useful result. Build it as a typed Python workflow with explicit routes and clear review outcomes.</p>
 
 <div class="docs-actions" markdown>
+[Build your first workflow](getting-started/runtime.md){ .md-button .md-button--primary }
+[Follow the support-email tutorial](tutorials/index.md){ .md-button }
+</div>
+<div class="docs-hero-notes"><span>Async Python</span><span>Configuration as files</span><span>Evaluations included</span></div>
+</div>
 
-[Install and run](getting-started/runtime.md){ .md-button .md-button--primary }
-[Build with Claude or Codex](skills/foliqant.md){ .md-button }
+## AI interprets. Your application decides what happens next.
 
+Emails and documents contain requests, uncertainty, and conflicting information.
+Use a model for the parts that need interpretation. Keep sequence, permissions,
+routing, and final disposition in your authored process and application code.
+
+<section class="process-demo" aria-label="Illustrative support-email routing">
+  <div class="process-demo__header"><span class="docs-eyebrow">Explore an authored process</span><span class="process-demo__badge">Illustration · no model calls</span></div>
+  <p>Choose an input to see the intended route. These are reviewed illustrative outcomes, not live predictions.</p>
+  <div class="process-demo__choices" role="group" aria-label="Example email">
+    <button type="button" data-scenario="billing" aria-pressed="true">A duplicate charge</button>
+    <button type="button" data-scenario="cancellation" aria-pressed="false">Cancel a renewal</button>
+    <button type="button" data-scenario="review" aria-pressed="false">An unclear request</button>
+  </div>
+  <div class="process-demo__content" aria-live="polite" aria-atomic="true">
+    <blockquote data-demo-input>“Please review the duplicate charge on invoice INV-7 for account A-100.”</blockquote>
+    <ol class="process-demo__route">
+      <li><span class="process-demo__number">01</span><strong>Interpret</strong><span data-demo-category>billing</span></li>
+      <li><span class="process-demo__number">02</span><strong>Follow a rule</strong><span data-demo-route>Billing flow</span></li>
+      <li><span class="process-demo__number">03</span><strong>Return a result</strong><span data-demo-result>Draft for an agent to review</span></li>
+    </ol>
+    <p class="process-demo__reason" data-demo-reason>The message explicitly identifies a duplicate charge. The workflow selects the billing flow; nothing is sent or changed automatically.</p>
+  </div>
+</section>
+
+Unresolved input is a normal business outcome. A valid assessment can say there
+is not enough evidence, information conflicts, or several categories fit. Your
+process can return `needs_review` instead of forcing a guess.
+
+Deterministic routing means the same validated result follows the same rules.
+It does not make a model deterministic or correct. Measure that with
+[reviewed evaluations](evaluation/index.md).
+
+## Find the capability you need
+
+<div class="docs-grid docs-grid--capabilities" markdown>
+<div class="docs-card" markdown>
+<span class="docs-step">DECIDE</span>
+### Make a bounded decision
+[Yes or no](steps/yes-no.md), [one category](steps/classification.md),
+[several labels](steps/labeling.md), or [an urgency level](steps/ranking.md).
+Get a typed answer with a reason and evidence strength.
+</div>
+<div class="docs-card" markdown>
+<span class="docs-step">EXTRACT</span>
+### Turn content into useful data
+[Extract JSON fields](steps/llm.md) or [separate distinct requests](steps/request-extraction.md)
+from a message. Validate the shape before the next operation uses it.
+</div>
+<div class="docs-card" markdown>
+<span class="docs-step">CONNECT</span>
+### Use tools with clear boundaries
+[Call a known MCP tool](steps/mcp.md), [let a model choose tools](steps/agent-loops.md),
+or [run a Python function](steps/handler.md). Keep tool access explicit.
+</div>
+<div class="docs-card" markdown>
+<span class="docs-step">DELIVER</span>
+### Put the result in your application
+[Embed in Python](integration/index.md), [serve an HTTP endpoint](integration/http.md),
+and [handle review or failure](integration/errors.md). Your host owns the final action.
 </div>
 </div>
 
-## AI interprets. Your process decides what happens next.
+## Three building blocks
 
-An email, document, or support request rarely arrives as a tidy set of fields.
-AI can identify its intent, assign labels, or extract information. Your business
-process still needs explicit rules: which work is allowed, in what order, and
-when a person should review the result.
-
-Foliqant combines those two kinds of work. Model steps interpret selected input
-and return typed results. Authored routes and trusted Python functions determine
-how the process uses those results. The model does not invent the workflow graph.
-
-<div class="docs-diagram" markdown tabindex="0" role="region" aria-label="AI and deterministic process diagram; scroll horizontally on small screens">
-
-```mermaid
-flowchart TD
-    accTitle: AI interpretation inside an authored process
-    accDescr: Input is interpreted by AI. Configured policy sends usable results to a Python function and unresolved results to a review outcome. Both return a structured result to the application.
-    input["Email or document"] --> ai["AI: classify or extract"]
-    ai --> policy{"Configured rules"}
-    policy -->|Usable result| code["Python function: apply business logic"]
-    policy -->|Unresolved or unmatched| review["Return a review outcome"]
-    code --> result["Structured result to your application"]
-    review --> result
-```
-
-</div>
-
-For example, classify a message as a billing or cancellation request, route it
-to the matching flow, extract the required fields, and apply your business
-rules in Python. If the intent cannot be resolved, return `needs_review` for
-the host application to handle.
-
-Deterministic routing means the same validated result follows the same authored
-rules. It does **not** mean a model always returns the same or a correct answer.
-Use [evaluation against reviewed examples](evaluation/index.md)
-to measure that separately.
-
-## Workflow → flows → steps
-
-| Building block | What you define | Example |
+| You define | Its responsibility | Support-email example |
 | --- | --- | --- |
-| **Workflow** | The whole process: input, starting flow, allowed routes, and final output | Handle an incoming request |
-| **Flow** | A sequential group of steps, its result, and what happens next | Classify a request, or handle billing |
-| **Step** | One task with selected input and a typed result | Identify intent, extract fields, or call a Python function |
+| **Workflow** | The complete process: input, routes, and final output | Handle an incoming email |
+| **Flow** | A sequence of related operations | Classify, or prepare a billing response |
+| **Step** | One operation with selected input and a validated result | Extract an account reference |
 
-A workflow can contain one flow or several connected flows. Steps run in the
-order you specify. At a routed flow's boundary, its configured transition
-chooses another flow or a terminal outcome. Unresolved results use explicit
-review handling. Your application awaits one call and receives an
-`ExecutionResult` with the final payload and execution records.
+Start with one workflow, one flow, and one step. Add a branch or tool only when
+your process needs it. Configuration lives in readable files; Python owns
+integration and deterministic business functions.
 
-### Choose the right step for the work
+<figure class="docs-figure">
+<img src="assets/diagrams/support-process.svg" alt="An email is interpreted by AI, then authored rules route clear requests to a read-only lookup and draft, or unresolved requests to review. Both return to the application." loading="lazy" width="740" height="430">
+<figcaption>AI interpretation inside an explicit process. Drafting is separate from sending or changing an account.</figcaption>
+</figure>
 
-| Step type | Use it to… |
-| --- | --- |
-| `decision` | Classify, label, or answer typed questions, with reasoning, answerability, and evidence strength |
-| `llm` | Extract structured fields or produce text; optionally use an allowlisted, bounded tool loop |
-| `handler` | Run a trusted async Python function registered by your application, such as a calculation or business rule |
-| `mcp` | Call one declared read-only external tool with explicit arguments |
-| `flow_collection` | Run a bounded list of explicitly planned callable flows sequentially and collect their results |
+[Understand workflows, flows, and steps →](concepts/runtime.md)
 
-Start with one flow and one step. Add other capabilities only when the process
-needs them. See [runtime concepts](concepts/runtime.md) for the architecture
-and execution boundaries.
+## From first request to a deployed application
 
-## Follow the guide
+<div class="docs-journey" markdown>
 
-| Stage | What you will do |
-| --- | --- |
-| [1. Get started](getting-started/runtime.md) | Install, scaffold, and run one request, manually or [with a coding agent](skills/foliqant.md) |
-| [2. Understand the configuration](configuration/index.md) | Learn the folder layout and what belongs in settings, workflow, flow, and step files |
-| [3. Define the process](configuration/workflows.md) | Set boundaries, ordered steps, data bindings, routes, and review handling |
-| [4. Add capabilities](steps/index.md) | Choose decision, extraction, Python, MCP, agent-loop, or collection behavior |
-| [5. Evaluate your solution](evaluation/index.md) | Author ground truth and measure individual steps, flows, and the complete workflow |
-
-The **Guide** teaches configuration. **Tutorials** apply it to worked examples.
-**Evaluation** teaches measurement. **Reference** supplies exact contracts and
-settings when you need a lookup.
-
-## Explore by task
-
-<div class="docs-grid" markdown>
-
-<div class="docs-card" markdown>
-
-### Understand the building blocks
-
-Learn how workflows, flows, and steps fit together, and which responsibilities
-stay in your application.
-
-[Explore runtime concepts →](concepts/runtime.md)
+1. **[Install and run](getting-started/runtime.md)** — start manually or [with Claude or Codex](skills/foliqant.md).
+2. **[Define the process](configuration/index.md)** — learn the folder layout, data bindings, and routes.
+3. **[Add a capability](steps/index.md)** — choose the task by the result you need.
+4. **[Connect your provider](configuration/providers.md)** — local models, OpenAI, Azure, Anthropic, Google, or Bedrock.
+5. **[Evaluate real requirements](evaluation/ground-truth.md)** — create reviewed cases and inspect disagreements.
+6. **[Integrate and deploy](integration/index.md)** — handle requests, results, errors, secrets, and operational limits.
 
 </div>
-<div class="docs-card" markdown>
 
-### Build one capability at a time
-
-Six runnable tutorials take you from classification to extraction, routing,
-tool calls, and processing several requests.
-
-[Start the learning path →](tutorials/index.md)
-
-</div>
-<div class="docs-card" markdown>
-
-### Configure your process
-
-Define prompts, schemas, selected context, and routes using a conventional
-file structure and explicit configuration.
-
-[Start with the folder layout →](configuration/index.md)
-
-</div>
-<div class="docs-card" markdown>
-
-### Measure before you rely on it
-
-Check wiring offline, evaluate against reviewed ground truth, and inspect
-results, confusion matrices, and operational failures.
-
-[Create gold and evaluate →](evaluation/index.md)
-
-</div>
-</div>
-
-## Keep the reference close
-
-- [Inputs, results, and errors](reference/inputs-and-results.md) — request and
-  response shapes, reasons, evidence strength, issue codes, and execution failures.
-- [Decision contracts](guides/decision-contracts.md) — typed questions,
-  answerability, evidence, and application policy.
-- [Configuration and CLI](reference/runtime-configuration.md) — providers,
-  environment values, tools, limits, telemetry, and commands.
-- [Evaluation results](evaluation/results.md) — understand measurements
-  and compare runs.
-- [Build with Claude or Codex](skills/foliqant.md) — a self-contained skill for
-  translating a business process into a working configuration.
+The **Guide** explains each task and its options. **Tutorials** build a support-email
+assistant step by step. **Evaluation** helps you measure and improve it. Detailed
+field and CLI lookups sit inside Guide when you need an exact contract.
 
 !!! note "A library inside your application"
 
-    Foliqant runs in your Python process. Your application owns inbound HTTP,
-    authentication, persistent jobs, and result storage.
+    Foliqant runs in your Python process. Your application owns inbound transport,
+    identity verification, durable jobs, result storage, and any business writes.
+    The core does not install a queue or a database.

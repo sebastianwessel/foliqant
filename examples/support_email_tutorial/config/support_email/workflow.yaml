@@ -1,0 +1,54 @@
+defaults:
+  model: local_qwen
+start: classify
+input_schema: input.schema.json
+output:
+  pointer: /flows/finalize/result
+  optional: true
+  default:
+    disposition: needs_review
+flows:
+  classify:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      binding:
+        pointer: /flows/classify/result
+      cases:
+        billing:
+          flow: billing
+        cancellation:
+          flow: cancellation
+      default:
+        outcome: needs_review
+    on_unresolved:
+      outcome: needs_review
+  billing:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      flow: finalize
+    on_unresolved:
+      outcome: needs_review
+  cancellation:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      flow: finalize
+    on_unresolved:
+      outcome: needs_review
+  finalize:
+    input:
+      billing:
+        pointer: /flows/billing/result
+        optional: true
+        default: null
+      cancellation:
+        pointer: /flows/cancellation/result
+        optional: true
+        default: null
+    transition:
+      outcome: completed

@@ -37,6 +37,8 @@ theme:
         name: Switch to light mode
 extra_css:
   - assets/stylesheets/theme.css
+extra_javascript:
+  - assets/javascripts/experience.js
 extra:
   generator: false
 plugins:
@@ -76,18 +78,41 @@ nav:
           - Define a workflow: configuration/workflows.md
           - Define sequential flows: configuration/flows.md
           - Pass data and write prompts: configuration/context.md
-          - Configure models: configuration/models.md
+      - Choose a capability:
+          - Find the right capability: steps/index.md
+          - Answer yes or no: steps/yes-no.md
+          - Choose one category: steps/classification.md
+          - Assign several labels: steps/labeling.md
+          - Assess priority or severity: steps/ranking.md
+          - Find distinct requests: steps/request-extraction.md
+          - Understand evidence and review: steps/decision.md
+          - Extract JSON data: steps/llm.md
+          - Generate text: steps/text.md
+          - Let a model use tools: steps/agent-loops.md
+          - Call an MCP tool directly: steps/mcp.md
+          - Run Python logic: steps/handler.md
+          - Process a list of requests: steps/flow-collection.md
+      - Connect and configure:
+          - Set up model profiles: configuration/models.md
+          - Choose an AI provider: configuration/providers.md
           - Connect MCP servers: configuration/mcp.md
-      - Step types:
-          - Choose a step type: steps/index.md
-          - Decisions and classification: steps/decision.md
-          - Extraction and text: steps/llm.md
-          - Python handlers: steps/handler.md
-          - Direct MCP calls: steps/mcp.md
-          - Bounded agent loops: steps/agent-loops.md
-          - Callable flow collections: steps/flow-collection.md
+          - Supply secrets and environment: configuration/environment.md
+          - Bound time, cost, and concurrency: configuration/limits.md
+      - Integrate and deploy:
+          - Embed in Python: integration/index.md
+          - Expose an HTTP endpoint: integration/http.md
+          - Use the result: integration/results.md
+          - Handle errors and review: integration/errors.md
+          - Handle multiple requests: integration/multiple-requests.md
+          - Deploy your application: integration/deployment.md
+          - Observe your workflow: integration/observability.md
+      - Look up details:
+          - Input and result fields: reference/inputs-and-results.md
+          - Decision criteria and policy: guides/decision-contracts.md
+          - Settings and CLI: reference/runtime-configuration.md
   - Tutorials:
-      - Learning path: tutorials/index.md
+      - Build a support-email assistant: tutorials/index.md
+      - Set up the project: tutorials/setup.md
       - Decisions and control flow:
           - 1. Classify one request: tutorials/decision-basics.md
           - 2. Add structured extraction: tutorials/structured-extraction.md
@@ -96,6 +121,8 @@ nav:
           - 4. Call a read-only MCP tool: tutorials/read-only-mcp.md
           - 5. Let a model use a tool: tutorials/model-tool-loop.md
           - 6. Process several requests: tutorials/multi-request-processing.md
+      - Evaluate the assistant: tutorials/evaluate.md
+      - Connect your application: tutorials/integrate.md
   - Evaluation:
       - Plan your evaluation: evaluation/index.md
       - Create ground truth: evaluation/ground-truth.md
@@ -103,7 +130,3 @@ nav:
       - Run, replay, and compare: evaluation/running.md
       - Read reports and confusion matrices: evaluation/results.md
       - Unit test with local fakes: evaluation/unit-testing.md
-  - Reference:
-      - Inputs, results, and errors: reference/inputs-and-results.md
-      - Decision criteria and policy: guides/decision-contracts.md
-      - Deployment and CLI: reference/runtime-configuration.md

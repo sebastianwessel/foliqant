@@ -1,117 +1,82 @@
-# Configure a bounded agent loop
+# Let the model use read-only tools
 
-A bounded agent loop is an `llm` step with an MCP tool policy. The model may
-request an allowlisted read-only tool, receive its validated result, and then
-produce the step's text or schema-constrained output. It remains one step in one
-sequential flow.
+An agent loop is an `llm` step with a `tools` policy. The model can request one or several allowlisted read-only MCP calls, inspect validated results, and produce the step's final **JSON or text** output. It remains one step in a sequential flow: the model cannot choose another flow, add tools, grant access, or persist memory.
 
-It is not an autonomous workflow agent: it cannot choose flows, extend its
-allowlist, change authorization, persist memory, create background work, or run
-beyond the configured deadlines and attempt budgets.
+First configure the model profile and MCP server in `config/settings.yaml`. The model must declare `supports_tools: true` and support the chosen output kind. The MCP profile must declare each tool's exact input schema, optional output schema, and `effect: read`. See [models](../configuration/models.md) and [MCP setup](../configuration/mcp.md).
 
-## Prepare model and MCP capabilities
+## One lookup, JSON answer
 
-The selected model profile must set `supports_tools: true` and support the
-chosen output kind. The named MCP profile must declare every allowed tool with
-an exact catalog and `effect: read`. Configure both in `config/settings.yaml`;
-see [models](../configuration/models.md) and [MCP](../configuration/mcp.md).
+List `answer` in `config/support_triage/triage/flow.yaml`. Save this step in `config/support_triage/triage/answer.step.yaml`, with a local `answer.schema.json` defining the required `status` string:
 
-## Add a tool policy to the LLM step
-
-This runnable definition is used by the
-[model tool-loop tutorial](../tutorials/model-tool-loop.md):
-
-```markdown
----
+```yaml
 type: llm
 input:
   message:
     pointer: /payload/message
+instructions: Use the lookup to answer the customer's invoice-status question. Do not invent a status.
 output:
   schema: answer.schema.json
 tools:
-  server: records_office
+  server: support_records
   allow:
-    - lookup_request
+    - lookup_invoice
   choice: required
----
-Answer a public-record request status question. Select the reference and language
-from the supplied message, then use lookup_request. Return only the reference,
-language, status and due_date from the validated tool response. Never invent a
-status or due date.
+max_iterations: 2
 ```
 
-`server`, a nonempty unique `allow` list, and `choice` are required:
+`config/support_triage/triage/answer.schema.json` can contain:
 
-| `choice` | Behavior |
-| --- | --- |
-| `auto` | The model may answer without a tool or call any allowed tool |
-| `required` | At least one allowed tool call must succeed before final output |
-| `name: lookup_request` | That exact allowed tool must succeed before final output |
-
-After the required call succeeds, the model may produce the final answer or
-make another allowed call while budgets remain.
-
-## Understand the bounded loop
-
-```mermaid
-flowchart LR
-    A[Selected inputs] --> B[Model request]
-    B -->|final output| E[Validate step output]
-    B -->|allowed tool call| C[Authorize and validate arguments]
-    C --> D[Read-only MCP call]
-    D -->|validated result| B
-    E --> F[Completed step]
+```json
+{
+  "type": "object",
+  "properties": {"status": {"type": "string"}},
+  "required": ["status"],
+  "additionalProperties": false
+}
 ```
 
-Each provider turn consumes one `model_requests_per_step` attempt and each tool
-call consumes one `tool_calls_per_step` attempt. Defaults are four model requests
-and three tool calls. The root `run_timeout`, per-attempt model/tool timeouts,
-provider admission limits, and MCP limits also apply. Tool calls emitted together
-are executed sequentially, so a batch cannot create unbounded MCP work.
+For a successful lookup, the public step can contain `"status": "completed"` and `"result": {"status": "paid"}`, where the object is validated against your schema. `choice: required` means at least one allowed tool call must succeed before final output. For exactly one named tool, set `choice:` to a mapping with `name: lookup_invoice`. With `choice: auto`, the model may answer without calling a tool.
 
-The runtime creates fresh model and MCP state for every invocation. It forwards
-only declared inputs and tool results; there is no history from another step or
-run. This source-checkout example registers the tutorial's scripted model factory
-while retaining the configured real local MCP client:
+## Several allowed lookups, text answer
 
-```python
-from examples.model_tool_loop import offline
-from examples.model_tool_loop.run import CONFIG_PATH, DEMO_PAYLOAD, runtime_environment
-from foliqant import Envelope, RuntimePlugins, open_application, prepare_application
+The same server policy may allow several tool names. The model selects among them and may make more than one call while limits remain:
 
-prepared = prepare_application(CONFIG_PATH)
-plugins = RuntimePlugins(model_factory=offline.model_factory)
-async with open_application(
-    prepared,
-    environment=runtime_environment(live=False),
-    plugins=plugins,
-) as app:
-    result = await app.run(
-        "request_assistant",
-        Envelope(payload=DEMO_PAYLOAD),
-    )
+```yaml
+# config/support_triage/triage/draft.step.yaml
+type: llm
+input:
+  message:
+    pointer: /payload/message
+instructions: Answer using verified invoice or subscription records only.
+output: text
+tools:
+  server: support_records
+  allow:
+    - lookup_invoice
+    - lookup_subscription
+  choice: required
+max_iterations: 3
 ```
 
-For deployed HTTP MCP, `RuntimePlugins` can also receive `mcp_credentials` and a
-resource-aware `tool_authorizer`. The profile's `auth` name must match its
-`mcp_credentials` key. The authorizer receives every tool request. Model
-selection never grants permission.
+A completed `result` here is a string, for example `"Invoice INV-42 is paid; the subscription remains active."` Tool calls emitted together execute sequentially. A step policy names **one MCP server**, though it may allow several tools from that server. Use separate steps for different servers. The `allow` list must be nonempty and unique; named choice must be on it.
 
-## Handle review and failure
+## Set the limits where they apply
 
-If the MCP server requests caller input, the LLM step returns `needs_review` and
-the flow stops at its unresolved boundary. If a required or named tool never
-succeeds, final validation fails with `invalid_output`. Invalid tool arguments,
-authorization denial, catalog drift, timeouts, provider failures, and exhausted
-budgets retain their stable technical error semantics; they are not converted
-to review.
+`max_iterations` belongs on the LLM step. It counts logical model turns, including the final answer, and defaults to **4** (allowed range 1–1024). The runtime stops before a fifth turn at the default; a final answer on turn four succeeds. Provider retries of one turn do not consume another iteration. This limit also applies to LLM steps with no tools.
 
-Do not retry an entire agent loop after an ambiguous timeout. Any completed tool
-call may already have been observed externally, even though current tools are
-restricted to read effects.
+`execution` in `config/settings.yaml` supplies separate local limits:
 
-The tutorial runs a scripted model through a real local MCP session, which proves
-wiring and tool-result delivery without a model endpoint. Add reviewed live cases
-before relying on model tool selection; see [running evaluations](../evaluation/running.md)
-and [unit testing](../evaluation/unit-testing.md).
+```yaml
+execution:
+  model_requests_per_step: 4
+  tool_calls_per_step: 3
+  run_timeout: 300
+  model_timeout: 60
+  tool_timeout: 30
+```
+
+These are the defaults. `model_requests_per_step` counts actual provider attempts, including retries; `tool_calls_per_step` counts tool attempts. Attempts are reserved before I/O and failures still consume them. The root `run_timeout` is an absolute invocation deadline. `model_timeout` bounds a logical model request after its first admission, shared by that request's retries; `tool_timeout` bounds tool work. A model profile also has its own `request_timeout`, admission and retry policy, and an MCP profile has call/admission/output limits. The earliest applicable deadline wins. See [execution limits](../configuration/limits.md), [models](../configuration/models.md), and [MCP setup](../configuration/mcp.md).
+
+The iteration and attempt limits are independent. For example, `max_iterations: 3` permits three model turns, but the default four provider attempts may be exhausted sooner if a request retries. Conversely, raising the provider-attempt budget does not let a loop exceed three turns. A tool call consumes no extra model iteration by itself; the model turn after the tool result does.
+
+If the MCP server requests caller input, the step returns `needs_review` with `result: null`. If a required or named call never succeeds, final validation fails with `invalid_output`. Exceeding an iteration or attempt limit fails with `budget_exhausted`; invalid arguments, authorization denial, catalog drift, and timeouts are technical failures. Each invocation starts with fresh model/tool state. Evaluate tool selection and final answers with [reviewed cases](../evaluation/task-types.md); the [model tool-loop tutorial](../tutorials/model-tool-loop.md) has an offline scripted example.

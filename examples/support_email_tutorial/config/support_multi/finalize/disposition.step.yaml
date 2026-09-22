@@ -1,0 +1,7 @@
+type: handler
+handler: decide_support_disposition
+input:
+  plan:
+    pointer: /payload/plan
+  collection:
+    pointer: /payload/collection

@@ -140,6 +140,7 @@ class LlmStepPlan(StepPlan):
     output_schema: FrozenObject | None = None
     tools: ToolPolicyPlan | None = None
     prompt: PromptTemplate | None = None
+    max_iterations: int = 4
 
 
 @dataclass(frozen=True, slots=True)

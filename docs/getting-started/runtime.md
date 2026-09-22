@@ -18,6 +18,8 @@ uv sync --locked --no-dev
 
 Select the adapters you need. An OpenAI-compatible local model uses the `openai`
 extra; MCP and OpenTelemetry use `mcp` and `telemetry`.
+Native Google and Amazon Bedrock use the `google` and `bedrock` extras.
+See [provider choice](../configuration/providers.md) for every supported connection.
 
 ```sh
 uv sync --locked --no-dev --extra openai --extra mcp

@@ -101,7 +101,11 @@ input:
 
 The keys under `input` must satisfy the registered input schema. Static checks
 reject provable missing, extra, or incompatible values; runtime validation
-covers dynamic data before the callback runs.
+covers dynamic data before the callback runs. For input
+`{"message": "Please check my invoice"}`, this example produces
+`{"status": "completed", "result": {"queue": "billing", "message": "Please check my invoice"}}`
+at `/flows/billing/steps/prepare`. The result is a JSON object validated
+against `OUTPUT_SCHEMA`. A deterministic handler does not need a model profile.
 
 ## Return completion, review, or failure
 
@@ -122,7 +126,9 @@ The runtime maps contract problems to stable errors:
 
 Cancellation propagates. Use native async I/O; the runtime does not move a
 blocking handler to a worker automatically or prove that external work stopped.
-Handlers are in-process code and share the host's trust boundary.
+Handlers are in-process code and share the host's trust boundary. The default
+root `run_timeout` is 300 seconds and applies to handlers too; see
+[execution limits](../configuration/limits.md).
 
 The [routing tutorial](../tutorials/multiflow-routing.md) contains complete
 registered handlers. Test handlers with local inputs and assert both their

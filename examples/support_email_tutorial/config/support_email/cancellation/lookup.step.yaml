@@ -1,0 +1,6 @@
+type: mcp
+server: account_records
+tool: lookup_account
+arguments:
+  account_reference:
+    pointer: /steps/require_reference/result/account_reference

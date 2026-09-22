@@ -1,8 +1,11 @@
-# Runtime concepts
+# Understand workflows, flows, and steps
 
-Foliqant separates authored workflow policy from runtime observations. It
-compiles the policy before clients open, then executes one foreground call in
-memory and returns one structured result.
+Imagine an incoming support email. You need to identify its request, collect
+relevant facts, and prepare a response—or ask a person to review it. Foliqant
+organizes that process into a workflow, its flows, and their individual steps.
+
+Your application sends one input and awaits one result. The process runs in
+memory, using only the routes and operations you defined.
 
 ## Map the business process
 
@@ -17,6 +20,11 @@ Use the three runtime levels deliberately:
 A workflow may contain one flow or route across several. A flow may contain one
 or more ordered steps. Steps never select the next flow; the containing flow
 owns transitions and unresolved handling.
+
+![A support workflow contains triage, billing, and cancellation flows; each flow runs focused steps in order.](../assets/diagrams/workflow-structure.svg)
+
+The diagram shows ownership. The process below shows how a configured route
+selects the next flow. Both routes and step order are defined by your application.
 
 <div class="docs-diagram" markdown tabindex="0" role="region" aria-label="Workflow architecture diagram; scroll horizontally on small screens">
 

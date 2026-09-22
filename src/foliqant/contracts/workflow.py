@@ -211,6 +211,7 @@ class LlmStepAuthoring(_CommonStep):
     output: Literal["text"] | SchemaOutput
     prompt: NonBlank | None = None
     tools: ToolPolicy | None = None
+    max_iterations: Annotated[int, Field(strict=True, ge=1, le=1024)] = 4
 
 
 class McpStepAuthoring(_CommonStep):

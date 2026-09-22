@@ -1,0 +1,4 @@
+steps:
+  - disposition
+output:
+  pointer: /steps/disposition/result

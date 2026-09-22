@@ -1,0 +1,7 @@
+type: flow_collection
+items:
+  pointer: /payload/items
+flows:
+  - billing_task
+  - cancellation_task
+max_items: 8

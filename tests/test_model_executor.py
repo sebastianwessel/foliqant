@@ -240,6 +240,31 @@ async def test_schema_output_uses_explicit_mode_and_independent_validation(
     assert budget.snapshot().tokens == TokenUsage(10, 4, 3, 2, 1)
 
 
+@pytest.mark.parametrize("output_kind", ["text", "schema"])
+async def test_one_iteration_allows_plain_llm_final_answer(output_kind: str) -> None:
+    step = replace(
+        _text_step() if output_kind == "text" else _schema_step(),
+        max_iterations=1,
+    )
+    calls = 0
+
+    async def model(_messages: Any, info: Any) -> ModelResponse:
+        nonlocal calls
+        calls += 1
+        if output_kind == "text":
+            return ModelResponse(parts=[TextPart("ok")], usage=_USAGE)
+        return _structured_response(info, {"value": {"answer": 42}})
+
+    budget = StepBudget(model_requests=2, tool_calls=0)
+    outcome = await _executor(step, _binding(model)).execute(
+        step,
+        _frozen_object({}),
+        _context(step.name, budget=budget),
+    )
+    assert thaw_json(outcome.result) == ("ok" if output_kind == "text" else {"answer": 42})
+    assert calls == budget.snapshot().model_requests == 1
+
+
 async def test_schema_output_is_rejected_by_host_validator_after_usage_is_recorded() -> None:
     step = _schema_step()
 

@@ -1,8 +1,8 @@
-# Configure a flow collection
+# Process planned support requests
 
 A `flow_collection` step executes an application-planned list of callable flows
-in supplied order. Use it after trusted code has turned a reviewed assessment
-into independent `{id, flow, input}` items. Foliqant supplies bounded composition;
+in supplied order. Use it after trusted code has turned a multi-request support
+email into independent `{id, flow, input}` items. Foliqant supplies bounded composition;
 the host still owns business planning, durability, retries, and recovery.
 
 ## Declare callable flows
@@ -11,7 +11,7 @@ Callable flows have steps, an optional input schema, and an optional output
 projection. They have no workflow input bindings or boundary routes:
 
 ```yaml
-# config/intake/workflow.yaml
+# config/support_multi/workflow.yaml
 flows:
   process:
     input:
@@ -22,15 +22,15 @@ flows:
       flow: finalize
     on_unresolved:
       flow: finalize
-  lookup_status:
+  billing_task:
     callable: true
-  prepare_guidance:
+  cancellation_task:
     callable: true
 ```
 
 Conventional callable definitions resolve to
-`config/intake/lookup_status/flow.yaml` and
-`config/intake/prepare_guidance/flow.yaml`. A callable cannot be the workflow
+`config/support_multi/billing_task/flow.yaml` and
+`config/support_multi/cancellation_task/flow.yaml`. A callable cannot be the workflow
 start or a transition target; a collection cannot call a routed flow.
 
 ## Supply the planned items
@@ -38,13 +38,13 @@ start or a transition target; a collection cannot call a routed flow.
 The collection step binds one array and allowlists callable targets:
 
 ```yaml
-# config/intake/process/requests.step.yaml
+# config/support_multi/process/requests.step.yaml
 type: flow_collection
 items:
   pointer: /payload/items
 flows:
-  - lookup_status
-  - prepare_guidance
+  - billing_task
+  - cancellation_task
 max_items: 8
 ```
 
@@ -53,19 +53,21 @@ exactly this public shape:
 
 ```yaml
 - id: request_1
-  flow: lookup_status
+  flow: billing_task
   input:
-    reference: PR-1042
-    language: en
+    account_reference: A-100
 - id: request_2
-  flow: prepare_guidance
+  flow: cancellation_task
   input:
-    topic: filing
+    account_reference: A-100
 ```
 
 IDs must be unique, `flow` must appear in the step allowlist, and `input` must
 match that callable flow's input schema. The runtime validates the entire list
-before any child I/O begins. An empty list completes successfully.
+before any child I/O begins. An empty list completes successfully. List
+`requests` in `config/support_multi/process/flow.yaml`; the step definition
+above goes beside it. Its `items` pointer reads this flow's bound payload,
+which a trusted planner or routed flow input binding must supply.
 
 ## Understand sequential execution
 
@@ -95,7 +97,11 @@ known deeper chains.
 The public step record includes `kind: flow_collection`. A successful or review
 record exposes ordered child records under `result.items`; each contains `id`,
 `flow`, status, its complete step ledger, projected result when present, usage,
-timing, and any safe error.
+timing, and any safe error. For an empty plan, the public fragment is
+`{"status": "completed", "kind": "flow_collection", "result": {"items": []}}`.
+With one successful task, `result.items[0]` includes `id: request_1`,
+`flow: billing_task`, and `status: completed`, plus that callable flow's
+result, step ledger, usage, and timing.
 
 A child `needs_review` stays in the ledger and later independent items continue.
 After all items, the collection becomes `needs_review`; the enclosing routed

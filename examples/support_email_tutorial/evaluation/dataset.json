@@ -1,0 +1,129 @@
+{
+  "name": "synthetic_support_email_gold",
+  "revision": "1",
+  "suites": [
+    {
+      "name": "support_email_pipeline",
+      "workflow": "support_email",
+      "cases": [
+        {
+          "id": "billing_with_account",
+          "input": {
+            "payload": {
+              "message": "Please review the duplicate charge on invoice INV-7 for account A-100."
+            }
+          },
+          "expectations": [
+            {"name": "completed", "path": "/execution/status", "expected": "completed", "comparison": "exact"},
+            {"name": "queue", "path": "/flows/classify/result", "expected": "billing", "comparison": "exact"},
+            {"name": "selected_flow", "path": "/flows/billing/status", "expected": "completed", "comparison": "exact"},
+            {"name": "projected_queue", "path": "/payload/queue", "expected": "billing", "comparison": "exact"},
+            {"name": "projected_reference", "path": "/payload/account_reference", "expected": "A-100", "comparison": "exact"},
+            {"name": "lookup_plan", "path": "/flows/billing/steps/lookup/result/plan", "expected": "Basic", "comparison": "exact"}
+          ]
+        },
+        {
+          "id": "cancellation_with_account",
+          "input": {
+            "payload": {"message": "Please cancel renewal for account A-200."}
+          },
+          "expectations": [
+            {"name": "completed", "path": "/execution/status", "expected": "completed", "comparison": "exact"},
+            {"name": "queue", "path": "/flows/classify/result", "expected": "cancellation", "comparison": "exact"},
+            {"name": "selected_flow", "path": "/flows/cancellation/status", "expected": "completed", "comparison": "exact"},
+            {"name": "projected_queue", "path": "/payload/queue", "expected": "cancellation", "comparison": "exact"},
+            {"name": "projected_reference", "path": "/payload/account_reference", "expected": "A-200", "comparison": "exact"},
+            {"name": "lookup_plan", "path": "/flows/cancellation/steps/lookup/result/plan", "expected": "Plus", "comparison": "exact"}
+          ]
+        },
+        {
+          "id": "two_active_queues",
+          "input": {
+            "payload": {
+              "message": "Please review the duplicate charge on invoice INV-7 for account A-100. Please cancel renewal for account A-200."
+            }
+          },
+          "expectations": [
+            {"name": "review", "path": "/execution/status", "expected": "needs_review", "comparison": "exact"},
+            {"name": "issue", "path": "/flows/classify/steps/classify/result/answerability/issues", "expected": ["multiple_valid_options"], "comparison": "set"},
+            {"name": "no_billing", "path": "/flows/billing/status", "expected": "skipped", "comparison": "exact"},
+            {"name": "no_cancellation", "path": "/flows/cancellation/status", "expected": "skipped", "comparison": "exact"}
+          ]
+        },
+        {
+          "id": "unsupported_email",
+          "input": {"payload": {"message": "Please help with my account."}},
+          "expectations": [
+            {"name": "review", "path": "/execution/status", "expected": "needs_review", "comparison": "exact"},
+            {"name": "issue", "path": "/flows/classify/steps/classify/result/answerability/issues", "expected": ["no_supported_answer"], "comparison": "set"},
+            {"name": "no_lookup", "path": "/execution/usage/tool_calls", "expected": 0, "comparison": "exact"}
+          ]
+        },
+        {
+          "id": "missing_account_reference",
+          "input": {"payload": {"message": "Please review invoice INV-7."}},
+          "expectations": [
+            {"name": "review", "path": "/execution/status", "expected": "needs_review", "comparison": "exact"},
+            {"name": "guard", "path": "/flows/billing/steps/require_reference/status", "expected": "needs_review", "comparison": "exact"},
+            {"name": "lookup_skipped", "path": "/flows/billing/steps/lookup/status", "expected": "skipped", "comparison": "exact"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "agent_reply_tool_loop",
+      "workflow": "agent_reply",
+      "cases": [
+        {
+          "id": "billing_account_lookup",
+          "input": {
+            "payload": {
+              "message": "Please review the duplicate charge on invoice INV-7 for account A-100.",
+              "account_reference": "A-100"
+            }
+          },
+          "expectations": [
+            {"name": "completed", "path": "/execution/status", "expected": "completed", "comparison": "exact"},
+            {"name": "draft", "path": "/payload/reply", "expected": "We received your request for A-100. A support agent will review it.", "comparison": "exact"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "support_multi_collection",
+      "workflow": "support_multi",
+      "cases": [
+        {
+          "id": "two_prepared_tasks",
+          "input": {
+            "payload": {
+              "message": "Review invoice INV-7 for account A-100 and cancel renewal for account A-200."
+            }
+          },
+          "expectations": [
+            {"name": "completed", "path": "/execution/status", "expected": "completed", "comparison": "exact"},
+            {"name": "ready", "path": "/payload/disposition", "expected": "ready", "comparison": "exact"},
+            {"name": "first_task", "path": "/flows/process/result/items/0/flow", "expected": "billing_task", "comparison": "exact"},
+            {"name": "second_task", "path": "/flows/process/result/items/1/flow", "expected": "cancellation_task", "comparison": "exact"},
+            {"name": "two_reads", "path": "/execution/usage/tool_calls", "expected": 2, "comparison": "exact"}
+          ]
+        },
+        {
+          "id": "one_prepared_one_held",
+          "input": {
+            "payload": {
+              "message": "Review invoice INV-7 for account A-100 and cancel renewal for my other account."
+            }
+          },
+          "expectations": [
+            {"name": "review", "path": "/execution/status", "expected": "needs_review", "comparison": "exact"},
+            {"name": "partial", "path": "/payload/disposition", "expected": "partial_review", "comparison": "exact"},
+            {"name": "prepared", "path": "/payload/prepared", "expected": ["billing_request"], "comparison": "set"},
+            {"name": "held", "path": "/payload/review", "expected": ["cancellation_request"], "comparison": "set"},
+            {"name": "one_read", "path": "/execution/usage/tool_calls", "expected": 1, "comparison": "exact"}
+          ]
+        }
+      ]
+    }
+  ]
+}

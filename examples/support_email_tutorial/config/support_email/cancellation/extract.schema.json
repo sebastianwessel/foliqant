@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "requested_action": {"type": "string", "minLength": 1},
+    "account_reference": {"type": ["string", "null"]}
+  },
+  "required": ["requested_action", "account_reference"],
+  "additionalProperties": false
+}

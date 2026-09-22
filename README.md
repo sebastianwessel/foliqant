@@ -48,7 +48,7 @@ uv sync --locked --no-dev --extra openai
 source .venv/bin/activate
 ```
 
-Available extras include `openai`, `azure`, `anthropic`, `mcp`, and
+Available extras include `openai`, `azure`, `anthropic`, `google`, `bedrock`, `mcp`, and
 `telemetry`.
 
 ## Quick start
@@ -106,16 +106,10 @@ for explicit installation commands, a starter prompt, and review checkpoints.
 
 ## Learn the runtime
 
-New to Foliqant? Follow the [six-stage tutorial path](docs/tutorials/index.md)
-from a single decision to a multi-request workflow with MCP and a model tool
-loop:
-
-1. [Classify one request](docs/tutorials/decision-basics.md)
-2. [Add structured extraction](docs/tutorials/structured-extraction.md)
-3. [Route between flows](docs/tutorials/multiflow-routing.md)
-4. [Call one read-only MCP tool](docs/tutorials/read-only-mcp.md)
-5. [Let a model use a read-only tool](docs/tutorials/model-tool-loop.md)
-6. [Process several requests conservatively](docs/tutorials/multi-request-processing.md)
+New to Foliqant? [Build a support-email assistant](docs/tutorials/index.md):
+start with project setup and one classification, then add extraction, routing,
+read-only tools, a bounded agent loop, evaluations, and HTTP integration.
+The runnable example includes synthetic ground truth and an offline mode.
 
 | Goal | Guide |
 | --- | --- |
@@ -125,7 +119,8 @@ loop:
 | Define workflows, flows, bindings, and routes | [Workflow guide](docs/configuration/workflows.md) |
 | Configure decisions, extraction, handlers, MCP, and agent loops | [Step types](docs/steps/index.md) |
 | Understand input/output shapes, reasons, evidence strength, and errors | [Inputs, results, and errors](docs/reference/inputs-and-results.md) |
-| Connect providers and tools | [Models](docs/configuration/models.md) · [MCP](docs/configuration/mcp.md) |
+| Connect providers and tools | [Provider choice](docs/configuration/providers.md) · [Models](docs/configuration/models.md) · [MCP](docs/configuration/mcp.md) |
+| Embed, serve HTTP, handle results, and deploy | [Application integration](docs/integration/index.md) |
 | Create ground truth and measure quality | [Evaluation guide](docs/evaluation/index.md) |
 | Look up limits, telemetry, and CLI options | [Deployment reference](docs/reference/runtime-configuration.md) |
 | Install the skill and build with a coding agent | [Build with the skill](docs/skills/foliqant.md) |

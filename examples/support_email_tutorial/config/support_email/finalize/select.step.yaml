@@ -1,0 +1,7 @@
+type: handler
+handler: select_reply
+input:
+  billing:
+    pointer: /payload/billing
+  cancellation:
+    pointer: /payload/cancellation

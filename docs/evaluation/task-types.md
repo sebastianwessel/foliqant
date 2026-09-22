@@ -164,6 +164,59 @@ ordered item identity, each relevant child result, and any partial ledger after
 failure. Evaluation traverses only records marked as flow collections; an
 ordinary business object that resembles a ledger is not treated as one.
 
+## Evaluate text and tool-assisted answers
+
+A good reply can have several correct phrasings. Do not use exact sentence
+equality as a general measure of writing quality. Separate the claims you can
+check deterministically from those a person must review:
+
+| Output or behavior | Useful check | What it does not establish |
+| --- | --- | --- |
+| JSON answer fields | Exact values for references, statuses, and amounts | Correctness of unrelated prose |
+| Free-form reply | A registered deterministic scorer for a precise requirement, plus human review | General factuality or helpfulness |
+| Read-only lookup | Expected final facts and step completion | Which tool arguments the model selected |
+| Required tool use | `/flows/{flow}/steps/{step}/usage/tool_calls` | Whether the call was useful or correct |
+| Agent-loop limit | A scripted model that keeps asking for tools, expecting `budget_exhausted` | Quality of a live model's stopping decision |
+
+For example, this expectation checks the attempt count in a controlled fixture
+that requires exactly one lookup:
+
+```json
+{
+  "name": "one_lookup",
+  "path": "/flows/answer/steps/draft/usage/tool_calls",
+  "expected": 1
+}
+```
+
+Choose counts from the business requirement, not from one observed model run.
+Tool retries also consume attempts. If several valid strategies exist, an exact
+count is too restrictive; use a registered scorer for an allowed bound, and
+inspect the final answer independently. A standard result does not expose a full
+tool-call transcript. Assert tool names and arguments in isolated integration
+tests with a recording fake; do not infer them from the final reply or count.
+
+For live text, review grounding in the provided input and tool facts, omissions,
+unsupported promises, language, and requested tone. The built-in comparisons do
+not call an LLM judge. The [support-email evaluation tutorial](../tutorials/evaluate.md)
+shows separate checks for status, classification, extraction, and a scripted
+reply; its exact draft expectation verifies wiring, not writing quality.
+
+## Review reasons and evidence strength
+
+Decision reasons and evidence strength are model assessments of the input.
+They are not probabilities or evidence that the answer is correct. Gold can
+assert a reviewed strength enum and answerability issues at their public paths,
+but avoid exact prose matching for reasons: review whether the reason names the
+actual supporting signal, conflict, or missing information.
+
+Evaluate these assessments separately from category accuracy. A wrong category
+with strong reported evidence is a particularly useful case to inspect. A
+strong assessment that an input is not answerable can be correct when the input
+clearly contains incompatible active requests. See
+[reason and evidence strength](../reference/inputs-and-results.md#reason-and-evidence-strength)
+for the precise meaning of each field.
+
 ## Understand metric limits
 
 Classification confusion rows are expected labels and columns are predicted

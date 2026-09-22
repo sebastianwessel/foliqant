@@ -1,0 +1,4 @@
+steps:
+  - select
+output:
+  pointer: /steps/select/result

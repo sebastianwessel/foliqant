@@ -1,156 +1,79 @@
-# 3. Route between flows
+# 3. Route to the right support branch
 
-Use a new flow when a result selects a different business boundary. In this
-example, classification chooses between billing and cancellation preparation;
-the workflow, not the model, owns the allowed destinations.
+Now make the category select a different flow. The model reports a category;
+the workflow owns the allowed destinations and an explicit review default.
 
-The [workflow guide](../configuration/workflows.md) explains transitions and
-review routes. The [handler guide](../steps/handler.md) explains the trusted
-Python functions used after classification.
-
-## Add branch flows
-
-Declare the start and match its projected scalar result exactly:
+In `my_support/config/support_email/workflow.yaml`, set `start: classify`
+and replace the `classify` transition with:
 
 ```yaml
-start: classify
-flows:
-  classify:
-    input:
-      message:
-        pointer: /payload/message
-    transition:
-      binding:
-        pointer: /flows/classify/result
-      cases:
-        billing:
-          flow: billing
-        cancellation:
-          flow: cancellation
-      default:
-        outcome: needs_review
-    on_unresolved:
-      outcome: needs_review
-  billing:
-    input:
-      message:
-        pointer: /payload/message
-    transition:
-      outcome: completed
-  cancellation:
-    input:
-      message:
-        pointer: /payload/message
-    transition:
-      outcome: completed
+transition:
+  binding:
+    pointer: /flows/classify/result
+  cases:
+    billing:
+      flow: billing
+    cancellation:
+      flow: cancellation
+  default:
+    outcome: needs_review
+on_unresolved:
+  outcome: needs_review
 ```
 
-The required default makes an unexpected string a review outcome. Exact matching
-does not coerce numbers, booleans, null, or similar strings.
-
-## Register trusted branch code
-
-Each branch contains a handler step:
+Add `billing` and `cancellation` to the same `flows` mapping:
 
 ```yaml
-type: handler
-handler: prepare_billing
-input:
-  message:
-    pointer: /payload/message
+billing:
+  input:
+    message:
+      pointer: /payload/message
+  transition:
+    outcome: completed
+  on_unresolved:
+    outcome: needs_review
+cancellation:
+  input:
+    message:
+      pointer: /payload/message
+  transition:
+    outcome: completed
+  on_unresolved:
+    outcome: needs_review
 ```
 
-YAML can select only a name that the host registered before compilation:
+Restore `classify/flow.yaml` to its one-step form from chapter 1. Move the
+extraction step and schema from `classify/` into
+`my_support/config/support_email/billing/`, then copy them into
+`my_support/config/support_email/cancellation/`. Adjust each instruction to
+name the selected action. Create `flow.yaml` in each new directory:
 
-```python
-from collections.abc import Mapping
-from pathlib import Path
-
-from foliqant import prepare_application
-from foliqant.adapters.handlers import HandlerRegistration
-from foliqant.core.execution import StepOutcome
-from foliqant.core.json import freeze_json
-
-
-async def prepare_billing(inputs, context):
-    del context
-    return StepOutcome(
-        {
-            "queue": "billing",
-            "action": "request_invoice_review",
-            "message": inputs["message"],
-        }
-    )
-
-
-async def prepare_cancellation(inputs, context):
-    del context
-    return StepOutcome(
-        {
-            "queue": "cancellation",
-            "action": "prepare_cancellation",
-            "message": inputs["message"],
-        }
-    )
-
-
-input_schema = freeze_json(
-    {
-        "type": "object",
-        "properties": {"message": {"type": "string"}},
-        "required": ["message"],
-        "additionalProperties": False,
-    }
-)
-output_schema = freeze_json(
-    {
-        "type": "object",
-        "properties": {
-            "queue": {"enum": ["billing", "cancellation"]},
-            "action": {"type": "string"},
-            "message": {"type": "string"},
-        },
-        "required": ["queue", "action", "message"],
-        "additionalProperties": False,
-    }
-)
-assert isinstance(input_schema, Mapping)
-assert isinstance(output_schema, Mapping)
-
-handlers = {
-    "prepare_billing": HandlerRegistration(
-        prepare_billing,
-        input_schema,
-        output_schema,
-    ),
-    "prepare_cancellation": HandlerRegistration(
-        prepare_cancellation,
-        input_schema,
-        output_schema,
-    ),
-}
-prepared = prepare_application(Path("config/settings.yaml"), handlers=handlers)
+```yaml
+steps:
+  - extract
+output:
+  pointer: /steps/extract/result
 ```
 
-Handlers are trusted host code, but their selected input and returned result are
-still validated against the registration schemas. Built-in workflow access is
-read-only; write-effect registrations are rejected.
+These two branch flows are alternative paths. Each gets the original email
+through its own workflow input binding. A workflow boundary cannot reach into
+another flow's private `/steps` records. To pass a result between flows, project
+it as a flow result and bind it in the workflow. The final
+[`workflow.yaml`](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/support_email/workflow.yaml)
+shows that pattern again when it feeds the final projection.
 
-## Observe the actual branch
-
-Pipeline results retain every declared flow. The selected branch is completed,
-the other branch is skipped, and `/transitions` records the authored target.
-Flow and step evaluations isolate the classifier without running the branch.
-For an invoice message, check `transitions[0].flow == "billing"`, the billing
-flow result queue is `billing`, and the cancellation flow status is `skipped`.
-
-Run and inspect the example:
+Compile the new graph without calling a model:
 
 ```sh
-python -m examples.routed_intake.run
-python -m examples.routed_intake.evaluate
+uv run --no-sync foliqant validate --config my_support/config/settings.yaml
+uv run --no-sync foliqant explain --config my_support/config/settings.yaml --workflow support_email
 ```
 
-Continue from
-[`examples/routed_intake`](https://github.com/sebastianwessel/foliqant/tree/main/examples/routed_intake)
-to [a declared read-only MCP call](read-only-mcp.md).
+For the invoice email, `flows.billing.status` will be
+`completed` and `flows.cancellation.status` will be `skipped`. An email with
+two current queues should end `needs_review` before either branch runs.
+The [`evaluation/dataset.json`](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/evaluation/dataset.json)
+records these expected paths.
+
+Continue to [the account lookup](read-only-mcp.md). See
+[workflow transitions](../configuration/workflows.md) for other route forms.

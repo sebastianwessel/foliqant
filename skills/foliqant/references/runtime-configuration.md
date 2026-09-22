@@ -32,6 +32,8 @@ adapters the application needs:
 | `openai` | OpenAI and OpenAI-compatible model clients |
 | `azure` | Azure OpenAI client |
 | `anthropic` | Anthropic client |
+| `google` | Native Gemini Developer API client |
+| `bedrock` | Native AWS Bedrock Converse client |
 | `mcp` | MCP Streamable HTTP/stdio and OAuth support |
 | `telemetry` | OTLP/HTTP traces and metrics |
 
@@ -144,6 +146,51 @@ options:
 
 Alternatively set `thinking_budget` (at least 1024 and below `max_tokens`);
 do not combine a fixed budget with `thinking`, `temperature`, or `top_p`.
+
+### Google Gemini Developer API
+
+```yaml
+provider: google
+model: $GOOGLE_MODEL_ID
+api_key: $GOOGLE_API_KEY
+output_mode: native
+options:
+  max_tokens: 4096
+```
+
+`api_key` defaults to `$GOOGLE_API_KEY`. This uses Google's native Gemini
+API, not Vertex AI or the OpenAI-compatible endpoint. The supported options
+are the common `max_tokens`, `temperature`, and `top_p` fields. The adapter
+turns SDK automatic retries off; configured transient-response retries remain
+within the normal model attempt budget. Choose a model with the text, JSON
+Schema, and tool capabilities that the selected steps require.
+
+### AWS Bedrock Converse
+
+```yaml
+provider: bedrock
+region: $AWS_REGION
+model: $BEDROCK_MODEL_ID
+output_mode: tool
+options:
+  max_tokens: 4096
+```
+
+`region` is required and may be a literal or an environment reference. The
+model ID is explicit and may be a reviewed inference-profile ID. Boto3 uses
+the host's default IAM credential chain; the `environment` mapping passed to
+`open_application` resolves marked Foliqant fields but does not inject AWS
+credentials into that chain. No AWS key fields are accepted in this profile.
+
+Use `output_mode: native` only when the selected Bedrock model profile
+positively supports native JSON Schema output. `output_mode: tool` can support
+schema steps on a model without native JSON Schema output, provided the model
+positively supports required tool choice. The adapter disables botocore
+automatic retries and runs its blocking SDK work off the event loop. Started
+Converse requests retain model admission until they actually finish, including
+after caller cancellation or a Foliqant deadline. Common generation options
+are `max_tokens`, `temperature`, and `top_p`; provider-specific thinking
+options are not exposed.
 
 An operation may select a profile ID, supply a profile override, or supply a
 complete provider profile. A profile override has this shape:

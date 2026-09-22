@@ -350,7 +350,9 @@ async def open_application(
                         for step in flow.steps
                     ),
                     models=frozenset(profile.model for profile in prepared._models.values()),
-                    providers=frozenset({"openai", "anthropic", "azure", "function"}),
+                    providers=frozenset(
+                        {"openai", "anthropic", "azure", "google", "bedrock", "function"}
+                    ),
                     tools=frozenset(
                         tool for server in config.mcp.values() for tool in server.catalog.tools
                     ),

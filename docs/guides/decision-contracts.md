@@ -4,9 +4,11 @@ Decision steps answer typed questions over supplied state. Each result carries
 an answerability status, stable issue codes, a short `reason`, and
 `evidence_strength`. Validate the complete result before applying application policy.
 
-This guide focuses on authoring categories and applying decision policy. Use
-[Inputs, results, and errors](../reference/inputs-and-results.md) as the full
-field reference, with request/response examples and all operational error codes.
+This guide focuses on authoring categories and applying decision policy. Start
+with [reading a workflow result](../integration/results.md) for the caller's
+view, then use the [input and result contracts](../reference/inputs-and-results.md)
+for exact fields. [Handle errors](../integration/errors.md) covers technical
+failures separately.
 
 ## Define category boundaries
 

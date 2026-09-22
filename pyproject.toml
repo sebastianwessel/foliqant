@@ -20,6 +20,8 @@ foliqant = "foliqant.cli:main"
 openai = ["pydantic-ai-slim[openai]==2.46.0"]
 anthropic = ["pydantic-ai-slim[anthropic]==2.46.0"]
 azure = ["pydantic-ai-slim[openai]==2.46.0"]
+google = ["pydantic-ai-slim[google]==2.46.0"]
+bedrock = ["pydantic-ai-slim[bedrock]==2.46.0"]
 mcp = ["mcp==2.2.0", "httpx2==2.13.0", "cryptography==50.0.1"]
 telemetry = [
   "opentelemetry-api==1.44.0",

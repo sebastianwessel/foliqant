@@ -280,6 +280,13 @@ JSON-encoded. `{{{{` and `}}}}` escape doubled braces. Unknown or malformed
 placeholders fail compilation. Render once: no recursive substitution, expressions,
 filters, attribute access, environment expansion or duplicate appended inputs.
 Decision steps retain their canonical task message and cannot use this template.
+An LLM step's `max_iterations` bounds logical model turns, including the final
+answer turn. It defaults to 4 and accepts integers 1–1024. A turn is one model
+request in the conversation; provider retries of that request remain the same
+turn. The step fails with `budget_exhausted` before a turn beyond this bound.
+The limit applies with or without tools and resets for every step invocation.
+It is independent of `execution.model_requests_per_step`, which counts actual
+provider attempts, including retries, and the tool-call attempt budget.
 
 ## In-memory execution
 
@@ -300,11 +307,13 @@ explicit optional/default bindings. Technical failure preserves accepted input
 and completed records rather than publishing a success projection.
 
 All model, MCP and handler operations are async. Use native async I/O. A blocking
-SDK must run through an owned bounded executor with an SDK timeout. A started
-blocking call retains its capacity until it actually finishes even if the caller
-stops waiting; cancellation never proves a remote operation stopped. Waiting
-cancelled calls must not start later. Do not create per-request event loops, call
-`asyncio.run` inside runtime code, use blocking sleeps or launch unbounded tasks.
+SDK must run through an owned bounded executor or an owned shield-and-drain
+wrapper around an SDK worker pool, bounded by local admission and SDK socket
+timeouts. A started blocking call retains its capacity until it actually
+finishes even if the caller stops waiting; cancellation never proves a remote
+operation stopped. Waiting cancelled calls must not start later. Do not create
+per-request event loops, call `asyncio.run` inside runtime code, use blocking
+sleeps or launch unbounded tasks.
 
 Reserve model/tool attempts immediately before external I/O. Failed or unreported
 attempts remain charged for that invocation. Missing token measurements remain
@@ -325,6 +334,17 @@ structured-output mode, capabilities, bounded timeouts/admission and environment
 credential references. No `/models` discovery or hidden SDK retry is allowed.
 Bootstrap owns one client lifespan and closes partially opened clients on failure.
 Provider preflight occurs before admission and attempt reservation.
+
+The native `google` profile targets the Gemini Developer API with an explicit
+API-key reference. The native `bedrock` profile targets Converse with a required
+region and the host's boto3 credential chain; the runtime environment mapping
+resolves authored region/model references but does not inject AWS credentials.
+Both expose common `max_tokens`, `temperature`, and `top_p` options, with no
+arbitrary provider request dictionary or hidden SDK retry. Bedrock client
+construction and cleanup run off the event loop. A started blocking Converse
+call keeps its owned model admission through timeout or caller cancellation
+until the SDK call actually ends. Native structured output and forced tool
+choice are subject to the selected model's verified provider profile.
 
 PydanticAI executes decision and text/schema LLM steps. Decisions use the strict
 runtime output contract plus independent cross-field validation against the
