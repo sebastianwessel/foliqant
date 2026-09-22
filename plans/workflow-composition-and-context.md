@@ -254,6 +254,15 @@ add a distinct fan-out boundary only if a later use case justifies it.
 
 ## P04 — Evaluate composition and optimize without changing meaning
 
+Apply the findings and data-readiness gate in
+[prompt-order/cache research](../research/prompt-order-cache-and-evaluation.md).
+Quality and stability take precedence over latency and cost. Existing evidence
+gold has only 10 development and 2 validation families; the latter has no limited
+strength examples. Historical native datasets are not independently reviewed
+runtime V3 gold. Expand and freeze family-separated, EN/DE business cases before
+using prompt-layout comparisons to choose production defaults. The research
+memo proposes an initial annotation budget, not a reliability guarantee.
+
 Extend the existing evaluator with examples/gold for isolated triage, isolated
 specialists and complete intake routing. Retain flow and step results in reports;
 support assertions against both and avoid double-counting metrics/usage. Keep
@@ -292,6 +301,16 @@ unsupported percentage target. If history does not help, ship no history feature
 Prefix caching does not require persistent application conversation state and
 does not remove output-generation cost. Check actual backend behavior rather
 than assuming a reusable cache exists across different schemas/instructions.
+The saved selected-baseline validation already reports 79.5% cached input tokens;
+this is cache-use evidence, not a cold/warm performance comparison. Separate
+unchanged-input cache reuse from prompt reordering and history reuse. Inspect
+provider-transformed tools/schemas and actual breakpoint requirements. Test
+fixed rules first and questions before dynamic state independently; preserve
+instruction authority, source chronology, tool permissions and native artifacts.
+Reject quality regressions even when cache metrics improve. Inconclusive
+comparisons retain the baseline; lack of statistical significance is not proof
+of equivalent quality. Provider-specific cache controls remain a measured-need
+decision, not an automatic new configuration layer.
 
 ## Delivery order and completion gates
 
