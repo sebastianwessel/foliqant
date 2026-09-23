@@ -58,9 +58,93 @@ output:
 These two branch flows are alternative paths. Each gets the original email
 through its own workflow input binding. A workflow boundary cannot reach into
 another flow's private `/steps` records. To pass a result between flows, project
-it as a flow result and bind it in the workflow. The final
-[`workflow.yaml`](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/support_email/workflow.yaml)
-shows that pattern again when it feeds the final projection.
+it as a flow result and bind it in the workflow.
+
+## See the complete workflow file
+
+This is the complete `my_support/config/support_email/workflow.yaml` from the
+finished tutorial. Keep the smaller branch version above while working through
+this chapter. In chapter 4, replace it with this file after you add the
+`finalize` flow and its `select` handler:
+
+```yaml
+defaults:
+  model: local_qwen
+start: classify
+input_schema: input.schema.json
+output:
+  pointer: /flows/finalize/result
+  optional: true
+  default:
+    disposition: needs_review
+flows:
+  classify:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      binding:
+        pointer: /flows/classify/result
+      cases:
+        billing:
+          flow: billing
+        cancellation:
+          flow: cancellation
+      default:
+        outcome: needs_review
+    on_unresolved:
+      outcome: needs_review
+  billing:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      flow: finalize
+    on_unresolved:
+      outcome: needs_review
+  cancellation:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      flow: finalize
+    on_unresolved:
+      outcome: needs_review
+  finalize:
+    input:
+      billing:
+        pointer: /flows/billing/result
+        optional: true
+        default: null
+      cancellation:
+        pointer: /flows/cancellation/result
+        optional: true
+        default: null
+    transition:
+      outcome: completed
+```
+
+`output.pointer` selects the concise business value that becomes
+`ExecutionResult.payload`. It does **not** discard any execution detail. The
+same returned `ExecutionResult` always has `flows`: the completed run includes
+the classification evidence, every executed branch step, the skipped branch,
+and the final selection. For a billing request, these paths are all available:
+
+```python
+result = await app.run("support_email", envelope)
+
+payload = result.payload
+classification = result.flows["classify"].steps["classify"].result
+account = result.flows["billing"].steps["lookup"].result
+final_value = result.flows["finalize"].result
+
+assert payload == final_value
+assert result.flows["cancellation"].status == "skipped"
+```
+
+The [input and result contract](../reference/inputs-and-results.md#executionresult-and-nested-records)
+shows the complete nesting and the difference between `payload` and the full
+execution record.
 
 Compile the new graph without calling a model:
 

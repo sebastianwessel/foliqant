@@ -39,6 +39,22 @@ async def test_completed_support_email_projects_host_payload(
     assert result["execution"]["usage"]["tool_calls"] == 1
 
 
+async def test_completed_support_email_keeps_the_full_execution_record() -> None:
+    result = (
+        await run_example(
+            {"message": "Please review the duplicate charge on invoice INV-7 for account A-100."}
+        )
+    ).model_dump(mode="json")
+
+    assert result["payload"] == result["flows"]["finalize"]["result"]
+    assert set(result["flows"]) == {"classify", "billing", "cancellation", "finalize"}
+    assert result["flows"]["classify"]["steps"]["classify"]["result"]["answer"] == {
+        "optionId": "billing"
+    }
+    assert result["flows"]["billing"]["steps"]["lookup"]["result"]["account_reference"] == ("A-100")
+    assert result["flows"]["cancellation"]["status"] == "skipped"
+
+
 @pytest.mark.parametrize(
     ("message", "issue"),
     [
@@ -167,3 +183,17 @@ def test_first_chapter_snippets_compile_offline(tmp_path: Path) -> None:
     (classify / "classify.step.md").write_text(decision)
     prepared = prepare_application(config / "settings.yaml")
     assert "support_email" in prepared.plans
+
+
+def test_routing_chapter_shows_the_complete_final_workflow() -> None:
+    chapter = (ROOT / "docs/tutorials/multiflow-routing.md").read_text()
+    match = re.search(
+        r"## See the complete workflow file.*?```yaml\n(.*?)\n```", chapter, re.DOTALL
+    )
+    assert match is not None
+    expected = (
+        (ROOT / "examples/support_email_tutorial/config/support_email/workflow.yaml")
+        .read_text()
+        .rstrip()
+    )
+    assert match.group(1) == expected
