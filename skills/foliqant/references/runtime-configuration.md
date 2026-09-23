@@ -12,6 +12,7 @@ generated files.
 
 - [Set up a downstream project](#set-up-a-downstream-project)
 - [Deployment root](#deployment-root)
+- [Default handling and precedence](#default-handling-and-precedence)
 - [Common model fields](#common-model-fields)
 - [Execution limits](#execution-limits)
 - [Provider retry policy](#provider-retry-policy)
@@ -57,7 +58,44 @@ created project, supply only the environment values its profiles reference.
 | `evaluation.dataset` | optional custom gold dataset path |
 
 Without `workflows`, discover immediate nonhidden
-`config/*/workflow.yaml`. Relative paths remain under the settings directory.
+`config/*/workflow.yaml`. Workflow and definition paths remain under the
+settings directory. The optional evaluation dataset can live outside that tree;
+its relative path is resolved from the settings file.
+
+## Default handling and precedence
+
+Omit fields whose package default fits the application. Values in examples such
+as `temperature: 0.1`, `reasoning_effort: low`, and per-step `max_tokens: 800`
+are explicit choices, not package defaults. Reject unknown fields; there is no
+implicit inheritance from surrounding folders or merged environment-specific
+YAML files.
+
+| Setting | Default when omitted |
+| --- | --- |
+| `models`, `mcp` | Empty registries; declare only dependencies the workflow uses. |
+| `execution` or individual execution fields | The execution values listed below. |
+| `telemetry` | Disabled. |
+| `evaluation` | No startup access to gold; explicit evaluation discovers `evaluation/dataset.json` beside `config/`. |
+| Model `provider`, `model`, `output_mode` | Required; no default provider, model ID, or output mode. |
+| OpenAI `api`; Azure `api` and `api_flavor` | Required; choose explicitly. Compatible `api` defaults to `chat`. |
+| Model `options.max_tokens` | `4096`. |
+| `temperature`, `top_p`, `seed`, reasoning/thinking options | Unset; the provider/model decides when no value is configured. |
+| Model capabilities | `supports_text`, `supports_json_schema`, and `supports_tools` are all `true`; configure the selected model's actual capabilities. |
+| Model admission and timeout | `concurrency: 4`, `queue_limit: 16`, `request_timeout: 60` seconds. |
+| Compatible `api_key` | Absent; OpenAI, Azure, Anthropic, and Google use their documented credential environment references. Bedrock uses the host credential chain. |
+| Compatible `allow_insecure_http`, `max_tokens_field` | `false`, `max_tokens`. |
+
+Model selection is explicit step `model` first, then workflow `defaults.model`.
+A sole model profile is not selected automatically. A profile override retains
+the profile's provider, credentials, capabilities, timeout, retries, and admission
+group. It replaces only an explicitly supplied model ID and individual supplied
+option keys; omitted options retain the profile value. A complete inline profile
+is independent and does not inherit the workflow profile's settings.
+
+For nullable generation options, an explicit `null` in an override clears the
+inherited value, leaving provider behavior in effect; it differs from omission.
+`model` and `max_tokens` cannot be cleared. The merged options must still satisfy
+the chosen provider's constraints.
 
 ## Common model fields
 
@@ -209,6 +247,9 @@ unsupported by the selected provider.
 
 ## Execution limits
 
+These are the package defaults; all timeout values are seconds. Setting only one
+field keeps the remaining defaults.
+
 ```yaml
 execution:
   concurrency: 4
@@ -225,6 +266,13 @@ execution:
 positive and at most 3600 seconds. `max_steps`,
 `model_requests_per_step`, and `tool_calls_per_step` are each 1–1024.
 Admission is per process and does not provide durability.
+
+Limits compose: the remaining run deadline still bounds each model/tool call.
+`model_timeout` bounds a logical model request while the profile's
+`request_timeout` configures its SDK/network timeout. For MCP, the effective
+tool timeout also respects the server's `request_timeout`. Raising a provider
+timeout alone does not raise the run deadline. LLM `max_iterations` limits logical
+turns independently of `model_requests_per_step`, which counts retry attempts.
 
 ## Provider retry policy
 
@@ -266,8 +314,11 @@ documents, and input are never expanded.
 
 `prepare_application` does not read environment values.
 `open_application` loads `.env` beside the chosen settings file, then
-overlays the supplied environment. Supplied/process values win. Missing
-references fail before clients open.
+overlays its required `environment` mapping. Pass `environment=os.environ` to
+use process values; a custom mapping supplies exactly those overrides instead.
+Supplied values win over `.env`. Missing or blank referenced values fail before
+clients open; `.env.example` is never read. Resolution happens once when the
+application opens, not per request, and resolved values are not expanded again.
 
 ## MCP
 

@@ -137,7 +137,45 @@ config/
       extract/
         step.md
         output.schema.json
+evaluation/
+  dataset.json
+  cases/
+    intake.json
 ```
+
+The `evaluation/` directory is optional and sits beside `config/`; runtime
+startup does not read it. A local `.env`, when used, sits beside the selected
+settings file and stays out of Git. `foliqant init` also supplies an
+`.env.example` as a scaffold template; it is not a runtime requirement.
+
+| Name | Convention and customization |
+| --- | --- |
+| `config/settings.yaml` | Default CLI settings path; use `--config PATH` for another filename or directory. There is no parent-directory search. |
+| `<workflow>/workflow.yaml` | Required filename inside a workflow directory. With discovery, `<workflow>` supplies its ID. An explicit `workflows` map selects relative directories; set `name` explicitly when that map key differs from the directory name. |
+| `<flow>/flow.yaml` | Default flow definition beside `workflow.yaml`; `flows.<id>.definition` can select another local file or an inline definition. |
+| `<step>.step.yaml` or `<step>.step.md` | Compact step definition beside `flow.yaml`. |
+| `<step>/step.yaml` or `<step>/step.md` | Equivalent folder form for a step with its own schema or other local resources. Choose one form per step. |
+| `input.schema.json`, `output.schema.json` | Recommended descriptive names, not automatically discovered schemas. Reference them explicitly through `input_schema` or `output.schema`. |
+
+There is no automatically discovered `steps/` container. To use one, provide
+explicit step `definition` paths. Resolve each path from its declaring file;
+step resources and their schemas must remain inside the flow definition's directory.
+Unlisted step files are not loaded or executed. Markdown step bodies supply
+instructions; YAML steps use an explicit `instructions` field.
+Conventional lookup uses the exact `.yaml` and `.md` names above; `.yml` is
+accepted for explicitly referenced YAML flow/step files, not as an additional
+discovery candidate.
+
+### Identifier rules
+
+Workflow, flow, step, model-profile, MCP-server, and registered-handler IDs use
+lowercase ASCII snake case matching `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`.
+Use names such as `support_intake`, `check_eligibility`, and `extract_invoice`;
+spaces, hyphens, uppercase letters, repeated/trailing underscores, and leading
+digits are invalid. These runtime IDs are not automatically normalized.
+Flow map keys and step IDs define identity even when explicit definition files
+have different names. Category catalog keys have their own normalization rules
+described under decision fields; do not apply that normalization to runtime IDs.
 
 - Omitting `workflows` discovers immediate nonhidden
   `config/*/workflow.yaml`; the directory supplies `name`.
@@ -154,7 +192,7 @@ config/
 | Field | Shape | Rule |
 | --- | --- | --- |
 | `name` | ID, optional | Defaults to workflow directory |
-| `start` | flow ID, optional | Inferred only for exactly one flow |
+| `start` | flow ID, optional | Inferred only for exactly one routed flow, excluding callable flows |
 | `defaults.model` | model profile ID, optional | Default for decision/LLM operations |
 | `input_schema` | JSON Schema object or local path, optional | Validates workflow payload |
 | `output` | binding, optional | Projects final top-level payload |
@@ -176,6 +214,28 @@ workflow start or a route target.
 
 A flow definition has optional `input_schema`, optional `output`, and a
 nonempty ordered `steps` list. Step IDs are unique within the flow.
+
+### Omitted fields and defaults
+
+| Omitted field | Effective behavior |
+| --- | --- |
+| Workflow `defaults.model` | No automatic model selection. Each decision/LLM step must select a model or inherit an explicit workflow default. |
+| Workflow or flow `input_schema` | No additional authored input-schema constraint at that boundary; normal envelope and binding validation still applies. |
+| Workflow `output` | Returned `ExecutionResult.payload` is the accepted workflow input payload. |
+| Flow `output` | Flow `result` is its bound input payload. Neither output default selects the last step automatically. |
+| Routed flow `on_unresolved` | End with `needs_review`. |
+| Pointer `optional` | `false`; missing values fail. `optional: true` requires an explicit `default`, used only for missing values, not present JSON `null`. |
+| Decision source `format` | `text`; select `json` explicitly for structured evidence. |
+| Decision `fallback` | No fallback selection; preserve the unresolved assessment. |
+| LLM `prompt` | Send the selected input object as the default JSON user message. |
+| LLM `tools` | No MCP tools available to the model. When configured, `server`, `allow`, and `choice` are explicit. |
+| LLM `max_iterations` | `4` logical model turns, including the final answer. |
+| Collection `max_items` | `32` sequential child invocations. |
+
+Steps, routes, category semantics, LLM output type/schema, and tool permissions
+are authored explicitly. Do not infer them from filenames or omit them expecting
+a default. Output projections affect the business payload; complete flow and
+step records remain in `ExecutionResult.flows`.
 
 ## Bindings and scope
 

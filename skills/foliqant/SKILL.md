@@ -17,8 +17,8 @@ skill directory; no source checkout or internal specifications are required.
 
 | Task | Read |
 | --- | --- |
-| Map business rules; author or change workflow, flow, step, binding, or routing definitions | [Workflow design](references/workflow-design.md) |
-| Install adapters; configure models, MCP, handlers, limits, secrets, or telemetry | [Runtime configuration](references/runtime-configuration.md) |
+| Map business rules; choose file layout and IDs; author workflows, flows, steps, bindings, routes, and omitted-field defaults | [Workflow design](references/workflow-design.md) |
+| Install adapters; configure models, MCP, handlers, limits, secrets, telemetry, default values, and override precedence | [Runtime configuration](references/runtime-configuration.md) |
 | Create gold, measure a scope, replay results, or compare runs | [Evaluation](references/evaluation.md) |
 | Scaffold a project; use the CLI; embed the application or expose it through HTTP | [Deployment and HTTP](references/deployment-http.md) |
 
