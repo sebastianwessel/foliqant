@@ -15,6 +15,7 @@ Foliqant looks it up only for an explicit evaluation command. Configure
 - [Author independent expectations](#author-independent-expectations)
 - [Choose the execution mode](#choose-the-execution-mode)
 - [Interpret honestly](#interpret-honestly)
+- [Deliverables and checks](#deliverables-and-checks)
 
 ## Dataset shape
 
@@ -96,7 +97,9 @@ A metric has unique `name`, result `path`,
 `kind: classification|multilabel`, and a nonempty unique ordered `labels`
 catalog. Classification gold is one declared string or declared `null`;
 multilabel gold is a unique array of declared strings. Every metric needs at
-least one matching expectation at its path.
+least one matching expectation at its path. A missing nested result path is not
+the same observation as a present JSON `null`; choose an always-present path
+or separate unanswered cases when declaring a metric.
 
 ## Select the measured boundary
 
@@ -157,7 +160,7 @@ Invocation controls are:
 | `--max-concurrency N` | `max_concurrency=N` | Concurrent case calls; default 1 |
 | `--timeout SECONDS` | `timeout=SECONDS` | Per-case deadline; default 300 |
 | `--repeat N` | `repeat=N` | Equal attempts per source case; default 1 |
-| `--output PATH` | `foliqant.evaluation.artifact.write_report` | New private artifact; no overwrite |
+| `--output PATH` | Call `foliqant.evaluation.artifact.write_report` after evaluation | New private artifact; no overwrite |
 | n/a | `include_details=True` | Retain private input, gold, and complete result |
 
 Python variants use `EvaluationVariant(name, revision,
@@ -166,9 +169,10 @@ callable must match the declared target: application `run`, `run_flow`, or
 `run_step`. Pass optional `metrics` and registered `scorers` to
 `evaluate`; use `compare_variants` only for explicitly authored variants.
 
-Reports default to unique private files under `.foliqant/evaluations/`. Full
-details may contain input, gold, and public results. Keep them ignored and do not
-print business values to console output.
+The CLI writes unique private report files under `.foliqant/evaluations/` by
+default; Python `evaluate` returns an in-memory report. Full details may contain
+input, gold, and public results. Keep saved reports ignored and do not print
+business values to console output.
 
 ## Interpret honestly
 
@@ -191,3 +195,12 @@ inventing a release threshold.
 Use scripted examples for deterministic wiring. Use representative live
 development cases to select a candidate and an untouched holdout to confirm it.
 Do not claim a small suite proves general quality, security, or efficiency.
+
+## Deliverables and checks
+
+Deliver the dataset manifest, any referenced case files, and a note identifying
+which expectations have been independently reviewed. Run
+`foliqant evaluate --check` from the application root, or add `--config PATH`
+for nondefault settings. Report structural failures separately from missing
+business gold. Execute live suites only when their configured external calls
+are intended for the task.

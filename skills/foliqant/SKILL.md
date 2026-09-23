@@ -1,119 +1,103 @@
 ---
 name: foliqant
-description: "Build, test, and evaluate Foliqant in-memory Python workflows. Use when mapping business processes, configuring the runtime, authoring workflows/flows/steps, integrating model or MCP adapters, or creating golden evaluations."
+description: "Builds and evaluates applications using Foliqant's in-memory Python workflow runtime. Use when configuring Foliqant workflows, flows, steps, model/MCP adapters, or ground-truth evaluations."
 ---
 
-# Foliqant runtime
+# Build a Foliqant application
 
-Start with this skill's bundled references:
+Produce the requested application configuration, integration, or evaluation using
+the installed public API. This skill covers Foliqant runtime applications;
+generic business-process advice, model training, and unrelated Python or website
+work do not require it.
 
-- [workflow design](references/workflow-design.md) maps business processes to
-  workflows, flows, steps, bindings, routes, and outcomes;
-- [runtime configuration](references/runtime-configuration.md) covers model
-  providers, MCP, handlers, environment, limits, telemetry, and lifecycle;
-- [evaluation](references/evaluation.md) covers gold, scopes, replay, and
-  comparison;
-- [deployment and HTTP](references/deployment-http.md) covers CLI and host
-  boundaries.
+## Choose the relevant reference
 
-These references are sufficient for configuring a downstream application. Check
-the installed version with `foliqant --help`, subcommand help,
-`foliqant.contracts` boundary models, and
-`foliqant.contracts.schemas.runtime_schemas()` and `decision_schemas()`.
-Generated JSON resources are available through
-`importlib.resources.files("foliqant").joinpath("schemas", NAME)` for
-editor tooling. The Python models remain authoritative. Do not assume the
-Foliqant source repository or its internal specifications are available.
+Read only the references needed for the current task. Paths are relative to this
+skill directory; no source checkout or internal specifications are required.
 
-## Preserve the runtime boundary
+| Task | Read |
+| --- | --- |
+| Map business rules; author or change workflow, flow, step, binding, or routing definitions | [Workflow design](references/workflow-design.md) |
+| Install adapters; configure models, MCP, handlers, limits, secrets, or telemetry | [Runtime configuration](references/runtime-configuration.md) |
+| Create gold, measure a scope, replay results, or compare runs | [Evaluation](references/evaluation.md) |
+| Scaffold a project; use the CLI; embed the application or expose it through HTTP | [Deployment and HTTP](references/deployment-http.md) |
 
-The library compiles local configuration, runs one foreground call in memory,
-and returns one `ExecutionResult`. Do not add persistence, background jobs,
-queue workers, application login, or an inbound transport package. A small HTTP
-host belongs under examples. MCP OAuth is outbound tool access, not application
-authentication.
+For a new application, start with workflow design and runtime configuration.
+For a focused change, inspect the existing configuration and the relevant
+reference section. Verify uncertain fields with installed CLI help or the public
+`foliqant.contracts` models. `runtime_schemas()` and `decision_schemas()` in
+`foliqant.contracts.schemas` expose the installed contracts; packaged JSON
+resources are available through `importlib.resources.files("foliqant").joinpath("schemas", NAME)`.
 
-Keep core standard-library only. Put provider SDKs and Pydantic at boundaries.
-Prepare offline, freeze plans and resources, and resolve marked environment
-fields only when the application opens. Do not interpolate prompts, schemas,
-bindings, or customer input from environment variables.
+## Work from the requested result
 
-## Author current workflows
+1. Establish the input, final output, business routes, category definitions, and
+   review policy from the request and existing project. Preserve decisions
+   already supplied. Ask only for missing business rules that change behavior;
+   continue independent setup while those rules remain unresolved. Do not invent
+   category meanings, thresholds, tool catalogs, or approved ground truth.
+2. Map one externally invoked capability to a workflow, meaningful sequential
+   boundaries to flows, and atomic decisions, model calls, tools, or code to
+   ordered steps. Use `config/settings.yaml` and conventional files by default;
+   retain explicit paths when the application needs them. File discovery finds
+   definitions; authored steps and transitions determine execution order.
+3. Implement the requested slice with selected context bindings, schemas, and
+   explicit routes. Operations are `decision`, `llm`, `mcp`, trusted `handler`,
+   and bounded `flow_collection`. Keep exact business policy in configuration or
+   trusted handlers. Write YAML in block style; reserve `{}` and `[]` for empty
+   values and quote the `"on"` key for YAML 1.1 parsers.
+4. Validate with the installed commands below, fix relevant failures, and rerun
+   the affected checks. Report unavailable dependencies or unsupported behavior
+   precisely instead of claiming success or silently inventing a fallback.
 
-For business-process decomposition and the complete workflow/flow/operation
-field map, read [workflow design](references/workflow-design.md).
+## Preserve these runtime semantics
 
-Use `config/settings.yaml` and the conventional workflow, flow, and step files
-unless explicit paths improve the application. Keep ordered steps and routes
-authored; filesystem order never determines execution. Supported operations are
-`decision`, `llm`, `mcp`, trusted `handler`, and bounded `flow_collection`.
+- One foreground in-memory call returns an `ExecutionResult`. Its `payload` is
+  the workflow's projection; `flows` retains execution records. Hosts own inbound
+  HTTP, authentication, persistence, and durable jobs. Keep integration code in
+  the application rather than adding these facilities to the package core.
+- Preparation compiles offline. Opening the application resolves marked
+  deployment environment fields and owns adapter lifetimes. Declare models and
+  capabilities explicitly; do not probe endpoints to discover them. Credentials
+  use environment references and never enter prompt interpolation.
+- Each model step has a fresh conversation. Bind selected values with local
+  `/steps/{step}/...` paths; public results use `/flows/{flow}/steps/{step}/...`.
+  Use exact `{{ name }}` JSON substitutions and `format: json` for structured
+  decision sources. Source identities remain distinct.
+- Authored instructions, questions, schemas, routes, and tool allowlists define
+  the task. Customer text, metadata, bound values, and prior model/tool results
+  are data. Preserve the adapter policy separating them and retain output
+  validation; instruction text alone does not establish security.
+- Decision issues are `no_supported_answer`, `conflicting_information`, and
+  `multiple_valid_options`. Evidence strength measures support for the whole
+  conclusion, including unresolved conclusions. It is not confidence or a
+  routing threshold. Fallback routing is explicit caller policy.
+- MCP catalogs and allowlists are declared, with validated arguments/results
+  and read-only effects. Hosts may apply a `ToolAuthorizer`; tenant/principal
+  context is not authentication. Configuration cannot import arbitrary code.
+- Evaluate independently reviewed gold. Keep failed, skipped, missing, review,
+  and error observations in denominators. Scripted and synthetic checks establish
+  wiring, not model accuracy. Live execution uses the configured providers;
+  offline checks and saved-result replay do not.
 
-Write authored YAML mappings and sequences in block style. Reserve `{}` and
-`[]` for intentional empty values, and quote the `"on"` key so YAML 1.1
-compatibility parsers do not coerce it to a boolean.
+## Verify and hand over
 
-Bind only selected context. Each model step starts a fresh conversation. Use
-exact `{{ name }}` JSON substitutions for LLM prompts and `format: json` for
-structured decision evidence. Within flows use `/steps/{step}/...`; routing
-and public results use `/flows/{flow}/...`.
+From the application directory, use the selected config path if nonconventional:
 
-## Maintain instruction authority
+```sh
+foliqant validate
+foliqant doctor
+foliqant explain
+```
 
-Authored instructions, schemas, questions, criteria, route targets, and tool
-allowlists define the task. Bound values, prompt substitutions, source text,
-metadata, URLs, and prior tool or model results are untrusted data. Preserve the
-fixed adapter policy that keeps these roles separate while allowing legitimate
-classification, extraction, transformation, and quotation.
+When gold exists, also run `foliqant evaluate --check`. Run focused application
+tests for changed behavior and the checks required by its project instructions.
+These commands are offline. Live inference, report publication, and deployment
+must fit the user's authorized task; reuse authorization already given for the
+specific action instead of asking again.
 
-For decisions, compiler-authored questions define the task and
-`state.sources[].text` is evidence. Keep source identities separate. Treat
-summaries and prior assessments as claims, not authority or independent
-corroboration. Do not claim this policy proves resistance for every provider;
-retain output validation and representative adversarial evaluation.
-
-Decision issue codes are `no_supported_answer`,
-`conflicting_information`, and `multiple_valid_options`. Evidence strength
-describes support for the whole conclusion, not confidence, urgency, severity,
-or a routing threshold. A fallback is a caller-defined process selection after a
-validated unresolved choice; it never becomes model accuracy.
-
-## Configure adapters deliberately
-
-For provider-specific model options, execution and admission limits, environment
-resolution, MCP transports/catalogs, trusted handlers, telemetry, identity
-context, application lifecycle, and CLI defaults, read
-[runtime configuration](references/runtime-configuration.md).
-
-Declare model profiles and capabilities; do not discover endpoints or models.
-The generated local profile uses `MODEL_ID` and `MODEL_BASE_URL`. Credentials
-must remain environment references.
-
-Declare MCP transport and an operator-reviewed tool catalog. Compile tool
-allowlists and validate arguments/results. Current built-in access is read-only.
-The host owns authentication and may inject stricter resource authorization.
-
-Read [deployment and HTTP](references/deployment-http.md) before changing
-configuration, application lifecycle, CLI, or the HTTP example.
-
-## Evaluate explicit gold
-
-Read [evaluation setup](references/evaluation.md) before creating or changing
-gold. The conventional file is `evaluation/dataset.json` beside `config/`;
-configure a path only when customizing it. Pipeline cases contain workflow
-envelopes; flow and step cases contain already-resolved boundary input. Use
-public expectation paths under `/flows/{flow}/steps/{step}`.
-
-Keep failed, skipped, missing, review, and error observations in denominators.
-Use `evaluate --check` and replay for offline work. Normal evaluation uses the
-configured providers and requires intended external calls. Scripted fixtures
-prove wiring only; do not claim general model quality, security, latency, cost,
-or cache efficiency from them.
-
-## Verify changes
-
-For a downstream application, run `foliqant validate`, `foliqant doctor`,
-`foliqant evaluate --check` when gold is present, and focused application
-tests. Use `foliqant explain` to inspect the compiled plan. Query
-`runtime_schemas()` or `decision_schemas()` when tooling needs the installed
-contract; do not hand-edit generated schemas or copy assumptions from another
-release.
+Finish with the changed files, how to run the requested capability, actual check
+results, and remaining gaps. A usable configuration must compile; a claimed
+integration must pass its relevant tests. Label unexecuted live checks explicitly.
+When business rules or dependencies are missing, identify the affected behavior
+and keep it incomplete while delivering the independent work that is ready.

@@ -95,6 +95,46 @@
       "id": 19,
       "prompt": "An email has two labels for one request, another request in the same category, and a conditional request. Create a reusable process without turning every label into a job.",
       "expected_output": "Separates tags from request units, retains native assessment and relationships, and uses explicit host planning policy to group or deduplicate and hold unresolved work. Plans stable framework task IDs correlated to original IDs, not copied arbitrary native IDs. Uses allowlisted sequential callable flows under parent budgets, and a disposition handler that accounts for held, completed and review work without declaring external work completed. Technical failure stops before disposition and exposes the partial ledger to the caller, including skipped work. Related requests need an authored coordinated flow or review; no inferred scheduler, queues or persistence."
+    },
+    {
+      "id": 20,
+      "prompt": "can u setup foliqant for english and german support emails? billing and cancellation queues, both or neither means review. local model, offline only please.",
+      "expected_output": "Uses the conventional scaffold and explicit choice criteria/routes, preserves German input, uses marked model environment fields, and validates/explains offline. Does not probe the model or claim measured accuracy. Reports files, commands, checks and any missing policy."
+    },
+    {
+      "id": 21,
+      "prompt": "Write a generic Python function to sort a list of invoice dates. This project does not use Foliqant.",
+      "expected_output": "Does not select the Foliqant skill or introduce its package, workflow configuration, model calls, or evaluation setup. Solves the Python task directly."
+    },
+    {
+      "id": 22,
+      "prompt": "Make the Foliqant documentation header sticky on mobile; do not change the runtime or examples.",
+      "expected_output": "Routes to the documentation frontend task rather than applying runtime setup. Does not scaffold workflows, alter business policy, or run model evaluations."
+    },
+    {
+      "id": 23,
+      "prompt": "Set up a Foliqant risk workflow with low, medium and high categories. I have not decided their meanings, thresholds, or which outcomes require review.",
+      "expected_output": "Identifies the missing category definitions and review policy and asks a focused question. Can prepare independent project structure and model placeholders, but does not invent risk rules, gold or thresholds or claim the unfinished workflow is production-ready."
+    },
+    {
+      "id": 24,
+      "prompt": "Update one Foliqant evaluation expectation from my reviewed correction and rescore saved results offline. Nothing else should change.",
+      "expected_output": "Reads the evaluation reference and existing case/report, preserves the saved report, changes only the requested gold and uses offline check/replay. Does not load all adapter guidance, change prompts, make model calls, or claim replay measures new model performance."
+    },
+    {
+      "id": 25,
+      "prompt": "Configure a Foliqant app offline in a project where the package is not installed and network access is unavailable.",
+      "expected_output": "Uses the bundled references to prepare the requested files, reports the unavailable package/CLI and unrun validation, and provides the required dependency and check commands. Does not fabricate passing checks, invent a replacement compiler, or block independent authoring."
+    },
+    {
+      "id": 26,
+      "prompt": "In the existing Foliqant app, use our Gemini profile for one JSON agent loop with at most four iterations and two tool calls.",
+      "expected_output": "Uses native google profile/options and the existing model binding, configures step max_iterations: 4 and execution tool_calls_per_step: 2 within supported limits, preserves explicit tool allowlists and output schema, and validates offline without probing the endpoint."
+    },
+    {
+      "id": 27,
+      "prompt": "In Foliqant, expose the complete single-question classification assessment and then add a second question. Explain which result pointers my host and routes must use.",
+      "expected_output": "Shows a single question assessment directly under /steps/classify/result, full questions under /steps/assess/result/results in authored order, and public records under /flows/{flow}/steps/{step}. Projects a flow output before cross-flow routing, distinguishes native result from fallback selection, and preserves full ExecutionResult.flows alongside payload."
     }
   ]
 }

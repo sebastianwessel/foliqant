@@ -63,6 +63,12 @@ The agent should start with the [configuration layout](../configuration/index.md
 then use [workflow](../configuration/workflows.md), [flow](../configuration/flows.md),
 and [step](../steps/index.md) definitions to encode your process.
 
+For focused changes, the skill directs the agent to the relevant bundled
+reference instead of loading the whole configuration manual. A completed task
+should include changed files, runnable commands, actual validation results, and
+any missing business rules or unexecuted checks. Existing decisions and
+authorization in your request remain in effect.
+
 ## Build a solution with the skill
 
 Give the agent a small business brief: the incoming data, desired result,
@@ -154,3 +160,22 @@ For the human review checklist, follow [configuration](../configuration/index.md
 [running evaluations](../evaluation/running.md). Keep the reviewed rules and
 gold in the application project so future agent changes can be checked against
 the same expectations.
+
+## Maintaining the skill
+
+The skill follows [Anthropic's authoring guidance](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
+and the scope, completion, and selective-reading principles discussed in
+[HackerNoon's prompts and skills article](https://hackernoon.com/gpt-6-astra-how-to-write-better-prompts-and-skills).
+Keep reusable runtime guidance in the skill, project contributor rules in
+`AGENTS.md`, and task-specific business policy in the application.
+
+The bundled
+[skill evaluation cases](https://github.com/sebastianwessel/foliqant/blob/main/skills/foliqant/evals/evals.json)
+are prompts with observable expected behavior, including unrelated requests,
+missing policy, and unavailable dependencies. They evaluate a coding agent's
+use of the skill; they are separate from your application's ground-truth dataset.
+They are test specifications, not a claim that every model has passed them.
+After changing the skill, run representative tasks in a disposable application,
+inspect the generated files, and execute the offline CLI checks. Record actual
+failures and fix the guidance that caused them. Formatting checks alone cannot
+establish correct agent behavior.

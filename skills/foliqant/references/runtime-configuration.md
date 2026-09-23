@@ -20,7 +20,7 @@ generated files.
 - [Trusted handlers](#trusted-handlers)
 - [Telemetry](#telemetry)
 - [Application lifecycle and context](#application-lifecycle-and-context)
-- [Evaluation and CLI](#evaluation-and-cli)
+- [Validate the configuration](#validate-the-configuration)
 
 ## Set up a downstream project
 
@@ -38,11 +38,10 @@ adapters the application needs:
 | `telemetry` | OTLP/HTTP traces and metrics |
 
 Run `foliqant init DEST` for a conventional starter, or create
-`config/settings.yaml` and one `config/<workflow>/workflow.yaml`. Use
-`foliqant validate`, `foliqant explain`, and `foliqant doctor` before
-opening providers. Copy the generated `config/.env.example` to
-`config/.env` and set `MODEL_ID` and `MODEL_BASE_URL` only when that local
-profile is used.
+`config/settings.yaml` and one `config/<workflow>/workflow.yaml`. The starter
+includes `config/.env.example`; copy it to `config/.env` and set `MODEL_ID`
+and `MODEL_BASE_URL` only when using its local model profile. For a manually
+created project, supply only the environment values its profiles reference.
 
 ## Deployment root
 
@@ -112,8 +111,8 @@ options:
   max_tokens: 4096
 ```
 
-HTTP requires explicit `allow_insecure_http: true`; prefer HTTPS outside local
-development.
+Plain HTTP requires explicit `allow_insecure_http: true`; prefer HTTPS outside
+local development.
 
 ### Azure OpenAI
 
@@ -406,14 +405,12 @@ stopped. Telemetry shutdown is also bounded and may report an incomplete drain
 while an exporter socket worker is still finishing; it does not hard-kill that
 worker.
 
-## Evaluation and CLI
+## Validate the configuration
 
-The conventional gold file is `evaluation/dataset.json` beside `config/`.
-`evaluation.dataset` selects a custom path relative to the settings file.
-Gold is opened only by explicit evaluation commands and does not change the
-runtime configuration digest.
-
-`init`, `validate`, `explain`, `doctor`, `run`, and `evaluate` use
-current CLI help. Configuration commands default to `config/settings.yaml`.
-`validate`, `explain`, `doctor`, and `evaluate --check` are offline.
-Normal `run` and evaluation open the configured providers.
+From the application root, run `foliqant validate`,
+`foliqant explain --workflow WORKFLOW_ID`, and `foliqant doctor`. These check
+the compiled configuration offline. Use `--config PATH` when settings are not
+at `config/settings.yaml`. Open the application only after its required marked
+environment values and selected adapter dependencies are available. See
+the evaluation reference for gold and the deployment reference for CLI and
+host behavior.

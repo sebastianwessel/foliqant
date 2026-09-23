@@ -15,8 +15,11 @@ installed `foliqant.contracts.workflow` models or
 - [Bindings and scope](#bindings-and-scope)
 - [Routing and unresolved outcomes](#routing-and-unresolved-outcomes)
 - [Operation fields](#operation-fields)
+- [Map multiple intentions to work](#map-multiple-intentions-to-work)
+- [Flow collection](#flow-collection)
 - [Schemas and Markdown](#schemas-and-markdown)
 - [Trust and evaluation](#trust-and-evaluation)
+- [Deliverables and checks](#deliverables-and-checks)
 
 ## Choose boundaries
 
@@ -138,7 +141,8 @@ config/
 
 - Omitting `workflows` discovers immediate nonhidden
   `config/*/workflow.yaml`; the directory supplies `name`.
-- A sole flow permits omitted `start`; multiple flows require it.
+- A sole routed flow permits omitted `start`; two or more routed flows require it.
+  Callable flows cannot be the start.
 - Omitting `flows.<id>.definition` resolves `<id>/flow.yaml`.
 - A shorthand step ID resolves exactly one `<id>.step.md|yaml` or
   `<id>/step.md|yaml`.
@@ -309,9 +313,8 @@ multiselect requires a nonempty catalog,
 Category IDs normalize to lowercase ASCII snake case, must begin with a letter,
 and must be unique; descriptions are nonempty authored semantics. Ordinal
 `levels` contain at least two ordered objects with `id` and `description`.
-The
-shorthand question receives the operation's question identity and all declared
-sources.
+The shorthand question receives the operation's question identity and all
+declared sources.
 
 Every item in full `questions` has common fields:
 
@@ -339,10 +342,39 @@ For multiselect, `0 <= minSelections <= maxSelections <= option count`.
 
 A fallback is supported only with shorthand `choice`. It contains a category
 with required `id` and optional `description` outside the normal catalog,
-plus a unique nonempty `on`
-list drawn from `no_supported_answer`, `conflicting_information`, and
+plus a unique nonempty `on` list drawn from `no_supported_answer`,
+`conflicting_information`, and
 `multiple_valid_options`. It selects a process category only when the validated
 unresolved issues are all covered; it does not rewrite the native answer.
+
+#### Read the decision result
+
+For shorthand `question`, `/steps/classify/result` holds one assessment directly.
+For a supported billing answer from a step named `classify`, its shape is:
+
+```json
+{
+  "questionId": "classify",
+  "type": "choice",
+  "answerability": {"status": "answerable", "issues": []},
+  "answer": {"optionId": "billing"},
+  "reason": "The message asks about a duplicate invoice charge.",
+  "evidence_strength": "strong"
+}
+```
+
+With full `questions`, the step result is `{"results": [...]}` in authored
+question order. Bind `/steps/assess/result/results/0/answer/optionId` for its
+first choice answer. Public execution records add the flow prefix:
+`/flows/triage/steps/classify/result`. To route another flow, first project the
+selected value as this flow's output, then bind `/flows/triage/result` in the
+workflow transition.
+
+Unresolved choices have `answer: null` and nonempty issues; their flow follows
+`on_unresolved`. A configured fallback adds `selection` beside `result` on the
+step record and preserves the unresolved native assessment. Use
+`/steps/classify/selection/category/id` for that explicit process selection.
+Never parse `reason` or convert `evidence_strength` into a route implicitly.
 
 ### LLM
 
@@ -461,16 +493,13 @@ max_items: 8
 | `max_items` | integer 1–1024 | Defaults to 32 |
 
 Each invocation item has a unique `id`, one allowlisted callable `flow`, and an
-object `input` validated at that flow boundary. Items execute sequentially under
-the root deadline and budgets; collection nesting is bounded to 16 levels.
-All item inputs are validated before any child I/O. An empty list completes.
-A child review permits later independent items, then the collection needs review;
-a technical failure stops it and retains later items as skipped. Review routing
-is explicit on the enclosing routed flow. Business policy stays in handlers. The
-runtime validates the whole list, allowlist, IDs, and child inputs before any
-child I/O. An empty list completes. A child review is recorded and collection
-continues; a technical child failure stops execution and marks remaining items
-skipped.
+object `input` validated at that flow boundary. The runtime validates the whole
+list before child I/O; an empty list completes. Items execute sequentially under
+the root deadline and budgets, with nesting bounded to 16 levels. A child review
+is recorded and later independent items continue; the collection then needs
+review and follows the enclosing routed flow's `on_unresolved` route. A technical
+failure stops execution and marks remaining items skipped. Business policy stays
+in handlers.
 
 The public step has `kind: flow_collection`. Completed and review ledgers are in
 `result.items`; a failed ledger remains in `partial_result.items`, including
@@ -509,3 +538,13 @@ For every business workflow author:
 Gold must be independently reviewed. An application may keep small authored
 synthetic fixtures in its own `evaluation/` directory; generated reports,
 customer data, and private gold remain private.
+
+## Deliverables and checks
+
+Deliver the workflow file, each referenced flow and step definition, local
+schemas, and the explicit routing/review decisions. Run `foliqant validate`
+and `foliqant explain --workflow WORKFLOW_ID` from the application root to
+check the compiled graph offline. When gold exists, run
+`foliqant evaluate --check` against its dataset.
+Report business rules or tool permissions that still need the application's
+owner to define instead of inventing them.

@@ -10,7 +10,9 @@ host concern outside package transport and core.
 The default path is `config/settings.yaml`. When `workflows` is omitted,
 preparation discovers only immediate nonhidden
 `config/*/workflow.yaml` files. Explicit workflow maps remain available.
-Configuration paths stay below the selected configuration directory.
+Workflow, flow, step, and schema paths stay within their allowed configuration
+directories. The optional evaluation dataset path is a literal path relative
+to the settings file.
 
 `prepare_application` compiles offline without reading `.env`, resolving
 credentials, importing configured code, or opening SDK clients.
@@ -67,3 +69,13 @@ authorization, rate control, idempotency, and disconnect handling.
 Do not add accepted receipts, detached work, result lookup, cancellation
 endpoints, or durability claims. Use the generated envelope and execution-result
 schemas rather than transport-specific duplicate DTOs.
+
+## Deliverables and checks
+
+For a host integration, deliver its request-to-envelope mapping, one awaited
+application call, result serialization, and the host's explicit authentication
+and authorization decisions. Run `foliqant validate` and
+`foliqant explain --workflow WORKFLOW_ID` against its configuration, then test
+the host with a local scripted or handler-backed workflow before connecting
+external providers. State which operational controls the host supplies; do not
+claim that the in-memory library supplies them.
