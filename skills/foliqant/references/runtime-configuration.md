@@ -460,7 +460,10 @@ worker.
 
 From the application root, run `foliqant validate`,
 `foliqant explain --workflow WORKFLOW_ID`, and `foliqant doctor`. These check
-the compiled configuration offline. Use `--config PATH` when settings are not
+the compiled configuration offline when no host handlers are required. With
+custom handlers, use `prepare_application(config_path, handlers=handlers)` and
+inspect `prepared.plans`; generic CLI commands do not load host registrations.
+Use `--config PATH` when settings are not
 at `config/settings.yaml`. Open the application only after its required marked
 environment values and selected adapter dependencies are available. See
 the evaluation reference for gold and the deployment reference for CLI and

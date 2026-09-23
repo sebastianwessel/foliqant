@@ -5,6 +5,18 @@ Use the installed `foliqant.contracts.deployment` models,
 checking configuration. The package owns an in-memory application API; HTTP is a
 host concern outside package transport and core.
 
+## Contents
+
+- [Configuration and preparation](#configuration-and-preparation)
+- [CLI](#cli)
+- [Integrate the Python lifecycle](#integrate-the-python-lifecycle)
+- [Register business functions](#register-business-functions)
+- [Interpret results and failures](#interpret-results-and-failures)
+- [Identity and tool permission](#identity-and-tool-permission)
+- [HTTP example](#http-example)
+- [Package and deploy](#package-and-deploy)
+- [Deliverables and checks](#deliverables-and-checks)
+
 ## Configuration and preparation
 
 The default path is `config/settings.yaml`. When `workflows` is omitted,
@@ -47,6 +59,128 @@ operation targets.
 Caught errors use fixed safe messages and optional sanitized locations. Never
 expose authored values, credentials, prompts, or raw exceptions.
 
+The generic CLI prepares without host Python registrations. For a configuration
+using trusted handlers, validate offline with your host's
+`prepare_application(path, handlers=handlers)` and inspect `prepared.plans`.
+Use the host's evaluation entry point with those same registrations. A generic
+CLI `unknown_handler` error is not a reason to remove the handler or permit
+configuration-driven imports.
+
+## Integrate the Python lifecycle
+
+For a one-shot use case, this is the complete lifetime pattern. It assumes the
+configured workflow is `support_intake` and uses no custom handlers:
+
+```python
+import asyncio
+import os
+from pathlib import Path
+
+from foliqant import Envelope, ExecutionResult, open_application, prepare_application
+
+
+async def process_message(message: str) -> ExecutionResult:
+    prepared = prepare_application(Path("config/settings.yaml"))
+    async with open_application(prepared, environment=os.environ) as app:
+        return await app.run("support_intake", Envelope(payload={"message": message}))
+
+
+if __name__ == "__main__":
+    result = asyncio.run(process_message("Please explain the charge on my invoice."))
+    # Hand the complete result to the calling application; avoid logging its data.
+```
+
+For a server, move preparation and the `open_application` context into startup
+and shutdown. Store the open application in server state and await
+`app.run(workflow_id, envelope)` per request. Do not call the one-shot function
+above per HTTP request: it would reopen clients. Runtime invocation state is
+isolated; shared host handlers and dependencies must also avoid mutable
+request-specific instance state. Await I/O, preserve cancellation, and keep
+blocking SDK/CPU work off the event loop.
+
+## Register business functions
+
+Configuration selects registered functions by name. The host registers a typed
+async handler, its boundary schemas, and its read effect before preparation.
+For example, this deterministic handler builds a business result and marks
+review explicitly:
+
+```python
+from pathlib import Path
+
+from foliqant import prepare_application
+from foliqant.adapters.handlers import HandlerRegistration
+from foliqant.core.execution import StepOutcome
+from foliqant.core.json import FrozenObject, freeze_json
+from foliqant.ports.execution import StepContext
+
+
+async def finalize(inputs: FrozenObject, context: StepContext) -> StepOutcome:
+    review = inputs["review_required"] is True
+    payload = {"disposition": "review" if review else "ready"}
+    return StepOutcome(freeze_json(payload), needs_review=review)
+
+
+handlers = {
+    "finalize": HandlerRegistration(
+        handler=finalize,
+        input_schema={
+            "type": "object",
+            "properties": {"review_required": {"type": "boolean"}},
+            "required": ["review_required"],
+            "additionalProperties": False,
+        },
+        output_schema={
+            "type": "object",
+            "properties": {"disposition": {"enum": ["ready", "review"]}},
+            "required": ["disposition"],
+            "additionalProperties": False,
+        },
+        effect="read",
+    )
+}
+prepared = prepare_application(Path("config/settings.yaml"), handlers=handlers)
+```
+
+Its step binds a boolean selected by your business policy:
+
+```yaml
+type: handler
+handler: finalize
+input:
+  review_required:
+    pointer: /payload/review_required
+```
+
+Project `/steps/finalize/result` as the flow output when this step is named
+`finalize`; project that flow result as the workflow output. Without those
+projections, input remains the default output. For a multi-request process,
+replace this simple boolean policy with an explicit check of the complete plan
+and collection ledger. Handler return schemas and `needs_review` are independent:
+a payload saying `review` alone does not set the execution status.
+
+## Interpret results and failures
+
+| Boundary/outcome | What the host receives | Required handling |
+| --- | --- | --- |
+| Offline compilation | `PreparedApplication` or `CompilationError` | Fix configuration and registrations before opening adapters. |
+| Invalid admission input, unavailable capacity, or another pre-run failure | `ServiceError` can be raised before a result exists | Map its canonical code and safe message into the host protocol. |
+| Successful work | `ExecutionResult`, `execution.status == "completed"` | Consume `payload`; retain `flows` when the use case needs evidence or intermediate results. |
+| Business review | Result with `needs_review` status | Apply the explicit review policy; this is not a provider outage or retry request. |
+| Admitted technical failure | Result with `failed` status and `execution.error` | Preserve the full result, including any partial collection ledger. Do not report a benign default payload as success. |
+| Caller cancellation | Cancellation propagates; a result is not guaranteed | Preserve cancellation and let host policy decide reconciliation. |
+
+Inspect `execution.status` before business payload. Serialize a complete result
+with `result.model_dump(mode="json")`. `app.run_flow` and `app.run_step` also
+return `ExecutionResult`, but accept already-resolved boundary input and run an
+isolated scope; they are useful for testing, not implicit workflow composition.
+
+Catch `ServiceError` at the host boundary; use `error.code.value`, its safe
+`str(error)`, and `error.retryable`. For returned failures, use
+`result.execution.error`. Do not infer retry permission from error text or
+automatically rerun a workflow: timeout/cancellation does not prove remote work
+stopped. Configured provider retry policy is narrower than whole-run retry.
+
 ## Identity and tool permission
 
 Optional tenant and principal IDs are invocation context. The host authenticates
@@ -70,12 +204,55 @@ Do not add accepted receipts, detached work, result lookup, cancellation
 endpoints, or durability claims. Use the generated envelope and execution-result
 schemas rather than transport-specific duplicate DTOs.
 
+For an async HTTP host (for example, Starlette installed as an application
+dependency), wire these concrete boundaries:
+
+1. Enter `open_application` in the server lifespan with the prepared host
+   registrations; store the application in server state.
+2. Check content type and bound streamed request bytes and read time before
+   decoding. Use `MAX_ENVELOPE_BYTES` and `decode_envelope` from
+   `foliqant.contracts.decoding` for an envelope-shaped JSON API.
+3. For a business-shaped API, validate the host request and explicitly construct
+   `Envelope(payload=...)`; do not pass the HTTP request or all headers as input.
+4. Apply the host's chosen identity policy. An unauthenticated demo should reject
+   supplied tenant/principal metadata rather than treating it as verified.
+5. Await `app.run` and serialize its complete result. Choose and document HTTP
+   status mappings for both raised errors and returned failed results. A valid
+   `needs_review` result can remain a successful HTTP response.
+6. Leave the lifespan on shutdown. Define disconnect handling at the host boundary;
+   it does not imply the model or tool has stopped remotely.
+
+## Package and deploy
+
+- Ship the Python application, reviewed package dependency plus selected adapter
+  extras, and the complete relative config/prompt/schema tree together. For a
+  container, use an explicit working directory or absolute settings path; the CLI
+  does not search parent directories. Supply the host's actual start command.
+- Keep secrets in the deployment environment or adjacent local `.env`, never in
+  the image/config artifact. Set required profile values and install the matching
+  provider/MCP extras. Evaluation datasets and reports need not ship with runtime.
+- Compile with actual handler registrations during build/tests; open adapters
+  once per process at startup. Only signal readiness after that startup succeeds.
+  Opening does not prove provider credentials or remote availability; do not add
+  model inference or `/models` discovery as an implicit health probe.
+- Admission and configured budgets are per process. Extra replicas multiply
+  capacity; host-level shared limits are an application decision. Tune run and
+  provider deadlines together using observed workload rather than increasing one
+  timeout or retry count blindly.
+- Stop accepting requests, drain owned work, and close the async context on
+  shutdown. In-flight state is lost on forced exit. Only design external durable
+  coordination if the use case requests it; it is not part of this core.
+- Use optional telemetry with safe labels and known/unknown usage preserved.
+  Full results contain business data; retain them only under the application's
+  policy. A projected payload is insufficient to diagnose partial child failures.
+
 ## Deliverables and checks
 
 For a host integration, deliver its request-to-envelope mapping, one awaited
-application call, result serialization, and the host's explicit authentication
-and authorization decisions. Run `foliqant validate` and
-`foliqant explain --workflow WORKFLOW_ID` against its configuration, then test
-the host with a local scripted or handler-backed workflow before connecting
-external providers. State which operational controls the host supplies; do not
-claim that the in-memory library supplies them.
+application call, result serialization, and any identity policy required by the
+use case. Validate with registered `prepare_application`, or CLI validation and
+explanation when no host registrations are needed. Test the host with scripted
+adapters or handler-only workflows for success, review, raised errors, returned
+failures, and shutdown. Provide the config/environment locations, dependency and
+start commands, and actual test outcomes. State which operational controls the
+host supplies; do not claim that the in-memory library supplies them.

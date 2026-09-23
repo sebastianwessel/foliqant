@@ -69,6 +69,13 @@ should include changed files, runnable commands, actual validation results, and
 any missing business rules or unexecuted checks. Existing decisions and
 authorization in your request remain in effect.
 
+For complete applications, it also covers host startup/shutdown, registered
+Python handlers, result/error handling, and deployment packaging. Its process
+composition reference distinguishes one triage branch, several labels, and
+independent requests; it shows planning, callable flows, review routes, and final
+disposition. These patterns keep your business policy explicit rather than
+asking the agent to infer how combined intentions should be handled.
+
 ## Build a solution with the skill
 
 Give the agent a small business brief: the incoming data, desired result,
@@ -143,6 +150,13 @@ foliqant evaluate --check
 Replace `request_intake` with the actual workflow ID. The evaluation check
 requires the reviewed dataset; it does not run inference. Keep live evaluation
 and deployment as separate, deliberate steps.
+
+If your application registers Python handlers, use its own preparation and
+evaluation entry points: generic CLI commands cannot register host functions.
+The agent should call `prepare_application(config_path, handlers=handlers)`,
+inspect the compiled plans, and use `load_dataset(prepared)` from
+`foliqant.evaluation.dataset` for offline gold validation. The skill includes
+this path so custom business functions remain part of the checks.
 
 ## What the skill enforces
 

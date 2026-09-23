@@ -20,9 +20,12 @@ skill directory; no source checkout or internal specifications are required.
 | Map business rules; choose file layout and IDs; author workflows, flows, steps, bindings, routes, and omitted-field defaults | [Workflow design](references/workflow-design.md) |
 | Install adapters; configure models, MCP, handlers, limits, secrets, telemetry, default values, and override precedence | [Runtime configuration](references/runtime-configuration.md) |
 | Create gold, measure a scope, replay results, or compare runs | [Evaluation](references/evaluation.md) |
-| Scaffold a project; use the CLI; embed the application or expose it through HTTP | [Deployment and HTTP](references/deployment-http.md) |
+| Combine flows after triage; process multiple requests; implement planning and final disposition | [Process composition](references/process-composition.md) |
+| Scaffold a project; implement a Python/HTTP host; handle failures; package and deploy | [Deployment and HTTP](references/deployment-http.md) |
 
 For a new application, start with workflow design and runtime configuration.
+For a complete use-case implementation, also read deployment and HTTP; for
+branching or multiple requests, read process composition before choosing routes.
 For a focused change, inspect the existing configuration and the relevant
 reference section. Verify uncertain fields with installed CLI help or the public
 `foliqant.contracts` models. `runtime_schemas()` and `decision_schemas()` in
@@ -90,8 +93,14 @@ foliqant doctor
 foliqant explain
 ```
 
+These generic CLI commands do not register host Python handlers. For a host
+with custom handlers, use its registered `prepare_application(...)` path to
+compile and inspect `prepared.plans`; see deployment and HTTP for the lifecycle.
+
 When gold exists, also run `foliqant evaluate --check`. Run focused application
 tests for changed behavior and the checks required by its project instructions.
+For handler-based configurations, load gold against the registered prepared
+application and use the host's evaluation entry point as described in evaluation.
 These commands are offline. Live inference, report publication, and deployment
 must fit the user's authorized task; reuse authorization already given for the
 specific action instead of asking again.

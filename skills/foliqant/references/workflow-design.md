@@ -2,7 +2,8 @@
 
 Use this reference when translating requirements into runtime configuration.
 Confirm the result with the installed `foliqant validate` and
-`foliqant explain` commands. For programmatic contract inspection, use the
+`foliqant explain` commands, or the host's registered `prepare_application`
+when custom Python handlers are used. For programmatic contract inspection, use the
 installed `foliqant.contracts.workflow` models or
 `foliqant.contracts.schemas.runtime_schemas()`.
 
@@ -602,9 +603,10 @@ customer data, and private gold remain private.
 ## Deliverables and checks
 
 Deliver the workflow file, each referenced flow and step definition, local
-schemas, and the explicit routing/review decisions. Run `foliqant validate`
-and `foliqant explain --workflow WORKFLOW_ID` from the application root to
-check the compiled graph offline. When gold exists, run
-`foliqant evaluate --check` against its dataset.
+schemas, and the explicit routing/review decisions. Compile the graph offline
+using CLI validation/explanation for configurations without host registrations,
+or registered `prepare_application` and `prepared.plans` for custom handlers.
+When gold exists, use CLI `evaluate --check` or `load_dataset(prepared)` with
+that registered application.
 Report business rules or tool permissions that still need the application's
 owner to define instead of inventing them.

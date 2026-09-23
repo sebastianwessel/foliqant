@@ -140,6 +140,23 @@ selection. Score answerability/issues and selection origin independently.
 
 ## Choose the execution mode
 
+The generic CLI has no host handler registrations. When the configuration uses
+trusted Python handlers, prepare through the host and check gold offline with:
+
+```python
+from foliqant import prepare_application
+from foliqant.evaluation.dataset import load_dataset
+
+prepared = prepare_application(config_path, handlers=handlers)
+dataset = load_dataset(prepared)
+```
+
+Here `handlers` is the application's registration map and `config_path` is its
+settings path. `load_dataset` resolves the configured/conventional dataset and
+validates its targets against that prepared application without opening adapters.
+Use Python `evaluate` with the same application's public scoped run functions
+for execution; do not remove handlers to make a generic CLI check pass.
+
 - `foliqant evaluate --check` validates dataset structure, targets, pointers,
   catalogs, and spans without opening providers.
 - `foliqant evaluate --replay REPORT` rescores saved results without inference.
@@ -201,6 +218,7 @@ Do not claim a small suite proves general quality, security, or efficiency.
 Deliver the dataset manifest, any referenced case files, and a note identifying
 which expectations have been independently reviewed. Run
 `foliqant evaluate --check` from the application root, or add `--config PATH`
-for nondefault settings. Report structural failures separately from missing
+for nondefault settings. With host handlers, use registered preparation and
+`load_dataset` above. Report structural failures separately from missing
 business gold. Execute live suites only when their configured external calls
 are intended for the task.

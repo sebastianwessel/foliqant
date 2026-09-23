@@ -150,6 +150,26 @@
       "id": 30,
       "prompt": "Use only actual Foliqant defaults. What are the execution limits, max iterations, token/sampling defaults and environment precedence?",
       "expected_output": "Reports execution concurrency 4, queue_limit 16, run_timeout 300, model_timeout 60, tool_timeout 30, max_steps 32, model_requests_per_step 4, tool_calls_per_step 3; LLM max_iterations 4; model max_tokens 4096 and unset sampling/reasoning. Distinguishes examples from defaults, requires provider/model/output_mode, and explains caller environment mapping over adjacent .env and no environment interpolation of prompt/customer data."
+    },
+    {
+      "id": 31,
+      "prompt": "Embed our Foliqant workflow with custom Python handlers into an existing async HTTP application and prepare it for container deployment.",
+      "expected_output": "Registers schema-validated async handlers during offline preparation, opens one application per process in host lifespan, validates request-to-envelope mapping, awaits one run, and preserves full results. Handles raised ServiceError separately from failed/review results. Packages config/resources and selected dependencies, configures env/working directory and shutdown, and validates via registered preparation instead of generic CLI unknown_handler failures. Does not add unsolicited persistence or queues."
+    },
+    {
+      "id": 32,
+      "prompt": "Two independent requests should run their own flows, but one may need review. The final response must include both results plus held requests.",
+      "expected_output": "Uses request_units, a separate planner flow, allowlisted sequential callable flows in a collection, and a final disposition handler. Routes incomplete assessment to planner and collection needs_review to finalizer explicitly. Matches ledger IDs to the whole plan, accounts for held/ignored work, and sets StepOutcome.needs_review according to business policy. A technical child failure stops before finalizer and preserves partial_result with skipped items."
+    },
+    {
+      "id": 33,
+      "prompt": "Our triage sometimes selects billing plus cancellation as one coordinated process, and sometimes they are independent requests. Should we spawn a flow for each label?",
+      "expected_output": "Distinguishes label sets from request units and asks only for missing combination policy. Maps a combined process via a deterministic route key to an authored coordinated flow; plans independent units as bounded callable flows. Does not invent a scheduler, parallel fan-out or cross-workflow transition, and does not use app.run_flow inside a handler as composition."
+    },
+    {
+      "id": 34,
+      "prompt": "Our Foliqant CLI validate reports unknown_handler for the custom planning function. How can the agent validate and evaluate this app without removing the function?",
+      "expected_output": "Uses prepare_application(config_path, handlers=registered_handlers) from host composition, inspects prepared.plans, and calls load_dataset(prepared) for offline gold/target checks. Runs scripted tests and Python evaluate against the same application. Does not invent CLI registration flags or config imports, remove business logic, or claim generic CLI checks passed."
     }
   ]
 }
