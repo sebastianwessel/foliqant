@@ -40,6 +40,54 @@ the body. See the [HTTP guide](../integration/http.md).
 expects the selected step's resolved binding names. Neither reconstructs upstream
 history. Use `run` for a normal workflow invocation.
 
+## Which call creates which result
+
+All three public execution methods return the same Python type:
+`ExecutionResult`. They differ in the amount of configured work they execute and
+therefore in the records that result contains.
+
+| Call | Use it when | What Foliqant executes | `ExecutionResult.payload` | `flows` and `transitions` |
+| --- | --- | --- | --- | --- |
+| `await app.run(workflow, envelope)` | Normal application request | The workflow start, routed flows, and configured output projection | The workflow output projection, or accepted input when no output is configured; a failed run preserves accepted input | Records every non-callable workflow flow; unvisited flows are `skipped`. Records the selected routing boundaries. |
+| `await app.run_flow(workflow, flow_id, envelope)` | Focused flow test or evaluation | One named flow, with the already resolved flow input | That flow's projected result, or accepted input if it fails | Contains only the named flow. Does not follow its transition, so `transitions` is empty. |
+| `await app.run_step(workflow, flow_id, step_id, envelope)` | Focused step test or evaluation | One named step, with exactly its resolved input names | That step's validated result, or accepted input if it fails | Contains only the named flow and step. It does not run preceding steps or routes, so `transitions` is empty. |
+
+`run_flow` and `run_step` still enforce the selected flow or step's input
+schema, output schema, provider limits, tool authorization, and result
+validation. They are execution tools, not ways to bypass policy.
+
+```python
+from pathlib import Path
+
+from foliqant import Envelope, open_application, prepare_application
+
+
+async def classify_one_email() -> None:
+    prepared = prepare_application(Path("config/settings.yaml"))
+    async with open_application(prepared, environment={}) as app:
+        # Production path: run the configured workflow graph.
+        whole_run = await app.run(
+            "support_email",
+            Envelope(payload={"message": "Please cancel my renewal."}),
+        )
+
+        # Focused test path: the payload keys are the step's resolved input names.
+        isolated_step = await app.run_step(
+            "support_email",
+            "classify",
+            "classify",
+            Envelope(payload={"message": "Please cancel my renewal."}),
+        )
+
+    assert whole_run.execution.status in {"completed", "needs_review"}
+    decision = isolated_step.flows["classify"].steps["classify"].result
+    print(decision)
+```
+
+The code uses the Pydantic boundary objects directly. Use
+`result.model_dump(mode="json")` when returning a JSON response or saving a
+reviewed report.
+
 ## Native decision input: `DecisionInput`
 
 A configured decision step builds a native input from its sources and questions.
@@ -120,47 +168,112 @@ A step authored with singular `question` exposes its one native result object as
 is answerable. Only a singular choice, ordinal, or predicate supplies a direct
 route key.
 
-## `ExecutionResult`
+## `ExecutionResult` and nested records
 
-Every invocation result has five top-level fields:
+Every public execution call produces one `ExecutionResult`. Its records are
+nested by the boundary that produced them; Foliqant never creates a separate
+flat decision or tool-result map.
 
-| Field | Contract |
-| --- | --- |
-| `payload` | Workflow output projection; defaults to accepted input without an output binding. |
-| `metadata` | Accepted metadata. |
-| `flows` | Map by flow instance ID; each has `status`, `steps`, and optional projected `result`. |
-| `transitions` | Selected flow boundaries and terminal outcomes. |
-| `execution` | `id`, `workflow`, `revision`, `status`, `usage`, and error when failed or cancelled. |
+```text
+ExecutionResult                    ← app.run(), app.run_flow(), app.run_step()
+├── payload                         ← public workflow / focused-boundary output
+├── metadata                        ← accepted caller metadata
+├── execution                       ← run-wide status, usage, and safe failure
+├── transitions[]                   ← only full workflow routing
+└── flows[flow_id] : FlowResult      ← executed or skipped workflow flow
+    ├── result                       ← flow output projection
+    ├── steps[step_id] : StepResult  ← operation result
+    │   ├── result                   ← decision, text, JSON, handler, or MCP value
+    │   └── result.items[]           ← only for a completed/reviewed collection
+    │       └── FlowCollectionItemResult
+    └── error                        ← only when that flow failed or was cancelled
+```
 
-A flow result defaults to that flow's bound input without an output projection.
-A completed flow or step always has `result`, even when its value is JSON `null`.
-Failed, cancelled, and skipped records omit it. Review records may contain a
-result. Flow and step statuses are `completed`, `needs_review`, `failed`,
-`cancelled`, or `skipped`; root execution has no `skipped`. Failed records
-require a safe `error`. A skipped record has no result, error, elapsed time,
-or usage.
+### Who produces each public shape?
 
-Step results are scoped under `/flows/{flow}/steps/{step}/result` and flow
-projections under `/flows/{flow}/result`. There is no flat decision map. Workflow
-routes and output bindings can use the original `/payload`, `/metadata`, and
-prior `/flows/{flow}/result`, not another flow's internal step ledger. Each
-transition records its source and `completed` or `needs_review` reason, with
-exactly one configured next `flow` or terminal `outcome`. Technical failure
-selects no unresolved transition.
+| Public type | Produced by | Where you receive it | When it exists |
+| --- | --- | --- | --- |
+| `ExecutionResult` | `WorkflowApplication.run`, `run_flow`, or `run_step` | The awaited return value | A call was admitted and reached execution. Invalid admission can instead raise `ServiceError`; caller cancellation propagates. |
+| `FlowResult` | The runtime after a configured flow runs, fails, reviews, or is skipped | `result.flows[flow_id]` | Every non-callable flow in a whole workflow run, or the selected flow for `run_flow` / `run_step`. |
+| `StepResult` | The runtime after a configured step runs, fails, reviews, or is skipped | `result.flows[flow_id].steps[step_id]` | Every step belonging to a flow record. `run_step` executes only the selected step. |
+| `FlowCollectionItemResult` | A `flow_collection` step after each callable child flow | `step.result.items[index]` or `step.partial_result.items[index]` | Only a flow-collection step. It is a flow record plus the planned child `id` and `flow`. |
+| `SafeError` | The failing runtime boundary | `execution.error`, `flow.error`, or `step.error` | A returned technical failure. It is absent for `needs_review`. |
+| `Usage` | The runtime's measured accounting | `execution.usage`; optionally a flow or step record | A run always has root usage. Flow and step usage is omitted when unavailable or skipped. |
 
-Every included usage object has `model_requests`, `tool_calls`, `input_tokens`,
-`output_tokens`, `cache_read_input_tokens`, `cache_write_input_tokens`, and
-`reasoning_output_tokens`. Counts are nonnegative; token values may be `null`
-when unavailable. Parent usage already aggregates child work, so do not add
-levels together.
+`ExecutionResult`, `FlowResult`, `StepResult`, and `SafeError` are strict
+Pydantic boundary models. Internally, `to_execution_result(...)` materializes
+the first three from immutable runtime records immediately before a public call
+returns. Your application normally reads them rather than constructing them.
+The exception is a local fake for an evaluation or integration test; see
+[unit testing](../evaluation/unit-testing.md).
 
-Only a singular choice decision can have `selection`. An answerable model choice
-has `origin: "model"`, matches native `answer.optionId`, and completes. An
-authored fallback has `origin: "fallback"`, leaves the native answer `null`, and
-keeps the step in review. A collection step has `kind: "flow_collection"` and an
-ordered `result.items` ledger when complete or in review; on failure it has
-`partial_result.items` instead. Each item adds `id` and `flow` to a child flow
-record. See [collection configuration](../steps/flow-collection.md).
+### Top-level fields
+
+| Field | Type | Created from | How an application should use it |
+| --- | --- | --- | --- |
+| `payload` | Any JSON value | Workflow output binding for `run`; selected flow or step result for scoped calls | Your primary business result after checking `execution.status`. It defaults to accepted input for a whole run without an output binding. |
+| `metadata` | `Metadata` | Accepted envelope metadata, including trusted identity consistency checks | Correlate a result with non-secret caller context. Do not treat it as authentication proof. |
+| `flows` | Map of `FlowResult` | Configured flow execution records | Inspect detailed outcomes, decision evidence, tool results, and skipped branches. |
+| `transitions` | List of `TransitionResult` | Authored route selected after each full-flow boundary | Explain why `run` visited a flow or finished. Scoped calls do not route, so this is empty. |
+| `execution` | `ExecutionInfo` | The complete invocation | Read this first for the overall status, ID, revision, measured usage, and safe technical error. |
+
+### Flow fields: `result.flows[flow_id]`
+
+| Field | Present when | Meaning |
+| --- | --- | --- |
+| `status` | Always | `completed`, `needs_review`, `failed`, `cancelled`, or `skipped`. |
+| `steps` | Always | Map of the flow's configured steps to `StepResult` records. |
+| `result` | Completed; may be present for review | The flow's configured output projection. Without one, it is the resolved flow input. It may be explicit JSON `null`. |
+| `usage`, `elapsed_seconds` | When measured | Local measurements. Root usage already includes this work; do not add both levels. |
+| `error` | Failed or cancelled | A safe technical failure. It is never present for a review outcome. |
+
+### Step fields: `result.flows[flow_id].steps[step_id]`
+
+| Field | Present when | Meaning |
+| --- | --- | --- |
+| `status` | Always | `completed`, `needs_review`, `failed`, `cancelled`, or `skipped`. |
+| `result` | Completed; may be present for review | The validated operation value: a native decision, schema object, text, handler result, direct MCP result, or collection ledger. It may be JSON `null`. |
+| `selection` | A singular choice decision selected a model or authored fallback category | `category.id` is the effective category for routing; `origin` says whether it came from the model or fallback. The native decision remains in `result`. |
+| `usage`, `elapsed_seconds` | When measured | Step-local model/tool usage and duration. Do not add it to root or flow totals. |
+| `error` | Failed or cancelled | A safe technical failure. |
+| `kind`, `partial_result` | A failed `flow_collection` | `kind` is `flow_collection`; `partial_result.items` retains the ordered child ledger completed before the technical failure. |
+
+### Status and field presence
+
+| Record status | `result` | `error` | Typical interpretation |
+| --- | --- | --- | --- |
+| `completed` | Required; may be JSON `null` | Absent | The operation or flow produced its validated result. |
+| `needs_review` | Optional | Absent | A valid business outcome needs a person or an authored follow-up policy. |
+| `failed` | Absent | Required | A technical failure stopped this boundary. Completed upstream records remain available. |
+| `cancelled` | Absent | May be present in a serialized record | No successful result is claimed. A caller cancellation normally propagates instead of returning an `ExecutionResult`. |
+| `skipped` | Absent | Absent | The whole workflow took another route. Skipped records have no timing or usage. |
+
+Root `execution.status` is `completed`, `needs_review`, `failed`, or
+`cancelled`; it is never `skipped`. A technical failure does not create a route
+transition. Workflow routes and output bindings can use the original `/payload`,
+`/metadata`, and an earlier `/flows/{flow}/result`, but not another flow's
+private step records.
+
+### Special nested result values
+
+| Step kind | `StepResult.result` shape | Related fields |
+| --- | --- | --- |
+| Singular `decision` | One native decision result | A singular answerable choice can add `selection`. |
+| Multi-question `decision` | `{"results": [...]}` in authored question order | No direct selection; inspect each native result. |
+| `llm` with schema output | Value validated against the step's JSON Schema | Tool-loop steps can also report model and tool usage. |
+| `llm` with text output | String | Text is validated only as the configured text result. |
+| `handler` or direct `mcp` | Value validated against the registered or catalog schema | Direct MCP calls are still nested at their step. |
+| `flow_collection` | `{"items": [FlowCollectionItemResult, ...]}` | On technical failure the same ledger is instead `partial_result`. |
+
+Every included `Usage` object has `model_requests`, `tool_calls`,
+`input_tokens`, `output_tokens`, `cache_read_input_tokens`,
+`cache_write_input_tokens`, and `reasoning_output_tokens`. Counts are
+nonnegative; token values may be `null` when a provider did not report them.
+Parent usage already aggregates child work, so do not add levels together.
+
+See [collection configuration](../steps/flow-collection.md) for its child-ledger
+semantics and [read a workflow result](../integration/results.md) for the
+minimal application-facing path.
 
 ## Errors, CLI, and presence
 
