@@ -23,6 +23,8 @@ flows:
         pointer: /payload/language
     transition:
       flow: process
+    on_unresolved:
+      outcome: needs_review
   process:
     input:
       items:

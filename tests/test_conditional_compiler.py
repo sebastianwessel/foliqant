@@ -49,7 +49,8 @@ def test_optional_is_not_a_binding_field(tmp_path):
         "unknown_field",
         {"main": flow(step("a", handler(value={"pointer": "/x", "optional": True, "default": 1})))},
     )
-    assert error.field is not None and error.field.endswith("pointer.optional")
+    assert error.field == "flows.main.definition.steps.0.definition.input.value.optional"
+    assert error.location.line > 1
 
 
 def test_default_makes_forward_references_optional(tmp_path):
@@ -156,7 +157,7 @@ def test_step_condition_types_are_checked_against_result_schemas(tmp_path):
     lookup = step("lookup", handler("lookup", identifier="/payload/identifier"))
     mismatch = step("next", handler(), when=when("/steps/lookup/result/status", gt=1))
     error = _fails(tmp_path, "condition_type_mismatch", {"main": flow(lookup, mismatch)})
-    assert error.field == "when"
+    assert error.field == "flows.main.definition.steps.1.when"
     assert error.location.line > 1
     impossible = step("next", handler(), when=when("/steps/lookup/result/unknown", present=True))
     _fails(tmp_path, "dangling_pointer", {"main": flow(lookup, impossible)})
@@ -170,7 +171,8 @@ def test_unsafe_patterns_fail_compilation_at_their_source_location(tmp_path):
     lookup = step("lookup", handler("lookup", identifier="/payload/identifier"))
     unsafe = step("next", handler(), when=when("/steps/lookup/result/fund", matches="(a+)+"))
     error = _fails(tmp_path, "unsafe_pattern", {"main": flow(lookup, unsafe)})
-    assert error.field == "matches" and error.location.line > 1
+    assert error.field == "flows.main.definition.steps.1.when" and error.location.line > 1
+    assert "(a+)+" not in str(error) and "nested unbounded quantifier" in error.message
     route = {
         "route": [
             {"when": when("/flows/main/result/fund", matches="(?:x|xy)*"), "outcome": "completed"},
@@ -365,7 +367,8 @@ def _cases(cases: dict[str, Any], **extra: Any) -> dict[str, Any]:
 
 def test_case_keys_must_be_allowed_values(tmp_path):
     error = _fails(tmp_path, "unmatched_case", _cases({"lost": {"flow": "repair"}}))
-    assert error.field == "transition.cases"
+    assert error.field == "flows.main.transition.cases"
+    assert "`lost`" in error.message and "`found`" in error.message
 
 
 def test_uncovered_values_warn_unless_listed_in_default_covers(tmp_path):
@@ -497,7 +500,8 @@ def test_review_default_accepts_issue_maps_and_routes(tmp_path):
     assert isinstance(plan.flow("main").on_unresolved, ConditionalRoutingPlan)
     assert isinstance(plan.flow("enrich").on_unresolved, UnresolvedRoutingPlan)
     completes = {"route": [{"outcome": "completed"}]}
-    _fails(tmp_path, "invalid_contract", flows, defaults={"on_unresolved": completes})
+    error = _fails(tmp_path, "review_completes_run", flows, defaults={"on_unresolved": completes})
+    assert error.field == "defaults.on_unresolved.route.0.outcome"
 
 
 def test_implicit_review_termination_is_reported_with_the_output_default(tmp_path):
@@ -507,9 +511,8 @@ def test_implicit_review_termination_is_reported_with_the_output_default(tmp_pat
         output={"pointer": "/flows/main/result", "default": {"status": "review"}},
     )
     info = next(item for item in plan.diagnostics if item.code == "review_ends_run")
-    assert info.level == "info" and '"status": "review"' in info.message
-    # The reviewing flow's own result is present, so the default is only a fallback.
-    assert "resolved from the flows that ran, or its default" in info.message
+    # The reviewing flow is the output flow: its projected result is returned.
+    assert info.level == "info" and "the projected result of `main`" in info.message
     flows = {
         "classify": _lookup_flow(transition={"flow": "answer"}),
         "answer": flow(
@@ -521,9 +524,10 @@ def test_implicit_review_termination_is_reported_with_the_output_default(tmp_pat
     plan = compile_document(
         tmp_path, flows, output={"pointer": "/flows/answer/result", "default": None}
     )
-    info = next(item for item in plan.diagnostics if item.code == "review_ends_run")
+    warning = next(item for item in plan.diagnostics if item.code == "review_ends_run")
     # `answer` never runs when `classify` stops for review: the host gets the default.
-    assert info.message.endswith("the host receives the workflow output default null.")
+    assert warning.level == "warning"
+    assert "the host receives the workflow output default null" in warning.message
 
 
 # Repeat -----------------------------------------------------------------------
@@ -572,7 +576,7 @@ def test_repeat_compiles_retry_flow_and_overrides(tmp_path):
 )
 def test_invalid_repeat_shapes(tmp_path, change):
     error = _fails(tmp_path, "invalid_repeat", _repeat_flows(_retry(**change)))
-    assert error.field is not None and error.field.startswith("repeat")
+    assert error.field is not None and error.field.startswith("flows.lookup_fund.repeat")
 
 
 def test_retry_input_without_retry_cannot_read_the_retry_flow(tmp_path):
@@ -602,7 +606,8 @@ def test_max_attempts_bounds(tmp_path, attempts):
 def test_repeat_budget_is_checked_against_max_steps(tmp_path):
     compile_document(tmp_path, _repeat_flows(_retry(max_attempts=4)), max_steps=8)
     error = _fails(tmp_path, "repeat_budget", _repeat_flows(_retry(max_attempts=5)), max_steps=8)
-    assert error.field == "repeat"
+    assert error.field == "flows.lookup_fund.repeat.max_attempts"
+    assert "(5 attempts x 1 steps + 4 retries x 1 steps)" in error.message
 
 
 def test_repeat_of_a_model_flow_without_retry_warns(tmp_path):
@@ -637,8 +642,14 @@ def test_repeat_scopes(tmp_path):
 
 def test_attempt_entries_expose_status_result_and_error_only(tmp_path):
     flows = _repeat_flows(_retry())
-    for field in ("attempt", "status", "result", "error"):
+    for field in ("attempt", "status", "result"):
         flows["enrich"]["input"] = {"entry": {"pointer": f"/flows/lookup_fund/attempts/0/{field}"}}
+        compile_document(tmp_path, flows)
+    # Only a failed attempt has an error, and a second attempt may not run: both need a default.
+    for pointer in ("/flows/lookup_fund/attempts/0/error", "/flows/lookup_fund/attempts/1/result"):
+        flows["enrich"]["input"] = {"entry": {"pointer": pointer}}
+        _fails(tmp_path, "unavailable_value", flows)
+        flows["enrich"]["input"] = {"entry": {"pointer": pointer, "default": None}}
         compile_document(tmp_path, flows)
     # Step records, usage and timing are never part of the bound attempt entry.
     for field in ("steps", "usage", "elapsed_seconds"):
@@ -829,3 +840,43 @@ def test_collection_budget_includes_the_item_repeat_worst_case(tmp_path):
     assert "collection_budget" in codes(plan)
     message = next(item.message for item in plan.diagnostics if item.code == "collection_budget")
     assert "12 steps" in message
+
+
+# Structural absence -------------------------------------------------------------
+
+
+def _checked_flow(**definition: Any) -> dict[str, Any]:
+    return flow(
+        step("first", handler()),
+        step("second", handler()),
+        output={"pointer": "/steps/second/result", "default": {}},
+        **definition,
+    )
+
+
+def test_output_defaults_of_completed_flows_never_apply_to_later_bindings(tmp_path):
+    reader = flow(
+        step("r", handler()),
+        input={"status": {"pointer": "/flows/check/result/status"}},
+        on_unresolved={"outcome": "needs_review"},
+    )
+    # Reached only after `check` completed: `second` ran, the `{}` default never applies.
+    compile_document(
+        tmp_path, {"check": _checked_flow(transition={"flow": "reader"}), "reader": reader}
+    )
+    # Reached also after `check` stopped for review: the default lacks `status`.
+    review = _checked_flow(transition={"flow": "reader"}, on_unresolved={"flow": "reader"})
+    _fails(tmp_path, "unavailable_value", {"check": review, "reader": reader})
+    reader["input"]["status"]["default"] = None
+    compile_document(tmp_path, {"check": review, "reader": reader})
+
+
+def test_record_fields_that_no_binding_can_read_are_dangling(tmp_path):
+    for field in ("error", "partial_result", "kind"):
+        steps = [step("a", handler()), step("b", handler(value=f"/steps/a/{field}"))]
+        _fails(tmp_path, "dangling_pointer", {"main": flow(*steps)})
+    # A handler may or may not report a selection: reading it needs a default.
+    steps = [step("a", handler()), step("b", handler(value="/steps/a/selection"))]
+    _fails(tmp_path, "unavailable_step_reference", {"main": flow(*steps)})
+    steps[1] = step("b", handler(value={"pointer": "/steps/a/selection", "default": None}))
+    compile_document(tmp_path, {"main": flow(*steps)})

@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -35,15 +36,17 @@ def test_invalid_arguments_are_redacted_json() -> None:
     secret = "private-secret-command"
     process = _cli(secret)
     assert process.returncode == 2
-    assert process.stdout == ""
-    assert secret not in process.stderr
-    assert json.loads(process.stderr) == {
+    assert secret not in process.stdout + process.stderr
+    assert json.loads(process.stdout) == {
         "error": {
             "code": "invalid_arguments",
             "message": "Invalid arguments; use --help for supported options.",
             "retryable": False,
         }
     }
+    assert process.stderr == (
+        "foliqant: invalid_arguments: Invalid arguments; use --help for supported options.\n"
+    )
 
 
 @pytest.mark.parametrize(
@@ -66,7 +69,8 @@ def test_config_defaults_to_current_directory_without_parent_discovery(
     nested.mkdir()
     missing = _cli(*arguments, cwd=nested)
     assert missing.returncode == 2
-    assert json.loads(missing.stderr)["error"]["code"] == "invalid_configuration"
+    assert json.loads(missing.stdout)["error"]["code"] == "invalid_configuration"
+    assert missing.stderr.startswith("settings.yaml:1:1: invalid_deployment: ")
 
 
 def test_init_is_atomic_non_overwriting_and_scaffolds_explicit_local_model_workflow(
@@ -91,8 +95,8 @@ def test_init_is_atomic_non_overwriting_and_scaffolds_explicit_local_model_workf
     sentinel.write_text("keep", encoding="utf-8")
     rejected = _cli("init", str(destination))
     assert rejected.returncode == 2
-    assert rejected.stdout == ""
-    assert json.loads(rejected.stderr)["error"]["code"] == "conflict"
+    assert json.loads(rejected.stdout)["error"]["code"] == "conflict"
+    assert rejected.stderr.startswith("foliqant: conflict: ")
     assert sentinel.read_text(encoding="utf-8") == "keep"
 
 
@@ -180,9 +184,10 @@ def test_stdin_is_bounded_and_body_is_not_echoed_on_rejection(tmp_path: Path, of
         "trusted-tenant",
         stdin=json.dumps({"payload": {"message": secret}, "metadata": {"tenant_id": "claimed"}}),
     )
-    assert code == 2 and output == ""
-    assert secret not in error and "claimed" not in error
-    assert json.loads(error)["error"]["code"] == "forbidden"
+    assert code == 2
+    assert secret not in output + error and "claimed" not in output + error
+    assert json.loads(output)["error"]["code"] == "forbidden"
+    assert error.splitlines()[-1].startswith("foliqant: forbidden: ")
 
 
 def test_run_without_identity_flags_preserves_envelope_identity_context(
@@ -302,9 +307,10 @@ def test_failed_execution_is_a_safe_cli_error_not_success_output(tmp_path, monke
         ]
     )
     captured = capsys.readouterr()
-    assert code == 4 and captured.out == ""
-    error = json.loads(captured.err.splitlines()[-1])["error"]
+    assert code == 4
+    error = json.loads(captured.out)["error"]
     assert error["code"] == "timeout" and error["retryable"] is True
+    assert captured.err.splitlines()[-1].startswith("foliqant: timeout: ")
 
 
 def test_nonregular_input_is_rejected_without_waiting_for_writer(tmp_path):
@@ -323,8 +329,9 @@ def test_nonregular_input_is_rejected_without_waiting_for_writer(tmp_path):
         "--input",
         str(fifo),
     )
-    assert process.returncode == 2 and process.stdout == ""
-    assert json.loads(process.stderr)["error"]["code"] == "invalid_input"
+    assert process.returncode == 2
+    assert json.loads(process.stdout)["error"]["code"] == "invalid_input"
+    assert process.stderr.startswith("foliqant: invalid_input: ")
 
 
 @pytest.fixture
@@ -370,3 +377,67 @@ def offline_cli(monkeypatch, capsys):
         return code, captured.out, captured.err
 
     return run
+
+
+_PROBLEM_LINE = re.compile(
+    r"^(?P<path>[^:]+):(?P<line>\d+):(?P<column>\d+): (?P<code>[a-z_]+) at (?P<field>\S+): "
+    r".+ \(hint: .+\)$"
+)
+
+
+def test_configuration_problems_print_readable_lines_and_json_status(tmp_path: Path) -> None:
+    destination = tmp_path / "project"
+    assert _cli("init", str(destination)).returncode == 0
+    workflow = destination / "config/demo/workflow.yaml"
+    workflow.write_text(
+        workflow.read_text().replace(
+            "    transition:\n      outcome: completed\n",
+            "    transition:\n      flow: summarize\n",
+        )
+    )
+    config = str(destination / "config/settings.yaml")
+    envelope = str(destination / "envelope.json")
+    for arguments in (
+        ["validate", "--config", config],
+        ["explain", "--config", config],
+        ["run", "--config", config, "--workflow", "demo", "--input", envelope],
+        ["evaluate", "--config", config, "--check"],
+    ):
+        process = _cli(*arguments)
+        assert process.returncode == 2, arguments
+        first, summary = process.stderr.splitlines()
+        match = _PROBLEM_LINE.match(first)
+        assert match is not None, first
+        assert match["path"] == "demo/workflow.yaml"
+        assert match["code"] == "workflow_cycle"
+        assert match["field"] == "flows.summarize.transition.flow"
+        assert summary == "foliqant: invalid_configuration: 1 problem."
+        status = json.loads(process.stdout)
+        assert status["error"]["reason"] == "workflow_cycle"
+        problem = status["problems"][0]
+        assert problem["location"] == {
+            "path": "demo/workflow.yaml",
+            "line": int(match["line"]),
+            "column": int(match["column"]),
+        }
+        assert problem["hint"] and problem["level"] == "error"
+
+
+def test_strict_validation_fails_with_readable_warning_lines(tmp_path: Path) -> None:
+    destination = tmp_path / "project"
+    assert _cli("init", str(destination)).returncode == 0
+    workflow = destination / "config/demo/workflow.yaml"
+    workflow.write_text(
+        workflow.read_text()
+        .replace("  on_unresolved:\n    outcome: needs_review\n", "")
+        .replace("output:\n  pointer: /flows/summarize/result\n", "output:\n  literal: done\n")
+    )
+    config = str(destination / "config/settings.yaml")
+    assert _cli("validate", "--config", config).returncode == 0
+    process = _cli("validate", "--strict", "--config", config)
+    assert process.returncode == 2
+    lines = process.stderr.splitlines()
+    assert [_PROBLEM_LINE.match(line)["code"] for line in lines[:-1]] == ["review_ends_run"]
+    assert lines[-1] == "foliqant: invalid_configuration: 1 problem."
+    status = json.loads(process.stdout)
+    assert [item["code"] for item in status["problems"]] == ["review_ends_run"]

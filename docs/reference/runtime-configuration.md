@@ -105,7 +105,9 @@ Normal preparation and execution do not read gold. See
 | `foliqant validate` | Compile and validate configuration; report diagnostics | No |
 | `foliqant validate --strict` | Also fail when any warning is reported | No |
 | `foliqant explain --workflow NAME` | Inspect the compiled process as JSON | No |
-| `foliqant explain --workflow NAME --format mermaid` | Render the graph as Mermaid (`dot` for Graphviz) | No |
+| `foliqant explain --workflow NAME --format mermaid` | Render one graph as Mermaid (`dot` for Graphviz) | No |
+| `foliqant explain --format mermaid --all --output docs/workflows.md` | Write a Markdown document with every workflow graph | No |
+| `foliqant explain --format mermaid --all --output docs/workflows.md --check` | Fail when that document is stale | No |
 | `foliqant doctor` | Check configuration and optional dependencies | No |
 | `foliqant run --workflow NAME --input PATH` | Run one request file | As configured |
 | `foliqant run --workflow NAME --input -` | Read one request from standard input | As configured |
@@ -115,22 +117,81 @@ Normal preparation and execution do not read gold. See
 | `foliqant evaluate --compare CANDIDATE --baseline BASELINE` | Compare compatible reports | No |
 
 Use `--help` on each command for its full argument list. `run` prints one JSON
-result and exits. It does not start a server or persist a job. `explain
---format mermaid|dot` prints graph text instead of JSON and needs `--workflow`
-when several workflows are configured. Handlers are declared in settings, so
-`validate`, `explain`, `doctor` and `evaluate --check` work for workflows with
-handlers; executing them needs the Python host that registers the callables.
-The CLI never imports application functions from configuration, so `run` fails
-with `missing_handler_registration` for such workflows.
+result and exits. It does not start a server or persist a job. Handlers are
+declared in settings, so `validate`, `explain`, `doctor` and `evaluate --check`
+work for workflows with handlers; executing them needs the Python host that
+registers the callables. The CLI never imports application functions from
+configuration, so `run` fails with `missing_handler_registration` for such
+workflows.
+
+### Output streams
+
+Standard output always carries exactly one JSON object (the result, or the
+failure status) or, for `explain --format mermaid|dot`, the rendering. Standard
+error carries readable text: one line per configuration problem, followed by a
+summary line, or one line for any other failure:
+
+```text
+demo/workflow.yaml:10:7: workflow_cycle at flows.second.transition.flow: The flows form a cycle: `first` -> `second` -> `first`, so a run might never terminate. (hint: Remove route and callable-flow cycles so every invocation terminates.)
+foliqant: invalid_configuration: 1 problem.
+```
+
+The JSON failure status has `error` (`code`, `message`, `retryable`, and for
+configuration problems `reason`, `field`, `hint` and `location` of the first
+problem), `problems` (every problem, structured like diagnostics) and
+`diagnostics` (every finding). `run` also writes its safe JSON log events to
+standard error.
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success, including `needs_review` results of `run` |
+| `1` | `evaluate` found a gold mismatch, or `explain --check` found a stale file |
+| `2` | Invalid arguments, input or configuration (every compiler error, and every warning under `--strict`) |
+| `3` | A required optional dependency is not installed |
+| `4` | Runtime failure of an operation |
+| `130` | Interrupted |
+
+For business review versus operational errors, see
+[error handling](../integration/errors.md).
+
+### Explain and generated documentation
+
+`explain` prints the graph model as JSON by default. `--format mermaid|dot`
+prints one graph and needs `--workflow` when several workflows are configured;
+`--all` renders every workflow into one Markdown document with a
+`## <workflow>` section each: its start and output projection, the fenced
+diagram and its diagnostics. `--output PATH` writes the rendering to a file
+(standard output then carries `{"command": "explain", "status": "written"}`),
+and `--check` compares the file with the current rendering instead, exiting
+with `1` when it is stale. Use it in CI to keep configuration documentation
+from drifting:
+
+```sh
+foliqant explain --format mermaid --all --output docs/workflows.md
+foliqant explain --format mermaid --all --output docs/workflows.md --check
+```
+
+Graphs show flows with their steps (`?` marks a step with `when`), transitions
+as solid edges labelled with the case key or the route entry and its condition
+with authored operands (`0: /payload/kind equals fund`, `in [a, b]`, `gt 3`,
+`matches /FOI-[0-9]+/`, `present=false`), review routes dashed, collection and
+retry calls dotted, and a repeat as a dotted self-loop with its bound and stop
+condition (`repeat ≤ 2 until status equals found`; pointers into the flow's
+own result are shortened). Literal bindings and default values are never shown.
+`foliqant.graph.render_document(prepared)` returns the same document, and
+`foliqant.explain(prepared, workflow)` the graph model.
 
 ## Diagnostics
 
-`validate`, `explain` and `doctor` report non-fatal compiler findings in
-`diagnostics`, each with `code`, `level` (`warning` or `info`), `message`,
-`location` (`path`, `line`, `column`) and an optional `field`. Errors still
-fail compilation with one stable `reason`. With `validate --strict`, or
-`prepare_application(..., strict=True)` in Python, the first warning fails
-compilation and the output lists every diagnostic.
+`validate`, `explain` and `doctor` report compiler findings in `diagnostics`,
+each with `code`, `level` (`warning` or `info`), `message`, `location` (`path`,
+`line`, `column`), `field` (the key path inside that file) and `hint`. Errors
+fail compilation. With `validate --strict`, or
+`prepare_application(..., strict=True)` in Python, warnings fail too and the
+failure lists every warning. [What the compiler guarantees](../configuration/validation.md)
+lists every error and warning with an example and its fix.
 
 | Code | Level | Meaning |
 | --- | --- | --- |
@@ -139,22 +200,18 @@ compilation and the output lists every diagnostic.
 | `route_unreachable_entry` | warning | a `route` entry can never be selected |
 | `repeat_without_retry` | warning | a repeated flow with a model step has no retry flow |
 | `unused_llm_input` | warning | an LLM input is not referenced by its `prompt` and is never sent |
-| `collection_budget` | warning | `max_items × steps(child)` may exceed `execution.max_steps` |
+| `collection_budget` | warning | `max_items × worst(child)` (nested collections and item repeats included) may exceed `execution.max_steps` |
+| `run_budget` | warning | the most expensive path from a start, with every repeat attempt, retry run and collection item, may exceed `execution.max_steps` |
+| `review_ends_run` | warning | a flow without a review route ends the run in review and the host would not receive that flow's projected result |
+| `review_ends_run` | info | the same, when the reviewing flow is the one the workflow output returns |
 | `case_on_unknown_type` | info | a `cases` field has no known value set |
-| `review_ends_run` | info | a flow without a review route ends the run in review |
 | `empty_text_source` | info | a decision `text` source may be an empty string |
 
-`PreparedApplication.diagnostics` exposes the same list, and
-`foliqant.explain(prepared, workflow)` returns the graph model that `explain`
-prints.
+`PreparedApplication.diagnostics` exposes the same list.
 
 Evaluation defaults: one concurrent case, a 300-second case timeout, one attempt
 per case. Reports use a new file under `.foliqant/evaluations/` beside settings
 unless `--output` chooses another new path. Never commit private reports.
-
-Exit codes: `0` success, `1` gold mismatch, `2` invalid input/configuration,
-`3` missing optional dependency, `4` runtime failure, and `130` interruption.
-For business review versus operational errors, see [error handling](../integration/errors.md).
 
 ## Installed schemas
 

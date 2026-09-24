@@ -52,16 +52,37 @@ alternative without parent-directory search.
 
 `validate`, `explain`, `doctor`, and `evaluate --check` are offline and list
 compiler `diagnostics`. `validate --strict` fails on any warning; use it in CI.
-`explain --format mermaid|dot --workflow ID` prints the graph (flows, routes,
-dashed review edges, dotted collection/retry calls, repeat annotations) as
-text for reviews. `run` reads one bounded envelope and returns one foreground
-result.
+`explain --format mermaid|dot --workflow ID` prints the graph (flows, routes
+with their conditions and operands, dashed review edges, dotted
+collection/retry calls, repeat self-loops such as `repeat ≤ 2 until status
+equals found`) as text for reviews. Generate docs with
+`foliqant explain --format mermaid --all --output docs/workflows.md`: one
+Markdown section per workflow with its start, output, diagram and diagnostics.
+Commit the file and keep it current in CI with the same command plus
+`--check` (exit `1` when stale). `run` reads one bounded envelope and returns
+one foreground result.
+
+Output streams: standard output carries exactly one JSON object (the result or
+the failure status with `error`, `problems` and `diagnostics`) or the graph
+text; standard error carries readable lines, one per configuration problem:
+`<file>:<line>:<column>: <code> at <field>: <message> (hint: ...)`. Exit codes:
+`0` success (also `needs_review`), `1` gold mismatch or stale `--check`
+output, `2` invalid arguments, input or configuration (warnings too under
+`--strict`), `3` missing optional dependency, `4` runtime failure, `130`
+interruption.
 `evaluate --replay` and `--compare` operate on saved artifacts without
 opening providers. Normal evaluation runs its configured pipeline, flow, or
 operation targets.
 
 Caught errors use fixed safe messages and optional sanitized locations. Never
 expose authored values, credentials, prompts, or raw exceptions.
+
+Host startup pattern: call `prepare_application(path, handlers=..., strict=True)`
+once at startup, before accepting work. On `CompilationError`, log every entry
+of `error.problems` field by field (`code`, `level`, `location.path`,
+`location.line`, `location.column`, `field`, `message`, `hint`; `str(error)`
+renders one line each) and exit non-zero. `open_application` refuses a strict
+preparation that carries warnings, so a later code path cannot bypass it.
 
 Handlers are declared under `handlers` in `settings.yaml`, so the generic CLI
 compiles, explains and checks workflows with handlers without host Python.

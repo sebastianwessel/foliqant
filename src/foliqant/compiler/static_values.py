@@ -3,8 +3,10 @@
 A :class:`Static` is a union of alternatives a pointer may resolve to at run
 time: schema nodes, authored constants (literals and defaults), projected
 objects (``output.fields``) and arrays (repeat attempts). ``absent`` records
-that the value may be missing. Unknown schemas stay unknown; these checks never
-claim a general subschema proof.
+that the value may be missing. ``missing`` records that it may be missing for a
+structural reason independent of business data: a constant or projected object
+without the selected key, or a repeat attempt after the first. Unknown schemas
+stay unknown; these checks never claim a general subschema proof.
 """
 
 import json
@@ -45,6 +47,7 @@ type Alternative = SchemaView | Const | Obj | Arr
 class Static:
     alternatives: tuple[Alternative, ...]
     absent: bool = False
+    missing: bool = False
 
     @property
     def impossible(self) -> bool:
@@ -58,11 +61,13 @@ def of(*alternatives: Alternative, absent: bool = False) -> Static:
 
 def union(items: Iterable[Static], *, absent: bool | None = None) -> Static:
     collected: list[Alternative] = []
-    missing = False
+    may_be_absent = False
+    structural = False
     for item in items:
         collected.extend(item.alternatives)
-        missing = missing or item.absent
-    return Static(tuple(collected), missing if absent is None else absent)
+        may_be_absent = may_be_absent or item.absent
+        structural = structural or item.missing
+    return Static(tuple(collected), may_be_absent if absent is None else absent, structural)
 
 
 def unknown(resources: Mapping[str, dict[str, object]]) -> Static:
@@ -104,6 +109,7 @@ def child(static: Static, token: str) -> Static:
     """Select one pointer token in every alternative; impossible branches become absent."""
     collected: list[Alternative] = []
     absent = static.absent
+    missing = static.missing
     for item in _alternatives(static):
         if isinstance(item, SchemaView):
             selected = item.child(token)
@@ -124,20 +130,23 @@ def child(static: Static, token: str) -> Static:
             ):
                 collected.append(Const(value[int(token)]))
             else:
-                absent = True
+                absent = missing = True
         elif isinstance(item, Obj):
             if token in item.fields:
                 selected_static = item.fields[token]
                 collected.extend(selected_static.alternatives)
                 absent = absent or selected_static.absent
+                missing = missing or selected_static.missing
             else:
-                absent = True
+                absent = missing = True
         elif token.isascii() and token.isdigit() and (len(token) == 1 or token[0] != "0"):
             collected.extend(item.items.alternatives)
             absent = True
+            # A flow that ran has its first attempt; later attempts may not have run.
+            missing = missing or token != "0" or item.items.missing
         else:
-            absent = True
-    return Static(tuple(collected), absent)
+            absent = missing = True
+    return Static(tuple(collected), absent, missing)
 
 
 def pointer(static: Static, tokens: Iterable[str]) -> Static:

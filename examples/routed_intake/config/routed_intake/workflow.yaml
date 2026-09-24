@@ -25,9 +25,13 @@ flows:
         pointer: /payload/message
     transition:
       outcome: completed
+    on_unresolved:
+      outcome: needs_review
   cancellation:
     input:
       message:
         pointer: /payload/message
     transition:
       outcome: completed
+    on_unresolved:
+      outcome: needs_review

@@ -712,11 +712,17 @@ customer data, and private gold remain private.
 Deliver the workflow file, each referenced flow and step definition, local
 schemas, handler declarations, and the explicit routing/review decisions.
 Compile the graph offline with `foliqant validate --strict` (declared handlers
-need no registration) and fix every warning; render it with
-`foliqant explain --format mermaid` and review routes, dashed review edges,
-dotted retry/collection calls and repeat annotations. Read the `diagnostics`:
-`uncovered_value`, `route_unreachable_entry` and `review_ends_run` usually point
-at missing business decisions. When gold exists, use CLI `evaluate --check` or
+need no registration) and fix every warning; each problem names its file,
+line, column and field. Render the graphs with
+`foliqant explain --format mermaid --all --output docs/workflows.md`, commit
+that document as a deliverable, and review routes (labels show conditions with
+their operands), dashed review edges, dotted retry/collection calls and repeat
+self-loops. Add `--check` to the application's CI so the document cannot drift.
+Read the `diagnostics`: `uncovered_value`, `route_unreachable_entry`,
+`review_ends_run` and `run_budget` usually point at missing business decisions
+or bounds. The compiler's guarantees (no cycles or dead ends, every flow
+reachable, bounded repeats and collections, bindings resolvable on every path)
+are listed with their codes in the public guide "What the compiler guarantees". When gold exists, use CLI `evaluate --check` or
 `load_dataset(prepared)` with the registered application.
 Report business rules or tool permissions that still need the application's
 owner to define instead of inventing them.

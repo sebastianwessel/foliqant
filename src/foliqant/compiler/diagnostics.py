@@ -5,6 +5,8 @@ from typing import Literal
 
 from foliqant.core.plan import Diagnostic, SourceLocation
 
+from .errors import hint_for
+
 _MAX_MESSAGE = 480
 
 WARNING_CODES = frozenset(
@@ -16,9 +18,12 @@ WARNING_CODES = frozenset(
         "repeat_without_retry",
         "unused_llm_input",
         "collection_budget",
+        "run_budget",
+        "review_ends_run",
     }
 )
 INFO_CODES = frozenset({"case_on_unknown_type", "review_ends_run", "empty_text_source"})
+"""Codes in both sets choose their level per finding (``review_ends_run``)."""
 
 
 def safe_text(value: object, limit: int = 64) -> str:
@@ -46,16 +51,18 @@ class Diagnostics:
         message: str,
         *,
         field_path: str | None = None,
+        level: Literal["warning", "info"] | None = None,
     ) -> None:
-        level: Literal["warning", "info"]
-        if code in WARNING_CODES:
-            level = "warning"
-        elif code in INFO_CODES:
-            level = "info"
-        else:  # pragma: no cover - programming error guarded by tests
-            raise ValueError("unknown diagnostic code")
+        allowed = {
+            *(("warning",) if code in WARNING_CODES else ()),
+            *(("info",) if code in INFO_CODES else ()),
+        }
+        if level is None and len(allowed) == 1:
+            level = "warning" if "warning" in allowed else "info"
+        if level is None or level not in allowed:  # pragma: no cover - programming error
+            raise ValueError("unknown diagnostic code or level")
         text = message if len(message) <= _MAX_MESSAGE else message[: _MAX_MESSAGE - 3] + "..."
-        item = Diagnostic(code, level, location, text, field_path)
+        item = Diagnostic(code, level, location, text, field_path, hint_for(code))
         if item not in self.items:
             self.items.append(item)
 

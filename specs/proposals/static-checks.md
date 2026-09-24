@@ -88,11 +88,10 @@ Implemented as specified, with these refinements:
 
 * `Diagnostic` also carries an optional `field`, and new diagnostics and the
   condition, route and repeat errors carry line/column source locations.
-* `validate --strict` fails with the standard error object for the first
-  warning plus a `diagnostics` list with every finding.
+* `validate --strict` fails with every warning (see Phase 5 notes below).
 * `review_ends_run` is reported for implicit terminal review only (no own
   `on_unresolved` and no workflow default); an explicit `outcome: needs_review`
-  is a visible decision.
+  is a visible decision. Its level is set per finding (Phase 5).
 * A cycle closed by an inherited review default reports
   `invalid_default_review_route`; an explicit review route to its own flow
   reports `review_route_to_self`.
@@ -101,7 +100,47 @@ Implemented as specified, with these refinements:
   `foliqant.graph.render_mermaid` and `render_dot`; `--format mermaid|dot` prints
   text and needs `--workflow` when several workflows exist.
 * The graph model shows binding pointers, `has_default`, condensed conditions and
-  case keys, but no literal values, defaults or condition operands, matching the
-  telemetry rule.
+  case keys, but no literal values or defaults. Condition operands were hidden
+  at first and are shown since Phase 5 (below); telemetry stays operand-free.
 * `compile_workflow(..., max_steps=)` enables the budget checks;
   `prepare_application` passes `execution.max_steps`.
+
+### Phase 5 refinements: guarantees, hard failure, generated documentation
+
+* Guarantees are explicit: `docs/configuration/validation.md` ("What the
+  compiler guarantees") lists every structural check with code, level, a
+  failing example and the fix; `tests/test_config_guarantees.py` has one test
+  per row (asserting code, file, line, column, field and hint) and compiles
+  every example of the guide, so table, examples and compiler cannot drift.
+* Every problem is a `Diagnostic` with `level: error|warning|info`, a `field`
+  that is the key path inside the reported file (validated identifiers are
+  echoed; rejected keys and data below `literal`/`default`/schemas are not) and
+  a `hint`. Validation errors are mapped to the offending YAML key.
+  `CompilationError.problems`/`.diagnostics` are structured; `str(error)`
+  renders `<file>:<line>:<column>: <code> at <field>: <message> (hint: ...)`
+  per problem.
+* `strict=True` fails with every warning at once; `PreparedApplication.strict`
+  makes `open_application` refuse a strict preparation that carries warnings.
+  `missing_handler_registration` lists every unregistered handler.
+* `review_ends_run` is a warning unless the reviewing flow's projected result
+  is what the workflow output returns (pointer, or the first `first_of` member
+  that can have run); then it stays info.
+* New or tightened checks found in the audit: `review_completes_run` (moved
+  from an anonymous contract validator to a located compiler error);
+  `unreachable_flow` also for flows reachable only through route entries that
+  can never be selected; `incompatible_route_type` for any known non-string,
+  non-null `cases` type (a mixed enum failed runs); `unavailable_value` for
+  required bindings into later repeat attempts, attempt errors, or keys a live
+  flow-result default lacks (defaults of unconditional steps of a flow known to
+  have completed are dead and ignored); step records expose only fields a
+  binding can read (`selection` for single-choice decisions and handlers, the
+  latter with a default); a flow output reading the first step's `selection`
+  needs a default; `collection_budget` expands nested collections and item
+  repeats; `run_budget` bounds the most expensive start-to-outcome path.
+* CLI: standard output carries the JSON status (also for failures), standard
+  error the rendered problems; `explain --all` (Markdown document for
+  mermaid/dot), `--output PATH`, `--check` (exit 1 when stale);
+  `foliqant.graph.render_document(prepared)`. Graph labels show authored
+  condition operands and complete repeat annotations
+  (`repeat ≤ 2 until status equals found`). Examples keep generated
+  `WORKFLOWS.md` files checked by `tests/test_example_workflow_docs.py`.

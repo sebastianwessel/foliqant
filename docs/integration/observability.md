@@ -113,9 +113,27 @@ means a schema and a condition disagree.
 ## Review the graph
 
 `foliqant explain --format mermaid` (or `dot`) renders every flow, route,
-review edge (dashed), collection and retry call (dotted) and repeat annotation,
-followed by the compiler diagnostics. Include the rendering in configuration
-reviews, and fix every warning reported by `foliqant validate` before release.
+review edge (dashed), collection and retry call (dotted) and repeat
+annotation (`repeat ≤ 2 until status equals found`), followed by the compiler
+diagnostics. Route labels show the authored condition with its operands
+(`0: /flows/lookup/result/status equals found`), so a reviewer can read the
+decision rules from the diagram; span events and logs keep the condensed form
+with pointers and operators only.
+
+Commit the rendered graphs with the configuration and check them in CI, so a
+changed route cannot go unreviewed:
+
+```sh
+foliqant validate --strict
+foliqant explain --format mermaid --all --output docs/workflows.md --check
+```
+
+The document has one section per workflow with its start, output projection,
+diagram and diagnostics; regenerate it without `--check`. Fix every warning
+before release. Span and log names in production (`route.selected` with
+`kind`, `index` and `case`) match the edge labels of the diagram, so an
+observed route can be found in the reviewed graph. See [what the compiler
+guarantees](../configuration/validation.md) for every check behind it.
 
 ## Export and shutdown defaults
 

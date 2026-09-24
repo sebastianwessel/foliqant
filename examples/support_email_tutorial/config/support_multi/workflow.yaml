@@ -21,6 +21,8 @@ flows:
         pointer: /flows/assess/result
     transition:
       flow: process
+    on_unresolved:
+      outcome: needs_review
   process:
     input:
       items:

@@ -13,6 +13,8 @@ flows:
         pointer: /payload/language
     transition:
       flow: lookup
+    on_unresolved:
+      outcome: needs_review
   lookup:
     input:
       reference:

@@ -14,7 +14,7 @@ from pydantic import TypeAdapter, ValidationError
 from foliqant.compiler import CompilationError, compile_workflow
 from foliqant.compiler.models import ModelRegistry
 from foliqant.contracts.models import OpenAIModelConfig
-from foliqant.contracts.workflow import Binding, FlowDefinition, WorkflowAuthoring
+from foliqant.contracts.workflow import Binding, FlowDefinition
 from foliqant.core.json import freeze_json
 from foliqant.core.plan import DecisionStepPlan, LlmStepPlan, MatchRoutingPlan
 from foliqant.core.prompt import render_prompt
@@ -110,7 +110,12 @@ def _fails(root: Path, reason: str | None = None, **extra: Any) -> CompilationEr
         _compile(root, **extra)
     if reason is not None:
         assert caught.value.reason == reason
-    assert str(caught.value) == "The workflow configuration is invalid."
+    location = caught.value.location
+    rendered = str(caught.value)
+    assert rendered.startswith(
+        f"{location.path}:{location.line}:{location.column}: {caught.value.reason}"
+    )
+    assert rendered.endswith(f"(hint: {caught.value.hint})")
     return caught.value
 
 
@@ -271,9 +276,9 @@ def test_unresolved_routes_participate_in_graph_and_cannot_directly_complete(
             "multiple_valid_options": {"outcome": "completed"},
         },
     ):
-        document = _workflow(tmp_path, {"first": _flow(on_unresolved=route)})
-        with pytest.raises(ValidationError):
-            WorkflowAuthoring.model_validate(document)
+        _workflow(tmp_path, {"first": _flow(on_unresolved=route)})
+        error = _fails(tmp_path, "review_completes_run")
+        assert error.field is not None and error.field.startswith("flows.first.on_unresolved")
 
 
 def test_exact_routes_require_a_default_and_do_not_reserve_terminal_ids(tmp_path: Path) -> None:

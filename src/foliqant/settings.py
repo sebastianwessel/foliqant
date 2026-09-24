@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from foliqant.adapters.handlers import HandlerExecutor, HandlerRegistration
 from foliqant.compiler import CompilationError, compile_workflow
-from foliqant.compiler._loader import load_yaml
+from foliqant.compiler._loader import YamlLocator, load_yaml
 from foliqant.compiler.models import ModelRegistry
 from foliqant.compiler.schema_helpers import validate_confined_tool_schema
 from foliqant.contracts.deployment import DeploymentConfig, HandlerDeclaration
@@ -74,6 +74,11 @@ class PreparedApplication:
         default_factory=lambda: MappingProxyType({}), repr=False
     )
     diagnostics: tuple[Diagnostic, ...] = ()
+    strict: bool = False
+    """Prepared with ``strict=True``: :func:`open_application` refuses any warning."""
+    _handler_locations: Mapping[str, SourceLocation] = field(
+        default_factory=lambda: MappingProxyType({}), repr=False
+    )
 
     @property
     def config(self) -> DeploymentConfig:
@@ -128,20 +133,20 @@ def _contract_schema(
 
 
 def _handler_contracts(
-    declarations: Mapping[str, HandlerDeclaration], root: Path, location: SourceLocation
+    declarations: Mapping[str, HandlerDeclaration], root: Path, locator: YamlLocator
 ) -> dict[str, HandlerContract]:
     return {
         name: HandlerContract(
             _contract_schema(
                 cast(str | dict[str, object], declaration.input_schema),
                 root,
-                location,
+                locator.locate("handlers", name, "input_schema"),
                 f"handlers.{name}.input_schema",
             ),
             _contract_schema(
                 cast(str | dict[str, object], declaration.output_schema),
                 root,
-                location,
+                locator.locate("handlers", name, "output_schema"),
                 f"handlers.{name}.output_schema",
             ),
             declaration.effect,
@@ -194,20 +199,36 @@ _HANDLER_ID = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*\Z")
 def _resolve_registrations(
     registered: Mapping[str, HandlerRegistration],
     contracts: Mapping[str, HandlerContract],
-    location: SourceLocation,
+    locator: YamlLocator,
 ) -> dict[str, HandlerRegistration]:
     """Verify each registration against its declaration and fill omitted schemas."""
     effective: dict[str, HandlerRegistration] = {}
     for name, registration in registered.items():
+        label = name if isinstance(name, str) and _HANDLER_ID.fullmatch(name) else "?"
         if not isinstance(registration, HandlerRegistration):
-            raise CompilationError("invalid_registry", location, field=_handler_field(name))
+            raise CompilationError(
+                "invalid_registry",
+                locator.locate("handlers"),
+                field=_handler_field(name),
+                message=f"The registration for handler `{label}` is not a HandlerRegistration.",
+            )
         contract = contracts.get(name)
         if contract is None:
             # Every registration needs a reviewed declaration under `handlers:`.
-            raise CompilationError("unknown_handler", location, field=_handler_field(name))
+            raise CompilationError(
+                "unknown_handler",
+                locator.locate("handlers"),
+                field=_handler_field(name),
+                message=f"Handler `{label}` is registered by the host but not declared under "
+                "`handlers` in settings.yaml.",
+            )
         if registration.effect != contract.effect:
             raise CompilationError(
-                "handler_contract_mismatch", location, field=f"handlers.{name}.effect"
+                "handler_contract_mismatch",
+                locator.locate("handlers", name, "effect"),
+                field=f"handlers.{name}.effect",
+                message=f"Handler `{label}` is registered with effect `{registration.effect}` "
+                f"but declared with `{contract.effect}`.",
             )
         for schema_field in ("input_schema", "output_schema"):
             given = getattr(registration, schema_field)
@@ -217,8 +238,10 @@ def _resolve_registrations(
             if difference is not None:
                 raise CompilationError(
                     "handler_contract_mismatch",
-                    location,
+                    locator.locate("handlers", name, schema_field),
                     field=f"handlers.{name}.{schema_field}{difference}",
+                    message=f"The registered {schema_field} of handler `{label}` differs from "
+                    f"the declared one at `{difference}`.",
                 )
         effective[name] = HandlerRegistration(
             registration.handler, contract.input_schema, contract.output_schema, contract.effect
@@ -239,11 +262,14 @@ def prepare_application(
     commands work) and fail at :func:`open_application`. With ``strict`` any
     warning diagnostic raises :class:`CompilationError`.
     """
-    location = SourceLocation(config_path.name, 1, 1)
+    locator: YamlLocator | None = None
     try:
         source = config_path.resolve(strict=True)
         raw = _read_settings_file(source)
-        data = load_yaml(raw.decode("utf-8"), relative_path=source.name)
+        text = raw.decode("utf-8")
+        data = load_yaml(text, relative_path=source.name)
+        locator = YamlLocator(text, relative_path=source.name)
+        settings_locator = locator
         freeze_json(data)
         root = source.parent
         if isinstance(data, dict) and "workflows" not in data:
@@ -256,9 +282,8 @@ def prepare_application(
         config = DeploymentConfig.model_validate(data, strict=True)
         if config.workflows is None:
             raise ValueError("workflows must be configured or discoverable")
-        location = SourceLocation(source.name, 1, 1)
-        contracts = _handler_contracts(config.handlers, root, location)
-        registered = _resolve_registrations(dict(handlers or {}), contracts, location)
+        contracts = _handler_contracts(config.handlers, root, settings_locator)
+        registered = _resolve_registrations(dict(handlers or {}), contracts, settings_locator)
         plans: dict[str, WorkflowPlan] = {}
         models = ModelRegistry(config.models)
         HandlerExecutor(registered)  # Validate declared schemas offline before activation.
@@ -330,28 +355,68 @@ def prepare_application(
             MappingProxyType(models.admission_groups),
             MappingProxyType(contracts),
             diagnostics,
+            strict,
+            MappingProxyType(
+                {name: settings_locator.locate("handlers", name) for name in sorted(contracts)}
+            ),
         )
     except CompilationError:
         raise
-    except (OSError, RuntimeError, UnicodeError, ValueError, ValidationError, ServiceError):
+    except ValidationError as error:
+        raise _deployment_error(error, locator, config_path) from None
+    except OSError:
+        raise CompilationError(
+            "invalid_deployment",
+            SourceLocation(config_path.name, 1, 1),
+            message="The settings file or a workflow directory it names cannot be read.",
+        ) from None
+    except (RuntimeError, UnicodeError, ValueError, ServiceError):
         raise CompilationError(
             "invalid_deployment", SourceLocation(config_path.name, 1, 1)
         ) from None
     if strict:
-        warning = next((item for item in diagnostics if item.level == "warning"), None)
-        if warning is not None:
-            raise CompilationError(warning.code, warning.location, field=warning.field)
+        require_no_warnings(prepared)
     return prepared
+
+
+def _deployment_error(
+    error: ValidationError, locator: YamlLocator | None, config_path: Path
+) -> CompilationError:
+    """Locate the first settings validation problem without echoing values."""
+    if locator is None:
+        return CompilationError("invalid_deployment", SourceLocation(config_path.name, 1, 1))
+    issue = error.errors(include_url=False, include_context=False, include_input=False)[0]
+    kept, location, final = locator.follow(tuple(issue["loc"]), frozenset())
+    parts = [
+        str(part) if isinstance(part, int) or _HANDLER_ID.fullmatch(part) else "*"
+        for part in (*kept, *((final,) if isinstance(final, str) else ()))
+    ]
+    reason = "unknown_field" if issue["type"] == "extra_forbidden" else "invalid_deployment"
+    return CompilationError(reason, location, field=".".join(parts) or None)
+
+
+def require_no_warnings(prepared: PreparedApplication) -> None:
+    """Fail with every warning of an application prepared with ``strict=True``."""
+    if not prepared.strict:
+        return
+    warnings = tuple(item for item in prepared.diagnostics if item.level == "warning")
+    if warnings:
+        raise CompilationError.from_problems(warnings, prepared.diagnostics)
 
 
 def require_handler_registrations(prepared: PreparedApplication) -> None:
     """Fail before activation when a declared handler has no host registration."""
     missing = sorted(set(prepared.handler_contracts) - set(prepared.handlers))
     if missing:
-        raise CompilationError(
-            "missing_handler_registration",
-            SourceLocation(prepared.source.name, 1, 1),
-            field=_handler_field(missing[0]),
+        raise CompilationError.from_problems(
+            CompilationError(
+                "missing_handler_registration",
+                prepared._handler_locations.get(name, SourceLocation(prepared.source.name, 1, 1)),
+                field=_handler_field(name),
+                message=f"Handler `{name}` is declared in settings.yaml but the host registered "
+                "no callable for it; pass it to prepare_application(handlers=...).",
+            ).problems[0]
+            for name in missing
         )
 
 

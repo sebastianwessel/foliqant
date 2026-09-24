@@ -486,11 +486,11 @@ worker.
 ## Validate the configuration
 
 From the application root, run `foliqant validate --strict`,
-`foliqant explain --workflow WORKFLOW_ID --format mermaid`, and
+`foliqant explain --format mermaid --all --output docs/workflows.md`, and
 `foliqant doctor`. Handlers are declared in settings, so these commands compile
 workflows with handlers offline; `prepare_application(config_path,
-handlers=handlers, strict=True)` does the same in Python and raises on the first
-warning. `PreparedApplication.diagnostics` and `foliqant.explain(prepared,
+handlers=handlers, strict=True)` does the same in Python and raises one
+`CompilationError` listing every warning in `error.problems`. `PreparedApplication.diagnostics` and `foliqant.explain(prepared,
 workflow)` expose the diagnostics and graph model. Use `--config PATH` when
 settings are not at `config/settings.yaml`. Open the application only after its
 required marked environment values, adapter dependencies and handler

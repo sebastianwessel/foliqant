@@ -248,6 +248,9 @@ print(plan.name, plan.start, plan.revision)
 Preparation checks contracts, local paths and schemas, routes, binding scopes,
 step order, and declared adapter capabilities. It does not read `.env`, test
 credentials, contact endpoints, or establish model quality and prompt safety.
+Pass `strict=True` at application startup so warnings fail too; see [what the
+compiler guarantees](validation.md) for every check and how problems are
+reported.
 Compilation errors identify a safe file location, field, reason, and corrective
 hint without echoing authored values.
 

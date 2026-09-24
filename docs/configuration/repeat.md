@@ -89,7 +89,11 @@ route on the result to decide what an unsatisfied `until` means, as the
 Every attempt and every retry run consumes steps from `execution.max_steps`
 and time from the run deadline. Validation computes the worst case,
 `max_attempts × steps(flow) + (max_attempts − 1) × steps(retry flow)`, and
-fails with `repeat_budget` when it alone exceeds `max_steps`.
+fails with `repeat_budget` when it alone exceeds `max_steps`. The `run_budget`
+warning adds up the whole path, so a repeated flow with a collection counts
+every attempt's items. Binding a later attempt (`/flows/<id>/attempts/1`) or
+the retry flow's result needs a `default`, because those may not exist; see
+[what the compiler guarantees](validation.md#bindings-resolve-on-every-path).
 
 ## Read attempts in the result
 

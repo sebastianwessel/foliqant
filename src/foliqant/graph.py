@@ -1,20 +1,23 @@
-"""Offline graph model of compiled workflows, with Mermaid and Graphviz renderings.
+"""Offline graph model of compiled workflows, with Mermaid, Graphviz and Markdown renderings.
 
-The model reports configured topology only: flow and step IDs, binding
-pointers, condensed conditions (pointers and operators), case keys, repeat
-limits, effective review routes and compiler diagnostics. It never contains
-literal binding values, condition operands, defaults, prompts or runtime data.
+The model reports configured topology: flow and step IDs, binding pointers,
+conditions with their authored operands (configuration, like case keys), case
+keys, repeat limits, effective review routes and compiler diagnostics. It never
+contains values bound into steps: ``literal`` bindings and ``default`` values
+are reported only as present, and prompts and runtime data never appear.
+Telemetry keeps its operand-free condensed conditions (``describe_condition``).
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from foliqant.core.conditions import describe_condition
 from foliqant.core.errors import ErrorCode, ServiceError
-from foliqant.core.json import JsonValue
+from foliqant.core.json import JsonValue, thaw_json
 from foliqant.core.plan import (
     AllConditionPlan,
     AnyConditionPlan,
@@ -125,8 +128,82 @@ def _edge_json(edge: GraphEdge) -> dict[str, JsonValue]:
     return value
 
 
+_MAX_OPERAND = 48
+_MAX_LABEL = 200
+
+
+def _operand_text(value: JsonValue) -> str:
+    """An authored operand, compact and bounded; simple strings stay unquoted."""
+    if (
+        isinstance(value, str)
+        and value
+        and all(character.isalnum() or character in "_-." for character in value)
+    ):
+        text = value
+    else:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(", ", ": "))
+    text = "".join(character if character.isprintable() else "?" for character in text)
+    return text if len(text) <= _MAX_OPERAND else text[: _MAX_OPERAND - 3] + "..."
+
+
+def _condition_source(source: BindingPlan, relative_to: str | None) -> str:
+    if source.kind == "literal":
+        return "literal"
+    if source.kind == "first_of":
+        return (
+            "first_of("
+            + ", ".join(_pointer_text(item, relative_to) for item in source.members)
+            + ")"
+        )
+    return _pointer_text(source.pointer or "", relative_to)
+
+
+def _pointer_text(pointer: str, relative_to: str | None) -> str:
+    """Shorten pointers into ``relative_to`` (``/flows/<id>/result``) for node annotations."""
+    if relative_to is not None:
+        if pointer == relative_to:
+            return "result"
+        if pointer.startswith(relative_to + "/"):
+            return pointer[len(relative_to) + 1 :]
+    return pointer
+
+
+def condition_label(condition: ConditionPlan, *, relative_to: str | None = None) -> str:
+    """Readable condition with its authored operands: ``/x equals found``, ``in [a, b]``.
+
+    Operands are configuration, like case keys, so they are shown; a ``literal``
+    condition source stays hidden. ``relative_to`` shortens pointers below it.
+    """
+
+    def visit(item: ConditionPlan) -> str:
+        if isinstance(item, LeafConditionPlan):
+            source = _condition_source(item.source, relative_to)
+            if item.operator in {"present", "empty"}:
+                return f"{source} {item.operator}={'true' if item.operand is True else 'false'}"
+            if item.operator == "length":
+                return f"{source} length {item.comparison} {_operand_text(thaw_json(item.operand))}"
+            if item.operator == "matches":
+                pattern = item.operand if isinstance(item.operand, str) else ""
+                text = "".join(c if c.isprintable() else "?" for c in pattern)
+                if len(text) > _MAX_OPERAND:
+                    text = text[: _MAX_OPERAND - 3] + "..."
+                return f"{source} matches /{text}/"
+            if item.operator in {"in", "not_in"} and isinstance(item.operand, tuple):
+                values = ", ".join(_operand_text(thaw_json(value)) for value in item.operand)
+                return f"{source} {item.operator} [{values}]"
+            return f"{source} {item.operator} {_operand_text(thaw_json(item.operand))}"
+        if isinstance(item, AllConditionPlan):
+            return "all(" + "; ".join(visit(child) for child in item.operands) + ")"
+        if isinstance(item, AnyConditionPlan):
+            return "any(" + "; ".join(visit(child) for child in item.operands) + ")"
+        return "not(" + visit(item.operand) + ")"
+
+    text = visit(condition)
+    return text if len(text) <= _MAX_LABEL else text[: _MAX_LABEL - 3] + "..."
+
+
 def condition_json(condition: ConditionPlan) -> dict[str, JsonValue]:
-    """Structure of a condition without operand values."""
+    """Structure of a condition with its authored operands; literal sources stay hidden."""
     if isinstance(condition, AllConditionPlan):
         return {"all": [condition_json(item) for item in condition.operands]}
     if isinstance(condition, AnyConditionPlan):
@@ -138,6 +215,8 @@ def condition_json(condition: ConditionPlan) -> dict[str, JsonValue]:
     if condition.operator in {"present", "empty"}:
         # The boolean selects the operator's polarity; it is not a compared value.
         leaf["operand"] = condition.operand is True
+    else:
+        leaf["operand"] = thaw_json(condition.operand)
     if condition.comparison is not None:
         leaf["comparison"] = condition.comparison
     source = condition.source
@@ -195,6 +274,7 @@ def _route_json(
                         {
                             "when": condition_json(entry.when),
                             "condition": describe_condition(entry.when),
+                            "label": condition_label(entry.when),
                         }
                         if entry.when is not None
                         else {}
@@ -216,6 +296,7 @@ def _step_json(step: CompiledStep, prepared: PreparedApplication | None) -> dict
     if step.when is not None:
         item["when"] = condition_json(step.when)
         item["condition"] = describe_condition(step.when)
+        item["label"] = condition_label(step.when)
     if isinstance(step, (DecisionStepPlan, LlmStepPlan)):
         item["model"] = step.model
         if prepared is not None and step.model in prepared._models:
@@ -286,6 +367,9 @@ def _flow_json(
             "max_attempts": flow.repeat.max_attempts,
             "until": condition_json(flow.repeat.until),
             "until_condition": describe_condition(flow.repeat.until),
+            "until_label": condition_label(
+                flow.repeat.until, relative_to=f"/flows/{flow.name}/result"
+            ),
         }
         if flow.repeat.retry_flow is not None:
             retry: dict[str, JsonValue] = {
@@ -297,6 +381,7 @@ def _flow_json(
             if flow.repeat.continue_when is not None:
                 retry["continue_when"] = condition_json(flow.repeat.continue_when)
                 retry["continue_condition"] = describe_condition(flow.repeat.continue_when)
+                retry["continue_label"] = condition_label(flow.repeat.continue_when)
             repeat["retry"] = retry
         if flow.repeat.retry_input:
             repeat["retry_input"] = {
@@ -327,7 +412,7 @@ def _route_edges(
                 source,
                 _target(entry.target),
                 kind,
-                f"{index}: {describe_condition(entry.when)}"
+                f"{index}: {condition_label(entry.when)}"
                 if entry.when is not None
                 else f"{index}: otherwise",
                 "review" if review else "route",
@@ -414,7 +499,10 @@ def workflow_graph(
                     for target in step.flows
                 )
         if flow.repeat is not None and flow.repeat.retry_flow is not None:
-            edges.append(GraphEdge(flow.name, flow.repeat.retry_flow, "retry", "retry", "call"))
+            label = "retry"
+            if flow.repeat.continue_when is not None:
+                label += f", continue when {condition_label(flow.repeat.continue_when)}"
+            edges.append(GraphEdge(flow.name, flow.repeat.retry_flow, "retry", label, "call"))
     outcomes = tuple(
         sorted(
             {edge.target.split(":", 1)[1] for edge in edges if edge.target.startswith("outcome:")}
@@ -448,7 +536,8 @@ def explain(prepared: PreparedApplication, workflow: str | None = None) -> Workf
 
 def _mermaid_text(value: str) -> str:
     return (
-        value.replace("&", "#amp;")
+        value.replace("#", "#35;")
+        .replace("&", "#amp;")
         .replace('"', "#quot;")
         .replace("<", "#lt;")
         .replace(">", "#gt;")
@@ -475,16 +564,20 @@ def _flow_label(flow: GraphFlow, *, separator: str) -> str:
     if flow.role == "retry":
         lines[0] = flow.id + " [retry]"
     lines.extend(names)
-    repeat = flow.document.get("repeat")
-    if isinstance(repeat, dict):
-        lines.append(f"repeat <= {repeat['max_attempts']} until {repeat['until_condition']}")
     return separator.join(lines)
 
 
-def render_mermaid(graph: WorkflowGraph) -> str:
+def _repeat_label(repeat: Mapping[str, JsonValue]) -> str:
+    """``repeat ≤ 2 until status equals found``; pointers into the own result are shortened."""
+    return f"repeat ≤ {repeat['max_attempts']} until {repeat['until_label']}"
+
+
+def render_mermaid(graph: WorkflowGraph, *, diagnostics: bool = True) -> str:
     """Render a Mermaid flowchart: solid routes, dashed review, dotted calls.
 
-    Conditional steps carry a ``?`` suffix; diagnostics follow as comments.
+    Conditional steps carry a ``?`` suffix; a repeat is a dotted self-loop with
+    its bound and stop condition. Diagnostics follow as comments unless
+    ``diagnostics`` is false.
     """
     lines = ["flowchart TD", "  start((start))"]
     for flow in graph.flows:
@@ -507,12 +600,12 @@ def render_mermaid(graph: WorkflowGraph) -> str:
         repeat = flow.document.get("repeat")
         if isinstance(repeat, dict):
             # Repetition is an attribute of the node, drawn as a self-loop annotation.
-            label = _mermaid_text(f"repeat <= {repeat['max_attempts']}")
+            label = _mermaid_text(_repeat_label(repeat))
             lines.append(f'  {_node(flow.id)} -.->|"{label}"| {_node(flow.id)}')
             styles.append(f"  linkStyle {index} stroke-dasharray: 1 4")
             index += 1
     lines.extend(styles)
-    for item in graph.diagnostics:
+    for item in graph.diagnostics if diagnostics else ():
         lines.append(
             f"  %% {item.level} {item.code} {item.location.path}:{item.location.line}: "
             + item.message.replace("\n", " ")
@@ -524,7 +617,7 @@ def _dot_text(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
-def render_dot(graph: WorkflowGraph) -> str:
+def render_dot(graph: WorkflowGraph, *, diagnostics: bool = True) -> str:
     """Render a Graphviz digraph with the same edge styles as :func:`render_mermaid`."""
     lines = [f'digraph "{_dot_text(graph.name)}" {{', "  rankdir=TB;"]
     lines.append('  "start" [shape=circle, label="start"];')
@@ -549,10 +642,10 @@ def render_dot(graph: WorkflowGraph) -> str:
         repeat = flow.document.get("repeat")
         if isinstance(repeat, dict):
             node = _node(flow.id)
-            label = _dot_text(f"repeat <= {repeat['max_attempts']}")
+            label = _dot_text(_repeat_label(repeat))
             lines.append(f'  "{node}" -> "{node}" [label="{label}", style=dotted];')
     lines.append("}")
-    for item in graph.diagnostics:
+    for item in graph.diagnostics if diagnostics else ():
         lines.append(
             f"// {item.level} {item.code} {item.location.path}:{item.location.line}: "
             + item.message.replace("\n", " ")
@@ -560,11 +653,90 @@ def render_dot(graph: WorkflowGraph) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _start_text(plan: WorkflowPlan) -> str:
+    if isinstance(plan.start, str):
+        return f"`{plan.start}`"
+    parts = [
+        f"`{_target(entry.target)}` when `{condition_label(entry.when)}`"
+        if entry.when is not None
+        else f"otherwise `{_target(entry.target)}`"
+        for entry in plan.start.entries
+    ]
+    return "; ".join(parts)
+
+
+def _output_text(binding: BindingPlan | None) -> str:
+    """The workflow output projection, without literal or default values."""
+    if binding is None:
+        return "the accepted input payload"
+    if binding.kind == "literal":
+        return "a literal value"
+    if binding.kind == "fields":
+        return "an object with " + ", ".join(f"`{name}`" for name, _ in binding.fields)
+    fallback = ", else its default" if binding.has_default else ""
+    if binding.kind == "first_of":
+        return (
+            "the first present of " + ", ".join(f"`{item}`" for item in binding.members) + fallback
+        )
+    return f"`{binding.pointer}`{fallback}"
+
+
+def _diagnostic_line(item: Diagnostic) -> str:
+    location = f"{item.location.path}:{item.location.line}:{item.location.column}"
+    field = f" at `{item.field}`" if item.field else ""
+    return f"- {item.level} `{item.code}` in `{location}`{field}: {item.message}"
+
+
+def render_document(
+    prepared: PreparedApplication, output_format: Literal["mermaid", "dot"] = "mermaid"
+) -> str:
+    """Render every workflow as one Markdown document for configuration documentation.
+
+    Each workflow gets a ``## <name>`` section with its start and output, the
+    fenced diagram and its diagnostics. The text is deterministic for the same
+    configuration, so a stored copy can be checked for drift
+    (``foliqant explain --format mermaid --all --output PATH --check``).
+    """
+    render = render_mermaid if output_format == "mermaid" else render_dot
+    lines = [
+        "# Workflows",
+        "",
+        f"Generated by `foliqant explain --format {output_format} --all`; regenerate it after "
+        "changing the configuration instead of editing it.",
+        "",
+    ]
+    for name in sorted(prepared.plans):
+        plan = prepared.plans[name]
+        graph = workflow_graph(plan, prepared)
+        lines.extend(
+            [
+                f"## {name}",
+                "",
+                f"Start: {_start_text(plan)}. Output: {_output_text(plan.output)}.",
+                "",
+                f"```{output_format}",
+                render(graph, diagnostics=False).rstrip("\n"),
+                "```",
+                "",
+            ]
+        )
+        if plan.diagnostics:
+            lines.append("Diagnostics:")
+            lines.append("")
+            lines.extend(_diagnostic_line(item) for item in plan.diagnostics)
+        else:
+            lines.append("Diagnostics: none.")
+        lines.append("")
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
 __all__ = [
     "GraphEdge",
     "GraphFlow",
     "WorkflowGraph",
+    "condition_label",
     "explain",
+    "render_document",
     "render_dot",
     "render_mermaid",
     "workflow_graph",

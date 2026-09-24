@@ -34,6 +34,11 @@ Control flow is configuration, checked before any request runs:
 - **Declared handler contracts** in settings, so `validate` and `explain` work
   without host code; `explain --format mermaid` draws the graph and lists
   compiler diagnostics.
+- **Structural guarantees**: no cycles or dead ends, every flow reachable,
+  bounded repeats and collections, and bindings that resolve on every path.
+  Invalid configurations hard-fail with `file:line:column: code at field`
+  problems; `explain --format mermaid --all --output docs/workflows.md --check`
+  keeps generated graph documentation current.
 
 The model interprets data; it does not invent the workflow graph. Typed results
 and explicit review paths make its output usable by application code, but do

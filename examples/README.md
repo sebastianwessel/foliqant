@@ -50,3 +50,12 @@ Workflow examples use `config/settings.yaml`, conventional
 `config/<workflow>/workflow.yaml`, `<flow>/flow.yaml`, and colocated step and
 schema files. Ordered step IDs and routes remain explicit; filesystem order
 never controls execution.
+
+Each example with a `config/` directory keeps a generated `WORKFLOWS.md`: the
+Mermaid graph, start, output and compiler diagnostics of every workflow. A test
+checks that it matches the configuration; after changing an example, regenerate
+it from the example directory:
+
+```sh
+foliqant explain --format mermaid --all --output WORKFLOWS.md
+```

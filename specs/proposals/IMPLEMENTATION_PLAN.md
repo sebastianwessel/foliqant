@@ -57,6 +57,20 @@ Status legend: ☐ open · ◐ in progress · ☑ done. Update this file as work
 | 3.5 | Host observability: pass the transport trace into `app.run`, log `execution.trace` ids | ☐ |
 | 3.6 | Docs of the platform (`docs/implementation.md` §7, `docs/workflows.md`, configuration) | ☐ |
 
+## Phase 5 — Structural guarantees, hard failure and generated documentation (library)
+
+| # | Work item | Spec | Status |
+|---|---|---|---|
+| 5.1 | `docs/configuration/validation.md` ("What the compiler guarantees"): every guarantee with code, level, failing example and fix; one focused test per row in `tests/test_config_guarantees.py`, which also compiles every example of the guide | static-checks.md | ☑ |
+| 5.2 | Compiler audit fixes: `review_completes_run`, dead-route-entry reachability, `incompatible_route_type` on mixed types, `unavailable_value` (later attempts, attempt errors, defaults lacking a key, with completion-aware defaults), bindable step record fields, first-step `selection` in flow outputs, recursive `collection_budget`, new `run_budget` | runtime.md | ☑ |
+| 5.3 | Located problems: validation errors mapped to YAML keys, full key-path fields, messages naming identifiers, hints on every diagnostic | runtime.md | ☑ |
+| 5.4 | `CompilationError.problems`/`.diagnostics`, rendered `str(error)`, strict preparation listing every warning, `PreparedApplication.strict` enforced by `open_application`, all missing handler registrations | runtime.md | ☑ |
+| 5.5 | `review_ends_run` warning unless the reviewing flow's result is the returned output (info) | static-checks.md | ☑ |
+| 5.6 | CLI: JSON status on stdout, rendered problems on stderr for every command, documented exit codes; `explain --all`, `--output`, `--check`; `foliqant.graph.render_document` | runtime.md | ☑ |
+| 5.7 | Graph labels with authored condition operands and complete repeat annotations; literals and defaults stay hidden | static-checks.md | ☑ |
+| 5.8 | Docs (`validation.md`, `reference/runtime-configuration.md`, `integration/observability.md`, workflows, conditions, integration, deployment), skill references, examples with explicit review routes and generated `WORKFLOWS.md` checked by `tests/test_example_workflow_docs.py` | — | ☑ |
+| 5.9 | Platform follow-up: regenerate `docs/workflows.md` and update graph-label assertions in `apps/workflows/tests/test_workflow_graph.py` (repeat annotation and operands changed); consider `foliqant explain --all --check` instead of the custom generator | — | ☐ |
+
 ## Phase 4 — Review and hardening
 
 | # | Work item | Status |

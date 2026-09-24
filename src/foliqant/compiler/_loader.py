@@ -128,3 +128,76 @@ class YamlLocator:
         if mark is None:
             return SourceLocation(self._path, 1 + self._offset, 1)
         return SourceLocation(self._path, mark.line + 1 + self._offset, mark.column + 1)
+
+    def follow(
+        self, loc: tuple[str | int, ...], tags: frozenset[str]
+    ) -> tuple[tuple[str | int, ...], SourceLocation, str | int | None]:
+        """Map a validation error path to the authored key path and its coordinate.
+
+        Union tags and class names that are not authored keys are skipped. A
+        tag equal to a key (``route`` before ``route``) is recognized by its
+        successor also being a key of the same mapping. Returns the matched
+        path, the location of its deepest node and the unmatched final token.
+        """
+        node = self._root
+        mark = node.start_mark if node is not None else None
+        kept: list[str | int] = []
+        matched_last = False
+        for index, token in enumerate(loc):
+            matched_last = False
+            following = loc[index + 1] if index + 1 < len(loc) else None
+            if isinstance(node, MappingNode) and isinstance(token, str):
+                keys = {
+                    key.value: (key, value)
+                    for key, value in node.value
+                    if isinstance(key, yaml.ScalarNode)
+                }
+                match = keys.get(token)
+                child = match[1] if match is not None else None
+                is_tag = token in tags and (
+                    (isinstance(following, str) and following in keys)
+                    or (
+                        isinstance(following, str)
+                        and not (
+                            isinstance(child, MappingNode)
+                            and any(
+                                isinstance(key, yaml.ScalarNode) and key.value == following
+                                for key, _ in child.value
+                            )
+                        )
+                    )
+                )
+                if match is None or is_tag:
+                    continue
+                mark, node = match[0].start_mark, match[1]
+                kept.append(token)
+                matched_last = True
+            elif isinstance(node, yaml.SequenceNode) and isinstance(token, int):
+                if not 0 <= token < len(node.value):
+                    continue
+                node = node.value[token]
+                mark = node.start_mark
+                kept.append(token)
+                matched_last = True
+        final = loc[-1] if loc and not matched_last else None
+        if mark is None:
+            return tuple(kept), SourceLocation(self._path, 1 + self._offset, 1), final
+        location = SourceLocation(self._path, mark.line + 1 + self._offset, mark.column + 1)
+        return tuple(kept), location, final
+
+
+def step_locator(path: Path, *, bundle: Path, source: bytes) -> YamlLocator:
+    """Locator of a step file; for Markdown, of its frontmatter with the line offset."""
+    relative = path.relative_to(bundle).as_posix()
+    try:
+        text = source.decode("utf-8")
+    except UnicodeError:
+        return YamlLocator("", relative_path=relative)
+    if path.suffix != ".md":
+        return YamlLocator(text, relative_path=relative)
+    lines = text.splitlines()
+    end = next(
+        (index for index, line in enumerate(lines[1:], start=1) if line.strip() == "---"),
+        len(lines),
+    )
+    return YamlLocator("\n".join(lines[1:end]), relative_path=relative, line_offset=1)

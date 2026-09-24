@@ -96,11 +96,12 @@ From the application directory, use the selected config path if nonconventional:
 ```sh
 foliqant validate --strict
 foliqant doctor
-foliqant explain --format mermaid --workflow WORKFLOW_ID
+foliqant explain --format mermaid --all --output docs/workflows.md
 ```
 
 Fix every error and warning in the reported `diagnostics`, or document why an
-`info` (such as `review_ends_run`) is intended. Review the Mermaid graph for
+`info` (such as `review_ends_run` for the output flow) is intended. Commit the
+generated `docs/workflows.md` and check it in CI with `--check`. Review the Mermaid graph for
 missing routes, review edges and retry calls. Declared handlers need no Python
 registration for these checks; running them needs the host's registered
 `prepare_application(...)`, see deployment and HTTP for the lifecycle.

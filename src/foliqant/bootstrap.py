@@ -37,6 +37,7 @@ from foliqant.settings import (
     load_environment,
     prepare_application,
     require_handler_registrations,
+    require_no_warnings,
 )
 
 if TYPE_CHECKING:
@@ -332,6 +333,8 @@ async def open_application(
     from foliqant.lifecycle import drain_before_close
 
     selected = plugins or RuntimePlugins()
+    # A strict preparation stays strict: warnings added later still refuse activation.
+    require_no_warnings(prepared)
     require_handler_registrations(prepared)
     credentials = load_environment(prepared.source, environment)
     resolver = EnvironmentResolver(credentials)

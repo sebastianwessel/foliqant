@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Never, TextIO, cast
 
 from foliqant.compiler import CompilationError
+from foliqant.compiler.errors import render_problems
 from foliqant.contracts.decoding import MAX_ENVELOPE_BYTES, decode_envelope
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.identity import Identity
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from foliqant.adapters.telemetry.logging import LoggingRuntime, LogLabels
     from foliqant.bootstrap import PreparedApplication
 
+_EXIT_STALE = 1
 _EXIT_INPUT = 2
 _EXIT_DEPENDENCY = 3
 _EXIT_RUNTIME = 4
@@ -47,6 +49,7 @@ _MESSAGES: dict[str, str] = {
     ErrorCode.UNCERTAIN_EFFECT.value: "An external operation requires reconciliation.",
     ErrorCode.CANCELLED.value: "The execution was cancelled.",
     ErrorCode.CAPACITY_EXCEEDED.value: "The service has reached its admission limit.",
+    "stale_output": "The generated file differs from the current configuration.",
 }
 
 _SCAFFOLD: Mapping[str, str] = {
@@ -142,6 +145,7 @@ class _CliFailure(Exception):
     hint: str | None = None
     retryable: bool = False
     diagnostics: tuple[Diagnostic, ...] = ()
+    problems: tuple[Diagnostic, ...] = ()
 
 
 class _Parser(argparse.ArgumentParser):
@@ -185,7 +189,18 @@ def _parser() -> argparse.ArgumentParser:
         "--format",
         choices=("json", "mermaid", "dot"),
         default="json",
-        help="json (default) or a Mermaid/Graphviz graph of one workflow",
+        help="json (default) or a Mermaid/Graphviz graph",
+    )
+    explain.add_argument(
+        "--all",
+        action="store_true",
+        help="every workflow; with mermaid/dot one Markdown document with a section each",
+    )
+    explain.add_argument("--output", type=Path, help="write the rendering to this file")
+    explain.add_argument(
+        "--check",
+        action="store_true",
+        help="compare --output with the current rendering; exit 1 when it is stale",
     )
 
     run = commands.add_parser("run", help="Run one workflow with an envelope")
@@ -270,9 +285,22 @@ def _failure_payload(failure: _CliFailure) -> dict[str, object]:
     if location is not None:
         error["location"] = location
     payload: dict[str, object] = {"error": error}
+    if failure.problems:
+        payload["problems"] = _diagnostics(failure.problems)
     if failure.diagnostics:
         payload["diagnostics"] = _diagnostics(failure.diagnostics)
     return payload
+
+
+def _failure_text(failure: _CliFailure) -> str:
+    """Human-readable failure for standard error: one line per problem, then a summary."""
+    message = _MESSAGES.get(failure.code, _MESSAGES[ErrorCode.DEPENDENCY_FAILURE.value])
+    if failure.problems:
+        count = len(failure.problems)
+        summary = f"foliqant: {failure.code}: {count} problem{'s' if count != 1 else ''}."
+        return render_problems(failure.problems) + "\n" + summary + "\n"
+    hint = f" (hint: {failure.hint})" if failure.hint else ""
+    return f"foliqant: {failure.code}: {message}{hint}\n"
 
 
 def _diagnostics(items: Sequence[Diagnostic]) -> list[dict[str, object]]:
@@ -285,6 +313,8 @@ def _diagnostics(items: Sequence[Diagnostic]) -> list[dict[str, object]]:
             value["location"] = location
         if item.field is not None:
             value["field"] = item.field
+        if item.hint is not None:
+            value["hint"] = item.hint
         result.append(value)
     return result
 
@@ -304,9 +334,7 @@ def _exit_for_service_error(error: ServiceError) -> int:
     return _EXIT_RUNTIME
 
 
-def _compilation_failure(
-    error: CompilationError, diagnostics: tuple[Diagnostic, ...] = ()
-) -> _CliFailure:
+def _compilation_failure(error: CompilationError) -> _CliFailure:
     return _CliFailure(
         ErrorCode.INVALID_CONFIGURATION.value,
         _EXIT_INPUT,
@@ -314,15 +342,16 @@ def _compilation_failure(
         reason=error.reason,
         field=error.field,
         hint=error.hint,
-        diagnostics=diagnostics,
+        diagnostics=error.diagnostics,
+        problems=error.problems,
     )
 
 
-def _prepare(config_path: Path) -> PreparedApplication:
+def _prepare(config_path: Path, *, strict: bool = False) -> PreparedApplication:
     from foliqant.bootstrap import prepare_application
 
     try:
-        return prepare_application(config_path)
+        return prepare_application(config_path, strict=strict)
     except CompilationError as error:
         raise _compilation_failure(error) from None
     except ServiceError:
@@ -358,14 +387,8 @@ def _init(destination: Path) -> dict[str, object]:
 
 
 def _validate(config_path: Path, *, strict: bool = False) -> dict[str, object]:
-    prepared = _prepare(config_path)
-    warnings = [item for item in prepared.diagnostics if item.level == "warning"]
-    if strict and warnings:
-        first = warnings[0]
-        raise _compilation_failure(
-            CompilationError(first.code, first.location, field=first.field),
-            prepared.diagnostics,
-        )
+    # A strict preparation fails with every warning, not only the first.
+    prepared = _prepare(config_path, strict=strict)
     return {
         "command": "validate",
         "status": "valid",
@@ -375,30 +398,76 @@ def _validate(config_path: Path, *, strict: bool = False) -> dict[str, object]:
     }
 
 
-def _explain(
-    config_path: Path, workflow: str | None, output_format: str
-) -> dict[str, object] | str:
-    from foliqant.graph import render_dot, render_mermaid, workflow_graph
+def _explain(args: argparse.Namespace) -> tuple[dict[str, object] | str, int]:
+    from foliqant.graph import render_document, render_dot, render_mermaid, workflow_graph
 
-    prepared = _prepare(config_path)
-    if workflow is not None:
-        plan = prepared.plans.get(workflow)
+    output_format: str = args.format
+    if (args.check and args.output is None) or (args.all and args.workflow is not None):
+        raise _CliFailure(
+            "invalid_arguments",
+            _EXIT_INPUT,
+            hint="--check needs --output; --all and --workflow exclude each other.",
+        )
+    prepared = _prepare(args.config)
+    if args.workflow is not None:
+        plan = prepared.plans.get(args.workflow)
         if plan is None:
             raise _CliFailure(ErrorCode.NOT_FOUND.value, _EXIT_INPUT)
         plans = [plan]
     else:
         plans = [prepared.plans[name] for name in sorted(prepared.plans)]
-    graphs = [workflow_graph(plan, prepared) for plan in plans]
-    if output_format != "json":
-        if len(graphs) != 1:
-            # One diagram per output; select the workflow explicitly.
-            raise _CliFailure("invalid_arguments", _EXIT_INPUT)
-        return render_mermaid(graphs[0]) if output_format == "mermaid" else render_dot(graphs[0])
-    return {
-        "command": "explain",
-        "configuration_digest": prepared.configuration_digest,
-        "workflows": [graph.to_json() for graph in graphs],
-    }
+    rendering: dict[str, object] | str
+    if output_format == "json":
+        rendering = {
+            "command": "explain",
+            "configuration_digest": prepared.configuration_digest,
+            "workflows": [workflow_graph(plan, prepared).to_json() for plan in plans],
+        }
+    elif args.all:
+        rendering = render_document(prepared, "mermaid" if output_format == "mermaid" else "dot")
+    elif len(plans) != 1:
+        # One diagram per output; select the workflow or render the document.
+        raise _CliFailure(
+            "invalid_arguments",
+            _EXIT_INPUT,
+            hint="Select one workflow with --workflow NAME, or render all with --all.",
+        )
+    else:
+        graph = workflow_graph(plans[0], prepared)
+        rendering = render_mermaid(graph) if output_format == "mermaid" else render_dot(graph)
+    if args.output is None:
+        return rendering, 0
+    text = (
+        rendering
+        if isinstance(rendering, str)
+        else json.dumps(rendering, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
+    )
+    return _write_rendering(args.output, text, check=args.check), 0
+
+
+def _write_rendering(path: Path, text: str, *, check: bool) -> dict[str, object]:
+    """Write generated documentation atomically, or compare it for drift with ``check``."""
+    if check:
+        try:
+            current = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            current = None
+        if current != text:
+            raise _CliFailure(
+                "stale_output",
+                _EXIT_STALE,
+                hint="Run the same command without --check to regenerate the file.",
+            )
+        return {"command": "explain", "status": "current", "output": str(path)}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix=".foliqant-", dir=path.parent)
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(text)
+        os.replace(temporary, path)
+    except OSError:
+        raise _CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME) from None
+    return {"command": "explain", "status": "written", "output": str(path)}
 
 
 def _doctor(config_path: Path) -> dict[str, object]:
@@ -528,7 +597,7 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object] | str, int]:
     if args.command == "validate":
         return _validate(args.config, strict=args.strict), 0
     if args.command == "explain":
-        return _explain(args.config, args.workflow, args.format), 0
+        return _explain(args)
     if args.command == "doctor":
         return _doctor(args.config), 0
     if args.command == "evaluate":
@@ -562,8 +631,23 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object] | str, int]:
     return asyncio.run(_run(args))
 
 
+def _report(failure: _CliFailure) -> int:
+    """Failure status as one JSON object on stdout; the readable text on stderr."""
+    _json_line(_failure_payload(failure))
+    sys.stderr.write(_failure_text(failure))
+    return failure.exit_code
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    """Execute one command with a single JSON success or safe failure object."""
+    """Execute one command: one JSON status object (or rendering) on stdout.
+
+    Failures print the same JSON failure object on stdout and readable text on
+    stderr: ``<file>:<line>:<column>: <code> at <field>: <message> (hint: ...)``
+    for every configuration problem. Exit codes: ``0`` success, ``1`` stale
+    ``explain --check`` output or gold mismatch, ``2`` invalid arguments, input
+    or configuration, ``3`` missing optional dependency, ``4`` runtime failure,
+    ``130`` interruption.
+    """
     try:
         args = _parser().parse_args(argv)
         payload, exit_code = _dispatch(args)
@@ -574,31 +658,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             _json_line(payload)
         return exit_code
     except _CliFailure as failure:
-        _json_line(_failure_payload(failure), stream=sys.stderr)
-        return failure.exit_code
+        return _report(failure)
+    except CompilationError as error:
+        return _report(_compilation_failure(error))
     except ServiceError as error:
-        service_failure = _CliFailure(
-            error.code.value, _exit_for_service_error(error), retryable=error.retryable
+        return _report(
+            _CliFailure(error.code.value, _exit_for_service_error(error), retryable=error.retryable)
         )
-        _json_line(_failure_payload(service_failure), stream=sys.stderr)
-        return service_failure.exit_code
     except (ImportError, ModuleNotFoundError):
-        dependency_failure = _CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_DEPENDENCY)
-        _json_line(_failure_payload(dependency_failure), stream=sys.stderr)
-        return dependency_failure.exit_code
+        return _report(_CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_DEPENDENCY))
     except KeyboardInterrupt:
-        cancelled_failure = _CliFailure(ErrorCode.CANCELLED.value, _EXIT_CANCELLED)
-        _json_line(_failure_payload(cancelled_failure), stream=sys.stderr)
-        return cancelled_failure.exit_code
+        return _report(_CliFailure(ErrorCode.CANCELLED.value, _EXIT_CANCELLED))
     except (OSError, TypeError, ValueError):
-        runtime_failure = _CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME)
-        _json_line(_failure_payload(runtime_failure), stream=sys.stderr)
-        return runtime_failure.exit_code
+        return _report(_CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME))
     except Exception:
         # No exception text or traceback may cross this public boundary.
-        internal_failure = _CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME)
-        _json_line(_failure_payload(internal_failure), stream=sys.stderr)
-        return internal_failure.exit_code
+        return _report(_CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME))
 
 
 __all__ = ["main"]

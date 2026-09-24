@@ -80,6 +80,7 @@ nav:
           - Decide with conditions: configuration/conditions.md
           - Retry a flow with repeat: configuration/repeat.md
           - Pass data and write prompts: configuration/context.md
+          - What the compiler guarantees: configuration/validation.md
       - Choose a capability:
           - Find the right capability: steps/index.md
           - Answer yes or no: steps/yes-no.md

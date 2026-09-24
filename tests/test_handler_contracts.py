@@ -110,9 +110,13 @@ def test_cli_validates_and_explains_workflows_with_declared_handlers(tmp_path):
         check=False,
     )
     assert strict.returncode == 2
-    failure = json.loads(strict.stderr)
+    failure = json.loads(strict.stdout)
     assert failure["error"]["reason"] == "uncovered_value"
+    assert [item["code"] for item in failure["problems"]] == ["uncovered_value"]
     assert [item["code"] for item in failure["diagnostics"]] == ["uncovered_value"]
+    first, summary = strict.stderr.splitlines()
+    assert ": uncovered_value at flows." in first and first.endswith(")")
+    assert summary == "foliqant: invalid_configuration: 1 problem."
 
 
 def test_strict_preparation_raises_on_warnings(tmp_path):
@@ -167,7 +171,9 @@ def test_cli_run_reports_missing_registrations(tmp_path):
         check=False,
     )
     assert completed.returncode == 2
-    assert json.loads(completed.stderr)["error"]["reason"] == "missing_handler_registration"
+    assert json.loads(completed.stdout)["error"]["reason"] == "missing_handler_registration"
+    assert "settings.yaml:" in completed.stderr
+    assert "missing_handler_registration at handlers.route_message" in completed.stderr
 
 
 @pytest.mark.parametrize(

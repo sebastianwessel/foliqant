@@ -40,8 +40,8 @@ _HANDLERS = {
 }
 
 
-def _prepare(path: Path):
-    return prepare_application(declare(path, _HANDLERS), handlers=_HANDLERS)
+def _prepare(path: Path, *, strict: bool = False):
+    return prepare_application(declare(path, _HANDLERS), handlers=_HANDLERS, strict=strict)
 
 
 def _project(tmp_path: Path) -> tuple[Path, Path, dict[str, Any]]:
@@ -383,7 +383,9 @@ def test_cli_evaluate_check_and_mismatch_have_safe_outputs(
     assert "private-email" not in captured.out
     assert json.loads(captured.out)["total_checks"] == 2
     assert main(["evaluate", "--config", str(config), "--max-concurrency", "0"]) == 2
-    assert json.loads(capsys.readouterr().err)["error"]["code"] == "invalid_input"
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["error"]["code"] == "invalid_input"
+    assert captured.err.startswith("foliqant: invalid_input: ")
 
 
 async def test_mixed_inline_and_separate_case_files_resolve_from_manifest(tmp_path: Path) -> None:

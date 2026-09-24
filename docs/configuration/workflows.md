@@ -294,9 +294,12 @@ routing key.
 Steps execute sequentially. If a step produces a valid unresolved result, the
 flow stops and uses `on_unresolved` instead of `transition`. Without a review
 route the workflow ends with `needs_review`; validation reports each such flow
-with the `review_ends_run` info diagnostic, naming what the host then receives:
-the workflow output resolved from the flows that ran, or its default when none
-of the flows it binds can have run.
+with `review_ends_run`, naming what the host then receives. It is a warning
+(fatal under `--strict`) when the host would receive the workflow output's
+default, the accepted input or other flows' results instead of the reviewing
+flow's projected result, and an info when the reviewing flow is the one the
+workflow output returns. Declaring `on_unresolved: {outcome: needs_review}`
+states that ending the run is intended.
 
 Use one target when all uncertainty follows the same path:
 
@@ -377,12 +380,16 @@ foliqant explain --config config/settings.yaml --workflow support_intake --forma
 ```
 
 Validation checks start selection, reachability, cycles, transitions, route
-coverage, conditions, known binding paths, and provable schema compatibility
-without calling a model or tool. Warnings and infos are listed in the
-`diagnostics` of the output; `--strict` fails on any warning. `explain` renders
-the graph as JSON, Mermaid or Graphviz. None of this proves that business
-categories, route cases, or review policy are correct. Exercise those with
-reviewed cases from the [evaluation guides](../evaluation/index.md).
+coverage, conditions, known binding paths, budgets and provable schema
+compatibility without calling a model or tool; [what the compiler
+guarantees](validation.md) lists every check with an example and its fix.
+Problems print as `<file>:<line>:<column>: <code> at <field>: <message> (hint:
+...)` on standard error. Warnings and infos are listed in the `diagnostics` of
+the output; `--strict` fails on any warning. `explain` renders the graph as
+JSON, Mermaid or Graphviz, and `explain --format mermaid --all --output
+docs/workflows.md` writes a document with every workflow. None of this proves
+that business categories, route cases, or review policy are correct. Exercise
+those with reviewed cases from the [evaluation guides](../evaluation/index.md).
 
 Continue with [Flows](flows.md) to define each sequential boundary or
 [Context](context.md) to understand exactly which values its bindings can see.

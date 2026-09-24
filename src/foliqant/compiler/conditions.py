@@ -34,18 +34,27 @@ from .static_values import Static, json_key, types, values
 type AuthoredCondition = LeafCondition | AllCondition | AnyCondition | NotCondition
 
 
-def compile_condition(authored: AuthoredCondition, location: SourceLocation) -> ConditionPlan:
+def compile_condition(
+    authored: AuthoredCondition, location: SourceLocation, field: str | None = None
+) -> ConditionPlan:
     """Freeze one validated authored condition into its standard-library plan.
 
     A ``matches`` pattern whose backtracking is not bounded fails with
-    ``unsafe_pattern``, a specific invalid condition.
+    ``unsafe_pattern``, a specific invalid condition. ``field`` is the key
+    path of the condition inside its file.
     """
     try:
         return _compile(authored)
     except ServiceError:
-        raise CompilationError("invalid_condition", location) from None
-    except UnsafePatternError:
-        raise CompilationError("unsafe_pattern", location, field="matches") from None
+        raise CompilationError("invalid_condition", location, field=field) from None
+    except UnsafePatternError as error:
+        raise CompilationError(
+            "unsafe_pattern",
+            location,
+            field=field or "matches",
+            message=f"The `matches` pattern is rejected: {error}; matching could take "
+            "unbounded time.",
+        ) from None
 
 
 def _compile(authored: AuthoredCondition) -> ConditionPlan:

@@ -21,19 +21,25 @@ class SourceLocation:
     column: int
 
 
+type DiagnosticLevel = Literal["error", "warning", "info"]
+
+
 @dataclass(frozen=True, slots=True)
 class Diagnostic:
-    """A non-fatal compiler finding; errors raise ``CompilationError`` instead.
+    """One compiler finding with a stable code, source coordinate and corrective hint.
 
-    Messages name configured identifiers and authored values only, never runtime
-    data, credentials or prompt text.
+    Warnings and infos are non-fatal and listed on plans; an ``error`` is the
+    problem carried by a raised ``CompilationError``. ``field`` is the safe key
+    path inside the reported file. Messages name configured identifiers and
+    authored values only, never runtime data, credentials or prompt text.
     """
 
     code: str
-    level: Literal["warning", "info"]
+    level: DiagnosticLevel
     location: SourceLocation
     message: str
     field: str | None = None
+    hint: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

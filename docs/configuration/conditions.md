@@ -149,9 +149,12 @@ decision result schemas):
 | `route_unreachable_entry` | warning | a route entry can never be selected |
 
 Run `foliqant validate --config config/settings.yaml` to see diagnostics, and
-`foliqant explain --format mermaid` to see conditions on the graph. Telemetry
-and `explain` show conditions as pointers and operators only, never operand
-values.
+`foliqant explain --format mermaid` to see conditions on the graph. `explain`
+shows the authored operands (`equals found`, `in [a, b]`, `matches /.../`),
+because they are configuration like case keys; a `literal` condition source
+stays hidden. Telemetry and logs show conditions as pointers and operators
+only, never operand values. Every condition check is listed in
+[what the compiler guarantees](validation.md#conditions-are-checked-and-bounded).
 
 Continue with [workflows](workflows.md) to route on conditions, or with
 [repeat](repeat.md) to retry a flow until a condition holds.

@@ -1,6 +1,7 @@
 """Static values of pointers in flow scope and workflow boundary scope."""
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from typing import Protocol, cast
 
 from foliqant.contracts.workflow import DeclaredToolCatalog
@@ -206,18 +207,25 @@ def _selection_schema(step: CompiledStep) -> dict[str, object]:
 
 
 def _record_schema(step: CompiledStep) -> dict[str, object]:
-    return {
-        "type": "object",
-        "properties": {
-            "status": {"type": "string", "enum": _STATUSES},
-            "kind": {"const": "flow_collection"},
-            "result": {},
-            "partial_result": collection_result_schema(),
-            "selection": _selection_schema(step),
-            "error": _ERROR_SCHEMA,
-        },
-        "additionalProperties": False,
+    """Step record fields a later binding can read.
+
+    ``error`` and ``partial_result`` exist only on failure, which stops the flow,
+    so no binding can read them. ``kind`` exists for collections only and
+    ``selection`` only for single-choice decisions and handlers.
+    """
+    properties: dict[str, object] = {
+        "status": {"type": "string", "enum": _STATUSES},
+        "result": {},
     }
+    if isinstance(step, FlowCollectionStepPlan):
+        properties["kind"] = {"const": "flow_collection"}
+    if isinstance(step, HandlerStepPlan) or (
+        isinstance(step, DecisionStepPlan)
+        and step.question_mode == "single"
+        and step.questions[0].type == "choice"
+    ):
+        properties["selection"] = _selection_schema(step)
+    return {"type": "object", "properties": properties, "additionalProperties": False}
 
 
 def binding_static(binding: BindingPlan, resolve: "PointerResolver") -> Static:
@@ -312,8 +320,35 @@ class FlowScope:
         return binding_static(binding, self)
 
 
+def completion_binding(binding: BindingPlan, conditional: frozenset[str]) -> BindingPlan:
+    """A flow output as projected after the flow completed.
+
+    Every unconditional step ran, so the default of a pointer to one of them
+    can never apply; defaults of conditional steps, of other pointers and of
+    ``first_of`` candidates stay.
+    """
+    if binding.kind == "fields":
+        return replace(
+            binding,
+            fields=tuple(
+                (name, completion_binding(item, conditional)) for name, item in binding.fields
+            ),
+        )
+    if binding.kind != "pointer" or not binding.has_default or binding.pointer is None:
+        return binding
+    parts = tokens(binding.pointer)
+    if len(parts) >= 2 and parts[0] == "steps" and parts[1] not in conditional:
+        return replace(binding, has_default=False, default=None)
+    return binding
+
+
 class WorkflowScope:
-    """Boundary pointers: ``/payload``, ``/metadata`` and ``/flows/<id>/result|attempts``."""
+    """Boundary pointers: ``/payload``, ``/metadata`` and ``/flows/<id>/result|attempts``.
+
+    ``completed`` names flows known to have completed where the pointer is
+    resolved (not stopped for review); their output defaults for unconditional
+    steps are then known not to apply.
+    """
 
     def __init__(
         self,
@@ -321,11 +356,19 @@ class WorkflowScope:
         flow_scopes: Mapping[str, FlowScope],
         input_path: str | None,
         schemas: Mapping[str, dict[str, object]],
+        completed: frozenset[str] = frozenset(),
     ) -> None:
         self.flows = flows
         self.flow_scopes = flow_scopes
         self.input_path = input_path
         self.schemas = schemas
+        self.completed = completed
+
+    def completed_at(self, names: Iterable[str]) -> "WorkflowScope":
+        """The same scope where ``names`` are known to have completed."""
+        return WorkflowScope(
+            self.flows, self.flow_scopes, self.input_path, self.schemas, frozenset(names)
+        )
 
     def view(self, schema: dict[str, object], path: str = "") -> SchemaView:
         return SchemaView(schema, schema, path, self.schemas)
@@ -336,7 +379,11 @@ class WorkflowScope:
             if flow.input_schema_path is not None:
                 return of(self.view(self.schemas[flow.input_schema_path], flow.input_schema_path))
             return of(self.view({"type": "object"}))
-        return self.flow_scopes[name].binding(flow.output)
+        output = flow.output
+        if name in self.completed:
+            conditional = frozenset(step.name for step in flow.steps if step.when is not None)
+            output = completion_binding(output, conditional)
+        return self.flow_scopes[name].binding(output)
 
     def attempts(self, name: str) -> Static:
         """Bindable attempt entries; step records, usage and time stay in the result only."""
@@ -346,7 +393,8 @@ class WorkflowScope:
                 "attempt": of(self.view({"type": "integer", "minimum": 1})),
                 "status": of(self.view({"type": "string", "enum": _STATUSES})),
                 "result": Static(result.alternatives, True),
-                "error": Static((self.view(_ERROR_SCHEMA),), True),
+                # Only a failed attempt has an error, and a failure stops the run.
+                "error": Static((self.view(_ERROR_SCHEMA),), True, True),
             }
         )
         return of(Arr(of(record)))

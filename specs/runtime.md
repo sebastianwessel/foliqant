@@ -197,7 +197,11 @@ optional exactly when it declares `default` (also `null`); without one a
 missing value fails with `missing_binding`. There is no `optional` flag. Flow
 and workflow `output` may also be `fields`: an object with exactly these keys,
 each any binding. All configured flow targets must exist and the reachable
-graph must be acyclic; unused definitions are rejected.
+graph must be acyclic; unused definitions are rejected, including flows
+reachable only through `route` entries that can never be selected
+(`unreachable_flow`). A review route never targets `outcome: completed`
+(`review_completes_run`). A `cases` binding is a required pointer whose static
+type, when known, is string or null on every path (`incompatible_route_type`).
 
 ### Conditions
 
@@ -260,28 +264,55 @@ IDs are stable lowercase snake case. Missing differs from explicit null.
 The compiler validates earlier-step order, flow dominance (with a virtual root
 over all start candidates), defaults for results of later, reviewable or
 conditional steps, `first_of` availability, known closed-schema paths and type
-compatibility of every member. Open/complex schemas remain runtime-checked.
-These checks do not prove business correctness.
+compatibility of every member. A required binding is also rejected when its
+value is structurally missing on some path (`unavailable_value`): a repeat
+attempt after the first, an attempt `error`, or a key that a flow result's
+`default` lacks when that default can apply (the flow may have stopped for
+review before the reader, or the defaulted pointer names a conditional step).
+Step records expose `selection` only for single-choice decisions (and, needing
+a default, handlers) and `kind` only for collections; `error` and
+`partial_result` exist only on failure and are never bindable. A flow output
+reads the first step's `selection` only with a default. Open/complex schemas,
+schema-optional payload fields and all-null `first_of` members remain
+runtime-checked. These checks do not prove business correctness.
 
 ### Diagnostics and static checks
 
 Errors raise `CompilationError`; non-fatal findings are returned as
-`Diagnostic(code, level: warning|info, location, message, field)` on
-`WorkflowPlan.diagnostics` and `PreparedApplication.diagnostics`, with line and
-column locations. Messages name configured identifiers and authored values,
-never runtime data or secrets. The compiler derives the allowed values of a
+`Diagnostic(code, level: error|warning|info, location, message, field, hint)`
+on `WorkflowPlan.diagnostics` and `PreparedApplication.diagnostics`, with line
+and column locations; `field` is the safe key path inside the reported file.
+`CompilationError.problems` lists the problems that invalidate the
+configuration (the first compiler error, or every warning under `strict`) and
+`.diagnostics` every finding; `reason`, `location`, `field`, `hint` and
+`message` describe the first problem. `str(error)` renders one line per
+problem: `<file>:<line>:<column>: <code> at <field>: <message> (hint: ...)`.
+Messages name configured identifiers and authored configuration values (case
+keys, allowed values), never runtime data, rejected keys, literal or default
+data, or secrets. The compiler derives the allowed values of a
 field from `enum`/`const` (including `anyOf`/`oneOf`), decision catalogs plus
 fallback, predicate answers, handler/MCP/LLM output schemas and object outputs.
 It reports `unmatched_case` (error), `uncovered_value` (warning, silenced by an
 exact `default_covers`, else `default_covers_mismatch`), `case_on_unknown_type`
 (info), `invalid_condition`, `unsafe_pattern`, `condition_type_mismatch` (errors),
 `condition_always_false`/`condition_always_true`, `route_unreachable_entry`,
-`repeat_without_retry`, `unused_llm_input`, `collection_budget` (warnings),
-`review_ends_run`, `empty_text_source` (info), and `invalid_repeat`,
-`repeat_budget` (errors, the latter when
+`repeat_without_retry`, `unused_llm_input`, `collection_budget` (warnings, the
+latter when `max_items × worst(child)` with nested collections and item repeats
+exceeds `execution.max_steps`), `run_budget` (warning: the most expensive path
+from a start candidate, counting every step, repeat attempt, retry run and
+collection item, exceeds `execution.max_steps`; not reported when a
+`collection_budget` warning already explains it), `review_ends_run` (warning
+when a flow without any review route would end the run in review and the host
+would not receive that flow's projected result, info when the reviewing flow is
+what the workflow output returns), `empty_text_source` (info), and
+`invalid_repeat`, `repeat_budget` (errors, the latter when
 `max_attempts × steps(flow) + (max_attempts − 1) × steps(retry)` exceeds
 `execution.max_steps`). `prepare_application(..., strict=True)` and
-`validate --strict` fail on the first warning.
+`validate --strict` fail with every warning; a strict `PreparedApplication`
+records `strict` and `open_application` refuses it while it carries a warning.
+The public guide `docs/configuration/validation.md` lists every guarantee with
+its code; `tests/test_config_guarantees.py` has one test per row and compiles
+every example of the guide.
 
 Files resolve relative to their declaring file. Conventional step discovery and
 schema references stay inside their flow bundle; an explicit step `definition`,
@@ -295,8 +326,9 @@ remain local and confined; remote, dynamic and unbounded recursive resolution is
 unsupported. Exact parsed dependency bytes are frozen for revision hashing.
 Declared model capabilities must satisfy each step before adapters open.
 
-Compiler failures contain a stable reason, authored file location, safe field
-path and corrective hint. Raw Pydantic errors and authored values are never
+Compiler failures contain a stable reason, authored file location (validation
+errors are mapped to the offending key), safe field path, message and
+corrective hint. Raw Pydantic errors, rejected keys and data values are never
 rendered. CLI `validate` and Python `prepare_application` share this compiler;
 there is no parallel validation engine or network preflight.
 
@@ -565,8 +597,16 @@ reported safely without replacing a completed business result.
 
 The package exposes embedded composition plus offline `init`, `validate`
 (`--strict`), `explain` (`--format json|mermaid|dot`, backed by
-`foliqant.explain(prepared, workflow)`), `doctor`, foreground `run` and explicit
-`evaluate` commands. Evaluation
+`foliqant.explain(prepared, workflow)`; `--all` renders every workflow, for
+mermaid/dot as one Markdown document from `foliqant.graph.render_document`
+with a `## <workflow>` section each holding its start, output, fenced diagram
+and diagnostics; `--output PATH` writes the rendering and `--check` compares it
+instead, exiting `1` when stale), `doctor`, foreground `run` and explicit
+`evaluate` commands. Graph labels show authored condition operands, which are
+configuration like case keys (`equals found`, `in [a, b]`, `matches /…/`,
+`present=false`), and complete repeat annotations (`repeat ≤ 2 until status
+equals found`); literal bindings and default values are never shown, and
+telemetry keeps operand-free condensed conditions. Evaluation
 check/replay modes are offline; ordinary evaluation executes configured targets.
 Offline commands do not open model/MCP endpoints. Commands default to
 `config/settings.yaml` relative to the current directory; `--config PATH`
@@ -575,8 +615,13 @@ a minimal local-model summary flow, its Markdown step, example envelope,
 `config/.env.example` with `MODEL_ID`/`MODEL_BASE_URL`, and usage instructions.
 Validation is offline; executing the generated flow requires the configured
 endpoint and provider extra. Init does not install packages or start a backend.
-Successful CLI output is one safe JSON object; failures use
-one stable safe error and a nonzero exit. There is no durable lookup/cancel operation or packaged HTTP server.
+Standard output carries one safe JSON object (the result, or the failure
+status with `error`, `problems` and `diagnostics`) or the requested graph text;
+standard error carries readable text, one rendered line per configuration
+problem plus a summary. Exit codes: `0` success, `1` gold mismatch or stale
+`explain --check` output, `2` invalid arguments, input or configuration, `3`
+missing optional dependency, `4` runtime failure, `130` interruption. There is
+no durable lookup/cancel operation or packaged HTTP server.
 
 The runnable HTTP example may use a small maintained ASGI library to decode one
 bounded request, invoke the in-memory application and return the terminal result.
@@ -590,7 +635,7 @@ Acceptance families require success and failure evidence:
 | Requirement / capability | Required evidence |
 | --- | --- |
 | `PACKAGE-CONTRACTS` | Strict envelopes/results, runtime reason/strength and one closed output shape, substantive/null/collection boundaries, subject occurrence, independent optional identity, W3C carrier, generated schema drift |
-| `PACKAGE-COMPILER` | Safe deterministic bundle compilation, graph/dataflow/schema checks, condition/route/repeat checks and diagnostics, duplicate/path escape rejection and no endpoint I/O |
+| `PACKAGE-COMPILER` | Safe deterministic bundle compilation, graph/dataflow/schema checks, condition/route/repeat checks and diagnostics, duplicate/path escape rejection and no endpoint I/O; one located test per documented structural guarantee and compiled guide examples |
 | `PACKAGE-RUNTIME` | End-to-end in-memory decision/LLM/MCP/handler execution across sequential flows, routed start, conditional routes and steps, bounded repeat with retry flows, bounded concurrency, cancellation and concurrent state isolation |
 | `PACKAGE-MCP` | Current SDK HTTP/stdio behavior, OAuth isolation, declared catalog/schema checks, budgets, authorization and protected context propagation |
 | `PACKAGE-PRIVACY` | Secret/PII sentinel checks across safe logs and optional observations; telemetry failure remains nonfatal |

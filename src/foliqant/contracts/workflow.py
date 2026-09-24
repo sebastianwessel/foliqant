@@ -451,38 +451,11 @@ Start = Annotated[
 ]
 
 
-def _review_targets(
-    route: TransitionTarget | UnresolvedRouting | ConditionalRouting | None,
-) -> list[TransitionTarget | RouteEntry | None]:
-    if isinstance(route, UnresolvedRouting):
-        return [
-            route.default,
-            route.no_supported_answer,
-            route.conflicting_information,
-            route.multiple_valid_options,
-        ]
-    if isinstance(route, ConditionalRouting):
-        return list(route.route)
-    return [route]
-
-
-def _completes(target: TransitionTarget | RouteEntry | None) -> bool:
-    return (isinstance(target, OutcomeTarget) and target.outcome == "completed") or (
-        isinstance(target, RouteEntry) and target.outcome == "completed"
-    )
-
-
 class WorkflowDefaults(BoundaryModel):
     """Workflow-wide defaults: step model and the inherited review route."""
 
     model: Id | None = None
     on_unresolved: ReviewRouting | None = None
-
-    @model_validator(mode="after")
-    def unresolved_does_not_complete(self) -> "WorkflowDefaults":
-        if any(_completes(target) for target in _review_targets(self.on_unresolved)):
-            raise ValueError("unresolved flows cannot directly complete the workflow")
-        return self
 
 
 class RepeatRetry(BoundaryModel):
@@ -509,13 +482,8 @@ class FlowInstance(BoundaryModel):
     input: dict[Id, Binding]
     transition: Transition
     on_unresolved: ReviewRouting | None = None
+    """A review route never targets ``outcome: completed`` (``review_completes_run``)."""
     repeat: Repeat | None = None
-
-    @model_validator(mode="after")
-    def unresolved_does_not_complete(self) -> "FlowInstance":
-        if any(_completes(target) for target in _review_targets(self.on_unresolved)):
-            raise ValueError("unresolved flows cannot directly complete the workflow")
-        return self
 
 
 class CallableFlow(BoundaryModel):

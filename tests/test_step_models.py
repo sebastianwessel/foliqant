@@ -407,7 +407,7 @@ def test_direct_compiler_revision_includes_inherited_options_without_credentials
 
 @pytest.mark.parametrize("inline", [False, True])
 def test_explain_names_provider_model_and_source_profile_without_credentials(tmp_path, inline):
-    from foliqant.cli import _explain
+    from foliqant.cli import _explain, _parser
 
     selection = (
         profile(model="$STEP_MODEL", api_key="$PRIVATE_KEY")
@@ -419,7 +419,10 @@ def test_explain_names_provider_model_and_source_profile_without_credentials(tmp
         {"first": step(selection)},
         models={"local": profile(api_key="private-credential-sentinel")},
     )
-    report = _explain(path, "demo", "json")
+    report, _ = _explain(
+        _parser().parse_args(["explain", "--config", str(path), "--workflow", "demo"])
+    )
+    assert isinstance(report, dict)
     model_step = next(
         item for item in report["workflows"][0]["flows"][0]["steps"] if item["id"] == "first"
     )
