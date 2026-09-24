@@ -146,8 +146,9 @@ Read it top to bottom:
   known plan completes, anything else goes to review. Running out of attempts
   is not a failure and not a review by itself.
 
-Validate and look at the graph. The repeat is drawn as a self-loop on
-`lookup`, the retry call as a dotted edge:
+Validate and look at the graph. The repeat is annotated in the title of the
+`lookup` box (`repeat ≤ 2 until plan not_equals Unknown`), and the retry call
+is a dotted edge to `correct` under `callable flows`:
 
 ```sh
 uv run --no-sync foliqant validate --config my_support/config/settings.yaml

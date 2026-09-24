@@ -52,12 +52,15 @@ alternative without parent-directory search.
 
 `validate`, `explain`, `doctor`, and `evaluate --check` are offline and list
 compiler `diagnostics`. `validate --strict` fails on any warning; use it in CI.
-`explain --format mermaid|dot --workflow ID` prints the graph (flows, routes
-with their conditions and operands, dashed review edges, dotted
-collection/retry calls, repeat self-loops such as `repeat ≤ 2 until status
-equals found`) as text for reviews. Generate docs with
+`explain --format mermaid|dot --workflow ID` prints the graph as text for
+reviews: one box per flow with its steps shaped by type (conditional steps
+dashed, their `when` on the incoming edge), routes with their conditions and
+operands, dashed review edges, dotted collection/retry calls into the grouped
+callable flows, and repeats in the flow title such as `repeat ≤ 2 until status
+equals found`; `--legend` adds a key of step shapes. Generate docs with
 `foliqant explain --format mermaid --all --output docs/workflows.md`: one
-Markdown section per workflow with its start, output, diagram and diagnostics.
+legend, then one Markdown section per workflow with its start, output, diagram
+and diagnostics.
 Commit the file and keep it current in CI with the same command plus
 `--check` (exit `1` when stale). `run` reads one bounded envelope and returns
 one foreground result.

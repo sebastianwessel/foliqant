@@ -144,3 +144,30 @@ Implemented as specified, with these refinements:
   condition operands and complete repeat annotations
   (`repeat ≤ 2 until status equals found`). Examples keep generated
   `WORKFLOWS.md` files checked by `tests/test_example_workflow_docs.py`.
+
+### Subgraph rendering
+
+* Mermaid and DOT draw each flow as a subgraph (DOT: cluster) holding its
+  steps in authored order, chained `<flow>__<step>`; flow and step IDs are
+  snake_case without `__`, fixed nodes end with `__` (`start__`,
+  `outcome_<name>__`, `callable__`) and a flow ID that is a Mermaid keyword
+  gets `___`. Shapes and `classDef` colors follow the step type (decision
+  hexagon, llm stadium, handler rectangle, mcp parallelogram, collection
+  subroutine); the second label line carries decision question types,
+  `llm · tools` or `flow_collection → <flows>`.
+* A step `when` gives the node a dashed `conditional` class and a `?`, and its
+  condition labels the edge from the previous step, shortened relative to
+  that step's result; a first step keeps it in the node. Route conditions are
+  shortened relative to the source flow's result and keep the route index
+  that telemetry reports. Diagram condition texts are cut at 60 characters
+  with `…`; the JSON model keeps its labels.
+* Flow edges connect subgraphs (DOT: last to first step with
+  `ltail`/`lhead`). A repeat is annotated in the flow title instead of a
+  self-loop, next to a dotted `retry` edge; collection calls are dotted
+  `calls` edges. Callable and retry flows sit in one `callable flows` group
+  after the routed flows.
+* `render_mermaid(graph, legend=True)`, `render_dot(graph, legend=True)` and
+  `explain --legend` append a legend of step types and a conditional example;
+  `render_document(prepared, legend=True)` (the default) places it once at
+  the top. `GraphFlow.plan` and `GraphEdge.when` give renderers the compiled
+  flow and route condition; neither appears in the JSON model.

@@ -112,13 +112,18 @@ means a schema and a condition disagree.
 
 ## Review the graph
 
-`foliqant explain --format mermaid` (or `dot`) renders every flow, route,
-review edge (dashed), collection and retry call (dotted) and repeat
-annotation (`repeat ≤ 2 until status equals found`), followed by the compiler
-diagnostics. Route labels show the authored condition with its operands
-(`0: /flows/lookup/result/status equals found`), so a reviewer can read the
+`foliqant explain --format mermaid` (or `dot`) renders every flow as a box
+with its steps in order, shaped and colored by step type, conditional steps
+dashed with their `when` on the incoming edge, routes between flows solid,
+review edges dashed, collection and retry calls dotted into the grouped
+callable flows, and repeats in the flow title (`lookup  ·  repeat ≤ 2 until
+status equals found`), followed by the compiler diagnostics. Route labels show
+the authored condition with its operands (`0: status equals found`; pointers
+into the source flow's own result are shortened), so a reviewer can read the
 decision rules from the diagram; span events and logs keep the condensed form
-with pointers and operators only.
+with pointers and operators only. `--legend` adds a key of step shapes; the
+[CLI reference](../reference/runtime-configuration.md#explain-and-generated-documentation)
+shows a rendered example.
 
 Commit the rendered graphs with the configuration and check them in CI, so a
 changed route cannot go unreviewed:
@@ -128,8 +133,8 @@ foliqant validate --strict
 foliqant explain --format mermaid --all --output docs/workflows.md --check
 ```
 
-The document has one section per workflow with its start, output projection,
-diagram and diagnostics; regenerate it without `--check`. Fix every warning
+The document starts with a legend and has one section per workflow with its
+start, output projection, diagram and diagnostics; regenerate it without `--check`. Fix every warning
 before release. Span and log names in production (`route.selected` with
 `kind`, `index` and `case`) match the edge labels of the diagram, so an
 observed route can be found in the reviewed graph. See [what the compiler

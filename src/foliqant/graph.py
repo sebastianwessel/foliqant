@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from foliqant.core.conditions import describe_condition
@@ -59,6 +59,8 @@ class GraphEdge:
     index: int | None = None
     case: str | None = None
     inherited: bool = False
+    when: ConditionPlan | None = field(default=None, compare=False, repr=False)
+    """The route entry's condition, for diagram labels relative to the source flow."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +70,8 @@ class GraphFlow:
     id: str
     role: Literal["routed", "callable", "retry"]
     document: Mapping[str, JsonValue]
+    plan: FlowPlan = field(compare=False, repr=False)
+    """The compiled flow; renderers read step details and conditions from it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,6 +422,7 @@ def _route_edges(
                 "review" if review else "route",
                 index=index,
                 inherited=inherited,
+                when=entry.when,
             )
             for index, entry in enumerate(route.entries)
         ]
@@ -479,7 +484,9 @@ def workflow_graph(
             "retry" if flow.name in retry_owner else "callable" if flow.callable else "routed"
         )
         flows.append(
-            GraphFlow(flow.name, role, _flow_json(flow, role, prepared, retry_owner.get(flow.name)))
+            GraphFlow(
+                flow.name, role, _flow_json(flow, role, prepared, retry_owner.get(flow.name)), flow
+            )
         )
         if flow.transition is not None:
             edges.extend(_route_edges(flow.name, flow.transition, "transition"))
@@ -534,6 +541,185 @@ def explain(prepared: PreparedApplication, workflow: str | None = None) -> Workf
     return workflow_graph(plan, prepared)
 
 
+_MAX_DIAGRAM_TEXT = 60
+_TITLE_SEPARATOR = "  ·  "
+_STEP_CLASSES = {
+    "decision": "decision",
+    "llm": "llm",
+    "handler": "handler",
+    "mcp": "mcp",
+    "flow_collection": "collection",
+}
+# Soft fill and stroke per step class; the text color keeps labels readable on dark themes.
+_STEP_COLORS = {
+    "decision": ("#fff4e5", "#d68a1d"),
+    "llm": ("#eef3ff", "#3b6fd6"),
+    "handler": ("#f2f2f2", "#666666"),
+    "mcp": ("#e9f8ee", "#2f9e5d"),
+    "collection": ("#f6ecff", "#8a4fd6"),
+}
+_TEXT_COLOR = "#1f2328"
+_MERMAID_SHAPES = {
+    "decision": ("{{", "}}"),
+    "llm": ("([", "])"),
+    "handler": ("[", "]"),
+    "mcp": ("[/", "/]"),
+    "collection": ("[[", "]]"),
+}
+_DOT_SHAPES = {
+    "decision": 'shape=hexagon, style="filled"',
+    "llm": 'shape=box, style="rounded,filled"',
+    "handler": 'shape=box, style="filled"',
+    "mcp": 'shape=parallelogram, style="filled"',
+    "collection": 'shape=box, peripheries=2, style="filled"',
+}
+# Flow IDs are snake_case without ``__``: step nodes join flow and step with ``__``,
+# fixed nodes end with ``__`` and a flow ID that is a Mermaid keyword gets ``___``.
+_RESERVED_IDS = frozenset(
+    {
+        "call",
+        "class",
+        "classdef",
+        "click",
+        "default",
+        "direction",
+        "end",
+        "flowchart",
+        "graph",
+        "href",
+        "interpolate",
+        "linkstyle",
+        "style",
+        "subgraph",
+    }
+)
+_START_NODE = "start__"
+_CALLABLE_GROUP = "callable__"
+_LEGEND_GROUP = "legend__"
+_REVIEW_DASH = "6 4"
+# Class definitions in emission order: step types, the conditional border, flow
+# subgraphs, the callable and legend groups, and the start and outcome nodes.
+_MERMAID_CLASSES = {
+    **{
+        css: f"fill:{fill},stroke:{stroke},color:{_TEXT_COLOR}"
+        for css, (fill, stroke) in _STEP_COLORS.items()
+    },
+    "conditional": "stroke-dasharray: 4 3",
+    "flow": f"fill:#fafbfc,stroke:#9aa1ab,color:{_TEXT_COLOR}",
+    "group": f"fill:none,stroke:#b8bec6,stroke-dasharray: 4 3,color:{_TEXT_COLOR}",
+    "terminal": f"fill:#ffffff,stroke:#57606a,color:{_TEXT_COLOR}",
+}
+_CALL_DASH = "1 4"
+_CONDITIONAL_DASH = "4 3"
+
+
+@dataclass(frozen=True, slots=True)
+class _StepView:
+    """One step node: its ID, class, label lines and the label of its incoming edge."""
+
+    node: str
+    css: str
+    lines: tuple[str, ...]
+    conditional: bool
+    entry: str
+
+
+def _short(text: str) -> str:
+    """Bound one diagram text at 60 characters, ending a cut text with ``…``."""
+    return text if len(text) <= _MAX_DIAGRAM_TEXT else text[: _MAX_DIAGRAM_TEXT - 1] + "…"
+
+
+def _flow_node(name: str) -> str:
+    return name + "___" if name in _RESERVED_IDS else name
+
+
+def _target_node(target: str) -> str:
+    if target.startswith("outcome:"):
+        return f"outcome_{target.split(':', 1)[1]}__"
+    return _flow_node(target)
+
+
+def _step_detail(step: CompiledStep) -> str:
+    """Second label line: the type with its question types, tools or called flows."""
+    if isinstance(step, DecisionStepPlan):
+        types = list(dict.fromkeys(question.type for question in step.questions))
+        return "decision · " + ", ".join(types) if types else "decision"
+    if isinstance(step, LlmStepPlan):
+        return "llm · tools" if step.tools is not None else "llm"
+    if isinstance(step, FlowCollectionStepPlan):
+        return "flow_collection → " + ", ".join(step.flows)
+    return step.type
+
+
+def _step_views(flow: GraphFlow) -> list[_StepView]:
+    """Steps in authored order; a ``when`` labels the edge from the previous step."""
+    views: list[_StepView] = []
+    previous: str | None = None
+    for step in flow.plan.steps:
+        lines = [step.name + ("?" if step.when is not None else ""), _short(_step_detail(step))]
+        entry = ""
+        if step.when is not None:
+            if previous is None:
+                lines.append("when " + _short(condition_label(step.when)))
+            else:
+                relative = f"/steps/{previous}/result"
+                entry = "when " + _short(condition_label(step.when, relative_to=relative))
+        views.append(
+            _StepView(
+                f"{flow.id}__{step.name}",
+                _STEP_CLASSES.get(step.type, "handler"),
+                tuple(lines),
+                step.when is not None,
+                entry,
+            )
+        )
+        previous = step.name
+    return views
+
+
+def _flow_title(flow: GraphFlow) -> str:
+    """``lookup  ·  repeat ≤ 2 until plan not_equals Unknown``; callables sit in their group."""
+    parts = [flow.id]
+    if flow.role == "retry":
+        parts.append(f"retry for {flow.document.get('retry_for')}")
+    repeat = flow.plan.repeat
+    if repeat is not None:
+        until = condition_label(repeat.until, relative_to=f"/flows/{flow.id}/result")
+        parts.append(f"repeat ≤ {repeat.max_attempts} until {_short(until)}")
+    return _TITLE_SEPARATOR.join(parts)
+
+
+def _edge_text(edge: GraphEdge, flows: Mapping[str, GraphFlow]) -> str:
+    """Diagram label of a flow-level edge; conditions are relative to the source flow."""
+    if edge.kind == "collection":
+        return "calls"
+    if edge.kind == "retry":
+        repeat = flows[edge.source].plan.repeat if edge.source in flows else None
+        if repeat is None or repeat.continue_when is None:
+            return "retry"
+        continue_when = condition_label(
+            repeat.continue_when, relative_to=f"/flows/{edge.target}/result"
+        )
+        return "retry, continue when " + _short(continue_when)
+    if edge.index is not None:
+        if edge.when is None:
+            text = f"{edge.index}: otherwise"
+        else:
+            relative = None if edge.kind == "start" else f"/flows/{edge.source}/result"
+            text = f"{edge.index}: " + _short(condition_label(edge.when, relative_to=relative))
+        if edge.kind == "review":
+            text = "review " + text
+    else:
+        text = _short(edge.label)
+    return text + (" (default)" if edge.inherited else "")
+
+
+def _partition(graph: WorkflowGraph) -> tuple[list[GraphFlow], list[GraphFlow]]:
+    """Routed flows keep the main path at the top level; callable and retry flows are grouped."""
+    routed = [flow for flow in graph.flows if flow.role == "routed"]
+    return routed, [flow for flow in graph.flows if flow.role != "routed"]
+
+
 def _mermaid_text(value: str) -> str:
     return (
         value.replace("#", "#35;")
@@ -545,66 +731,118 @@ def _mermaid_text(value: str) -> str:
     )
 
 
-def _node(name: str) -> str:
-    if name == START:
-        return "start"
-    if name.startswith("outcome:"):
-        return "outcome_" + name.split(":", 1)[1]
-    return "flow_" + name
+def _mermaid_label(lines: tuple[str, ...] | list[str]) -> str:
+    return "<br/>".join(_mermaid_text(line) for line in lines)
 
 
-def _flow_label(flow: GraphFlow, *, separator: str) -> str:
-    steps = flow.document.get("steps")
-    names: list[str] = []
-    if isinstance(steps, list):
-        for step in steps:
-            if isinstance(step, dict):
-                names.append(f"{step['id']}{'?' if 'when' in step else ''} ({step['type']})")
-    lines = [flow.id + (" [callable]" if flow.role == "callable" else "")]
-    if flow.role == "retry":
-        lines[0] = flow.id + " [retry]"
-    lines.extend(names)
-    return separator.join(lines)
+class _MermaidWriter:
+    """Collects node, edge, class and link-style lines; link indices follow emission order."""
+
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+        self.links = 0
+        self.dashes: dict[str, list[int]] = {}
+        self.classes: dict[str, list[str]] = {}
+
+    def node(self, indent: str, node: str, css: str, lines: tuple[str, ...], dashed: bool) -> None:
+        opening, closing = _MERMAID_SHAPES[css]
+        self.lines.append(f'{indent}{node}{opening}"{_mermaid_label(lines)}"{closing}')
+        self.mark(node, css)
+        if dashed:
+            self.mark(node, "conditional")
+
+    def edge(self, indent: str, source: str, target: str, label: str, dash: str | None) -> None:
+        arrow = "-->" if dash in {None, _CONDITIONAL_DASH} else "-.->"
+        text = f'|"{_mermaid_text(label)}"|' if label else ""
+        self.lines.append(f"{indent}{source} {arrow}{text} {target}")
+        if dash is not None:
+            self.dashes.setdefault(dash, []).append(self.links)
+        self.links += 1
+
+    def flow(self, flow: GraphFlow, indent: str) -> None:
+        title = _mermaid_text(_flow_title(flow))
+        self.lines.extend(
+            [f'{indent}subgraph {_flow_node(flow.id)}["{title}"]', f"{indent}  direction TB"]
+        )
+        self.mark(_flow_node(flow.id), "flow")
+        views = _step_views(flow)
+        for view in views:
+            self.node(indent + "  ", view.node, view.css, view.lines, view.conditional)
+        for previous, view in zip(views, views[1:], strict=False):
+            dash = _CONDITIONAL_DASH if view.conditional else None
+            self.edge(indent + "  ", previous.node, view.node, view.entry, dash)
+        self.lines.append(f"{indent}end")
+
+    def legend(self) -> None:
+        self.lines.extend([f'  subgraph {_LEGEND_GROUP}["legend"]', "    direction LR"])
+        self.mark(_LEGEND_GROUP, "group")
+        for step_type, css in _STEP_CLASSES.items():
+            self.node("    ", f"legend_{css}__", css, (step_type,), False)
+        self.node("    ", "legend_conditional__", "handler", ("step?", "when …"), True)
+        # Invisible links keep the unconnected legend nodes in one row; they count as links.
+        nodes = [f"legend_{css}__" for css in _STEP_CLASSES.values()] + ["legend_conditional__"]
+        self.lines.append("    " + " ~~~ ".join(nodes))
+        self.links += len(nodes) - 1
+        self.lines.append("  end")
+
+    def mark(self, node: str, css: str) -> None:
+        self.classes.setdefault(css, []).append(node)
+
+    def finish(self) -> list[str]:
+        lines = list(self.lines)
+        used = [css for css in _MERMAID_CLASSES if css in self.classes]
+        lines.extend(f"  classDef {css} {_MERMAID_CLASSES[css]}" for css in used)
+        lines.extend(f"  class {','.join(self.classes[css])} {css}" for css in used)
+        for dash in (_CONDITIONAL_DASH, _REVIEW_DASH, _CALL_DASH):
+            if dash in self.dashes:
+                indices = ",".join(str(index) for index in self.dashes[dash])
+                lines.append(f"  linkStyle {indices} stroke-dasharray: {dash}")
+        return lines
 
 
-def _repeat_label(repeat: Mapping[str, JsonValue]) -> str:
-    """``repeat ≤ 2 until status equals found``; pointers into the own result are shortened."""
-    return f"repeat ≤ {repeat['max_attempts']} until {repeat['until_label']}"
+def _edge_dash(edge: GraphEdge) -> str | None:
+    if edge.kind == "review":
+        return _REVIEW_DASH
+    if edge.kind in {"collection", "retry"}:
+        return _CALL_DASH
+    return None
 
 
-def render_mermaid(graph: WorkflowGraph, *, diagnostics: bool = True) -> str:
-    """Render a Mermaid flowchart: solid routes, dashed review, dotted calls.
+def render_mermaid(graph: WorkflowGraph, *, diagnostics: bool = True, legend: bool = False) -> str:
+    """Render a Mermaid flowchart with one subgraph per flow and its steps inside.
 
-    Conditional steps carry a ``?`` suffix; a repeat is a dotted self-loop with
-    its bound and stop condition. Diagnostics follow as comments unless
+    Step shapes and colors follow the step type; ``?`` and a dashed border mark
+    a step with ``when``, whose condition labels the edge from the previous
+    step. Flow edges connect subgraphs: routes solid, review routes dashed,
+    collection and retry calls dotted; a repeat is annotated in the flow title.
+    Callable and retry flows are grouped in ``callable flows``. ``legend``
+    appends a node per step type; diagnostics follow as comments unless
     ``diagnostics`` is false.
     """
-    lines = ["flowchart TD", "  start((start))"]
-    for flow in graph.flows:
-        label = _mermaid_text(_flow_label(flow, separator="\n")).replace("\n", "<br/>")
-        lines.append(f'  {_node(flow.id)}["{label}"]')
+    writer = _MermaidWriter()
+    writer.lines.extend(["flowchart TD", f"  {_START_NODE}((start))"])
+    writer.mark(_START_NODE, "terminal")
+    routed, called = _partition(graph)
+    for flow in routed:
+        writer.flow(flow, "  ")
+    if called:
+        writer.lines.extend([f'  subgraph {_CALLABLE_GROUP}["callable flows"]', "    direction TB"])
+        writer.mark(_CALLABLE_GROUP, "group")
+        for flow in called:
+            writer.flow(flow, "    ")
+        writer.lines.append("  end")
     for outcome in graph.outcomes:
-        lines.append(f'  outcome_{outcome}(["{outcome}"])')
-    styles: list[str] = []
-    for index, edge in enumerate(graph.edges):
-        arrow = "-->" if edge.kind in {"start", "transition"} else "-.->"
-        label = edge.label + (" (default)" if edge.inherited else "")
-        text = f'|"{_mermaid_text(label)}"|' if label else ""
-        lines.append(f"  {_node(edge.source)} {arrow}{text} {_node(edge.target)}")
-        if edge.kind == "review":
-            styles.append(f"  linkStyle {index} stroke-dasharray: 6 4")
-        elif edge.kind in {"collection", "retry"}:
-            styles.append(f"  linkStyle {index} stroke-dasharray: 1 4")
-    index = len(graph.edges)
-    for flow in graph.flows:
-        repeat = flow.document.get("repeat")
-        if isinstance(repeat, dict):
-            # Repetition is an attribute of the node, drawn as a self-loop annotation.
-            label = _mermaid_text(_repeat_label(repeat))
-            lines.append(f'  {_node(flow.id)} -.->|"{label}"| {_node(flow.id)}')
-            styles.append(f"  linkStyle {index} stroke-dasharray: 1 4")
-            index += 1
-    lines.extend(styles)
+        writer.lines.append(f'  outcome_{outcome}__(["{_mermaid_text(outcome)}"])')
+        writer.mark(f"outcome_{outcome}__", "terminal")
+    flows = {flow.id: flow for flow in graph.flows}
+    for edge in graph.edges:
+        source = _START_NODE if edge.kind == "start" else _flow_node(edge.source)
+        writer.edge(
+            "  ", source, _target_node(edge.target), _edge_text(edge, flows), _edge_dash(edge)
+        )
+    if legend:
+        writer.legend()
+    lines = writer.finish()
     for item in graph.diagnostics if diagnostics else ():
         lines.append(
             f"  %% {item.level} {item.code} {item.location.path}:{item.location.line}: "
@@ -613,23 +851,115 @@ def render_mermaid(graph: WorkflowGraph, *, diagnostics: bool = True) -> str:
     return "\n".join(lines) + "\n"
 
 
+_DOT_DEFAULTS = (
+    f'  graph [fontname="Helvetica", fontsize=12, fontcolor="{_TEXT_COLOR}"];',
+    f'  node [fontname="Helvetica", fontsize=11, fontcolor="{_TEXT_COLOR}"];',
+    '  edge [fontname="Helvetica", fontsize=10];',
+)
+
+
 def _dot_text(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
-def render_dot(graph: WorkflowGraph, *, diagnostics: bool = True) -> str:
-    """Render a Graphviz digraph with the same edge styles as :func:`render_mermaid`."""
-    lines = [f'digraph "{_dot_text(graph.name)}" {{', "  rankdir=TB;"]
-    lines.append('  "start" [shape=circle, label="start"];')
-    for flow in graph.flows:
-        label = _dot_text(_flow_label(flow, separator="\n"))
-        shape = "box" if flow.role == "routed" else "box, style=dashed"
-        lines.append(f'  "{_node(flow.id)}" [shape={shape}, label="{label}"];')
+def _dot_node(node: str, css: str, lines: tuple[str, ...], conditional: bool) -> str:
+    fill, stroke = _STEP_COLORS[css]
+    shape = _DOT_SHAPES[css]
+    if conditional:
+        shape = shape.replace('style="', 'style="dashed,')
+    label = _dot_text("\n".join(lines))
+    return f'"{node}" [{shape}, fillcolor="{fill}", color="{stroke}", label="{label}"];'
+
+
+def _dot_flow(flow: GraphFlow, indent: str) -> list[str]:
+    lines = [
+        f'{indent}subgraph "cluster_{flow.id}" {{',
+        f'{indent}  label="{_dot_text(_flow_title(flow))}";',
+        f'{indent}  style="rounded,filled";',
+        f'{indent}  fillcolor="#fafbfc";',
+        f'{indent}  color="#9aa1ab";',
+    ]
+    views = _step_views(flow)
+    lines.extend(
+        indent + "  " + _dot_node(view.node, view.css, view.lines, view.conditional)
+        for view in views
+    )
+    for previous, view in zip(views, views[1:], strict=False):
+        attributes = [f'label="{_dot_text(view.entry)}"'] if view.entry else []
+        if view.conditional:
+            attributes.append("style=dashed")
+        suffix = f" [{', '.join(attributes)}]" if attributes else ""
+        lines.append(f'{indent}  "{previous.node}" -> "{view.node}"{suffix};')
+    lines.append(f"{indent}}}")
+    return lines
+
+
+def _dot_legend() -> list[str]:
+    lines = [
+        f'  subgraph "cluster_{_LEGEND_GROUP}" {{',
+        '    label="legend";',
+        "    style=dashed;",
+        '    color="#b8bec6";',
+    ]
+    for step_type, css in _STEP_CLASSES.items():
+        lines.append("    " + _dot_node(f"legend_{css}__", css, (step_type,), False))
+    lines.append("    " + _dot_node("legend_conditional__", "handler", ("step?", "when …"), True))
+    lines.append("  }")
+    return lines
+
+
+def render_dot(graph: WorkflowGraph, *, diagnostics: bool = True, legend: bool = False) -> str:
+    """Render a Graphviz digraph with the structure and styles of :func:`render_mermaid`.
+
+    Each flow is a cluster with its steps; flow edges run between clusters
+    (``compound=true``), from the last step of the source to the first step
+    of the target.
+    """
+    lines = [
+        f'digraph "{_dot_text(graph.name)}" {{',
+        "  rankdir=TB;",
+        "  compound=true;",
+        *_DOT_DEFAULTS,
+        f'  "{_START_NODE}" [shape=circle, color="#57606a", label="start"];',
+    ]
+    routed, called = _partition(graph)
+    for flow in routed:
+        lines.extend(_dot_flow(flow, "  "))
+    if called:
+        lines.extend(
+            [
+                f'  subgraph "cluster_{_CALLABLE_GROUP}" {{',
+                '    label="callable flows";',
+                "    style=dashed;",
+                '    color="#b8bec6";',
+            ]
+        )
+        for flow in called:
+            lines.extend(_dot_flow(flow, "    "))
+        lines.append("  }")
     for outcome in graph.outcomes:
-        lines.append(f'  "outcome_{outcome}" [shape=box, style=rounded, label="{outcome}"];')
+        lines.append(
+            f'  "outcome_{outcome}__" [shape=box, style=rounded, color="#57606a", '
+            f'label="{_dot_text(outcome)}"];'
+        )
+    flows = {flow.id: flow for flow in graph.flows}
     for edge in graph.edges:
-        attributes = []
-        label = edge.label + (" (default)" if edge.inherited else "")
+        # Edges run from the last step of the source to the first step of the target,
+        # clipped at the cluster borders.
+        attributes: list[str] = []
+        if edge.kind == "start":
+            tail = _START_NODE
+        else:
+            tail = f"{edge.source}__{flows[edge.source].plan.steps[-1].name}"
+            if edge.target != edge.source:
+                attributes.append(f'ltail="cluster_{edge.source}"')
+        if edge.target.startswith("outcome:"):
+            head = _target_node(edge.target)
+        else:
+            head = f"{edge.target}__{flows[edge.target].plan.steps[0].name}"
+            if edge.target != edge.source:
+                attributes.append(f'lhead="cluster_{edge.target}"')
+        label = _edge_text(edge, flows)
         if label:
             attributes.append(f'label="{_dot_text(label)}"')
         if edge.kind == "review":
@@ -637,13 +967,9 @@ def render_dot(graph: WorkflowGraph, *, diagnostics: bool = True) -> str:
         elif edge.kind in {"collection", "retry"}:
             attributes.append("style=dotted")
         suffix = f" [{', '.join(attributes)}]" if attributes else ""
-        lines.append(f'  "{_node(edge.source)}" -> "{_node(edge.target)}"{suffix};')
-    for flow in graph.flows:
-        repeat = flow.document.get("repeat")
-        if isinstance(repeat, dict):
-            node = _node(flow.id)
-            label = _dot_text(_repeat_label(repeat))
-            lines.append(f'  "{node}" -> "{node}" [label="{label}", style=dotted];')
+        lines.append(f'  "{tail}" -> "{head}"{suffix};')
+    if legend:
+        lines.extend(_dot_legend())
     lines.append("}")
     for item in graph.diagnostics if diagnostics else ():
         lines.append(
@@ -651,6 +977,17 @@ def render_dot(graph: WorkflowGraph, *, diagnostics: bool = True) -> str:
             + item.message.replace("\n", " ")
         )
     return "\n".join(lines) + "\n"
+
+
+def _legend_document(output_format: Literal["mermaid", "dot"]) -> str:
+    """A diagram holding only the legend, placed once at the top of a document."""
+    if output_format == "dot":
+        header = ['digraph "legend" {', "  rankdir=TB;", *_DOT_DEFAULTS]
+        return "\n".join([*header, *_dot_legend(), "}"])
+    writer = _MermaidWriter()
+    writer.lines.append("flowchart LR")
+    writer.legend()
+    return "\n".join(writer.finish())
 
 
 def _start_text(plan: WorkflowPlan) -> str:
@@ -688,14 +1025,18 @@ def _diagnostic_line(item: Diagnostic) -> str:
 
 
 def render_document(
-    prepared: PreparedApplication, output_format: Literal["mermaid", "dot"] = "mermaid"
+    prepared: PreparedApplication,
+    output_format: Literal["mermaid", "dot"] = "mermaid",
+    *,
+    legend: bool = True,
 ) -> str:
     """Render every workflow as one Markdown document for configuration documentation.
 
-    Each workflow gets a ``## <name>`` section with its start and output, the
-    fenced diagram and its diagnostics. The text is deterministic for the same
-    configuration, so a stored copy can be checked for drift
-    (``foliqant explain --format mermaid --all --output PATH --check``).
+    The document starts with one legend of step shapes and edge styles unless
+    ``legend`` is false. Each workflow gets a ``## <name>`` section with its
+    start and output, the fenced diagram and its diagnostics. The text is
+    deterministic for the same configuration, so a stored copy can be checked
+    for drift (``foliqant explain --format mermaid --all --output PATH --check``).
     """
     render = render_mermaid if output_format == "mermaid" else render_dot
     lines = [
@@ -705,6 +1046,20 @@ def render_document(
         "changing the configuration instead of editing it.",
         "",
     ]
+    if legend:
+        lines.extend(
+            [
+                "Each flow is a box with its steps in order; the shape and color show the step "
+                "type. A dashed step marked `?` runs only when its condition, shown on the edge "
+                "into it, holds. Solid edges are routes, dashed edges review routes and dotted "
+                "edges calls of the flows grouped under callable flows.",
+                "",
+                f"```{output_format}",
+                _legend_document(output_format),
+                "```",
+                "",
+            ]
+        )
     for name in sorted(prepared.plans):
         plan = prepared.plans[name]
         graph = workflow_graph(plan, prepared)

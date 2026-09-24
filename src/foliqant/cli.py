@@ -196,6 +196,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="every workflow; with mermaid/dot one Markdown document with a section each",
     )
+    explain.add_argument(
+        "--legend",
+        action="store_true",
+        help="append a legend of step shapes to a mermaid/dot graph (--all always has one)",
+    )
     explain.add_argument("--output", type=Path, help="write the rendering to this file")
     explain.add_argument(
         "--check",
@@ -402,11 +407,18 @@ def _explain(args: argparse.Namespace) -> tuple[dict[str, object] | str, int]:
     from foliqant.graph import render_document, render_dot, render_mermaid, workflow_graph
 
     output_format: str = args.format
-    if (args.check and args.output is None) or (args.all and args.workflow is not None):
+    if (
+        (args.check and args.output is None)
+        or (args.all and args.workflow is not None)
+        or (args.legend and output_format == "json")
+    ):
         raise _CliFailure(
             "invalid_arguments",
             _EXIT_INPUT,
-            hint="--check needs --output; --all and --workflow exclude each other.",
+            hint=(
+                "--check needs --output; --all and --workflow exclude each other; "
+                "--legend needs --format mermaid or dot."
+            ),
         )
     prepared = _prepare(args.config)
     if args.workflow is not None:
@@ -434,7 +446,8 @@ def _explain(args: argparse.Namespace) -> tuple[dict[str, object] | str, int]:
         )
     else:
         graph = workflow_graph(plans[0], prepared)
-        rendering = render_mermaid(graph) if output_format == "mermaid" else render_dot(graph)
+        render = render_mermaid if output_format == "mermaid" else render_dot
+        rendering = render(graph, legend=args.legend)
     if args.output is None:
         return rendering, 0
     text = (

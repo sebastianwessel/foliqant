@@ -715,9 +715,10 @@ Compile the graph offline with `foliqant validate --strict` (declared handlers
 need no registration) and fix every warning; each problem names its file,
 line, column and field. Render the graphs with
 `foliqant explain --format mermaid --all --output docs/workflows.md`, commit
-that document as a deliverable, and review routes (labels show conditions with
-their operands), dashed review edges, dotted retry/collection calls and repeat
-self-loops. Add `--check` to the application's CI so the document cannot drift.
+that document as a deliverable, and review each flow box (steps in order,
+conditional steps dashed with their `when` on the incoming edge), routes
+(labels show conditions with their operands), dashed review edges, dotted
+retry/collection calls and the repeat annotation in the flow title. Add `--check` to the application's CI so the document cannot drift.
 Read the `diagnostics`: `uncovered_value`, `route_unreachable_entry`,
 `review_ends_run` and `run_budget` usually point at missing business decisions
 or bounds. The compiler's guarantees (no cycles or dead ends, every flow

@@ -106,6 +106,7 @@ Normal preparation and execution do not read gold. See
 | `foliqant validate --strict` | Also fail when any warning is reported | No |
 | `foliqant explain --workflow NAME` | Inspect the compiled process as JSON | No |
 | `foliqant explain --workflow NAME --format mermaid` | Render one graph as Mermaid (`dot` for Graphviz) | No |
+| `foliqant explain --workflow NAME --format mermaid --legend` | Render one graph with a legend of step shapes | No |
 | `foliqant explain --format mermaid --all --output docs/workflows.md` | Write a Markdown document with every workflow graph | No |
 | `foliqant explain --format mermaid --all --output docs/workflows.md --check` | Fail when that document is stale | No |
 | `foliqant doctor` | Check configuration and optional dependencies | No |
@@ -173,15 +174,101 @@ foliqant explain --format mermaid --all --output docs/workflows.md
 foliqant explain --format mermaid --all --output docs/workflows.md --check
 ```
 
-Graphs show flows with their steps (`?` marks a step with `when`), transitions
-as solid edges labelled with the case key or the route entry and its condition
-with authored operands (`0: /payload/kind equals fund`, `in [a, b]`, `gt 3`,
-`matches /FOI-[0-9]+/`, `present=false`), review routes dashed, collection and
-retry calls dotted, and a repeat as a dotted self-loop with its bound and stop
-condition (`repeat ≤ 2 until status equals found`; pointers into the flow's
-own result are shortened). Literal bindings and default values are never shown.
-`foliqant.graph.render_document(prepared)` returns the same document, and
-`foliqant.explain(prepared, workflow)` the graph model.
+Each flow is a subgraph holding its steps in authored order. The node shape
+and color show the step type: a hexagon for `decision` (with its question
+types, `decision · choice`), a stadium for `llm` (`llm · tools` with tools), a
+rectangle for `handler`, a parallelogram for `mcp` and a subroutine box for
+`flow_collection` (`flow_collection → <flows>`). A step with `when` has a
+dashed border and a `?`; its condition labels the edge from the previous step
+(`when status equals invalid`, pointers into that step's result shortened), or
+the node itself for a first step. Edges between flows connect the subgraphs:
+routes are solid and labelled with the case key, `default`, or the route
+entry and its condition with authored operands (`0: status equals valid`,
+`in [a, b]`, `gt 3`, `matches /FOI-[0-9]+/`, `present=false`; pointers into the
+source flow's own result are shortened), review routes are dashed, and
+collection (`calls`) and retry calls are dotted. A repeat is annotated in the
+flow's title (`lookup  ·  repeat ≤ 2 until plan not_equals Unknown`). Callable
+and retry flows are grouped under `callable flows` after the routed flows, so
+the main path reads top-down; `start` is a circle and outcomes are stadiums.
+Condition texts longer than 60 characters end with `…`. Graphviz output has
+the same structure with one cluster per flow. `--legend` (or
+`render_mermaid(graph, legend=True)` and `render_dot(graph, legend=True)`)
+appends one node per step type and a conditional example; the `--all`
+document shows the legend once at its top. Literal bindings and default values
+are never shown. `foliqant.graph.render_document(prepared)` returns the same
+document, and `foliqant.explain(prepared, workflow)` the graph model.
+
+The `account_intake` workflow of the conditional intake example renders as:
+
+```mermaid
+flowchart TD
+  start__((start))
+  subgraph classify["classify"]
+    direction TB
+    classify__classify{{"classify<br/>decision · choice"}}
+  end
+  subgraph extract["extract"]
+    direction TB
+    extract__extract(["extract?<br/>llm<br/>when /payload/form_reference present=false"])
+    extract__check["check<br/>handler"]
+    extract__repair(["repair?<br/>llm"])
+    extract__recheck["recheck?<br/>handler"]
+    extract__extract --> extract__check
+    extract__check -->|"when status equals invalid"| extract__repair
+    extract__repair -->|"when result present=true"| extract__recheck
+  end
+  subgraph lookup["lookup  ·  repeat ≤ 2 until plan not_equals Unknown"]
+    direction TB
+    lookup__lookup[/"lookup<br/>mcp"/]
+  end
+  subgraph manual_review["manual_review"]
+    direction TB
+    manual_review__open_review["open_review<br/>handler"]
+  end
+  subgraph callable__["callable flows"]
+    direction TB
+    subgraph correct["correct  ·  retry for lookup"]
+      direction TB
+      correct__correct(["correct<br/>llm"])
+    end
+  end
+  outcome_completed__(["completed"])
+  outcome_needs_review__(["needs_review"])
+  start__ -->|"0: /payload/form/request_type present=true"| extract
+  start__ -->|"1: otherwise"| classify
+  classify -->|"billing"| extract
+  classify -->|"cancellation"| extract
+  classify -->|"default"| manual_review
+  classify -.->|"review (default)"| manual_review
+  extract -->|"0: status equals valid"| lookup
+  extract -->|"1: otherwise"| manual_review
+  extract -.->|"review (default)"| manual_review
+  lookup -->|"0: plan not_equals Unknown"| outcome_completed__
+  lookup -->|"1: otherwise"| manual_review
+  lookup -.->|"review (default)"| manual_review
+  lookup -.->|"retry, continue when status equals corrected"| correct
+  manual_review --> outcome_needs_review__
+  manual_review -.->|"review"| outcome_needs_review__
+  classDef decision fill:#fff4e5,stroke:#d68a1d,color:#1f2328
+  classDef llm fill:#eef3ff,stroke:#3b6fd6,color:#1f2328
+  classDef handler fill:#f2f2f2,stroke:#666666,color:#1f2328
+  classDef mcp fill:#e9f8ee,stroke:#2f9e5d,color:#1f2328
+  classDef conditional stroke-dasharray: 4 3
+  classDef flow fill:#fafbfc,stroke:#9aa1ab,color:#1f2328
+  classDef group fill:none,stroke:#b8bec6,stroke-dasharray: 4 3,color:#1f2328
+  classDef terminal fill:#ffffff,stroke:#57606a,color:#1f2328
+  class classify__classify decision
+  class extract__extract,extract__repair,correct__correct llm
+  class extract__check,extract__recheck,manual_review__open_review handler
+  class lookup__lookup mcp
+  class extract__extract,extract__repair,extract__recheck conditional
+  class classify,extract,lookup,manual_review,correct flow
+  class callable__ group
+  class start__,outcome_completed__,outcome_needs_review__ terminal
+  linkStyle 1,2 stroke-dasharray: 4 3
+  linkStyle 8,11,14,17 stroke-dasharray: 6 4
+  linkStyle 15 stroke-dasharray: 1 4
+```
 
 ## Diagnostics
 

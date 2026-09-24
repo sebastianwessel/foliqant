@@ -600,7 +600,8 @@ The package exposes embedded composition plus offline `init`, `validate`
 `foliqant.explain(prepared, workflow)`; `--all` renders every workflow, for
 mermaid/dot as one Markdown document from `foliqant.graph.render_document`
 with a `## <workflow>` section each holding its start, output, fenced diagram
-and diagnostics; `--output PATH` writes the rendering and `--check` compares it
+and diagnostics after one legend; `--legend` adds the legend to a single
+graph; `--output PATH` writes the rendering and `--check` compares it
 instead, exiting `1` when stale), `doctor`, foreground `run` and explicit
 `evaluate` commands. Graph labels show authored condition operands, which are
 configuration like case keys (`equals found`, `in [a, b]`, `matches /…/`,
