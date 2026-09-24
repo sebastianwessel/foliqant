@@ -116,9 +116,23 @@ PydanticAI (via `genai-prices` extractors) maps OpenAI chat
 `prompt_tokens_details.cached_tokens` and `completion_tokens_details.reasoning_tokens`,
 and the Responses equivalents, to `cache_read_tokens` and `output_reasoning_tokens`
 for `openai`, OpenAI-compatible (any base URL, falling back to the OpenAI
-extractor) and `azure`. The runtime's accounting reads only fields the SDK set,
-so omitted details stay unknown instead of zero. Tests pin this for chat and
-Responses payloads and for `FunctionModel` usage.
+extractor) and `azure`. `RequestUsage.__init__` only ever `setattr`s the keys it
+receives, so `request_token_usage` reads `vars(usage)` and a name that was
+never reported (including `cache_read_tokens`/`cache_write_tokens`, which the
+dataclass declares with a default of `0`) simply stays absent from it. pydantic-ai
+2.46.0 declares no first-class field at all for reasoning tokens; `RequestUsage.extract`
+only sets `output_reasoning_tokens` as an instance attribute when the provider was
+recognized and mapped. When extraction doesn't map a count, `request_token_usage`
+falls back to the same `details` key the adapter itself set from the raw response
+(`details["reasoning_tokens"]`, `details["cached_tokens"]`) before giving up and
+reporting `None`; the fallback is only consulted when the field is absent, so it
+never overrides a genuinely reported zero. The fallback also only trusts a
+*nonzero* `details` value: pydantic_ai's OpenAI Responses adapter writes
+`details["reasoning_tokens"] = 0` both for a genuine zero (already resolved by
+the declared-field check) and for an omitted measurement, so a bare zero found
+only in `details` is indistinguishable from that placeholder and stays unknown.
+Tests pin this for chat and Responses payloads and for `FunctionModel` usage
+covering the field, `details`-key, fully-absent, and ambiguous-zero cases.
 
 ## Implementation notes
 
@@ -130,6 +144,9 @@ Responses payloads and for `FunctionModel` usage.
   together or not at all; when present, `by_model` requests sum to
   `model_requests`. Serialization places counts first, then the estimate, then
   `by_model`.
+* `ExecutionInfo`, `Usage`, and `ModelUsage` (`foliqant.contracts.execution`) are
+  re-exported from the top-level `foliqant` package alongside `ExecutionResult`,
+  so a caller can import the whole result surface from one place.
 * `gen_ai.response.model` is exported when it equals a configured model or is a
   dated snapshot of one (`<model>-…`); any other provider-reported value is
   dropped.

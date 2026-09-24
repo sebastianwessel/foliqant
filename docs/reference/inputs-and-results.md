@@ -208,6 +208,11 @@ returns. Your application normally reads them rather than constructing them.
 The exception is a local fake for an evaluation or integration test; see
 [unit testing](../evaluation/unit-testing.md).
 
+`ExecutionResult`, `ExecutionInfo`, `Usage`, and `ModelUsage` are importable
+directly from the top-level package (`from foliqant import ExecutionInfo,
+ExecutionResult, ModelUsage, Usage`) for annotating a handler's return type or
+building a local fake without reaching into `foliqant.contracts.execution`.
+
 ### Top-level fields
 
 | Field | Type | Created from | How an application should use it |

@@ -179,7 +179,14 @@ def test_wheel_contains_and_runs_the_public_package(tmp_path):
             "-I",
             "-c",
             "import foliqant.decisions, foliqant.evaluation; "
-            "from foliqant import Envelope, load_environment, open_application; "
+            "import foliqant.contracts.execution as execution; "
+            "from foliqant import ("
+            "Envelope, ExecutionInfo, ExecutionResult, ModelUsage, Usage, "
+            "load_environment, open_application); "
+            "assert ExecutionInfo is execution.ExecutionInfo; "
+            "assert ExecutionResult is execution.ExecutionResult; "
+            "assert ModelUsage is execution.ModelUsage; "
+            "assert Usage is execution.Usage; "
             "from pathlib import Path; "
             "assert load_environment(Path('settings.yaml'), {'EXAMPLE': 'value'}) "
             "== {'EXAMPLE': 'value'}",

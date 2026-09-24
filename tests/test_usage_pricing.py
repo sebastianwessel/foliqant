@@ -439,6 +439,70 @@ async def test_function_model_details_reach_usage_cost_and_the_chat_span():
     }
 
 
+@pytest.mark.parametrize(
+    ("usage", "expected"),
+    [
+        # Field: a recognized provider's genai-prices extractor mapped the counts onto
+        # `RequestUsage`'s instance attributes directly (see the previous test, which also
+        # verifies this reaches the chat span).
+        (
+            RequestUsage(
+                input_tokens=1_000,
+                output_tokens=200,
+                cache_read_tokens=600,
+                output_reasoning_tokens=50,
+            ),
+            TokenUsage(1_000, 200, 600, None, 50),
+        ),
+        # Details key: extraction never set the field (e.g. an unrecognized provider, or a
+        # mapping genai-prices lacks), but the adapter that produced this `RequestUsage` still
+        # left the raw counts in `details`, matching how pydantic_ai's OpenAI adapter mirrors
+        # `completion_tokens_details.reasoning_tokens` into `details["reasoning_tokens"]`.
+        (
+            RequestUsage(
+                input_tokens=1_000,
+                output_tokens=200,
+                details={"cached_tokens": 600, "reasoning_tokens": 50},
+            ),
+            TokenUsage(1_000, 200, 600, None, 50),
+        ),
+        # Absent: neither the field nor a known `details` key reports a count, so it stays
+        # unknown instead of becoming a false zero.
+        (
+            RequestUsage(input_tokens=1_000, output_tokens=200),
+            TokenUsage(1_000, 200),
+        ),
+        # Ambiguous zero: a bare `details` zero with no field is indistinguishable from the
+        # placeholder pydantic_ai's OpenAI Responses adapter writes for an omitted measurement
+        # (see `test_responses_sdk_usage_preserves_reasoning_presence`), so it stays unknown
+        # rather than becoming a false zero; a details fallback is only trusted when nonzero.
+        (
+            RequestUsage(
+                input_tokens=1_000,
+                output_tokens=200,
+                details={"cached_tokens": 0, "reasoning_tokens": 0},
+            ),
+            TokenUsage(1_000, 200),
+        ),
+    ],
+    ids=["field", "details_key", "absent", "ambiguous_details_zero"],
+)
+async def test_function_model_reasoning_and_cached_tokens_read_field_then_details(usage, expected):
+    step = _text_step()
+    budget = StepBudget(model_requests=1, tool_calls=0)
+    executor = ModelExecutor(
+        {"configured-alias": _gpt_binding(usage, None)},
+        WorkflowSchemas(_plan(step)),
+        telemetry=ModelTelemetry(
+            TracerProvider(shutdown_on_exit=False), NoOpMeterProvider(), TelemetryLabels()
+        ),
+    )
+    outcome = await executor.execute(step, _frozen_object({}), _context(step.name, budget=budget))
+    assert outcome.result == "ok"
+    measured = budget.snapshot()
+    assert dict(measured.by_model)["gpt-5.6-terra"].tokens == expected
+
+
 async def test_unpriced_model_span_has_no_cost():
     exporter = InMemorySpanExporter()
     provider = TracerProvider(shutdown_on_exit=False)

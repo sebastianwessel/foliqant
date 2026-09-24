@@ -274,6 +274,16 @@ def test_execution_info_schema_requires_only_failure_errors() -> None:
     assert not validator.is_valid(_info(error=_error()))
 
 
+def test_execution_info_and_usage_types_are_exported_from_the_top_level_package() -> None:
+    import foliqant
+
+    assert foliqant.ExecutionInfo is ExecutionInfo
+    assert foliqant.Usage is PublicUsage
+    from foliqant.contracts.execution import ModelUsage
+
+    assert foliqant.ModelUsage is ModelUsage
+
+
 @pytest.mark.parametrize(
     "metadata",
     [

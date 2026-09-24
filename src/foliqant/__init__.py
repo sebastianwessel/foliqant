@@ -12,16 +12,19 @@ if TYPE_CHECKING:
         prepare_application,
     )
     from .contracts.envelope import Envelope
-    from .contracts.execution import ExecutionResult
+    from .contracts.execution import ExecutionInfo, ExecutionResult, ModelUsage, Usage
     from .core.identity import Identity
     from .graph import WorkflowGraph, explain
 
 __all__ = [
     "Envelope",
+    "ExecutionInfo",
     "ExecutionResult",
     "Identity",
+    "ModelUsage",
     "PreparedApplication",
     "RuntimePlugins",
+    "Usage",
     "WorkflowApplication",
     "WorkflowGraph",
     "explain",
@@ -49,10 +52,10 @@ def __getattr__(name: str) -> object:
         from .contracts.envelope import Envelope
 
         return Envelope
-    if name == "ExecutionResult":
-        from .contracts.execution import ExecutionResult
+    if name in {"ExecutionInfo", "ExecutionResult", "ModelUsage", "Usage"}:
+        from .contracts import execution
 
-        return ExecutionResult
+        return cast(object, getattr(execution, name))
     if name == "Identity":
         from .core.identity import Identity
 

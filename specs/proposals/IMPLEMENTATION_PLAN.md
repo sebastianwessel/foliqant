@@ -115,8 +115,18 @@ Fixed with regression tests:
   session-level holder is gone, so concurrent calls never exchange traceparents.
 * `invalid_condition` is reported by position, not by key name.
 * `describe_condition` keeps `present=`/`empty=` polarity.
+* `request_token_usage` (`adapters/models/accounting.py`) read reasoning tokens
+  only from a `RequestUsage.output_reasoning_tokens` instance attribute, which
+  pydantic-ai 2.46.0 only sets when a recognized provider's genai-prices
+  extractor mapped it; an unrecognized provider (or a mapping genai-prices
+  lacks) left reasoning tokens `None` even though the adapter's own
+  `details["reasoning_tokens"]` still had the count. Cached tokens now get the
+  same `details["cached_tokens"]` fallback for symmetry. The field is always
+  checked first, so a genuinely reported zero is never overridden.
 
 Added capabilities (additive): callable-flow `repeat` per collection item
 (ledger `attempts`/`repeat`/`retry`, budget includes the worst case), shared
 explicit step definitions anywhere in the configuration root,
-`ExecutionResult.start`, and `RuntimePlugins(tracer_provider=...)`.
+`ExecutionResult.start`, `RuntimePlugins(tracer_provider=...)`, and
+`ExecutionInfo`/`Usage`/`ModelUsage` re-exported from the top-level `foliqant`
+package.
