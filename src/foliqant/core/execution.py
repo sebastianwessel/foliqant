@@ -1,6 +1,7 @@
 """Immutable execution values shared by the engine and adapter ports."""
 
 from dataclasses import dataclass, fields
+from decimal import ROUND_HALF_EVEN, Decimal
 from types import MappingProxyType
 from typing import Literal, cast
 
@@ -57,17 +58,102 @@ class TokenUsage:
 
 
 @dataclass(frozen=True, slots=True)
+class Cost:
+    """An estimated cost; ``amount`` is None when a needed count or price was unavailable."""
+
+    currency: str
+    amount: Decimal | None = None
+    reference_model: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.currency) is not str or not self.currency:
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+        amount = self.amount
+        if amount is not None and (
+            type(amount) is not Decimal or not amount.is_finite() or amount < 0
+        ):
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+
+    @staticmethod
+    def combine(left: "Cost | None", right: "Cost | None") -> "Cost | None":
+        """Sum two estimates; unpriced requests (None) make a priced total incomplete."""
+        if left is None or right is None:
+            priced = left or right
+            return None if priced is None else Cost(priced.currency, None, priced.reference_model)
+        if left.currency != right.currency:
+            # One currency per total; a mixed sum has no meaningful amount.
+            return Cost(left.currency, None)
+        amount = (
+            left.amount + right.amount
+            if left.amount is not None and right.amount is not None
+            else None
+        )
+        reference = left.reference_model if left.reference_model == right.reference_model else None
+        return Cost(left.currency, amount, reference)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelUsage:
+    """Requests sent to one provider model ID.
+
+    ``cost`` is None when no request was priced; combining priced and unpriced
+    requests keeps the currency but loses the amount.
+    """
+
+    requests: int
+    tokens: TokenUsage = TokenUsage()
+    cost: Cost | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.requests) is not int or self.requests < 1:
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+
+    def plus(self, other: "ModelUsage") -> "ModelUsage":
+        return ModelUsage(
+            self.requests + other.requests,
+            self.tokens.plus(other.tokens),
+            Cost.combine(self.cost, other.cost),
+        )
+
+
+def _merge_models(
+    left: tuple[tuple[str, ModelUsage], ...], right: tuple[tuple[str, ModelUsage], ...]
+) -> tuple[tuple[str, ModelUsage], ...]:
+    if not right:
+        return left
+    merged = dict(left)
+    for model, usage in right:
+        previous = merged.get(model)
+        merged[model] = usage if previous is None else previous.plus(usage)
+    return tuple(sorted(merged.items()))
+
+
+@dataclass(frozen=True, slots=True)
 class Usage:
+    """Measured totals; ``by_model`` splits model requests by provider model ID."""
+
     model_requests: int = 0
     tool_calls: int = 0
     tokens: TokenUsage = TokenUsage(0, 0, 0, 0, 0)
+    by_model: tuple[tuple[str, ModelUsage], ...] = ()
 
     def plus(self, other: "Usage") -> "Usage":
         return Usage(
             self.model_requests + other.model_requests,
             self.tool_calls + other.tool_calls,
             self.tokens.plus(other.tokens),
+            _merge_models(self.by_model, other.by_model),
         )
+
+    @property
+    def cost(self) -> Cost | None:
+        """The estimate across models: None unless at least one model is priced."""
+        if not self.by_model:
+            return None
+        total = self.by_model[0][1].cost
+        for _, usage in self.by_model[1:]:
+            total = Cost.combine(total, usage.cost)
+        return total
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,15 +313,53 @@ class CallerContext:
     metadata: FrozenObject
 
 
+_COST_QUANTUM = Decimal("0.000001")
+
+
+def cost_value(cost: Cost) -> dict[str, FrozenJson]:
+    """Project an estimate rounded to six decimals; an unknown amount is null."""
+    value: dict[str, FrozenJson] = {
+        "cost": (
+            float(cost.amount.quantize(_COST_QUANTUM, rounding=ROUND_HALF_EVEN))
+            if cost.amount is not None
+            else None
+        ),
+        "cost_complete": cost.amount is not None,
+        "currency": cost.currency,
+    }
+    if cost.reference_model is not None:
+        value["reference_model"] = cost.reference_model
+    return value
+
+
+def _model_usage_value(value: ModelUsage) -> FrozenObject:
+    item: dict[str, FrozenJson] = {
+        "requests": value.requests,
+        "input_tokens": value.tokens.input_tokens,
+        "cached_input_tokens": value.tokens.cache_read_input_tokens,
+        "output_tokens": value.tokens.output_tokens,
+        "reasoning_tokens": value.tokens.reasoning_output_tokens,
+    }
+    if value.cost is not None:
+        item.update(cost_value(value.cost))
+    return MappingProxyType(item)
+
+
 def usage_value(value: Usage) -> FrozenObject:
     """Project measured usage once, without adding parent and child totals."""
-    return MappingProxyType(
-        {
-            "model_requests": value.model_requests,
-            "tool_calls": value.tool_calls,
-            **{field.name: getattr(value.tokens, field.name) for field in fields(value.tokens)},
-        }
-    )
+    projected: dict[str, FrozenJson] = {
+        "model_requests": value.model_requests,
+        "tool_calls": value.tool_calls,
+        **{field.name: getattr(value.tokens, field.name) for field in fields(value.tokens)},
+    }
+    cost = value.cost
+    if cost is not None:
+        projected.update(cost_value(cost))
+    if value.by_model:
+        projected["by_model"] = MappingProxyType(
+            {model: _model_usage_value(usage) for model, usage in value.by_model}
+        )
+    return MappingProxyType(projected)
 
 
 def step_record_value(record: StepRecord) -> FrozenObject:

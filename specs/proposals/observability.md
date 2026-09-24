@@ -74,7 +74,8 @@ Implemented as specified, with these refinements:
   runtime spans join a host-owned OpenTelemetry provider; no runtime provider,
   exporter or metric pipeline is created, `install_global_telemetry=True` is
   rejected with `invalid_configuration`, and the host provider is never shut
-  down. Span names (`foliqant.workflow|flow|step`, `execute_tool <tool>`) and
+  down. Span names (`workflow <id>`, `flow <id>`, `step <id> (<type>)`,
+  `execute_tool <tool>`; see [usage-and-pricing.md](usage-and-pricing.md)) and
   event attributes are sanitized when recorded, so host processors receive the
   same content as the runtime exporter; model spans keep PydanticAI's
   content-free attributes, which only the runtime exporter narrows further.

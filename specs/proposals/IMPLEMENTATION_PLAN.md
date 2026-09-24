@@ -71,6 +71,19 @@ Status legend: ☐ open · ◐ in progress · ☑ done. Update this file as work
 | 5.8 | Docs (`validation.md`, `reference/runtime-configuration.md`, `integration/observability.md`, workflows, conditions, integration, deployment), skill references, examples with explicit review routes and generated `WORKFLOWS.md` checked by `tests/test_example_workflow_docs.py` | — | ☑ |
 | 5.9 | Platform follow-up: regenerate `docs/workflows.md` and update graph-label assertions in `apps/workflows/tests/test_workflow_graph.py` (repeat annotation and operands changed); consider `foliqant explain --all --check` instead of the custom generator | — | ☐ |
 
+## Phase 6 — Readable traces, usage by model and cost estimation (library)
+
+| # | Work item | Spec | Status |
+|---|---|---|---|
+| 6.1 | Span names from configuration IDs (`workflow <id>`, `flow <id>` with ` [item <i>]` / ` #<n>`, `step <id> (<type>)`), one naming function at creation and export; `foliqant.step.kind`; existing `foliqant.*` attributes and scopes kept | usage-and-pricing.md | ☑ |
+| 6.2 | Model spans: reported `gen_ai.usage.*` including cached, cache-creation and reasoning tokens, `gen_ai.response.model` (configured model or dated snapshot), `foliqant.usage.cost`; export allowlist updated | usage-and-pricing.md | ☑ |
+| 6.3 | `by_model` on every usage object, recorded per reserved attempt (`start_model_request(model, pricing)`), aggregated through steps, flows, attempts, retry flows and collections | usage-and-pricing.md | ☑ |
+| 6.4 | Profile `pricing` (strict, `Decimal`, long-context tier, `reasoning_billed_as`, `reference_model`), override replace/clear, results `cost`/`cost_complete`/`currency`/`reference_model` rounded to six decimals; schemas regenerated | usage-and-pricing.md | ☑ |
+| 6.5 | `explain` (`model_selection.pricing`) and `doctor` (`models`) show configured pricing | usage-and-pricing.md | ☑ |
+| 6.6 | Cached and reasoning usage from OpenAI-compatible and Azure responses verified (chat, Responses, `FunctionModel`) | usage-and-pricing.md | ☑ |
+| 6.7 | Docs (`integration/observability.md`, `integration/results.md`, `reference/inputs-and-results.md`, `configuration/models.md`), skill reference, `runtime.md`; tests in `tests/test_usage_pricing.py` and the telemetry suites | — | ☑ |
+| 6.8 | Platform follow-up: dashboards and queries that matched span names `foliqant.workflow|flow|step` select by instrumentation scope or `foliqant.*` attributes; add `pricing` to deployed profiles | — | ☐ |
+
 ## Phase 4 — Review and hardening
 
 | # | Work item | Status |

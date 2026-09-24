@@ -261,9 +261,11 @@ async def test_embedded_bootstrap_parent_chain_for_each_model_attempt(
     assert closed
     assert trace.get_tracer_provider() is previous_global
     spans = captured.get_finished_spans()
-    workflow = next(span for span in spans if span.name == "foliqant.workflow")
-    flow = next(span for span in spans if span.name == "foliqant.flow")
-    step = next(span for span in spans if span.name == "foliqant.step")
+    workflow = next(
+        span for span in spans if span.instrumentation_scope.name == "foliqant.workflow"
+    )
+    flow = next(span for span in spans if span.instrumentation_scope.name == "foliqant.flow")
+    step = next(span for span in spans if span.instrumentation_scope.name == "foliqant.step")
     calls = [span for span in spans if span.kind is SpanKind.CLIENT]
     assert len(calls) == len(seen) == 2
     assert workflow.parent.span_id == int("b" * 16, 16)
@@ -435,8 +437,9 @@ async def test_environment_model_references_resolve_to_telemetry_labels(
     assert result.execution.status == "completed"
     assert result.execution.trace is not None
     spans = captured.get_finished_spans()
-    assert {span.name for span in spans} >= {"foliqant.workflow", "foliqant.flow", "foliqant.step"}
+    assert {span.name for span in spans} >= {"workflow demo", "flow main", "step first (llm)"}
     client = [span for span in spans if span.kind is SpanKind.CLIENT]
+    assert {span.name for span in client} == ({f"chat {model_id}"} if labelled else {"chat"})
     assert client, "model request spans must still be exported"
     models = {span.attributes.get("gen_ai.request.model") for span in client}
     assert models == ({model_id} if labelled else {None})

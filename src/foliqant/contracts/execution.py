@@ -28,9 +28,7 @@ from foliqant.core.execution import (
     TokenUsage,
     flow_record_value,
     step_record_value,
-)
-from foliqant.core.execution import (
-    Usage as CoreUsage,
+    usage_value,
 )
 from foliqant.core.json import JsonValue, thaw_json
 
@@ -93,7 +91,87 @@ class SafeError(_ExecutionBoundary):
         return values
 
 
-class Usage(_ExecutionBoundary):
+_Cost = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+_COST_FIELDS = ("cost", "cost_complete", "currency", "reference_model")
+
+
+class _PricedUsage(_ExecutionBoundary):
+    """Cost fields, present exactly when configured pricing applied to a request.
+
+    ``cost`` is rounded to six decimals, or ``null`` with ``cost_complete: false``
+    when a count the estimate needs was not reported or a request was unpriced.
+    """
+
+    cost: _Cost | None | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+    cost_complete: bool | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+    currency: Literal["USD"] | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+    reference_model: _NonBlank | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+
+    @model_validator(mode="after")
+    def cost_fields_together(self) -> Self:
+        present = self.model_fields_set
+        priced = {"cost", "cost_complete", "currency"}
+        if priced & present and not priced <= present:
+            raise ValueError("cost, cost_complete and currency occur together")
+        if "reference_model" in present and ("currency" not in present or not self.reference_model):
+            raise ValueError("reference_model requires a priced estimate")
+        if "currency" in present:
+            if self.currency is None or self.cost_complete is None:
+                raise ValueError("currency and cost_complete cannot be null")
+            if self.cost_complete != (self.cost is not None):
+                raise ValueError("cost_complete must describe cost presence")
+        return self
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        # Counts first, then the estimate, then the per-model split.
+        trailing = (*_COST_FIELDS, "by_model")
+        ordered = {name: value for name, value in values.items() if name not in trailing}
+        for name in trailing:
+            if name in self.model_fields_set and name in values:
+                ordered[name] = values[name]
+        return ordered
+
+
+class ModelUsage(_PricedUsage):
+    """Usage of one provider model ID; ``null`` counts were not reported."""
+
+    requests: Annotated[int, Field(strict=True, ge=1)]
+    input_tokens: _Count | None
+    cached_input_tokens: _Count | None
+    output_tokens: _Count | None
+    reasoning_tokens: _Count | None
+
+    @model_validator(mode="after")
+    def valid_token_subsets(self) -> Self:
+        try:
+            TokenUsage(
+                self.input_tokens,
+                self.output_tokens,
+                self.cached_input_tokens,
+                None,
+                self.reasoning_tokens,
+            )
+        except ServiceError:
+            raise ValueError("invalid token usage") from None
+        return self
+
+
+class Usage(_PricedUsage):
+    """Measured totals; ``by_model`` splits model requests by provider model ID.
+
+    ``by_model`` is omitted when no model request was made; when present it
+    accounts for every model request. Cost fields sum the priced models and are
+    omitted when no model is priced.
+    """
+
     model_requests: _Count
     tool_calls: _Count
     input_tokens: _Count | None
@@ -101,6 +179,13 @@ class Usage(_ExecutionBoundary):
     cache_read_input_tokens: _Count | None
     cache_write_input_tokens: _Count | None
     reasoning_output_tokens: _Count | None
+    by_model: (
+        Annotated[
+            dict[Annotated[str, StringConstraints(min_length=1, max_length=512)], ModelUsage],
+            Field(min_length=1),
+        ]
+        | SkipJsonSchema[None]
+    ) = Field(default=None, json_schema_extra=_omit_default)
 
     @model_validator(mode="after")
     def valid_token_subsets(self) -> Self:
@@ -114,6 +199,16 @@ class Usage(_ExecutionBoundary):
             )
         except ServiceError:
             raise ValueError("invalid token usage") from None
+        if "by_model" in self.model_fields_set and self.by_model is None:
+            raise ValueError("by_model must be omitted rather than null")
+        if self.by_model is not None and self.model_requests != sum(
+            item.requests for item in self.by_model.values()
+        ):
+            raise ValueError("by_model must account for every model request")
+        if "currency" in self.model_fields_set and not any(
+            item.currency is not None for item in (self.by_model or {}).values()
+        ):
+            raise ValueError("a total cost requires a priced model")
         return self
 
 
@@ -652,18 +747,6 @@ def _safe_error(failure: Failure) -> dict[str, JsonValue]:
     }
 
 
-def _usage(value: CoreUsage) -> dict[str, JsonValue]:
-    return {
-        "model_requests": value.model_requests,
-        "tool_calls": value.tool_calls,
-        "input_tokens": value.tokens.input_tokens,
-        "output_tokens": value.tokens.output_tokens,
-        "cache_read_input_tokens": value.tokens.cache_read_input_tokens,
-        "cache_write_input_tokens": value.tokens.cache_write_input_tokens,
-        "reasoning_output_tokens": value.tokens.reasoning_output_tokens,
-    }
-
-
 def _step_result(record: StepRecord) -> dict[str, JsonValue]:
     return cast(dict[str, JsonValue], thaw_json(step_record_value(record)))
 
@@ -700,7 +783,7 @@ def to_execution_result(value: RunResult) -> ExecutionResult:
             "workflow": value.workflow,
             "revision": value.revision,
             "status": value.status,
-            "usage": _usage(value.usage),
+            "usage": cast(dict[str, JsonValue], thaw_json(usage_value(value.usage))),
         }
         if value.error is not None:
             execution["error"] = _safe_error(value.error)

@@ -445,13 +445,22 @@ async def open_application(
                 )
                 if set(models) != set(effective_models.models):
                     raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+                model_profiles = effective_models.models
+                # Pricing is configuration, applied the same way to any model factory.
                 models = {
                     alias: replace(
                         binding,
-                        admission=models[prepared._model_admission_groups[alias]].admission,
+                        admission=(
+                            models[prepared._model_admission_groups[alias]].admission
+                            if alias in prepared._model_admission_groups
+                            else binding.admission
+                        ),
+                        pricing=(
+                            pricing.plan()
+                            if (pricing := model_profiles[alias].pricing) is not None
+                            else None
+                        ),
                     )
-                    if alias in prepared._model_admission_groups
-                    else binding
                     for alias, binding in models.items()
                 }
             mcp_runtime = None

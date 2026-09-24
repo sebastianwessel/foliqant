@@ -89,7 +89,8 @@ async def test_real_runner_spans_and_metrics_do_not_capture_business_values(tmp_
         context_api.detach(token)
     assert result.status == "completed"
     spans = exporter.get_finished_spans()
-    assert [s.name for s in spans] == ["foliqant.step", "foliqant.flow", "foliqant.workflow"]
+    assert [s.name for s in spans] == ["step first (handler)", "flow main", "workflow inbox"]
+    assert spans[0].attributes["foliqant.step.kind"] == "handler"
     root = spans[-1]
     assert root.parent.span_id == int("0123456789abcdef", 16)
     assert all(s.context.trace_id == int(_PARENT.split("-")[1], 16) for s in spans)
@@ -210,7 +211,11 @@ def test_invalid_explicit_carrier_does_not_inherit_unrelated_parent(telemetry):
                 trace_api.get_current_span().get_span_context().trace_id
                 != ambient.get_span_context().trace_id
             )
-    root = next(s for s in exporter.get_finished_spans() if s.name == "foliqant.workflow")
+    root = next(
+        s
+        for s in exporter.get_finished_spans()
+        if s.instrumentation_scope.name == "foliqant.workflow"
+    )
     assert root.parent is None
 
 

@@ -33,8 +33,9 @@ async def test_runtime_spans_join_the_host_provider_without_owning_it(tmp_path):
             result = await app.run("demo", Envelope(payload={"message": "invoice 42"}))
     assert result.execution.status == "completed"
     spans = {span.name: span for span in exporter.get_finished_spans()}
-    assert {"foliqant.workflow", "foliqant.flow", "foliqant.step"} <= set(spans)
-    workflow = spans["foliqant.workflow"]
+    assert {"workflow demo", "flow main"} <= set(spans)
+    assert any(name.startswith("step ") and name.endswith(" (handler)") for name in spans)
+    workflow = spans["workflow demo"]
     # Runtime spans are children of the host's current span in the host's trace.
     assert workflow.context.trace_id == parent.get_span_context().trace_id
     assert workflow.parent is not None
@@ -43,7 +44,7 @@ async def test_runtime_spans_join_the_host_provider_without_owning_it(tmp_path):
     assert result.execution.trace.trace_id == f"{workflow.context.trace_id:032x}"
     # Runtime spans are built from configured labels only, also without an export filter.
     assert "invoice" not in "".join(span.to_json() for span in exporter.get_finished_spans())
-    assert spans["foliqant.flow"].attributes["foliqant.flow.name"] == "main"
+    assert spans["flow main"].attributes["foliqant.flow.name"] == "main"
     # The runtime neither installed globals nor shut the host provider down.
     assert trace_api.get_tracer_provider() is global_before
     with host_tracer.start_as_current_span("host.after"):

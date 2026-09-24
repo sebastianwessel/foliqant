@@ -16,6 +16,7 @@ refinements made while building the features.
 | [static-checks.md](static-checks.md) | Route coverage checks, workflow-level review default, warnings, `explain` graphs | application-side lint scripts and graph generators |
 | [handlers.md](handlers.md) | Declared handler contracts for the CLI, review issues from handlers, `route_key` removal, richer `StepContext` | CLI workarounds, dead fields |
 | [observability.md](observability.md) | Spans and events for routes, conditions, repeats and skips; host trace propagation; structured logs | ad-hoc logging in hosts |
+| [usage-and-pricing.md](usage-and-pricing.md) | Descriptive span names, usage by provider model, configured cost estimates | trace tooling that decodes attributes, application-side cost spreadsheets |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Delivery plan: order, ownership, verification, documentation | — |
 
 Principles kept by every feature (see `../README.md`): reviewed configuration owns the topology;

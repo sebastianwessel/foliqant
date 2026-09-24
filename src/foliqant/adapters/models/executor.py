@@ -66,7 +66,7 @@ class _InvocationModel(WrapperModel):
         self._max_iterations = max_iterations
         self._iterations = 0
         if telemetry is not None:
-            self.wrapped = telemetry.instrument(binding.model)
+            self.wrapped = telemetry.instrument(binding.model, binding.pricing)
 
     async def request(
         self,
@@ -97,7 +97,9 @@ class _InvocationModel(WrapperModel):
                     first_attempt = False
                 if deadline <= loop.time():
                     _fail(ErrorCode.TIMEOUT)
-                ticket = await self._context.budget.start_model_request()
+                ticket = await self._context.budget.start_model_request(
+                    self._request_model.model_name, self._binding.pricing
+                )
                 started_at = (
                     self._telemetry.start_request() if self._telemetry is not None else None
                 )

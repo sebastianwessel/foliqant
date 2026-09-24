@@ -277,6 +277,22 @@ Every included `Usage` object has `model_requests`, `tool_calls`,
 nonnegative; token values may be `null` when a provider did not report them.
 Parent usage already aggregates child work, so do not add levels together.
 
+| `Usage` field | Presence | Meaning |
+| --- | --- | --- |
+| `by_model` | A model request was made | `ModelUsage` by provider model ID; its `requests` sum to `model_requests` |
+| `cost` | Some request used a priced profile | Estimate across models, rounded to six decimals; `null` when incomplete |
+| `cost_complete` | With `cost` | `false` when a needed count was unreported or some requests were unpriced |
+| `currency` | With `cost` | `USD` |
+| `reference_model` | With `cost`, when all priced requests share one | The model whose prices were used as a reference estimate |
+
+A `ModelUsage` has `requests` (at least 1), `input_tokens`,
+`cached_input_tokens`, `output_tokens` and `reasoning_tokens` (each `null` when
+unreported), and the same optional `cost`, `cost_complete`, `currency` and
+`reference_model` for that model's requests. Cached tokens are a subset of
+input tokens and reasoning tokens a subset of output tokens. How the estimate
+is computed is described under
+[model pricing](../configuration/models.md#estimate-cost-with-pricing).
+
 See [collection configuration](../steps/flow-collection.md) for its child-ledger
 semantics and [read a workflow result](../integration/results.md) for the
 minimal application-facing path.
@@ -298,7 +314,9 @@ interruption.
 Unknown fields are rejected except application-defined envelope metadata.
 Protected metadata, errors, selections, category descriptions, collection
 `kind`, and `partial_result` are omitted when absent, not serialized as null.
-Native nullable answers and unknown token measurements use explicit null.
+Native nullable answers, unknown token measurements and an incomplete cost
+estimate use explicit null; `by_model` and cost fields are omitted when they do
+not apply.
 Record-level unavailable timing or usage is omitted in canonical serialization.
 
 Packaged schemas are `envelope.schema.json`, `decision-input.schema.json`,

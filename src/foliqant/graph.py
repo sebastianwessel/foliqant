@@ -311,6 +311,8 @@ def _step_json(step: CompiledStep, prepared: PreparedApplication | None) -> dict
                 selection["profile"] = source
             elif step.model in prepared.config.models:
                 selection["profile"] = step.model
+            if profile.pricing is not None:
+                selection["pricing"] = profile.pricing.summary()
             item["model_selection"] = selection
     if isinstance(step, DecisionStepPlan):
         item["sources"] = {name: binding_json(binding) for name, binding in step.sources}

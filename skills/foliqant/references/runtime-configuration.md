@@ -96,7 +96,9 @@ is independent and does not inherit the workflow profile's settings.
 For nullable generation options, an explicit `null` in an override clears the
 inherited value, leaving provider behavior in effect; it differs from omission.
 `model` and `max_tokens` cannot be cleared. The merged options must still satisfy
-the chosen provider's constraints.
+the chosen provider's constraints. An override's `pricing` replaces the
+profile's pricing and `pricing: null` removes it; an override with a different
+`model` does not inherit the profile's pricing.
 
 ## Common model fields
 
@@ -107,6 +109,7 @@ Every model profile has:
   `supports_tools` (true);
 - `concurrency` (4), `queue_limit` (16), and `request_timeout` (60);
 - `retry` (one attempt by default);
+- optional `pricing` (see [Pricing](#pricing));
 - provider-specific `options`.
 
 `output_mode: tool` requires tool support. At least text or JSON Schema output
@@ -118,6 +121,40 @@ Common generation options are `max_tokens` (default 4096, 1–1,048,576),
 optional `temperature` (0–2), and optional `top_p` (greater than 0 and at
 most 1). OpenAI-family profiles also accept an optional strict-integer `seed`
 and `reasoning_effort: none|minimal|low|medium|high|xhigh`.
+
+### Pricing
+
+`pricing` estimates cost from reported usage; it is configuration, not a price
+list, and must be updated when prices change. Example with GPT-5.6 Terra list
+prices:
+
+```yaml
+pricing:
+  currency: USD                    # required, only USD
+  input_per_million: 2.00          # required
+  cached_input_per_million: 0.20   # optional; defaults to the input price
+  output_per_million: 12.00        # required
+  reasoning_billed_as: output      # output (default) | input
+  long_context:                    # optional tier for large requests
+    threshold_input_tokens: 272000 # applies when input tokens exceed it
+    input_per_million: 4.00
+    cached_input_per_million: 0.40
+    output_per_million: 18.00
+  reference_model: gpt-5.6-terra   # optional: whose prices are borrowed
+```
+
+Per request: (input − cached) × input price + cached × cached price + output ×
+output price; reasoning tokens are part of output and use the input price with
+`reasoning_billed_as: input`. The long-context tier replaces all prices of a
+request above the threshold. Arithmetic is exact decimal; results round to six
+decimals. A needed count that was not reported gives `cost: null` with
+`cost_complete: false`. Prices are numbers from 0 to 1,000,000; strings,
+other currencies and unknown fields are rejected. Usage objects then carry
+`cost`, `cost_complete`, `currency`, optional `reference_model`, and
+`by_model` (keyed by provider model ID: `requests`, `input_tokens`,
+`cached_input_tokens`, `output_tokens`, `reasoning_tokens`, and the cost
+fields). `foliqant explain` shows `model_selection.pricing`; `foliqant doctor`
+lists `models.<profile>.pricing`.
 
 ### OpenAI
 
@@ -434,6 +471,14 @@ review. `StepContext` adds `trace` (W3C carrier of the step span), `attempt`,
 - `metric_export_interval` (60), `metric_export_batch_size` (512);
 - `export_timeout` (10), `shutdown_timeout` (10);
 - `conditions` (false): add debug `condition.evaluated` span events.
+
+Spans are named from configuration IDs: `workflow <id>`, `flow <id>` (with
+` [item <index>]` inside a collection and ` #<attempt>` from the second attempt),
+`step <id> (<type>)`, `chat <model>` and `execute_tool <tool>`. Attributes keep
+`foliqant.workflow.name`, `foliqant.flow.name`, `foliqant.step.name`,
+`foliqant.step.kind`, `foliqant.execution.id`, `foliqant.flow.attempt` and
+`foliqant.flow.role`; model spans add OTel GenAI `gen_ai.*` usage attributes
+and `foliqant.usage.cost` when pricing is configured.
 
 An empty endpoint disables that signal. Telemetry exports allowlisted configured
 component labels (resolved values, never `$NAME` references), trace identifiers,

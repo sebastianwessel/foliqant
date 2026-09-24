@@ -73,8 +73,12 @@ model:
 An override can also set `model` to a different served model ID. Unspecified
 options retain the profile value; explicit `null` clears an optional option.
 `max_tokens` cannot be cleared. Overrides retain the profile's provider,
-credentials, capabilities, timeout, and shared admission limit. A complete inline
-provider profile is also accepted, but named profiles are easier to reuse and audit.
+credentials, capabilities, timeout, and shared admission limit. An override may
+also set [`pricing`](#estimate-cost-with-pricing), which replaces the profile's
+block; `pricing: null` removes it. An override that selects a different `model`
+does not inherit the profile's pricing, because those prices describe the
+profile's own model. A complete inline provider profile is also accepted, but
+named profiles are easier to reuse and audit.
 
 ## Choose a provider
 
@@ -142,6 +146,72 @@ Except for `max_tokens`, omitted generation settings defer to the provider.
 Acceptance by the configuration validator does not prove that a particular
 model supports the combination. Change one setting at a time and compare on
 the same [reviewed evaluation cases](../evaluation/running.md).
+
+## Estimate cost with pricing
+
+Add an optional `pricing` block to a profile to have results and model spans
+report an estimated cost. This profile uses the GPT-5.6 Terra list prices as an
+example:
+
+```yaml
+models:
+  terra:
+    provider: azure_openai
+    api: responses
+    api_flavor: v1
+    endpoint: $AZURE_OPENAI_ENDPOINT
+    model: gpt-5.6-terra
+    output_mode: native
+    pricing:
+      currency: USD
+      input_per_million: 2.00
+      cached_input_per_million: 0.20
+      output_per_million: 12.00
+      long_context:
+        threshold_input_tokens: 272000
+        input_per_million: 4.00
+        cached_input_per_million: 0.40
+        output_per_million: 18.00
+```
+
+Prices change, and they are configuration: copy the current prices of your
+provider and contract into `pricing`, and review them like any other setting.
+Foliqant ships no price list and never looks prices up.
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `currency` | Yes | `USD` |
+| `input_per_million` | Yes | Price of one million uncached input tokens |
+| `cached_input_per_million` | No | Price of one million cached input tokens; omitted, cached input is billed at the input price |
+| `output_per_million` | Yes | Price of one million output tokens |
+| `reasoning_billed_as` | No | `output` (default) or `input`: which price applies to reasoning tokens |
+| `long_context` | No | `threshold_input_tokens` and the tier's `input_per_million`, optional `cached_input_per_million`, and `output_per_million` |
+| `reference_model` | No | The model whose prices you used, when you estimate one model with another's prices, for example `gpt-5.6-terra` for a local model |
+
+Each request is estimated on its own, with exact decimal arithmetic:
+
+- uncached input (input minus cached tokens) × input price,
+- plus cached input × cached price (the input price when none is set),
+- plus output tokens × output price. Providers report reasoning tokens inside
+  the output tokens; with `reasoning_billed_as: input` those tokens use the
+  input price instead.
+
+When a request's input tokens exceed `threshold_input_tokens`, every token of
+that request uses the `long_context` prices; at or below the threshold the base
+prices apply. Cache writes are billed as input. Request costs are summed per
+model and across steps, flows, attempts and collection items, and rounded to six
+decimals in the result.
+
+The estimate is never guessed. When a count it needs was not reported (input or
+output tokens, cached tokens when a cached price is set, or reasoning tokens
+with `reasoning_billed_as: input`), that request's cost is unknown and the
+result shows `cost: null` with `cost_complete: false`. Validation is strict:
+prices are nonnegative numbers of at most 1,000,000, and unknown fields,
+strings and other currencies are rejected offline. `foliqant explain` shows
+each step's effective pricing under `model_selection.pricing`, and `foliqant
+doctor` lists every profile's pricing under `models`. See
+[usage by model and cost](../integration/results.md#read-usage-by-model-and-cost)
+for the result fields.
 
 ## Keep credentials separate from business data
 

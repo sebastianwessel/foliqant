@@ -12,7 +12,7 @@ input rather than fabricating a successful output.
 | `flows` | Records by flow instance ID, with local `steps`, optional projected `result`, and `attempt_count`. |
 | `start` | The first flow of a workflow run and the `start` form that selected it; omitted for `run_flow` and `run_step`. |
 | `transitions` | Routes or terminal outcomes selected at flow boundaries, with the `route` form that selected each. |
-| `execution` | Run ID, workflow, revision, status, measured usage, safe error on failure, and `trace` IDs when telemetry is enabled. |
+| `execution` | Run ID, workflow, revision, status, measured usage (by model, with an optional cost estimate), safe error on failure, and `trace` IDs when telemetry is enabled. |
 
 A completed step result is at `result.flows[flow_id].steps[step_id].result`.
 Its `result` can be JSON `null`; an omitted `result` means something else. Flow
@@ -57,6 +57,54 @@ with [`repeat`](../configuration/repeat.md) and a retry flow additionally carry
 `attempts_usage` / `attempts_elapsed_seconds` sum every run. A repeated flow's
 `repeat.stopped_by` is `until`, `exhausted`, `continue_when`, `review` or
 `failure`. The root `execution.usage` counts every attempt and retry run once.
+
+## Read usage by model and cost
+
+`execution.usage` is the run total; it counts every step, flow attempt, retry
+flow run and collection item once. Whenever a model was used, the usage object
+also has `by_model`, keyed by the provider model ID the requests were sent to.
+Flow and step usage carry the same split for their own work.
+
+```json
+{
+  "model_requests": 1,
+  "tool_calls": 2,
+  "input_tokens": 1850,
+  "output_tokens": 210,
+  "cache_read_input_tokens": 1024,
+  "cache_write_input_tokens": null,
+  "reasoning_output_tokens": 64,
+  "cost": 0.004377,
+  "cost_complete": true,
+  "currency": "USD",
+  "reference_model": "gpt-5.6-terra",
+  "by_model": {
+    "qwen3-30b-a3b": {
+      "requests": 1,
+      "input_tokens": 1850,
+      "cached_input_tokens": 1024,
+      "output_tokens": 210,
+      "reasoning_tokens": 64,
+      "cost": 0.004377,
+      "cost_complete": true,
+      "currency": "USD",
+      "reference_model": "gpt-5.6-terra"
+    }
+  }
+}
+```
+
+Token counts keep the known/unknown rule: `null` means the provider did not
+report the count, never zero. `cached_input_tokens` is part of `input_tokens`
+and `reasoning_tokens` is part of `output_tokens`.
+
+`cost`, `cost_complete` and `currency` appear only when the model profile
+configures [`pricing`](../configuration/models.md#estimate-cost-with-pricing).
+`cost` is an estimate rounded to six decimals, computed per request from the
+configured prices, not a provider invoice. It is `null` with
+`cost_complete: false` when a count the estimate needs was not reported, or
+when a total mixes priced and unpriced requests. `reference_model` names the
+model whose prices a profile borrows as a reference estimate.
 
 ## Correlate with traces
 

@@ -97,7 +97,7 @@ async def test_sequential_items_share_root_identity_deadline_and_exact_usage():
 
     async def execute(step, inputs, context):
         calls.append((inputs["message"], context))
-        ticket = await context.budget.start_model_request()
+        ticket = await context.budget.start_model_request("test-model")
         await context.budget.finish_model_request(ticket, TokenUsage(2, 3, 0, 0, 0))
         return StepOutcome(freeze_json({"value": inputs["message"]}))
 
@@ -326,7 +326,7 @@ async def test_failure_retains_completed_failed_and_unstarted_items_without_doub
 
     async def execute(step, inputs, context):
         calls.append(inputs["message"])
-        await context.budget.start_model_request()
+        await context.budget.start_model_request("test-model")
         if inputs["message"] == "fail":
             if mode == "timeout":
                 try:
@@ -417,11 +417,16 @@ async def test_child_flow_trace_is_nested_under_collection_step():
         children = [
             span
             for span in spans
-            if span.name == "foliqant.flow"
+            if span.instrumentation_scope.name == "foliqant.flow"
             and span.attributes.get("foliqant.flow.name") == "worker"
         ]
         assert len(children) == 2
         assert all(span.parent.span_id == parent.context.span_id for span in children)
+        assert parent.name == "step dispatch (flow_collection)"
+        assert sorted(span.name for span in children) == [
+            "flow worker [item 0]",
+            "flow worker [item 1]",
+        ]
     finally:
         provider.shutdown()
 

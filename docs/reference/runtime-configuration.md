@@ -109,7 +109,7 @@ Normal preparation and execution do not read gold. See
 | `foliqant explain --workflow NAME --format mermaid --legend` | Render one graph with a legend of step shapes | No |
 | `foliqant explain --format mermaid --all --output docs/workflows.md` | Write a Markdown document with every workflow graph | No |
 | `foliqant explain --format mermaid --all --output docs/workflows.md --check` | Fail when that document is stale | No |
-| `foliqant doctor` | Check configuration and optional dependencies | No |
+| `foliqant doctor` | Check configuration and optional dependencies; list model profiles with their `pricing` | No |
 | `foliqant run --workflow NAME --input PATH` | Run one request file | As configured |
 | `foliqant run --workflow NAME --input -` | Read one request from standard input | As configured |
 | `foliqant evaluate --check` | Validate reviewed gold and targets | No |

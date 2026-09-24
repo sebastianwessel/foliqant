@@ -1064,10 +1064,13 @@ class WorkflowRunner:
                 await asyncio.sleep(0)
                 if asyncio.get_running_loop().time() >= deadline:
                     raise ServiceError(ErrorCode.TIMEOUT)
-                attributes = self._attributes(
-                    invocation,
-                    attempt=attempt if flow.repeat is not None or role == "retry" else None,
-                )
+                attributes = {
+                    **self._attributes(
+                        invocation,
+                        attempt=attempt if flow.repeat is not None or role == "retry" else None,
+                    ),
+                    "foliqant.step.kind": step.type,
+                }
                 guard: tuple[bool, ConditionTrace] | None = None
                 location = f"steps.{step.name}.when"
                 if step.when is not None and step_id is None:

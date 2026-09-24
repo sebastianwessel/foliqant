@@ -198,7 +198,7 @@ async def test_routes_only_to_configured_flow_target(
 
     async def handle(step, inputs, context):
         if context.flow_id == "main":
-            ticket = await context.budget.start_model_request()
+            ticket = await context.budget.start_model_request("test-model")
             await context.budget.finish_model_request(ticket, TokenUsage(10, 5))
             return StepOutcome(route)
         assert context.flow_id == selected
@@ -218,7 +218,7 @@ async def test_execution_error_is_safe_and_failed_attempts_remain_counted(tmp_pa
     async def handle(
         step: OperationStep, inputs: FrozenObject, context: StepContext
     ) -> StepOutcome:
-        await context.budget.start_model_request()
+        await context.budget.start_model_request("test-model")
         raise RuntimeError("PRIVATE-USER-CONTENT")
 
     result = await runner(plan, Scripted(handle)).run(accepted(), identity=Identity())

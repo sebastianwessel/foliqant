@@ -8,14 +8,19 @@ from typing import Literal, Protocol
 from foliqant.core.execution import CallerContext, StepOutcome, TokenUsage, Usage
 from foliqant.core.json import FrozenJson, FrozenObject
 from foliqant.core.plan import DecisionStepPlan, HandlerStepPlan, LlmStepPlan, McpStepPlan
+from foliqant.core.pricing import PricingPlan
 
 type OperationStep = DecisionStepPlan | LlmStepPlan | McpStepPlan | HandlerStepPlan
 
 
 class AttemptBudget(Protocol):
-    """Adapters reserve every request before I/O; snapshots are local observations."""
+    """Adapters reserve every request before I/O; snapshots are local observations.
 
-    async def start_model_request(self) -> int: ...
+    ``model`` is the provider model ID the request is sent to; ``pricing``, when
+    configured for it, estimates the request's cost from its reported usage.
+    """
+
+    async def start_model_request(self, model: str, pricing: PricingPlan | None = None) -> int: ...
 
     async def finish_model_request(self, ticket: int, usage: TokenUsage) -> None: ...
 

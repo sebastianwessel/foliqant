@@ -34,6 +34,17 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "anthropic",
           "title": "Provider",
@@ -240,6 +251,17 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "azure_openai",
           "title": "Provider",
@@ -316,6 +338,17 @@
           ],
           "title": "Output Mode",
           "type": "string"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "provider": {
           "const": "bedrock",
@@ -437,6 +470,17 @@
           ],
           "title": "Output Mode",
           "type": "string"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "provider": {
           "const": "openai_compatible",
@@ -563,6 +607,17 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "google",
           "title": "Provider",
@@ -609,6 +664,130 @@
       "title": "GoogleModelConfig",
       "type": "object"
     },
+    "LongContextPricing": {
+      "additionalProperties": false,
+      "description": "Prices for every token of a request whose input exceeds the threshold.",
+      "properties": {
+        "cached_input_per_million": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Per Million"
+        },
+        "input_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Input Per Million",
+          "type": "number"
+        },
+        "output_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Output Per Million",
+          "type": "number"
+        },
+        "threshold_input_tokens": {
+          "maximum": 100000000,
+          "minimum": 1,
+          "title": "Threshold Input Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "threshold_input_tokens",
+        "input_per_million",
+        "output_per_million"
+      ],
+      "title": "LongContextPricing",
+      "type": "object"
+    },
+    "ModelPricing": {
+      "additionalProperties": false,
+      "description": "Configured prices used to estimate cost; an estimate, not a provider invoice.\n\nExample (GPT-5.6 Terra list prices at the time of writing; prices change)::\n\n    pricing:\n      currency: USD\n      input_per_million: 2.00\n      cached_input_per_million: 0.20\n      output_per_million: 12.00\n      long_context:\n        threshold_input_tokens: 272000\n        input_per_million: 4.00\n        cached_input_per_million: 0.40\n        output_per_million: 18.00",
+      "properties": {
+        "cached_input_per_million": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Per Million"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "input_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Input Per Million",
+          "type": "number"
+        },
+        "long_context": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LongContextPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Output Per Million",
+          "type": "number"
+        },
+        "reasoning_billed_as": {
+          "default": "output",
+          "enum": [
+            "output",
+            "input"
+          ],
+          "title": "Reasoning Billed As",
+          "type": "string"
+        },
+        "reference_model": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Model"
+        }
+      },
+      "required": [
+        "currency",
+        "input_per_million",
+        "output_per_million"
+      ],
+      "title": "ModelPricing",
+      "type": "object"
+    },
     "OpenAIModelConfig": {
       "additionalProperties": false,
       "properties": {
@@ -650,6 +829,17 @@
           ],
           "title": "Output Mode",
           "type": "string"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "provider": {
           "const": "openai",

@@ -43,6 +43,15 @@ class ModelRegistry:
             document = base.model_dump(mode="python")
             if selected.model is not None:
                 document["model"] = selected.model
+                # Profile prices describe the profile's own model.
+                if selected.model != base.model:
+                    document["pricing"] = None
+            if "pricing" in selected.model_fields_set:
+                document["pricing"] = (
+                    selected.pricing.model_dump(mode="python")
+                    if selected.pricing is not None
+                    else None
+                )
             document["options"] = {
                 **base.options.model_dump(mode="python"),
                 **selected.options.model_dump(mode="python", exclude_unset=True),

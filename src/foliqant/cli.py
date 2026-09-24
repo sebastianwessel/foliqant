@@ -495,6 +495,14 @@ def _doctor(config_path: Path) -> dict[str, object]:
         "configuration_digest": prepared.configuration_digest,
         "workflows": sorted(prepared.plans),
         "handlers": sorted(prepared.handler_contracts),
+        "models": {
+            name: {
+                "provider": profile.provider,
+                "model": profile.model,
+                **({"pricing": profile.pricing.summary()} if profile.pricing is not None else {}),
+            }
+            for name, profile in sorted(prepared.config.models.items())
+        },
         "diagnostics": _diagnostics(prepared.diagnostics),
         "optional_dependencies": optional,
     }

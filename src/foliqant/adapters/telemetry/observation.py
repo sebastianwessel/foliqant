@@ -19,7 +19,7 @@ from foliqant.core.execution import StepStatus
 from foliqant.ports.observation import Observation, ObservationValue, TraceContext
 
 from .logging import LogEvent, emit_event
-from .privacy import TelemetryLabels, safe_event_attributes
+from .privacy import TelemetryLabels, safe_event_attributes, scope_span_name
 
 _PROPAGATOR = TraceContextTextMapPropagator()
 _MAX_SECONDS = 365 * 24 * 60 * 60
@@ -270,7 +270,9 @@ class WorkflowTelemetry:
     ) -> Observation:
         """Attach a content-free scope; close it in the same async task.
 
-        Scope ``attributes`` (attempt, role, execution ID) are sanitized on export.
+        Scope ``attributes`` (attempt, role, step kind, collection index, execution
+        ID) are sanitized on export. The span is named by its configuration, for
+        example ``step extract (llm)``; see ``scope_span_name``.
         """
         extra = dict(attributes or {})
         scope: dict[str, AttributeValue] = {}
@@ -291,7 +293,9 @@ class WorkflowTelemetry:
             tracer, duration, name = self._workflow_tracer, self._workflow_duration, "workflow"
         parent = _parent(trace, transport_trace)
         # The exported name already; spans on a host provider look the same.
-        span = tracer.start_span(f"foliqant.{name}", context=parent, attributes=scope)
+        span = tracer.start_span(
+            scope_span_name(f"foliqant.{name}", scope), context=parent, attributes=scope
+        )
         try:
             token = context_api.attach(trace_api.set_span_in_context(span, parent))
         except BaseException:

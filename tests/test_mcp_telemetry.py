@@ -349,9 +349,10 @@ async def _child(*, embedded: bool = False) -> None:
     assert len(spans) >= 8
     trace_ids = {span.context.trace_id for span in spans}
     assert trace_ids == {int(parent.split("-")[1], 16) for parent in parents}
-    assert sum(span.name == "foliqant.workflow" for span in spans) == 2
-    assert sum(span.name == "foliqant.step" for span in spans) == 2
-    assert sum(span.name == "foliqant.flow" for span in spans) == 2
+    assert sum(span.instrumentation_scope.name == "foliqant.workflow" for span in spans) == 2
+    assert sum(span.instrumentation_scope.name == "foliqant.step" for span in spans) == 2
+    assert sum(span.instrumentation_scope.name == "foliqant.flow" for span in spans) == 2
+    assert sum(span.name == "step call (mcp)" for span in spans) == 2
 
     captured_by_trace: dict[int, dict[str, object]] = {}
     for request in captured_calls:
@@ -387,7 +388,7 @@ async def _child(*, embedded: bool = False) -> None:
             span
             for span in spans
             if span.context.trace_id == trace_id
-            and span.name == "foliqant.step"
+            and span.name == "step call (mcp)"
             and span.attributes.get("foliqant.step.name") == "call"
         )
         client = next(

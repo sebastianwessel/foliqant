@@ -46,7 +46,9 @@ _OPERATORS = frozenset(
     }
 )
 _MISMATCHES = frozenset({"incompatible_type", "value_too_long"})
+_STEP_KINDS = frozenset({"decision", "llm", "mcp", "handler", "flow_collection"})
 _MAX_EVENTS = 128
+_MAX_COST = 1_000_000_000.0
 
 _STRING_ATTRIBUTES = {
     "service.name": "services",
@@ -58,7 +60,6 @@ _STRING_ATTRIBUTES = {
     "foliqant.workflow.name": "workflows",
     "gen_ai.provider.name": "providers",
     "gen_ai.request.model": "models",
-    "gen_ai.response.model": "models",
     "gen_ai.tool.name": "tools",
 }
 _USAGE_ATTRIBUTES = frozenset(
@@ -173,14 +174,35 @@ def _safe_scope_name(span: ReadableSpan) -> str:
     return "external"
 
 
+def scope_span_name(scope: str, attributes: Mapping[str, AttributeValue]) -> str:
+    """Name a workflow, flow or step span from its sanitized configuration attributes.
+
+    Names use configuration IDs and fixed words only: ``workflow <id>``,
+    ``flow <id>`` with `` [item <index>]`` inside a collection and `` #<n>`` for
+    attempt 2 onwards, and ``step <id> (<kind>)``. A name that is not an
+    exportable label is left out rather than replaced by a runtime value.
+    """
+    kind = scope.removeprefix("foliqant.")
+    label = attributes.get(f"foliqant.{kind}.name")
+    name = f"{kind} {label}" if type(label) is str and _LABEL.fullmatch(label) else kind
+    if kind == "flow":
+        index = attributes.get("foliqant.collection.index")
+        if type(index) is int and 0 <= index <= 1023:
+            name = f"{name} [item {index}]"
+        attempt = attributes.get("foliqant.flow.attempt")
+        if type(attempt) is int and 2 <= attempt <= 64:
+            name = f"{name} #{attempt}"
+    elif kind == "step":
+        step_kind = attributes.get("foliqant.step.kind")
+        if type(step_kind) is str and step_kind in _STEP_KINDS:
+            name = f"{name} ({step_kind})"
+    return name
+
+
 def _safe_span_name(span: ReadableSpan, attributes: Mapping[str, AttributeValue]) -> str:
     scope = _safe_scope_name(span)
-    if scope == "foliqant.workflow":
-        return "foliqant.workflow"
-    if scope == "foliqant.step":
-        return "foliqant.step"
-    if scope == "foliqant.flow":
-        return "foliqant.flow"
+    if scope in {"foliqant.workflow", "foliqant.flow", "foliqant.step"}:
+        return scope_span_name(scope, attributes)
     if scope == "foliqant.tool":
         tool = attributes.get("gen_ai.tool.name")
         return f"execute_tool {tool}" if type(tool) is str else "execute_tool"
@@ -216,6 +238,19 @@ def _safe_attributes(
         if type(value) is str and value in allowed:
             output[key] = value
 
+    response_model = attributes.get("gen_ai.response.model")
+    if type(response_model) is str and _LABEL.fullmatch(response_model):
+        # The configured model or a provider snapshot of it, such as `<model>-2026-05-01`.
+        if response_model in labels.models or any(
+            response_model.startswith(f"{model}-") for model in labels.models
+        ):
+            output["gen_ai.response.model"] = response_model
+    step_kind = attributes.get("foliqant.step.kind")
+    if type(step_kind) is str and step_kind in _STEP_KINDS:
+        output["foliqant.step.kind"] = step_kind
+    cost = attributes.get("foliqant.usage.cost")
+    if type(cost) is float and 0 <= cost <= _MAX_COST:
+        output["foliqant.usage.cost"] = cost
     operation = attributes.get("gen_ai.operation.name")
     if type(operation) is str and operation in _GEN_AI_OPERATIONS:
         output["gen_ai.operation.name"] = operation

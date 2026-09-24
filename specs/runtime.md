@@ -439,6 +439,9 @@ Success routing runs only after a completed flow; review uses `on_unresolved`.
 All flows share one root admission slot, execution ID, monotonic deadline and
 visited-step budget. Transitions do not reacquire admission or reset counters.
 Root usage sums flow subtotals once; parent and child durations are not added.
+Every usage object splits model requests by provider model ID (`by_model`), and
+a profile's optional `pricing` adds a per-request cost estimate summed with the
+same rules (see [usage and pricing](#usage-by-model-and-cost)).
 Flow output may be projected on review, so references to unexecuted steps require
 explicit optional/default bindings. Technical failure preserves accepted input
 and completed records rather than publishing a success projection.
@@ -557,6 +560,31 @@ the root deadline. Cancellation interrupts waiting without launching another cal
 Record each actual attempt and unknown usage honestly; retries do not imply
 remote idempotency or guarantee recovery.
 
+## Usage by model and cost
+
+The step budget reserves each model attempt for the provider model ID it is sent
+to, together with the profile's pricing. Usage keeps unknown counts unknown:
+an attempt without a report counts as a request with unknown tokens. `by_model`
+(`requests`, `input_tokens`, `cached_input_tokens`, `output_tokens`,
+`reasoning_tokens`) is present whenever a model request was made and its
+requests sum to `model_requests`.
+
+`pricing` (`currency: USD`, `input_per_million`, optional
+`cached_input_per_million`, `output_per_million`, `reasoning_billed_as:
+output|input`, optional `long_context` with `threshold_input_tokens` and tier
+prices, optional `reference_model`) is strict configuration read as exact
+decimals. A request costs uncached input × input price + cached input × cached
+price (input price when absent) + output × output price, with reasoning tokens
+(a subset of output) at the input price when `reasoning_billed_as: input`. The
+long-context tier replaces all prices of a request whose input tokens exceed the
+threshold. A count the formula needs but that was not reported leaves the cost
+unknown. Costs sum unrounded; results expose `cost` rounded to six decimals,
+`cost_complete`, `currency` and `reference_model`, and `cost: null` with
+`cost_complete: false` when any contributing request is unknown or unpriced. Cost
+fields are omitted when no priced request contributed. An override's `pricing`
+replaces or (with `null`) clears the profile's; an override with another `model`
+does not inherit it. `explain` and `doctor` show the configured pricing.
+
 ## Privacy, logging and observations
 
 Safe JSON logging uses fixed event codes and allowlisted bounded fields. It drops
@@ -574,9 +602,17 @@ bounded shutdown; embedded hosts are never silently given a new global provider.
 Explicit owned providers preserve workflow → flow → step → model/tool attempt
 parentage in embedded applications as well as the CLI. Labels come from resolved
 configuration; values that cannot be exported safely are dropped with one
-warning event, never failing activation. Flow spans carry the attempt, maximum
-attempts and role (`routed`, `callable`, `retry`); skipped steps have a span
-with `foliqant.step.skipped`. Fixed events report `route.selected`,
+warning event, never failing activation. Spans are named from configuration
+IDs: `workflow <id>`, `flow <id>` (` [item <index>]` inside a collection,
+` #<attempt>` from the second attempt), `step <id> (<type>)`, `chat <model>` and
+`execute_tool <tool>`; a name that is not an allowlisted label is omitted, never
+replaced by a runtime value. Flow spans carry the attempt, maximum
+attempts and role (`routed`, `callable`, `retry`); step spans carry
+`foliqant.step.kind`; skipped steps have a span
+with `foliqant.step.skipped`. Model spans carry the reported OTel GenAI
+`gen_ai.usage.*` counts (input, output, cache read, cache creation, reasoning),
+`gen_ai.response.model` when it is the configured model or a dated snapshot of
+it, and `foliqant.usage.cost` when the request's estimate is known. Fixed events report `route.selected`,
 `repeat.stopped`, `step.skipped` (condensed condition: pointers and operators
 only), `handler.review` and `condition.type_mismatch`; `condition.evaluated`
 is opt-in through `telemetry.conditions`. `ExecutionResult.execution.trace`

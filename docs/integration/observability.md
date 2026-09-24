@@ -52,15 +52,69 @@ settings separately.
 
 Usage can be unknown when a provider did not report it. `null` means unknown,
 not zero. Workflow, flow, and step totals overlap; use the workflow total for
-the complete call instead of adding every level.
+the complete call instead of adding every level. The result also splits usage
+by provider model and, with [configured pricing](../configuration/models.md#estimate-cost-with-pricing),
+estimates its cost; see [usage by model](results.md#read-usage-by-model-and-cost).
+
+## Span names
+
+Spans are named by what they are, using configuration IDs and fixed words only,
+so a trace reads like the workflow configuration and names stay low-cardinality:
+
+| Span | Name | Example |
+| --- | --- | --- |
+| Run | `workflow <workflow id>` | `workflow support_multi` |
+| Flow run | `flow <flow id>` | `flow assess` |
+| Repeat attempt 2 onwards, or a later retry-flow run | `flow <flow id> #<attempt>` | `flow lookup_fund #2` |
+| Callable flow inside a collection | `flow <flow id> [item <index>]` | `flow billing_task [item 0]` |
+| Step | `step <step id> (<type>)` | `step extract (llm)`, `step lookup (mcp)`, `step classify (decision)` |
+| Model request | `chat <model>` | `chat gpt-5.6-terra` |
+| Model tool call or direct MCP call | `execute_tool <tool>` | `execute_tool lookup_account` |
+
+The step type is `decision`, `llm`, `mcp`, `handler` or `flow_collection`. The
+first attempt carries no suffix; a collection item with a repeated flow reads
+`flow billing_task [item 0] #2`. A name that is not an exportable label is left
+out rather than replaced by a runtime value (the span is then just `step (llm)`).
+Collection item IDs are business data and never appear; the item index does.
+
+This is a trace of the tutorial's multi-request workflow: a decision, a planning
+handler, a collection of two callable flows that each call an MCP tool, and a
+final handler.
+
+```text
+workflow support_multi
+  flow assess
+    step identify (decision)
+      chat qwen3-30b-a3b
+  flow plan
+    step plan (handler)
+  flow process
+    step requests (flow_collection)
+      flow billing_task [item 0]
+        step lookup (mcp)
+          execute_tool lookup_account
+        step prepare (handler)
+      flow cancellation_task [item 1]
+        step lookup (mcp)
+          execute_tool lookup_account
+        step prepare (handler)
+  flow finalize
+    step disposition (handler)
+```
+
+Queries by attribute keep working: every name is also available as a
+`foliqant.*` attribute below, and the instrumentation scopes remain
+`foliqant.workflow`, `foliqant.flow`, `foliqant.step` and `foliqant.tool`.
 
 ## Spans, attributes and events
 
 | Span or event | Content |
 | --- | --- |
-| `foliqant.workflow` span | `foliqant.workflow.name`, `foliqant.execution.id`, outcome; event `route.selected` for the start |
-| `foliqant.flow` span | `foliqant.flow.name`, `foliqant.flow.role` (`routed`, `callable`, `retry`), `foliqant.flow.attempt` and `foliqant.flow.max_attempts` for repeated and retry flows, `foliqant.collection.index` inside collections |
-| `foliqant.step` span | `foliqant.step.name`; a skipped step has `foliqant.step.skipped = true`, outcome `skipped` and a `step.skipped` event |
+| Workflow span | `foliqant.workflow.name`, `foliqant.execution.id`, outcome; event `route.selected` for the start |
+| Flow span | `foliqant.flow.name`, `foliqant.flow.role` (`routed`, `callable`, `retry`), `foliqant.flow.attempt` and `foliqant.flow.max_attempts` for repeated and retry flows, `foliqant.collection.index` inside collections |
+| Step span | `foliqant.step.name`, `foliqant.step.kind` (the step type); a skipped step has `foliqant.step.skipped = true`, outcome `skipped` and a `step.skipped` event |
+| Model span (`chat <model>`) | [OTel GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/) `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model` (the configured model or a dated snapshot of it), `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and where the provider reports them `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens` and `gen_ai.usage.reasoning.output_tokens`; `foliqant.usage.cost` (the request's estimate, rounded to six decimals) when the profile configures pricing and every count the estimate needs was reported |
+| Tool span (`execute_tool <tool>`) | `gen_ai.operation.name`, `gen_ai.tool.name`, `foliqant.request.attempt` |
 | `route.selected` event (flow span) | `kind` (`direct`, `cases`, `route`, `review`), `index`, `case`, `target` |
 | `repeat.stopped` event (last attempt) | `stopped_by` |
 | `step.skipped` event | `condition`: the condensed condition, pointers and operators only |
@@ -78,9 +132,8 @@ telemetry:
 ```
 
 A retry flow's span is a child of the attempt it follows, so one trace shows
-"attempt 1, retry, attempt 2". Every span carries the run's
-`foliqant.execution.id`, the same ID as `execution.id` in the result.
-Collection item IDs are business data and are not exported; the item index is.
+`flow lookup_fund`, `flow correct`, `flow lookup_fund #2`. Every span carries
+the run's `foliqant.execution.id`, the same ID as `execution.id` in the result.
 
 ## Propagate the trace across your system
 

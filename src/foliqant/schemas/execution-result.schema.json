@@ -682,6 +682,102 @@
       "title": "Metadata",
       "type": "object"
     },
+    "ModelUsage": {
+      "additionalProperties": false,
+      "description": "Usage of one provider model ID; ``null`` counts were not reported.",
+      "properties": {
+        "cached_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cached Input Tokens"
+        },
+        "cost": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cost"
+        },
+        "cost_complete": {
+          "title": "Cost Complete",
+          "type": "boolean"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Input Tokens"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Output Tokens"
+        },
+        "reasoning_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reasoning Tokens"
+        },
+        "reference_model": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Reference Model",
+          "type": "string"
+        },
+        "requests": {
+          "minimum": 1,
+          "title": "Requests",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "requests",
+        "input_tokens",
+        "cached_input_tokens",
+        "output_tokens",
+        "reasoning_tokens"
+      ],
+      "title": "ModelUsage",
+      "type": "object"
+    },
     "RepeatInfo": {
       "additionalProperties": false,
       "description": "Why a repeated flow stopped; exhaustion is not a review.",
@@ -1189,7 +1285,20 @@
     },
     "Usage": {
       "additionalProperties": false,
+      "description": "Measured totals; ``by_model`` splits model requests by provider model ID.\n\n``by_model`` is omitted when no model request was made; when present it\naccounts for every model request. Cost fields sum the priced models and are\nomitted when no model is priced.",
       "properties": {
+        "by_model": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ModelUsage"
+          },
+          "minProperties": 1,
+          "propertyNames": {
+            "maxLength": 512,
+            "minLength": 1
+          },
+          "title": "By Model",
+          "type": "object"
+        },
         "cache_read_input_tokens": {
           "anyOf": [
             {
@@ -1213,6 +1322,27 @@
             }
           ],
           "title": "Cache Write Input Tokens"
+        },
+        "cost": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cost"
+        },
+        "cost_complete": {
+          "title": "Cost Complete",
+          "type": "boolean"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
         },
         "input_tokens": {
           "anyOf": [
@@ -1254,6 +1384,13 @@
             }
           ],
           "title": "Reasoning Output Tokens"
+        },
+        "reference_model": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Reference Model",
+          "type": "string"
         },
         "tool_calls": {
           "minimum": 0,

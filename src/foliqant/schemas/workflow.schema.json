@@ -67,6 +67,17 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "anthropic",
           "title": "Provider",
@@ -306,6 +317,17 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "azure_openai",
           "title": "Provider",
@@ -382,6 +404,17 @@
           ],
           "title": "Output Mode",
           "type": "string"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "provider": {
           "const": "bedrock",
@@ -687,6 +720,17 @@
           ],
           "title": "Output Mode",
           "type": "string"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "provider": {
           "const": "openai_compatible",
@@ -1431,6 +1475,17 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "google",
           "title": "Provider",
@@ -1958,6 +2013,51 @@
       "title": "LlmStepAuthoring",
       "type": "object"
     },
+    "LongContextPricing": {
+      "additionalProperties": false,
+      "description": "Prices for every token of a request whose input exceeds the threshold.",
+      "properties": {
+        "cached_input_per_million": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Per Million"
+        },
+        "input_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Input Per Million",
+          "type": "number"
+        },
+        "output_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Output Per Million",
+          "type": "number"
+        },
+        "threshold_input_tokens": {
+          "maximum": 100000000,
+          "minimum": 1,
+          "title": "Threshold Input Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "threshold_input_tokens",
+        "input_per_million",
+        "output_per_million"
+      ],
+      "title": "LongContextPricing",
+      "type": "object"
+    },
     "MatchRouting": {
       "additionalProperties": false,
       "description": "Exact string matching with an explicit default, without coercion.\n\n``default_covers`` lists the statically allowed values that deliberately\nfall to ``default``; it must equal the uncovered set the compiler derives.",
@@ -2206,9 +2306,88 @@
       "title": "ModelOptionOverrides",
       "type": "object"
     },
+    "ModelPricing": {
+      "additionalProperties": false,
+      "description": "Configured prices used to estimate cost; an estimate, not a provider invoice.\n\nExample (GPT-5.6 Terra list prices at the time of writing; prices change)::\n\n    pricing:\n      currency: USD\n      input_per_million: 2.00\n      cached_input_per_million: 0.20\n      output_per_million: 12.00\n      long_context:\n        threshold_input_tokens: 272000\n        input_per_million: 4.00\n        cached_input_per_million: 0.40\n        output_per_million: 18.00",
+      "properties": {
+        "cached_input_per_million": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Per Million"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "input_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Input Per Million",
+          "type": "number"
+        },
+        "long_context": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LongContextPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Output Per Million",
+          "type": "number"
+        },
+        "reasoning_billed_as": {
+          "default": "output",
+          "enum": [
+            "output",
+            "input"
+          ],
+          "title": "Reasoning Billed As",
+          "type": "string"
+        },
+        "reference_model": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Model"
+        }
+      },
+      "required": [
+        "currency",
+        "input_per_million",
+        "output_per_million"
+      ],
+      "title": "ModelPricing",
+      "type": "object"
+    },
     "ModelProfileOverride": {
       "additionalProperties": false,
-      "description": "Reuse a deployment profile and replace its model ID or generation options.\n\nExample: ``{profile: local, options: {max_tokens: 800}}`` retains the\nprofile's provider, credentials, capabilities, timeout, and shared admission.",
+      "description": "Reuse a deployment profile and replace its model ID, options or pricing.\n\nExample: ``{profile: local, options: {max_tokens: 800}}`` retains the\nprofile's provider, credentials, capabilities, timeout, and shared admission.\n``pricing`` replaces the profile's pricing and ``null`` removes it. The\nprofile's pricing describes its own model: an override that sets another\n``model`` does not inherit it.",
       "properties": {
         "model": {
           "anyOf": [
@@ -2226,6 +2405,17 @@
         },
         "options": {
           "$ref": "#/$defs/ModelOptionOverrides"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "profile": {
           "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
@@ -2562,6 +2752,17 @@
           ],
           "title": "Output Mode",
           "type": "string"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "provider": {
           "const": "openai",

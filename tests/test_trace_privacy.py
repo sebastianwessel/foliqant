@@ -48,6 +48,7 @@ def _labels() -> TelemetryLabels:
         tools=frozenset({"lookup_invoice"}),
         workflows=frozenset({"invoice_review"}),
         steps=frozenset({"classify"}),
+        flows=frozenset({"triage"}),
     )
 
 
@@ -168,14 +169,50 @@ def test_actual_readable_span_is_cloned_and_sanitized_before_delegate() -> None:
             "tools/call lookup_invoice",
         ),
         ("mcp-python-sdk", {"mcp.method.name": _SECRET}, "mcp.operation"),
-        ("foliqant.workflow", {"foliqant.workflow.name": "invoice_review"}, "foliqant.workflow"),
-        ("foliqant.step", {"foliqant.step.name": "classify"}, "foliqant.step"),
+        (
+            "foliqant.workflow",
+            {"foliqant.workflow.name": "invoice_review"},
+            "workflow invoice_review",
+        ),
+        ("foliqant.workflow", {"foliqant.workflow.name": _SECRET}, "workflow"),
+        ("foliqant.step", {"foliqant.step.name": "classify"}, "step classify"),
+        (
+            "foliqant.step",
+            {"foliqant.step.name": "classify", "foliqant.step.kind": "decision"},
+            "step classify (decision)",
+        ),
+        ("foliqant.step", {"foliqant.step.name": _SECRET, "foliqant.step.kind": _SECRET}, "step"),
+        ("foliqant.flow", {"foliqant.flow.name": "triage"}, "flow triage"),
+        (
+            "foliqant.flow",
+            {"foliqant.flow.name": "triage", "foliqant.flow.attempt": 1},
+            "flow triage",
+        ),
+        (
+            "foliqant.flow",
+            {"foliqant.flow.name": "triage", "foliqant.flow.attempt": 3},
+            "flow triage #3",
+        ),
+        (
+            "foliqant.flow",
+            {
+                "foliqant.flow.name": "triage",
+                "foliqant.collection.index": 4,
+                "foliqant.flow.attempt": 2,
+            },
+            "flow triage [item 4] #2",
+        ),
+        (
+            "foliqant.flow",
+            {"foliqant.flow.name": "triage", "foliqant.flow.attempt": 999},
+            "flow triage",
+        ),
         (_SECRET, {"private": _SECRET}, "external.operation"),
     ],
 )
 def test_span_names_are_fixed_by_reviewed_scope_and_operation(
     scope: str,
-    attributes: dict[str, str],
+    attributes: dict[str, str | int],
     expected_name: str,
 ) -> None:
     delegate = RecordingProcessor()

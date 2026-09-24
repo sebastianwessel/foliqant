@@ -67,7 +67,7 @@ async def test_repeat_attempts_retry_role_and_stop_are_traced(tmp_path):
     executor = Handlers(lookup=_found_on("LU0000000002"), correct=_corrector())
     result, spans = await _traced(plan, executor, {"identifier": "PRIVATE-ID"})
     assert result.status == "completed"
-    flows = [span for span in spans if span.name == "foliqant.flow"]
+    flows = [span for span in spans if span.instrumentation_scope.name == "foliqant.flow"]
     attempts = [
         span for span in flows if span.attributes.get("foliqant.flow.name") == "lookup_fund"
     ]
@@ -76,6 +76,13 @@ async def test_repeat_attempts_retry_role_and_stop_are_traced(tmp_path):
     assert {span.attributes["foliqant.flow.role"] for span in attempts} == {"routed"}
     retry = next(span for span in flows if span.attributes.get("foliqant.flow.name") == "correct")
     assert retry.attributes["foliqant.flow.role"] == "retry"
+    # Span names read as the configuration: the attempt suffix starts at the second run.
+    assert [span.name for span in attempts] == ["flow lookup_fund", "flow lookup_fund #2"]
+    assert retry.name == "flow correct"
+    assert {span.name for span in spans if span.instrumentation_scope.name == "foliqant.step"} >= {
+        "step lookup (handler)",
+        "step correct (handler)",
+    }
     # The retry runs between the first and the second attempt, inside the first.
     assert retry.parent.span_id == attempts[0].context.span_id
     assert _events(attempts[0], "repeat.stopped") == []
@@ -83,7 +90,8 @@ async def test_repeat_attempts_retry_role_and_stop_are_traced(tmp_path):
     assert _events(attempts[1], "route.selected") == [
         {"kind": "route", "index": 0, "target": "enrich"}
     ]
-    root = next(span for span in spans if span.name == "foliqant.workflow")
+    root = next(span for span in spans if span.instrumentation_scope.name == "foliqant.workflow")
+    assert root.name == f"workflow {plan.name}"
     assert _events(root, "route.selected") == [{"kind": "direct", "target": "lookup_fund"}]
     assert result.start is not None and result.start.flow == "lookup_fund"
     evaluated = _events(attempts[0], "condition.evaluated")
@@ -112,7 +120,7 @@ async def test_a_failure_before_the_next_attempt_stops_on_the_last_attempt_span(
     attempts = [
         span
         for span in spans
-        if span.name == "foliqant.flow"
+        if span.instrumentation_scope.name == "foliqant.flow"
         and span.attributes.get("foliqant.flow.name") == "lookup_fund"
     ]
     assert len(attempts) == 1
@@ -132,7 +140,7 @@ async def test_routed_start_result_and_event_agree(tmp_path, payload, selected, 
         },
     )
     result, spans = await _traced(plan, Handlers(), payload)
-    root = next(span for span in spans if span.name == "foliqant.workflow")
+    root = next(span for span in spans if span.instrumentation_scope.name == "foliqant.workflow")
     public = to_execution_result(result).model_dump(mode="json")
     assert public["start"] == {"flow": selected, "route": {"kind": "route", "index": index}}
     assert _events(root, "route.selected") == [
@@ -155,7 +163,8 @@ async def test_skipped_steps_record_a_span_and_condensed_condition(tmp_path):
     repair = next(
         span
         for span in spans
-        if span.name == "foliqant.step" and span.attributes.get("foliqant.step.name") == "repair"
+        if span.instrumentation_scope.name == "foliqant.step"
+        and span.attributes.get("foliqant.step.name") == "repair"
     )
     assert repair.attributes["foliqant.step.skipped"] is True
     assert repair.attributes["foliqant.outcome"] == "skipped"
@@ -226,9 +235,9 @@ async def test_handler_review_issues_are_traced(tmp_path):
         return StepOutcome(None, needs_review=True, unresolved_issues=("no_supported_answer",))
 
     _, spans = await _traced(plan, Handlers(check=review), {})
-    check = next(span for span in spans if span.name == "foliqant.step")
+    check = next(span for span in spans if span.instrumentation_scope.name == "foliqant.step")
     assert _events(check, "handler.review") == [{"issues": ("no_supported_answer",)}]
-    flow_span = next(span for span in spans if span.name == "foliqant.flow")
+    flow_span = next(span for span in spans if span.instrumentation_scope.name == "foliqant.flow")
     assert _events(flow_span, "route.selected") == [{"kind": "review", "target": "needs_review"}]
 
 
@@ -241,7 +250,7 @@ async def test_step_context_trace_is_the_step_span_carrier(tmp_path):
         return StepOutcome(None)
 
     _, spans = await _traced(plan, Handlers(check=check), {})
-    step_span = next(span for span in spans if span.name == "foliqant.step")
+    step_span = next(span for span in spans if span.instrumentation_scope.name == "foliqant.step")
     assert carriers[0]["traceparent"].split("-")[2] == f"{step_span.context.span_id:016x}"
 
 
