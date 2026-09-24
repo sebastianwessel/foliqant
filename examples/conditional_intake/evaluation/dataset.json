@@ -1,0 +1,283 @@
+{
+  "name": "synthetic_conditional_intake_gold",
+  "revision": "1",
+  "suites": [
+    {
+      "name": "account_intake_pipeline",
+      "workflow": "account_intake",
+      "cases": [
+        {
+          "id": "form_with_reference",
+          "input": {
+            "payload": {
+              "message": "Invoice INV-7 was charged twice.",
+              "form": {
+                "request_type": "billing",
+                "account_reference": "A-100"
+              }
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "classification_skipped",
+              "path": "/flows/classify/status",
+              "expected": "skipped",
+              "comparison": "exact"
+            },
+            {
+              "name": "extraction_skipped",
+              "path": "/flows/extract/steps/extract/status",
+              "expected": "skipped",
+              "comparison": "exact"
+            },
+            {
+              "name": "queue_from_form",
+              "path": "/payload/queue",
+              "expected": "billing",
+              "comparison": "exact"
+            },
+            {
+              "name": "plan",
+              "path": "/payload/account/plan",
+              "expected": "Basic",
+              "comparison": "exact"
+            },
+            {
+              "name": "one_attempt",
+              "path": "/flows/lookup/attempt_count",
+              "expected": 1,
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "reference_repaired",
+          "input": {
+            "payload": {
+              "message": "Please cancel renewal for account a 200."
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "queue",
+              "path": "/payload/queue",
+              "expected": "cancellation",
+              "comparison": "exact"
+            },
+            {
+              "name": "repaired",
+              "path": "/flows/extract/result/repaired",
+              "expected": "A-200",
+              "comparison": "exact"
+            },
+            {
+              "name": "rechecked",
+              "path": "/flows/extract/steps/recheck/result/status",
+              "expected": "valid",
+              "comparison": "exact"
+            },
+            {
+              "name": "plan",
+              "path": "/payload/account/plan",
+              "expected": "Plus",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "lookup_retried",
+          "input": {
+            "payload": {
+              "message": "Please review invoice INV-9 for account A-120; my previous account was A-100."
+            }
+          },
+          "expectations": [
+            {
+              "name": "completed",
+              "path": "/execution/status",
+              "expected": "completed",
+              "comparison": "exact"
+            },
+            {
+              "name": "attempts",
+              "path": "/flows/lookup/attempt_count",
+              "expected": 2,
+              "comparison": "exact"
+            },
+            {
+              "name": "stopped_by",
+              "path": "/flows/lookup/repeat/stopped_by",
+              "expected": "until",
+              "comparison": "exact"
+            },
+            {
+              "name": "first_attempt",
+              "path": "/flows/lookup/attempts/0/result/plan",
+              "expected": "Unknown",
+              "comparison": "exact"
+            },
+            {
+              "name": "corrected",
+              "path": "/flows/correct/result/account_reference",
+              "expected": "A-100",
+              "comparison": "exact"
+            },
+            {
+              "name": "plan",
+              "path": "/payload/account/plan",
+              "expected": "Basic",
+              "comparison": "exact"
+            },
+            {
+              "name": "repair_skipped",
+              "path": "/flows/extract/steps/repair/status",
+              "expected": "skipped",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "unknown_account_reviewed",
+          "input": {
+            "payload": {
+              "message": "Please cancel renewal for account A-999."
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "stopped_by",
+              "path": "/flows/lookup/repeat/stopped_by",
+              "expected": "continue_when",
+              "comparison": "exact"
+            },
+            {
+              "name": "correction",
+              "path": "/flows/correct/result/status",
+              "expected": "no_correction",
+              "comparison": "exact"
+            },
+            {
+              "name": "reason",
+              "path": "/payload/review/reason",
+              "expected": "account_unknown",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "unclassified_reviewed",
+          "input": {
+            "payload": {
+              "message": "Please help with my account."
+            }
+          },
+          "expectations": [
+            {
+              "name": "review",
+              "path": "/execution/status",
+              "expected": "needs_review",
+              "comparison": "exact"
+            },
+            {
+              "name": "issue",
+              "path": "/flows/classify/steps/classify/result/answerability/issues",
+              "expected": [
+                "no_supported_answer"
+              ],
+              "comparison": "set"
+            },
+            {
+              "name": "reason",
+              "path": "/payload/review/reason",
+              "expected": "unclassified",
+              "comparison": "exact"
+            },
+            {
+              "name": "lookup_skipped",
+              "path": "/flows/lookup/status",
+              "expected": "skipped",
+              "comparison": "exact"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "extract_flow",
+      "workflow": "account_intake",
+      "flow": "extract",
+      "cases": [
+        {
+          "id": "form_reference",
+          "input": {
+            "payload": {
+              "message": "Invoice INV-7 was charged twice.",
+              "form_reference": "a-100"
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/flows/extract/result/status",
+              "expected": "valid",
+              "comparison": "exact"
+            },
+            {
+              "name": "normalized",
+              "path": "/flows/extract/result/account_reference",
+              "expected": "A-100",
+              "comparison": "exact"
+            },
+            {
+              "name": "model_skipped",
+              "path": "/flows/extract/steps/extract/status",
+              "expected": "skipped",
+              "comparison": "exact"
+            }
+          ]
+        },
+        {
+          "id": "repaired_reference",
+          "input": {
+            "payload": {
+              "message": "Please cancel renewal for account a 200.",
+              "form_reference": null
+            }
+          },
+          "expectations": [
+            {
+              "name": "status",
+              "path": "/flows/extract/result/status",
+              "expected": "valid",
+              "comparison": "exact"
+            },
+            {
+              "name": "repaired",
+              "path": "/flows/extract/result/repaired",
+              "expected": "A-200",
+              "comparison": "exact"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

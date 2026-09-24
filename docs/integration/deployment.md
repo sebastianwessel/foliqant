@@ -26,8 +26,12 @@ the supported fields and resolution rules.
 
 At startup, call `prepare_application(config_path, handlers=...)`, then enter
 `open_application(prepared, environment=os.environ, plugins=...)` once per
-process. Register trusted handler implementations and tool authorizers in
-application code; configuration cannot import Python functions. Hold the async
+process. Handler **contracts** are declared in `settings.yaml` and reviewed with
+the configuration; handler **implementations** and tool authorizers are
+registered in application code, because configuration cannot import Python
+functions. `open_application` fails with `missing_handler_registration` when a
+declared handler has no registration, so a deployment cannot start half-wired.
+Run `foliqant validate --strict` in CI to fail the build on warnings. Hold the async
 context while requests are accepted and leave it during service shutdown.
 The context drains owned work before closing clients. A forced process kill
 loses unfinished in-memory executions, so the host needs durable coordination

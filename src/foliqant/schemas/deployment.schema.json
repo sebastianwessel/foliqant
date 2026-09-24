@@ -749,6 +749,59 @@
       "title": "GoogleModelConfig",
       "type": "object"
     },
+    "HandlerDeclaration": {
+      "additionalProperties": false,
+      "description": "The reviewed contract of one trusted handler; the host registers the callable.\n\nSchemas are inline objects or JSON/YAML files relative to the settings file,\nconfined to its directory. Declarations let offline commands validate\nworkflows without importing host code.",
+      "properties": {
+        "effect": {
+          "enum": [
+            "read",
+            "write"
+          ],
+          "title": "Effect",
+          "type": "string"
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            }
+          ],
+          "title": "Input Schema"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            }
+          ],
+          "title": "Output Schema"
+        }
+      },
+      "required": [
+        "input_schema",
+        "output_schema",
+        "effect"
+      ],
+      "title": "HandlerDeclaration",
+      "type": "object"
+    },
     "JsonValue": {
       "anyOf": [
         {
@@ -1163,6 +1216,11 @@
           "title": "Allow Insecure Http",
           "type": "boolean"
         },
+        "conditions": {
+          "default": false,
+          "title": "Conditions",
+          "type": "boolean"
+        },
         "export_timeout": {
           "default": 10.0,
           "exclusiveMinimum": 0,
@@ -1306,6 +1364,16 @@
     },
     "execution": {
       "$ref": "#/$defs/ExecutionConfig"
+    },
+    "handlers": {
+      "maxProperties": 256,
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+          "$ref": "#/$defs/HandlerDeclaration"
+        }
+      },
+      "title": "Handlers",
+      "type": "object"
     },
     "mcp": {
       "maxProperties": 128,

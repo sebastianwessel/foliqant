@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import pytest
 import yaml
+from handler_contracts import declare
 from tests.test_evaluation import result, suite, variant
 
 from foliqant import prepare_application
@@ -35,7 +36,13 @@ def _usage(count=1):
 
 
 def _child(identity, *, status="completed", elapsed=1.0, flow="child"):
-    record = {"id": identity, "flow": flow, "status": status, "steps": {"work": {"status": status}}}
+    record = {
+        "id": identity,
+        "flow": flow,
+        "status": status,
+        "steps": {"work": {"status": status}},
+        "attempt_count": 0 if status == "skipped" else 1,
+    }
     if status == "completed":
         record.update(result={"label": "a"}, usage=_usage(), elapsed_seconds=elapsed)
         record["steps"]["work"].update(
@@ -68,6 +75,7 @@ def _result(children, *, failed=False, marked=True):
         "steps": {"collect": step},
         "usage": _usage(len(children)),
         "elapsed_seconds": 5.0,
+        "attempt_count": 1,
     }
     if failed:
         error = {
@@ -268,7 +276,13 @@ def _project(tmp_path):
         )
     dataset = {"name": "collections", "revision": "gold", "suites": specs}
     (tmp_path / "dataset.json").write_text(json.dumps(dataset))
-    return prepare_application(config, handlers={"echo": registration}), dataset, calls
+    return (
+        prepare_application(
+            declare(config, {"echo": registration}), handlers={"echo": registration}
+        ),
+        dataset,
+        calls,
+    )
 
 
 async def test_workflow_callable_flow_step_collection_and_replay(tmp_path, monkeypatch):
@@ -326,6 +340,7 @@ async def test_generated_nested_ledger_overhead_does_not_reduce_business_depth(l
             "id": "nested",
             "flow": "child",
             "status": "completed",
+            "attempt_count": 1,
             "result": ledger,
             "steps": {
                 "nested": {"kind": "flow_collection", "status": "completed", "result": ledger}
@@ -387,6 +402,7 @@ async def test_sixteen_collection_levels_keep_full_business_value_depth():
             "id": "nested",
             "flow": "child",
             "status": "completed",
+            "attempt_count": 1,
             "result": None,
             "steps": {
                 "nested": {
@@ -414,6 +430,7 @@ async def test_evaluator_rejects_external_results_beyond_supported_collection_de
             "id": "nested",
             "flow": "child",
             "status": "completed",
+            "attempt_count": 1,
             "result": None,
             "steps": {
                 "nested": {

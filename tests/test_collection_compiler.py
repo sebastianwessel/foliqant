@@ -122,7 +122,7 @@ def test_unreferenced_callable_is_rejected(tmp_path):
 def test_callable_cannot_be_read_as_root_flow_record(tmp_path, optional):
     pointer = {"pointer": "/flows/child/result"}
     if optional:
-        pointer.update(optional=True, default=None)
+        pointer.update(default=None)
     _document(tmp_path, output=pointer)
     _fails(tmp_path, "invalid_flow_reference")
 
@@ -135,7 +135,7 @@ def test_callable_calls_do_not_affect_routed_dominance(tmp_path):
             "child": _callable(),
             "last": _flow(input={"earlier": {"pointer": "/flows/first/result"}}),
         },
-        output={"pointer": "/flows/last/result", "optional": True, "default": None},
+        output={"pointer": "/flows/last/result", "default": None},
     )
     _compile(tmp_path)
 
@@ -213,7 +213,7 @@ def test_literal_max_items_and_optional_default_are_checked(tmp_path):
         {
             "first": _flow(
                 _collection(
-                    items={"pointer": "/payload/optional", "optional": True, "default": items},
+                    items={"pointer": "/payload/optional", "default": items},
                     max_items=1,
                 )
             ),
@@ -311,7 +311,6 @@ def test_collection_kind_marker_has_a_known_string_schema(tmp_path):
                     "kind": {"pointer": "/steps/step0/kind"},
                     "partial": {
                         "pointer": "/steps/step0/partial_result/items",
-                        "optional": True,
                         "default": [],
                     },
                 }

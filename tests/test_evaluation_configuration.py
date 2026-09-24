@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 import yaml
+from handler_contracts import declare
 
 from foliqant import Envelope, open_application, prepare_application
 from foliqant.adapters.handlers import HandlerRegistration
@@ -40,7 +41,7 @@ _HANDLERS = {
 
 
 def _prepare(path: Path):
-    return prepare_application(path, handlers=_HANDLERS)
+    return prepare_application(declare(path, _HANDLERS), handlers=_HANDLERS)
 
 
 def _project(tmp_path: Path) -> tuple[Path, Path, dict[str, Any]]:

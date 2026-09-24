@@ -72,9 +72,9 @@ YAML files.
 
 | Setting | Default when omitted |
 | --- | --- |
-| `models`, `mcp` | Empty registries; declare only dependencies the workflow uses. |
+| `models`, `mcp`, `handlers` | Empty registries; declare only dependencies the workflow uses. |
 | `execution` or individual execution fields | The execution values listed below. |
-| `telemetry` | Disabled. |
+| `telemetry` | Disabled; `conditions` (debug condition events) defaults to `false`. |
 | `evaluation` | No startup access to gold; explicit evaluation discovers `evaluation/dataset.json` beside `config/`. |
 | Model `provider`, `model`, `output_mode` | Required; no default provider, model ID, or output mode. |
 | OpenAI `api`; Azure `api` and `api_flavor` | Required; choose explicitly. Compatible `api` defaults to `chat`. |
@@ -85,7 +85,8 @@ YAML files.
 | Compatible `api_key` | Absent; OpenAI, Azure, Anthropic, and Google use their documented credential environment references. Bedrock uses the host credential chain. |
 | Compatible `allow_insecure_http`, `max_tokens_field` | `false`, `max_tokens`. |
 
-Model selection is explicit step `model` first, then workflow `defaults.model`.
+Model selection is explicit step `model` first, then the flow definition's
+`defaults.model`, then workflow `defaults.model`.
 A sole model profile is not selected automatically. A profile override retains
 the profile's provider, credentials, capabilities, timeout, retries, and admission
 group. It replaces only an explicitly supplied model ID and individual supplied
@@ -379,25 +380,46 @@ authenticate a caller.
 
 ## Trusted handlers
 
-Register trusted Python before preparation:
+Declare every handler's contract in `settings.yaml`; schemas are inline objects
+or JSON/YAML files relative to the settings file, self-contained and confined
+to its directory:
+
+```yaml
+handlers:
+  normalize:
+    input_schema: contracts/normalize.input.json
+    output_schema: contracts/normalize.output.json
+    effect: read
+```
+
+Register the trusted callable when preparing the application:
 
 ```python
-from foliqant.adapters.handlers import HandlerRegistration
 from foliqant import prepare_application
+from foliqant.adapters.handlers import HandlerRegistration
 
 handlers = {
-    "normalize": HandlerRegistration(
-        handler=normalize,  # async (FrozenObject, StepContext) -> StepOutcome
-        input_schema={"type": "object"},
-        output_schema={"type": "object"},
-        effect="read",
-    )
+    # async (FrozenObject, StepContext) -> StepOutcome
+    "normalize": HandlerRegistration(normalize),
 }
 prepared = prepare_application(config_path, handlers=handlers)
 ```
 
-Configuration cannot import code. Handler schemas participate in compilation and
-runtime validation. Exceptions become safe service errors.
+`HandlerRegistration(handler, input_schema=None, output_schema=None,
+effect="read")`: optional schemas (for example generated from Pydantic models)
+must equal the declaration after canonicalisation, else
+`handler_contract_mismatch` names the handler and the first differing path.
+A registration for an undeclared handler is `unknown_handler`; a declared
+handler without registration compiles (offline commands work) and fails at
+`open_application` with `missing_handler_registration`. Configuration cannot
+import code. Declared schemas drive compile-time binding and route-coverage
+checks and runtime validation. Exceptions become safe service errors.
+
+A handler returns `StepOutcome(result, needs_review=False, selection=None,
+unresolved_issues=())`. Issues require `needs_review` and select issue-specific
+review routes; a selection's origin is `fallback` exactly when the step needs
+review. `StepContext` adds `trace` (W3C carrier of the step span), `attempt`,
+`collection_item` and `flow_role` (`routed`, `callable`, `retry`).
 
 ## Telemetry
 
@@ -410,12 +432,17 @@ runtime validation. Exceptions become safe service errors.
 - `span_queue_capacity` (2048), `span_batch_size` (512),
   `span_schedule_delay` (5);
 - `metric_export_interval` (60), `metric_export_batch_size` (512);
-- `export_timeout` (10), `shutdown_timeout` (10).
+- `export_timeout` (10), `shutdown_timeout` (10);
+- `conditions` (false): add debug `condition.evaluated` span events.
 
 An empty endpoint disables that signal. Telemetry exports allowlisted configured
-component labels, trace identifiers, statuses, timings, attempt numbers, and
+component labels (resolved values, never `$NAME` references), trace identifiers,
+statuses, timings, attempt numbers, routes, repeat stops, skipped steps and
 usage, never tenant/principal identity, payloads, prompts, model output,
-credentials, or raw exceptions. `open_application(...,
+condition operands, credentials, or raw exceptions. Labels that cannot be
+exported safely are dropped with one `telemetry_labels_dropped` log event.
+`ExecutionResult.execution.trace` holds the run span's `trace_id`/`span_id`;
+streamable-HTTP MCP calls carry `traceparent`/`tracestate` headers. `open_application(...,
 install_global_telemetry=True)` is an explicit host choice.
 Foliqant does not replace host logging; configure a reviewed safe sink and
 filters for SDK and third-party logs.
@@ -458,13 +485,14 @@ worker.
 
 ## Validate the configuration
 
-From the application root, run `foliqant validate`,
-`foliqant explain --workflow WORKFLOW_ID`, and `foliqant doctor`. These check
-the compiled configuration offline when no host handlers are required. With
-custom handlers, use `prepare_application(config_path, handlers=handlers)` and
-inspect `prepared.plans`; generic CLI commands do not load host registrations.
-Use `--config PATH` when settings are not
-at `config/settings.yaml`. Open the application only after its required marked
-environment values and selected adapter dependencies are available. See
-the evaluation reference for gold and the deployment reference for CLI and
-host behavior.
+From the application root, run `foliqant validate --strict`,
+`foliqant explain --workflow WORKFLOW_ID --format mermaid`, and
+`foliqant doctor`. Handlers are declared in settings, so these commands compile
+workflows with handlers offline; `prepare_application(config_path,
+handlers=handlers, strict=True)` does the same in Python and raises on the first
+warning. `PreparedApplication.diagnostics` and `foliqant.explain(prepared,
+workflow)` expose the diagnostics and graph model. Use `--config PATH` when
+settings are not at `config/settings.yaml`. Open the application only after its
+required marked environment values, adapter dependencies and handler
+registrations are available. See the evaluation reference for gold and the
+deployment reference for CLI and host behavior.

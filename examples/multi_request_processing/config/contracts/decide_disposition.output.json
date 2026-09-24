@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "IgnoredRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "withdrawn",
+            "quoted",
+            "duplicate"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "reason"
+      ],
+      "title": "IgnoredRequest",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "disposition": {
+      "enum": [
+        "ready",
+        "partial_review",
+        "review",
+        "no_action"
+      ],
+      "title": "Disposition",
+      "type": "string"
+    },
+    "prepared": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Prepared",
+      "type": "array"
+    },
+    "review": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Review",
+      "type": "array"
+    },
+    "ignored": {
+      "items": {
+        "$ref": "#/$defs/IgnoredRequest"
+      },
+      "title": "Ignored",
+      "type": "array"
+    }
+  },
+  "required": [
+    "disposition",
+    "prepared",
+    "review",
+    "ignored"
+  ],
+  "title": "Disposition",
+  "type": "object"
+}

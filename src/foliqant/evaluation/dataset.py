@@ -227,6 +227,12 @@ def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) 
         if plan is None:
             raise ValueError("unknown evaluation workflow")
         flows = {flow.name: flow for flow in plan.flows}
+        # Retry flows of `repeat` are recorded under `/flows` like routed flows.
+        retry_flows = {
+            flow.repeat.retry_flow
+            for flow in plan.flows
+            if not flow.callable and flow.repeat is not None and flow.repeat.retry_flow is not None
+        }
         if suite.flow is not None and suite.flow not in flows:
             raise ValueError("unknown evaluation flow")
         names = {step.name for step in flows[suite.flow].steps} if suite.flow is not None else set()
@@ -240,16 +246,26 @@ def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) 
                 ]
                 if not parts:
                     continue  # The empty pointer is the whole result.
-                if parts[0] not in {"payload", "metadata", "flows", "transitions", "execution"}:
+                if parts[0] not in {
+                    "payload",
+                    "metadata",
+                    "flows",
+                    "start",
+                    "transitions",
+                    "execution",
+                }:
                     raise ValueError("unknown execution result root")
                 if parts[0] == "flows" and len(parts) >= 2:
                     target = flows.get(parts[1])
                     if (
                         target is None
                         or (suite.flow is not None and parts[1] != suite.flow)
-                        or (suite.flow is None and target.callable)
+                        or (suite.flow is None and target.callable and parts[1] not in retry_flows)
                     ):
                         raise ValueError("expectation references an unavailable flow")
+                    if len(parts) >= 6 and parts[2] == "attempts" and parts[4] == "steps":
+                        # An attempt record has the same steps as its flow.
+                        parts = [*parts[:2], *parts[4:]]
                     if len(parts) >= 4 and parts[2] == "steps":
                         step_names = {step.name for step in target.steps}
                         if parts[3] not in step_names or (
@@ -260,7 +276,8 @@ def validate_targets(dataset: EvaluationDataset, prepared: PreparedApplication) 
                 if (
                     parts[0] == "execution"
                     and len(parts) >= 2
-                    and parts[1] not in {"id", "workflow", "revision", "status", "usage", "error"}
+                    and parts[1]
+                    not in {"id", "workflow", "revision", "status", "usage", "error", "trace"}
                 ):
                     raise ValueError("unknown execution field")
 

@@ -74,6 +74,10 @@
         "status": {
           "$ref": "#/$defs/RunStatus"
         },
+        "trace": {
+          "$ref": "#/$defs/TraceIds",
+          "title": "Trace"
+        },
         "usage": {
           "$ref": "#/$defs/Usage"
         },
@@ -93,9 +97,9 @@
       "title": "ExecutionInfo",
       "type": "object"
     },
-    "FlowCollectionItemResult": {
+    "FlowAttempt": {
       "additionalProperties": false,
-      "description": "One collection item's complete flow record, including skipped local steps.",
+      "description": "One attempt of a repeated flow, or one run of a retry flow.",
       "oneOf": [
         {
           "not": {
@@ -174,6 +178,12 @@
         }
       ],
       "properties": {
+        "attempt": {
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
         "elapsed_seconds": {
           "anyOf": [
             {
@@ -190,16 +200,6 @@
         "error": {
           "$ref": "#/$defs/SafeError",
           "title": "Error"
-        },
-        "flow": {
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "title": "Flow",
-          "type": "string"
-        },
-        "id": {
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "title": "Id",
-          "type": "string"
         },
         "result": {
           "$ref": "#/$defs/JsonValue"
@@ -231,34 +231,14 @@
       "required": [
         "status",
         "steps",
-        "id",
-        "flow"
+        "attempt"
       ],
-      "title": "FlowCollectionItemResult",
+      "title": "FlowAttempt",
       "type": "object"
     },
-    "FlowCollectionResult": {
+    "FlowCollectionItemResult": {
       "additionalProperties": false,
-      "description": "Ordered child invocation ledger; each item identity occurs exactly once.",
-      "properties": {
-        "items": {
-          "items": {
-            "$ref": "#/$defs/FlowCollectionItemResult"
-          },
-          "maxItems": 1024,
-          "title": "Items",
-          "type": "array"
-        }
-      },
-      "required": [
-        "items"
-      ],
-      "title": "FlowCollectionResult",
-      "type": "object"
-    },
-    "FlowResult": {
-      "additionalProperties": false,
-      "description": "A flow's scoped step records and explicitly present projected result.",
+      "description": "One collection item's complete flow record, including skipped local steps.\n\nA callable flow with ``repeat`` carries its attempts like a routed flow;\n``retry`` records the item's retry flow runs (last run plus ``attempts``).",
       "oneOf": [
         {
           "not": {
@@ -337,6 +317,45 @@
         }
       ],
       "properties": {
+        "attempt_count": {
+          "maximum": 64,
+          "minimum": 0,
+          "title": "Attempt Count",
+          "type": "integer"
+        },
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/FlowAttempt"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Attempts",
+          "type": "array"
+        },
+        "attempts_elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempts Elapsed Seconds"
+        },
+        "attempts_usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "elapsed_seconds": {
           "anyOf": [
             {
@@ -353,6 +372,221 @@
         "error": {
           "$ref": "#/$defs/SafeError",
           "title": "Error"
+        },
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "repeat": {
+          "$ref": "#/$defs/RepeatInfo",
+          "title": "Repeat"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "retry": {
+          "$ref": "#/$defs/FlowResult",
+          "title": "Retry"
+        },
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "steps": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "$ref": "#/$defs/StepResult"
+            }
+          },
+          "title": "Steps",
+          "type": "object"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "status",
+        "steps",
+        "attempt_count",
+        "id",
+        "flow"
+      ],
+      "title": "FlowCollectionItemResult",
+      "type": "object"
+    },
+    "FlowCollectionResult": {
+      "additionalProperties": false,
+      "description": "Ordered child invocation ledger; each item identity occurs exactly once.",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/FlowCollectionItemResult"
+          },
+          "maxItems": 1024,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "FlowCollectionResult",
+      "type": "object"
+    },
+    "FlowResult": {
+      "additionalProperties": false,
+      "description": "A flow's scoped step records and explicitly present projected result.\n\n``attempt_count`` counts executions (zero when skipped). Repeated and retry\nflows list every run in ``attempts``; the top-level fields describe the last\nrun and ``attempts_usage`` / ``attempts_elapsed_seconds`` sum all runs.",
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "needs_review"
+            }
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          }
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "result"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "skipped"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "attempt_count": {
+          "maximum": 64,
+          "minimum": 0,
+          "title": "Attempt Count",
+          "type": "integer"
+        },
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/FlowAttempt"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Attempts",
+          "type": "array"
+        },
+        "attempts_elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempts Elapsed Seconds"
+        },
+        "attempts_usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "error": {
+          "$ref": "#/$defs/SafeError",
+          "title": "Error"
+        },
+        "repeat": {
+          "$ref": "#/$defs/RepeatInfo",
+          "title": "Repeat"
         },
         "result": {
           "$ref": "#/$defs/JsonValue"
@@ -383,7 +617,8 @@
       },
       "required": [
         "status",
-        "steps"
+        "steps",
+        "attempt_count"
       ],
       "title": "FlowResult",
       "type": "object"
@@ -445,6 +680,62 @@
         }
       },
       "title": "Metadata",
+      "type": "object"
+    },
+    "RepeatInfo": {
+      "additionalProperties": false,
+      "description": "Why a repeated flow stopped; exhaustion is not a review.",
+      "properties": {
+        "stopped_by": {
+          "enum": [
+            "until",
+            "exhausted",
+            "continue_when",
+            "review",
+            "failure"
+          ],
+          "title": "Stopped By",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stopped_by"
+      ],
+      "title": "RepeatInfo",
+      "type": "object"
+    },
+    "RouteSelection": {
+      "additionalProperties": false,
+      "description": "Which configuration form selected a target.\n\n``index`` is the selected ``route`` entry; ``case`` is the matched case key\n(``cases``) or the review issue that selected an issue-specific target.\nBoth are omitted when they do not apply, for example for ``default``.",
+      "properties": {
+        "case": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Case",
+          "type": "string"
+        },
+        "index": {
+          "maximum": 31,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "direct",
+            "cases",
+            "route",
+            "review"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "RouteSelection",
       "type": "object"
     },
     "RunStatus": {
@@ -510,6 +801,51 @@
         "id"
       ],
       "title": "SelectedCategory",
+      "type": "object"
+    },
+    "StartResult": {
+      "additionalProperties": false,
+      "description": "The first flow of a workflow run and how it was selected.",
+      "properties": {
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
+          "type": "string"
+        },
+        "route": {
+          "$ref": "#/$defs/StartRoute"
+        }
+      },
+      "required": [
+        "flow",
+        "route"
+      ],
+      "title": "StartResult",
+      "type": "object"
+    },
+    "StartRoute": {
+      "additionalProperties": false,
+      "description": "Which ``start`` form selected the first flow; ``index`` for a routed start.",
+      "properties": {
+        "index": {
+          "maximum": 31,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "direct",
+            "route"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "StartRoute",
       "type": "object"
     },
     "StepResult": {
@@ -765,6 +1101,28 @@
       "title": "TraceCarrier",
       "type": "object"
     },
+    "TraceIds": {
+      "additionalProperties": false,
+      "description": "OpenTelemetry identifiers of the run span, for host log correlation.",
+      "properties": {
+        "span_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "trace_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id"
+      ],
+      "title": "TraceIds",
+      "type": "object"
+    },
     "TransitionResult": {
       "additionalProperties": false,
       "description": "One recorded workflow boundary with exactly one authored target.",
@@ -812,6 +1170,9 @@
           "title": "Reason",
           "type": "string"
         },
+        "route": {
+          "$ref": "#/$defs/RouteSelection"
+        },
         "source": {
           "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
           "title": "Source",
@@ -820,7 +1181,8 @@
       },
       "required": [
         "source",
-        "reason"
+        "reason",
+        "route"
       ],
       "title": "TransitionResult",
       "type": "object"
@@ -915,6 +1277,7 @@
   "$id": "urn:foliqant:schema:execution-result.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "description": "One run: projected payload, flow records, transitions and terminal facts.\n\n``start`` is present for workflow runs and omitted for isolated flow or step\nruns, which have no start selection.",
   "properties": {
     "execution": {
       "$ref": "#/$defs/ExecutionInfo"
@@ -933,6 +1296,10 @@
     },
     "payload": {
       "$ref": "#/$defs/JsonValue"
+    },
+    "start": {
+      "$ref": "#/$defs/StartResult",
+      "title": "Start"
     },
     "transitions": {
       "items": {

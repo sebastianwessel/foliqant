@@ -1,34 +1,13 @@
-"""Trusted read-only handlers for the deterministic routing tutorial."""
+"""Trusted read-only handlers for the deterministic routing tutorial.
 
-from collections.abc import Mapping
+Their contracts (input/output schemas and effect) are declared in
+``config/settings.yaml``; the host registers only the callables.
+"""
 
 from foliqant.adapters.handlers import HandlerRegistration
 from foliqant.core.execution import StepOutcome
-from foliqant.core.json import FrozenObject, JsonValue, freeze_json
+from foliqant.core.json import FrozenObject
 from foliqant.ports.execution import StepContext
-
-INPUT_SCHEMA: dict[str, JsonValue] = {
-    "type": "object",
-    "properties": {"message": {"type": "string"}},
-    "required": ["message"],
-    "additionalProperties": False,
-}
-OUTPUT_SCHEMA: dict[str, JsonValue] = {
-    "type": "object",
-    "properties": {
-        "queue": {"type": "string", "enum": ["billing", "cancellation"]},
-        "action": {"type": "string"},
-        "message": {"type": "string"},
-    },
-    "required": ["queue", "action", "message"],
-    "additionalProperties": False,
-}
-
-
-def _schema(value: dict[str, JsonValue]) -> FrozenObject:
-    result = freeze_json(value)
-    assert isinstance(result, Mapping)
-    return result
 
 
 async def prepare_billing(inputs: FrozenObject, context: StepContext) -> StepOutcome:
@@ -56,10 +35,6 @@ async def prepare_cancellation(inputs: FrozenObject, context: StepContext) -> St
 
 
 HANDLERS = {
-    "prepare_billing": HandlerRegistration(
-        prepare_billing, _schema(INPUT_SCHEMA), _schema(OUTPUT_SCHEMA)
-    ),
-    "prepare_cancellation": HandlerRegistration(
-        prepare_cancellation, _schema(INPUT_SCHEMA), _schema(OUTPUT_SCHEMA)
-    ),
+    "prepare_billing": HandlerRegistration(prepare_billing),
+    "prepare_cancellation": HandlerRegistration(prepare_cancellation),
 }

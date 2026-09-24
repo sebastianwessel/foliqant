@@ -12,7 +12,7 @@ from enum import StrEnum
 from typing import TextIO, cast
 
 from foliqant.core.errors import ErrorCode
-from foliqant.core.execution import RunStatus
+from foliqant.core.execution import StepStatus
 
 _MAX_COUNT = 2**53 - 1
 _MAX_DURATION_SECONDS = 365 * 24 * 60 * 60
@@ -25,6 +25,16 @@ _LEVELS = {
     logging.CRITICAL: "CRITICAL",
 }
 _OUTCOMES = frozenset({"cancelled", "completed", "failed", "needs_review", "skipped"})
+_EXECUTION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+_LOCATION = re.compile(r"[a-z0-9_.]{1,200}\Z")
+_ROUTE_KINDS = frozenset({"direct", "cases", "route", "review"})
+_STOPS = frozenset({"until", "exhausted", "continue_when", "review", "failure"})
+_ISSUES = frozenset({"no_supported_answer", "conflicting_information", "multiple_valid_options"})
+_OPERATORS = frozenset(
+    {"gt", "gte", "lt", "lte", "matches", "length", "equals", "not_equals", "in", "not_in"}
+)
+_TARGET_OUTCOMES = frozenset({"completed", "needs_review"})
+_MISMATCHES = frozenset({"incompatible_type", "value_too_long"})
 
 
 class LogEvent(StrEnum):
@@ -41,6 +51,13 @@ class LogEvent(StrEnum):
     FLOW_COMPLETED = "flow_completed"
     FLOW_FAILED = "flow_failed"
     DEPENDENCY_REJECTED = "dependency_rejected"
+    ROUTE_SELECTED = "route_selected"
+    STEP_SKIPPED = "step_skipped"
+    REPEAT_STOPPED = "repeat_stopped"
+    HANDLER_REVIEW = "handler_review"
+    CONDITION_TYPE_MISMATCH = "condition_type_mismatch"
+    CONDITION_EVALUATED = "condition_evaluated"
+    TELEMETRY_LABELS_DROPPED = "telemetry_labels_dropped"
     EXTERNAL_EVENT = "external_event"
 
 
@@ -68,8 +85,9 @@ _DEFAULT_LABELS = LogLabels()
 class SafeJsonFormatter(logging.Formatter):
     """Inspect only fixed fields; arbitrary messages, extras and exceptions are ignored.
 
-    At most twelve scalar fields are emitted. No record is retained or modified.
-    Unknown/third-party records become a generic event even at DEBUG severity.
+    Only bounded scalar fields from a fixed allowlist are emitted. No record is
+    retained or modified. Unknown/third-party records become a generic event even
+    at DEBUG severity. Flow targets must be configured flow labels or outcomes.
     """
 
     def __init__(self, labels: LogLabels = _DEFAULT_LABELS) -> None:
@@ -129,6 +147,34 @@ class SafeJsonFormatter(logging.Formatter):
         outcome = fields.get("outcome")
         if type(outcome) is str and outcome in _OUTCOMES:
             output["outcome"] = outcome
+        attempt = fields.get("attempt")
+        if type(attempt) is int and 1 <= attempt <= 64:
+            output["attempt"] = attempt
+        execution = fields.get("execution_id")
+        if type(execution) is str and _EXECUTION_ID.fullmatch(execution):
+            output["execution_id"] = execution
+        for key, allowed_values in (
+            ("route_kind", _ROUTE_KINDS),
+            ("stopped_by", _STOPS),
+            ("operator", _OPERATORS),
+            ("reason", _MISMATCHES),
+        ):
+            value = fields.get(key)
+            if type(value) is str and value in allowed_values:
+                output[key] = value
+        target = fields.get("target")
+        if type(target) is str and (target in self._labels.flows or target in _TARGET_OUTCOMES):
+            output["target"] = target
+        location = fields.get("location")
+        if type(location) is str and _LOCATION.fullmatch(location):
+            output["location"] = location
+        issues = fields.get("issues")
+        if (
+            isinstance(issues, tuple)
+            and issues
+            and all(type(issue) is str and issue in _ISSUES for issue in issues)
+        ):
+            output["issues"] = ",".join(cast(tuple[str, ...], issues))
         for key, length in (("trace_id", 32), ("span_id", 16)):
             value = fields.get(key)
             if (
@@ -240,7 +286,16 @@ def emit_event(
     error_code: ErrorCode | None = None,
     trace_id: str | None = None,
     span_id: str | None = None,
-    outcome: RunStatus | None = None,
+    outcome: StepStatus | None = None,
+    attempt: int | None = None,
+    execution_id: str | None = None,
+    route_kind: str | None = None,
+    target: str | None = None,
+    stopped_by: str | None = None,
+    operator: str | None = None,
+    location: str | None = None,
+    issues: tuple[str, ...] | None = None,
+    reason: str | None = None,
 ) -> None:
     """Emit a typed event; the sink enforces field validity and startup labels."""
     if not isinstance(event, LogEvent) or type(level) is not int or level not in _LEVELS:
@@ -260,6 +315,15 @@ def emit_event(
                 "trace_id": trace_id,
                 "span_id": span_id,
                 "outcome": outcome,
+                "attempt": attempt,
+                "execution_id": execution_id,
+                "route_kind": route_kind,
+                "target": target,
+                "stopped_by": stopped_by,
+                "operator": operator,
+                "location": location,
+                "issues": issues,
+                "reason": reason,
             }
         },
     )

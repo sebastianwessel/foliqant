@@ -841,6 +841,9 @@
                 },
                 {
                   "$ref": "#/$defs/SourceLiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/SourceFirstOfBinding"
                 }
               ]
             }
@@ -893,6 +896,37 @@
       "title": "FallbackCategory",
       "type": "object"
     },
+    "FirstOfBinding": {
+      "additionalProperties": false,
+      "description": "The first member that resolves to a non-null value, otherwise ``default``.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "first_of": {
+          "items": {
+            "$ref": "#/$defs/PointerMember"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "First Of",
+          "type": "array"
+        }
+      },
+      "required": [
+        "first_of"
+      ],
+      "title": "FirstOfBinding",
+      "type": "object"
+    },
     "FlowCollectionStepAuthoring": {
       "additionalProperties": false,
       "description": "Invoke allowlisted callable flows sequentially from explicit item inputs.",
@@ -913,6 +947,9 @@
             },
             {
               "$ref": "#/$defs/LiteralBinding"
+            },
+            {
+              "$ref": "#/$defs/FirstOfBinding"
             }
           ],
           "title": "Items"
@@ -1079,6 +1116,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1156,6 +1196,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1289,6 +1332,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1888,6 +1934,7 @@
     },
     "PointerBinding": {
       "additionalProperties": false,
+      "description": "An RFC 6901 pointer; a declared ``default`` makes the binding optional.",
       "properties": {
         "default": {
           "anyOf": [
@@ -1900,11 +1947,6 @@
           ],
           "default": null
         },
-        "optional": {
-          "default": false,
-          "title": "Optional",
-          "type": "boolean"
-        },
         "pointer": {
           "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
           "title": "Pointer",
@@ -1915,6 +1957,22 @@
         "pointer"
       ],
       "title": "PointerBinding",
+      "type": "object"
+    },
+    "PointerMember": {
+      "additionalProperties": false,
+      "description": "One `first_of` candidate; defaults belong to the enclosing binding.",
+      "properties": {
+        "pointer": {
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "PointerMember",
       "type": "object"
     },
     "PredicateQuestion": {
@@ -2155,6 +2213,46 @@
       "title": "SchemaOutput",
       "type": "object"
     },
+    "SourceFirstOfBinding": {
+      "additionalProperties": false,
+      "description": "The first present decision source candidate with explicit rendering.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "first_of": {
+          "items": {
+            "$ref": "#/$defs/PointerMember"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "First Of",
+          "type": "array"
+        },
+        "format": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "required": [
+        "first_of"
+      ],
+      "title": "SourceFirstOfBinding",
+      "type": "object"
+    },
     "SourceLiteralBinding": {
       "additionalProperties": false,
       "description": "A literal decision source with explicit optional JSON rendering.",
@@ -2201,11 +2299,6 @@
           ],
           "title": "Format",
           "type": "string"
-        },
-        "optional": {
-          "default": false,
-          "title": "Optional",
-          "type": "boolean"
         },
         "pointer": {
           "pattern": "^(?:/(?:[^~/]|~[01])*)*$",

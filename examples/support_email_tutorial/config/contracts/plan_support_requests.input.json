@@ -1,0 +1,366 @@
+{
+  "$defs": {
+    "Answerability": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/AnswerabilityStatus"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/AnswerabilityIssue"
+          },
+          "maxItems": 3,
+          "title": "Issues",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status",
+        "issues"
+      ],
+      "title": "Answerability",
+      "type": "object"
+    },
+    "AnswerabilityIssue": {
+      "enum": [
+        "no_supported_answer",
+        "conflicting_information",
+        "multiple_valid_options"
+      ],
+      "type": "string"
+    },
+    "AnswerabilityStatus": {
+      "enum": [
+        "answerable",
+        "partially_answerable",
+        "not_answerable",
+        "undetermined"
+      ],
+      "type": "string"
+    },
+    "ConditionalRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "conditional_on",
+          "title": "Type",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "predicateQuestionId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Predicatequestionid",
+          "type": "string"
+        },
+        "requiredValue": {
+          "enum": [
+            "true",
+            "false"
+          ],
+          "title": "Requiredvalue",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "requestId",
+        "predicateQuestionId",
+        "requiredValue"
+      ],
+      "title": "ConditionalRelation",
+      "type": "object"
+    },
+    "EvidenceStrength": {
+      "enum": [
+        "limited",
+        "strong"
+      ],
+      "type": "string"
+    },
+    "MutuallyExclusiveRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "mutually_exclusive",
+          "title": "Type",
+          "type": "string"
+        },
+        "requestIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 2,
+          "title": "Requestids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "requestIds"
+      ],
+      "title": "MutuallyExclusiveRelation",
+      "type": "object"
+    },
+    "PrecedesRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "precedes",
+          "title": "Type",
+          "type": "string"
+        },
+        "beforeRequestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Beforerequestid",
+          "type": "string"
+        },
+        "afterRequestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Afterrequestid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "beforeRequestId",
+        "afterRequestId"
+      ],
+      "title": "PrecedesRelation",
+      "type": "object"
+    },
+    "RequestRelation": {
+      "discriminator": {
+        "mapping": {
+          "conditional_on": "#/$defs/ConditionalRelation",
+          "mutually_exclusive": "#/$defs/MutuallyExclusiveRelation",
+          "precedes": "#/$defs/PrecedesRelation",
+          "requires": "#/$defs/RequiresRelation"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ConditionalRelation"
+        },
+        {
+          "$ref": "#/$defs/RequiresRelation"
+        },
+        {
+          "$ref": "#/$defs/PrecedesRelation"
+        },
+        {
+          "$ref": "#/$defs/MutuallyExclusiveRelation"
+        }
+      ]
+    },
+    "RequestUnit": {
+      "additionalProperties": false,
+      "description": "One requested item; identifiers are local to this response.",
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "withdrawn",
+            "conditional",
+            "quoted"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "categoryId": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Categoryid"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "categoryId",
+        "subject",
+        "description"
+      ],
+      "title": "RequestUnit",
+      "type": "object"
+    },
+    "RequestUnitsAnswer": {
+      "additionalProperties": false,
+      "description": "Requested items and their explicitly supported relationships.",
+      "properties": {
+        "units": {
+          "items": {
+            "$ref": "#/$defs/RequestUnit"
+          },
+          "maxItems": 256,
+          "title": "Units",
+          "type": "array"
+        },
+        "relations": {
+          "items": {
+            "$ref": "#/$defs/RequestRelation"
+          },
+          "maxItems": 256,
+          "title": "Relations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "units",
+        "relations"
+      ],
+      "title": "RequestUnitsAnswer",
+      "type": "object"
+    },
+    "RequestUnitsResult": {
+      "additionalProperties": false,
+      "description": "Request collection with support for the reported items and answerability.",
+      "properties": {
+        "questionId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Questionid",
+          "type": "string"
+        },
+        "answerability": {
+          "$ref": "#/$defs/Answerability"
+        },
+        "reason": {
+          "maxLength": 400,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        },
+        "evidence_strength": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvidenceStrength"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Support for the whole reported assessment, including answerability and any abstention. Strong or limited may accompany any answerability status. Null means support was not assessed; it does not mean the answer is absent. This is not model confidence or a correctness probability."
+        },
+        "type": {
+          "const": "request_units",
+          "title": "Type",
+          "type": "string"
+        },
+        "answer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestUnitsAnswer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "questionId",
+        "answerability",
+        "reason",
+        "evidence_strength",
+        "type",
+        "answer"
+      ],
+      "title": "RequestUnitsResult",
+      "type": "object"
+    },
+    "RequiresRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "requires",
+          "title": "Type",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "requiredRequestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requiredrequestid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "requestId",
+        "requiredRequestId"
+      ],
+      "title": "RequiresRelation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assessment": {
+      "$ref": "#/$defs/RequestUnitsResult"
+    }
+  },
+  "required": [
+    "assessment"
+  ],
+  "title": "PlanningInput",
+  "type": "object"
+}

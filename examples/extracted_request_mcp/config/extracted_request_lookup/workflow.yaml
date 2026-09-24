@@ -2,7 +2,6 @@ start: extract
 input_schema: input.schema.json
 output:
   pointer: /flows/lookup/result
-  optional: true
   default:
     status: needs_review
 flows:

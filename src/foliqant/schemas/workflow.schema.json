@@ -1,5 +1,38 @@
 {
   "$defs": {
+    "AllCondition": {
+      "additionalProperties": false,
+      "description": "Logical and over 1..32 conditions.",
+      "properties": {
+        "all": {
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/LeafCondition"
+              },
+              {
+                "$ref": "#/$defs/AllCondition"
+              },
+              {
+                "$ref": "#/$defs/AnyCondition"
+              },
+              {
+                "$ref": "#/$defs/NotCondition"
+              }
+            ]
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "title": "AllCondition",
+      "type": "object"
+    },
     "AnthropicModelConfig": {
       "additionalProperties": false,
       "properties": {
@@ -168,6 +201,39 @@
         }
       },
       "title": "AnthropicOptions",
+      "type": "object"
+    },
+    "AnyCondition": {
+      "additionalProperties": false,
+      "description": "Logical or over 1..32 conditions.",
+      "properties": {
+        "any": {
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/LeafCondition"
+              },
+              {
+                "$ref": "#/$defs/AllCondition"
+              },
+              {
+                "$ref": "#/$defs/AnyCondition"
+              },
+              {
+                "$ref": "#/$defs/NotCondition"
+              }
+            ]
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Any",
+          "type": "array"
+        }
+      },
+      "required": [
+        "any"
+      ],
+      "title": "AnyCondition",
       "type": "object"
     },
     "AzureModelConfig": {
@@ -372,7 +438,7 @@
     },
     "CallableFlow": {
       "additionalProperties": false,
-      "description": "A flow available only to explicit collection calls, without boundary routes.",
+      "description": "A flow available only to explicit collection or retry calls, without routes.\n\n``repeat`` repeats every collection item invocation; its bindings and\nconditions read the item scope: ``/payload`` (the item input), ``/metadata``,\n``/flows/<self>/result|attempts`` and ``/flows/<retry>/result|attempts``.",
       "properties": {
         "callable": {
           "const": true,
@@ -395,6 +461,17 @@
           ],
           "default": null,
           "title": "Definition"
+        },
+        "repeat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Repeat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -658,6 +735,62 @@
       "title": "CompatibleModelConfig",
       "type": "object"
     },
+    "ConditionFirstOf": {
+      "additionalProperties": false,
+      "description": "The first present member (resolves and is not null), otherwise absent.",
+      "properties": {
+        "first_of": {
+          "items": {
+            "$ref": "#/$defs/ConditionPointer"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "First Of",
+          "type": "array"
+        }
+      },
+      "required": [
+        "first_of"
+      ],
+      "title": "ConditionFirstOf",
+      "type": "object"
+    },
+    "ConditionPointer": {
+      "additionalProperties": false,
+      "description": "A pointer source; absence is part of every operator's semantics.",
+      "properties": {
+        "pointer": {
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "ConditionPointer",
+      "type": "object"
+    },
+    "ConditionalRouting": {
+      "additionalProperties": false,
+      "description": "Ordered conditional targets; the last entry is the unconditional otherwise.",
+      "properties": {
+        "route": {
+          "items": {
+            "$ref": "#/$defs/RouteEntry"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Route",
+          "type": "array"
+        }
+      },
+      "required": [
+        "route"
+      ],
+      "title": "ConditionalRouting",
+      "type": "object"
+    },
     "DecisionFallback": {
       "additionalProperties": false,
       "properties": {
@@ -874,6 +1007,9 @@
                 },
                 {
                   "$ref": "#/$defs/SourceLiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/SourceFirstOfBinding"
                 }
               ]
             }
@@ -926,6 +1062,37 @@
       "title": "FallbackCategory",
       "type": "object"
     },
+    "FirstOfBinding": {
+      "additionalProperties": false,
+      "description": "The first member that resolves to a non-null value, otherwise ``default``.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "first_of": {
+          "items": {
+            "$ref": "#/$defs/PointerMember"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "First Of",
+          "type": "array"
+        }
+      },
+      "required": [
+        "first_of"
+      ],
+      "title": "FirstOfBinding",
+      "type": "object"
+    },
     "FlowCollectionStepAuthoring": {
       "additionalProperties": false,
       "description": "Invoke allowlisted callable flows sequentially from explicit item inputs.",
@@ -946,6 +1113,9 @@
             },
             {
               "$ref": "#/$defs/LiteralBinding"
+            },
+            {
+              "$ref": "#/$defs/FirstOfBinding"
             }
           ],
           "title": "Items"
@@ -971,10 +1141,34 @@
       "title": "FlowCollectionStepAuthoring",
       "type": "object"
     },
+    "FlowDefaults": {
+      "additionalProperties": false,
+      "description": "Defaults for the steps of one flow definition, overriding the workflow's.",
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "title": "FlowDefaults",
+      "type": "object"
+    },
     "FlowDefinition": {
       "additionalProperties": false,
       "description": "A reusable sequence; the containing workflow owns its instance identity.",
       "properties": {
+        "defaults": {
+          "$ref": "#/$defs/FlowDefaults"
+        },
         "input_schema": {
           "anyOf": [
             {
@@ -1004,6 +1198,12 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
+                },
+                {
+                  "$ref": "#/$defs/ObjectOutput"
                 }
               ]
             },
@@ -1067,6 +1267,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1077,13 +1280,20 @@
         "on_unresolved": {
           "anyOf": [
             {
-              "$ref": "#/$defs/FlowTarget"
-            },
-            {
-              "$ref": "#/$defs/OutcomeTarget"
-            },
-            {
-              "$ref": "#/$defs/UnresolvedRouting"
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/FlowTarget"
+                },
+                {
+                  "$ref": "#/$defs/OutcomeTarget"
+                },
+                {
+                  "$ref": "#/$defs/UnresolvedRouting"
+                },
+                {
+                  "$ref": "#/$defs/ConditionalRouting"
+                }
+              ]
             },
             {
               "type": "null"
@@ -1092,8 +1302,19 @@
           "default": null,
           "title": "On Unresolved"
         },
-        "transition": {
+        "repeat": {
           "anyOf": [
+            {
+              "$ref": "#/$defs/Repeat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "transition": {
+          "oneOf": [
             {
               "$ref": "#/$defs/FlowTarget"
             },
@@ -1102,6 +1323,9 @@
             },
             {
               "$ref": "#/$defs/MatchRouting"
+            },
+            {
+              "$ref": "#/$defs/ConditionalRouting"
             }
           ],
           "title": "Transition"
@@ -1270,6 +1494,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1322,6 +1549,266 @@
         }
       ]
     },
+    "LeafCondition": {
+      "additionalProperties": false,
+      "description": "One source (`binding` or `literal`) and exactly one operator.",
+      "properties": {
+        "binding": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ConditionPointer"
+                },
+                {
+                  "$ref": "#/$defs/ConditionFirstOf"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Binding"
+        },
+        "empty": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Empty"
+        },
+        "equals": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "gt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gt"
+        },
+        "gte": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gte"
+        },
+        "in": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "In"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LengthComparison"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "literal": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "lt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lt"
+        },
+        "lte": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lte"
+        },
+        "matches": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Matches"
+        },
+        "not_equals": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "not_in": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not In"
+        },
+        "present": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Present"
+        }
+      },
+      "title": "LeafCondition",
+      "type": "object"
+    },
+    "LengthComparison": {
+      "additionalProperties": false,
+      "description": "Exactly one integer comparison applied to a string, array or object length.",
+      "properties": {
+        "equals": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Equals"
+        },
+        "gt": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gt"
+        },
+        "gte": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gte"
+        },
+        "lt": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lt"
+        },
+        "lte": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lte"
+        }
+      },
+      "title": "LengthComparison",
+      "type": "object"
+    },
     "LiteralBinding": {
       "additionalProperties": false,
       "properties": {
@@ -1347,6 +1834,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1470,7 +1960,7 @@
     },
     "MatchRouting": {
       "additionalProperties": false,
-      "description": "Exact string matching with an explicit default, without coercion.",
+      "description": "Exact string matching with an explicit default, without coercion.\n\n``default_covers`` lists the statically allowed values that deliberately\nfall to ``default``; it must equal the uncovered set the compiler derives.",
       "properties": {
         "binding": {
           "oneOf": [
@@ -1479,6 +1969,9 @@
             },
             {
               "$ref": "#/$defs/LiteralBinding"
+            },
+            {
+              "$ref": "#/$defs/FirstOfBinding"
             }
           ],
           "title": "Binding"
@@ -1508,6 +2001,23 @@
             }
           ],
           "title": "Default"
+        },
+        "default_covers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Covers"
         }
       },
       "required": [
@@ -1530,6 +2040,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1850,7 +2363,7 @@
     },
     "NamedStep": {
       "additionalProperties": false,
-      "description": "One ordered operation with an identity independent of its definition file.",
+      "description": "One ordered operation with an identity independent of its definition file.\n\nA step with ``when`` runs only when the condition holds; otherwise it is\nrecorded as ``skipped`` and the flow continues with the next step.",
       "properties": {
         "definition": {
           "anyOf": [
@@ -1899,6 +2412,31 @@
           "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
           "title": "Id",
           "type": "string"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/LeafCondition"
+                },
+                {
+                  "$ref": "#/$defs/AllCondition"
+                },
+                {
+                  "$ref": "#/$defs/AnyCondition"
+                },
+                {
+                  "$ref": "#/$defs/NotCondition"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "When"
         }
       },
       "required": [
@@ -1921,6 +2459,66 @@
         "name"
       ],
       "title": "NamedToolChoice",
+      "type": "object"
+    },
+    "NotCondition": {
+      "additionalProperties": false,
+      "description": "Logical negation of one condition.",
+      "properties": {
+        "not": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/LeafCondition"
+            },
+            {
+              "$ref": "#/$defs/AllCondition"
+            },
+            {
+              "$ref": "#/$defs/AnyCondition"
+            },
+            {
+              "$ref": "#/$defs/NotCondition"
+            }
+          ],
+          "title": "Not"
+        }
+      },
+      "required": [
+        "not"
+      ],
+      "title": "NotCondition",
+      "type": "object"
+    },
+    "ObjectOutput": {
+      "additionalProperties": false,
+      "description": "Project an object with exactly these keys, each resolved from one binding.",
+      "properties": {
+        "fields": {
+          "maxProperties": 128,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
+                }
+              ]
+            }
+          },
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "required": [
+        "fields"
+      ],
+      "title": "ObjectOutput",
       "type": "object"
     },
     "OpenAIModelConfig": {
@@ -2206,6 +2804,7 @@
     },
     "PointerBinding": {
       "additionalProperties": false,
+      "description": "An RFC 6901 pointer; a declared ``default`` makes the binding optional.",
       "properties": {
         "default": {
           "anyOf": [
@@ -2218,11 +2817,6 @@
           ],
           "default": null
         },
-        "optional": {
-          "default": false,
-          "title": "Optional",
-          "type": "boolean"
-        },
         "pointer": {
           "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
           "title": "Pointer",
@@ -2233,6 +2827,22 @@
         "pointer"
       ],
       "title": "PointerBinding",
+      "type": "object"
+    },
+    "PointerMember": {
+      "additionalProperties": false,
+      "description": "One `first_of` candidate; defaults belong to the enclosing binding.",
+      "properties": {
+        "pointer": {
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "PointerMember",
       "type": "object"
     },
     "PredicateQuestion": {
@@ -2313,6 +2923,131 @@
         "criteria"
       ],
       "title": "PredicateQuestionShorthand",
+      "type": "object"
+    },
+    "Repeat": {
+      "additionalProperties": false,
+      "description": "Bounded repetition of one flow instance; the static graph stays acyclic.",
+      "properties": {
+        "max_attempts": {
+          "maximum": 64,
+          "minimum": 2,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "retry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepeatRetry"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "retry_input": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
+                }
+              ]
+            }
+          },
+          "title": "Retry Input",
+          "type": "object"
+        },
+        "until": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/LeafCondition"
+            },
+            {
+              "$ref": "#/$defs/AllCondition"
+            },
+            {
+              "$ref": "#/$defs/AnyCondition"
+            },
+            {
+              "$ref": "#/$defs/NotCondition"
+            }
+          ],
+          "title": "Until"
+        }
+      },
+      "required": [
+        "max_attempts",
+        "until"
+      ],
+      "title": "Repeat",
+      "type": "object"
+    },
+    "RepeatRetry": {
+      "additionalProperties": false,
+      "description": "A callable flow run between two attempts of the repeated flow.",
+      "properties": {
+        "continue_when": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/LeafCondition"
+                },
+                {
+                  "$ref": "#/$defs/AllCondition"
+                },
+                {
+                  "$ref": "#/$defs/AnyCondition"
+                },
+                {
+                  "$ref": "#/$defs/NotCondition"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Continue When"
+        },
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
+          "type": "string"
+        },
+        "input": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PointerBinding"
+                },
+                {
+                  "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
+                }
+              ]
+            }
+          },
+          "title": "Input",
+          "type": "object"
+        }
+      },
+      "required": [
+        "flow"
+      ],
+      "title": "RepeatRetry",
       "type": "object"
     },
     "RequestUnitsQuestion": {
@@ -2447,6 +3182,68 @@
       "title": "RetryConfig",
       "type": "object"
     },
+    "RouteEntry": {
+      "additionalProperties": false,
+      "description": "One ordered route entry; the first entry whose condition holds is selected.",
+      "properties": {
+        "flow": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flow"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "enum": [
+                "completed",
+                "needs_review"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outcome"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/LeafCondition"
+                },
+                {
+                  "$ref": "#/$defs/AllCondition"
+                },
+                {
+                  "$ref": "#/$defs/AnyCondition"
+                },
+                {
+                  "$ref": "#/$defs/NotCondition"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "When"
+        }
+      },
+      "title": "RouteEntry",
+      "type": "object"
+    },
     "SchemaOutput": {
       "additionalProperties": false,
       "properties": {
@@ -2471,6 +3268,46 @@
         "schema"
       ],
       "title": "SchemaOutput",
+      "type": "object"
+    },
+    "SourceFirstOfBinding": {
+      "additionalProperties": false,
+      "description": "The first present decision source candidate with explicit rendering.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "first_of": {
+          "items": {
+            "$ref": "#/$defs/PointerMember"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "First Of",
+          "type": "array"
+        },
+        "format": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "required": [
+        "first_of"
+      ],
+      "title": "SourceFirstOfBinding",
       "type": "object"
     },
     "SourceLiteralBinding": {
@@ -2520,11 +3357,6 @@
           "title": "Format",
           "type": "string"
         },
-        "optional": {
-          "default": false,
-          "title": "Optional",
-          "type": "boolean"
-        },
         "pointer": {
           "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
           "title": "Pointer",
@@ -2535,6 +3367,67 @@
         "pointer"
       ],
       "title": "SourcePointerBinding",
+      "type": "object"
+    },
+    "StartRouteEntry": {
+      "additionalProperties": false,
+      "description": "A start candidate; conditions read only ``/payload`` and ``/metadata``.",
+      "properties": {
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
+          "type": "string"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/LeafCondition"
+                },
+                {
+                  "$ref": "#/$defs/AllCondition"
+                },
+                {
+                  "$ref": "#/$defs/AnyCondition"
+                },
+                {
+                  "$ref": "#/$defs/NotCondition"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "When"
+        }
+      },
+      "required": [
+        "flow"
+      ],
+      "title": "StartRouteEntry",
+      "type": "object"
+    },
+    "StartRouting": {
+      "additionalProperties": false,
+      "description": "Select the first flow from the accepted envelope.",
+      "properties": {
+        "route": {
+          "items": {
+            "$ref": "#/$defs/StartRouteEntry"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Route",
+          "type": "array"
+        }
+      },
+      "required": [
+        "route"
+      ],
+      "title": "StartRouting",
       "type": "object"
     },
     "ToolPolicy": {
@@ -2648,6 +3541,7 @@
     },
     "WorkflowDefaults": {
       "additionalProperties": false,
+      "description": "Workflow-wide defaults: step model and the inherited review route.",
       "properties": {
         "model": {
           "anyOf": [
@@ -2661,6 +3555,31 @@
           ],
           "default": null,
           "title": "Model"
+        },
+        "on_unresolved": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/FlowTarget"
+                },
+                {
+                  "$ref": "#/$defs/OutcomeTarget"
+                },
+                {
+                  "$ref": "#/$defs/UnresolvedRouting"
+                },
+                {
+                  "$ref": "#/$defs/ConditionalRouting"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Unresolved"
         }
       },
       "title": "WorkflowDefaults",
@@ -2734,6 +3653,12 @@
             },
             {
               "$ref": "#/$defs/LiteralBinding"
+            },
+            {
+              "$ref": "#/$defs/FirstOfBinding"
+            },
+            {
+              "$ref": "#/$defs/ObjectOutput"
             }
           ]
         },
@@ -2747,8 +3672,15 @@
     "start": {
       "anyOf": [
         {
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "type": "string"
+          "oneOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/StartRouting"
+            }
+          ]
         },
         {
           "type": "null"

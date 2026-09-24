@@ -1,0 +1,12 @@
+input_schema:
+  type: object
+  properties:
+    account_reference:
+      type: string
+  required:
+    - account_reference
+  additionalProperties: false
+steps:
+  - lookup
+output:
+  pointer: /steps/lookup/result

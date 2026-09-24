@@ -1,0 +1,23 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "language": {
+      "enum": [
+        "en",
+        "de"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "next_step": {
+      "title": "Next Step",
+      "type": "string"
+    }
+  },
+  "required": [
+    "language",
+    "next_step"
+  ],
+  "title": "Guidance",
+  "type": "object"
+}

@@ -48,6 +48,8 @@ class TelemetryConfig(BoundaryModel):
     metric_export_batch_size: Annotated[int, Field(strict=True, ge=1, le=65_536)] = 512
     export_timeout: Annotated[float, Field(gt=0, le=30)] = 10.0
     shutdown_timeout: Annotated[float, Field(gt=0, le=30)] = 10.0
+    conditions: bool = False
+    """Also record a debug `condition.evaluated` event for every evaluated condition."""
 
     @field_validator("traces_headers", "metrics_headers")
     @classmethod

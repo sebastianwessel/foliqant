@@ -1,0 +1,1472 @@
+{
+  "$defs": {
+    "Answerability": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/AnswerabilityStatus"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/AnswerabilityIssue"
+          },
+          "maxItems": 3,
+          "title": "Issues",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status",
+        "issues"
+      ],
+      "title": "Answerability",
+      "type": "object"
+    },
+    "AnswerabilityIssue": {
+      "enum": [
+        "no_supported_answer",
+        "conflicting_information",
+        "multiple_valid_options"
+      ],
+      "type": "string"
+    },
+    "AnswerabilityStatus": {
+      "enum": [
+        "answerable",
+        "partially_answerable",
+        "not_answerable",
+        "undetermined"
+      ],
+      "type": "string"
+    },
+    "ConditionalRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "conditional_on",
+          "title": "Type",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "predicateQuestionId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Predicatequestionid",
+          "type": "string"
+        },
+        "requiredValue": {
+          "enum": [
+            "true",
+            "false"
+          ],
+          "title": "Requiredvalue",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "requestId",
+        "predicateQuestionId",
+        "requiredValue"
+      ],
+      "title": "ConditionalRelation",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "enum": [
+        "invalid_configuration",
+        "invalid_input",
+        "invalid_output",
+        "unauthenticated",
+        "forbidden",
+        "not_found",
+        "missing_binding",
+        "timeout",
+        "budget_exhausted",
+        "dependency_failure",
+        "conflict",
+        "uncertain_effect",
+        "cancelled",
+        "capacity_exceeded"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "EvidenceStrength": {
+      "enum": [
+        "limited",
+        "strong"
+      ],
+      "type": "string"
+    },
+    "FlowAttempt": {
+      "additionalProperties": false,
+      "description": "One attempt of a repeated flow, or one run of a retry flow.",
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "needs_review"
+            }
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          }
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "result"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "skipped"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "steps": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "$ref": "#/$defs/StepResult"
+            }
+          },
+          "title": "Steps",
+          "type": "object"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "error": {
+          "$ref": "#/$defs/SafeError",
+          "title": "Error"
+        },
+        "attempt": {
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "status",
+        "steps",
+        "attempt"
+      ],
+      "title": "FlowAttempt",
+      "type": "object"
+    },
+    "FlowCollectionItem": {
+      "additionalProperties": false,
+      "description": "One explicit invocation request; the selected step restricts its flow target.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Input",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "flow",
+        "input"
+      ],
+      "title": "FlowCollectionItem",
+      "type": "object"
+    },
+    "FlowCollectionItemResult": {
+      "additionalProperties": false,
+      "description": "One collection item's complete flow record, including skipped local steps.\n\nA callable flow with ``repeat`` carries its attempts like a routed flow;\n``retry`` records the item's retry flow runs (last run plus ``attempts``).",
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "needs_review"
+            }
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          }
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "result"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "skipped"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "steps": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "$ref": "#/$defs/StepResult"
+            }
+          },
+          "title": "Steps",
+          "type": "object"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "error": {
+          "$ref": "#/$defs/SafeError",
+          "title": "Error"
+        },
+        "attempt_count": {
+          "maximum": 64,
+          "minimum": 0,
+          "title": "Attempt Count",
+          "type": "integer"
+        },
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/FlowAttempt"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Attempts",
+          "type": "array"
+        },
+        "attempts_usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "attempts_elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempts Elapsed Seconds"
+        },
+        "repeat": {
+          "$ref": "#/$defs/RepeatInfo",
+          "title": "Repeat"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
+          "type": "string"
+        },
+        "retry": {
+          "$ref": "#/$defs/FlowResult",
+          "title": "Retry"
+        }
+      },
+      "required": [
+        "status",
+        "steps",
+        "attempt_count",
+        "id",
+        "flow"
+      ],
+      "title": "FlowCollectionItemResult",
+      "type": "object"
+    },
+    "FlowCollectionResult": {
+      "additionalProperties": false,
+      "description": "Ordered child invocation ledger; each item identity occurs exactly once.",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/FlowCollectionItemResult"
+          },
+          "maxItems": 1024,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "FlowCollectionResult",
+      "type": "object"
+    },
+    "FlowResult": {
+      "additionalProperties": false,
+      "description": "A flow's scoped step records and explicitly present projected result.\n\n``attempt_count`` counts executions (zero when skipped). Repeated and retry\nflows list every run in ``attempts``; the top-level fields describe the last\nrun and ``attempts_usage`` / ``attempts_elapsed_seconds`` sum all runs.",
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "needs_review"
+            }
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          }
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "result"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "skipped"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "steps": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "$ref": "#/$defs/StepResult"
+            }
+          },
+          "title": "Steps",
+          "type": "object"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "error": {
+          "$ref": "#/$defs/SafeError",
+          "title": "Error"
+        },
+        "attempt_count": {
+          "maximum": 64,
+          "minimum": 0,
+          "title": "Attempt Count",
+          "type": "integer"
+        },
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/FlowAttempt"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Attempts",
+          "type": "array"
+        },
+        "attempts_usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "attempts_elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempts Elapsed Seconds"
+        },
+        "repeat": {
+          "$ref": "#/$defs/RepeatInfo",
+          "title": "Repeat"
+        }
+      },
+      "required": [
+        "status",
+        "steps",
+        "attempt_count"
+      ],
+      "title": "FlowResult",
+      "type": "object"
+    },
+    "HeldRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "incomplete_assessment",
+            "related_requests",
+            "conditional_request",
+            "unsupported_request",
+            "missing_account_reference",
+            "too_many_requests"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "reason"
+      ],
+      "title": "HeldRequest",
+      "type": "object"
+    },
+    "IgnoredRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "withdrawn",
+            "quoted",
+            "duplicate"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "reason"
+      ],
+      "title": "IgnoredRequest",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "MutuallyExclusiveRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "mutually_exclusive",
+          "title": "Type",
+          "type": "string"
+        },
+        "requestIds": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 2,
+          "title": "Requestids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "requestIds"
+      ],
+      "title": "MutuallyExclusiveRelation",
+      "type": "object"
+    },
+    "PrecedesRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "precedes",
+          "title": "Type",
+          "type": "string"
+        },
+        "beforeRequestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Beforerequestid",
+          "type": "string"
+        },
+        "afterRequestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Afterrequestid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "beforeRequestId",
+        "afterRequestId"
+      ],
+      "title": "PrecedesRelation",
+      "type": "object"
+    },
+    "RepeatInfo": {
+      "additionalProperties": false,
+      "description": "Why a repeated flow stopped; exhaustion is not a review.",
+      "properties": {
+        "stopped_by": {
+          "enum": [
+            "until",
+            "exhausted",
+            "continue_when",
+            "review",
+            "failure"
+          ],
+          "title": "Stopped By",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stopped_by"
+      ],
+      "title": "RepeatInfo",
+      "type": "object"
+    },
+    "RequestPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/FlowCollectionItem"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "request_ids": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Request Ids",
+          "type": "object"
+        },
+        "held": {
+          "items": {
+            "$ref": "#/$defs/HeldRequest"
+          },
+          "title": "Held",
+          "type": "array"
+        },
+        "ignored": {
+          "items": {
+            "$ref": "#/$defs/IgnoredRequest"
+          },
+          "title": "Ignored",
+          "type": "array"
+        },
+        "assessment": {
+          "$ref": "#/$defs/RequestUnitsResult"
+        }
+      },
+      "required": [
+        "items",
+        "request_ids",
+        "held",
+        "ignored",
+        "assessment"
+      ],
+      "title": "RequestPlan",
+      "type": "object"
+    },
+    "RequestRelation": {
+      "discriminator": {
+        "mapping": {
+          "conditional_on": "#/$defs/ConditionalRelation",
+          "mutually_exclusive": "#/$defs/MutuallyExclusiveRelation",
+          "precedes": "#/$defs/PrecedesRelation",
+          "requires": "#/$defs/RequiresRelation"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ConditionalRelation"
+        },
+        {
+          "$ref": "#/$defs/RequiresRelation"
+        },
+        {
+          "$ref": "#/$defs/PrecedesRelation"
+        },
+        {
+          "$ref": "#/$defs/MutuallyExclusiveRelation"
+        }
+      ]
+    },
+    "RequestUnit": {
+      "additionalProperties": false,
+      "description": "One requested item; identifiers are local to this response.",
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "withdrawn",
+            "conditional",
+            "quoted"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "categoryId": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Categoryid"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "categoryId",
+        "subject",
+        "description"
+      ],
+      "title": "RequestUnit",
+      "type": "object"
+    },
+    "RequestUnitsAnswer": {
+      "additionalProperties": false,
+      "description": "Requested items and their explicitly supported relationships.",
+      "properties": {
+        "units": {
+          "items": {
+            "$ref": "#/$defs/RequestUnit"
+          },
+          "maxItems": 256,
+          "title": "Units",
+          "type": "array"
+        },
+        "relations": {
+          "items": {
+            "$ref": "#/$defs/RequestRelation"
+          },
+          "maxItems": 256,
+          "title": "Relations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "units",
+        "relations"
+      ],
+      "title": "RequestUnitsAnswer",
+      "type": "object"
+    },
+    "RequestUnitsResult": {
+      "additionalProperties": false,
+      "description": "Request collection with support for the reported items and answerability.",
+      "properties": {
+        "questionId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Questionid",
+          "type": "string"
+        },
+        "answerability": {
+          "$ref": "#/$defs/Answerability"
+        },
+        "reason": {
+          "maxLength": 400,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        },
+        "evidence_strength": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvidenceStrength"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Support for the whole reported assessment, including answerability and any abstention. Strong or limited may accompany any answerability status. Null means support was not assessed; it does not mean the answer is absent. This is not model confidence or a correctness probability."
+        },
+        "type": {
+          "const": "request_units",
+          "title": "Type",
+          "type": "string"
+        },
+        "answer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestUnitsAnswer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "questionId",
+        "answerability",
+        "reason",
+        "evidence_strength",
+        "type",
+        "answer"
+      ],
+      "title": "RequestUnitsResult",
+      "type": "object"
+    },
+    "RequiresRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "requires",
+          "title": "Type",
+          "type": "string"
+        },
+        "requestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "requiredRequestId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Requiredrequestid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "requestId",
+        "requiredRequestId"
+      ],
+      "title": "RequiresRelation",
+      "type": "object"
+    },
+    "SafeError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "location": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "title": "Location",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "title": "SafeError",
+      "type": "object"
+    },
+    "SelectedCategory": {
+      "additionalProperties": false,
+      "description": "Exact configured category identity; descriptions retain authored whitespace.",
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Id",
+          "type": "string"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "SelectedCategory",
+      "type": "object"
+    },
+    "StepResult": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "partial_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              },
+              "kind": {
+                "const": "flow_collection"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "completed",
+                  "needs_review"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/FlowCollectionResult",
+                "title": "Partial Result"
+              }
+            },
+            "required": [
+              "result"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "selection"
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "completed",
+                  "needs_review"
+                ]
+              }
+            },
+            "required": [
+              "result"
+            ]
+          }
+        }
+      ],
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "needs_review"
+            }
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          }
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "result"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "skipped"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "selection": {
+          "$ref": "#/$defs/StepSelection",
+          "title": "Selection"
+        },
+        "error": {
+          "$ref": "#/$defs/SafeError",
+          "title": "Error"
+        },
+        "partial_result": {
+          "$ref": "#/$defs/FlowCollectionResult",
+          "title": "Partial Result"
+        },
+        "kind": {
+          "const": "flow_collection",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "StepResult",
+      "type": "object"
+    },
+    "StepSelection": {
+      "additionalProperties": false,
+      "description": "Effective classification without changing the native answer or uncertainty.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/SelectedCategory"
+        },
+        "origin": {
+          "enum": [
+            "model",
+            "fallback"
+          ],
+          "title": "Origin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "origin"
+      ],
+      "title": "StepSelection",
+      "type": "object"
+    },
+    "StepStatus": {
+      "enum": [
+        "completed",
+        "needs_review",
+        "failed",
+        "cancelled",
+        "skipped"
+      ],
+      "type": "string"
+    },
+    "Usage": {
+      "additionalProperties": false,
+      "properties": {
+        "model_requests": {
+          "minimum": 0,
+          "title": "Model Requests",
+          "type": "integer"
+        },
+        "tool_calls": {
+          "minimum": 0,
+          "title": "Tool Calls",
+          "type": "integer"
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Input Tokens"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Output Tokens"
+        },
+        "cache_read_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cache Read Input Tokens"
+        },
+        "cache_write_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cache Write Input Tokens"
+        },
+        "reasoning_output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reasoning Output Tokens"
+        }
+      },
+      "required": [
+        "model_requests",
+        "tool_calls",
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens",
+        "cache_write_input_tokens",
+        "reasoning_output_tokens"
+      ],
+      "title": "Usage",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "plan": {
+      "$ref": "#/$defs/RequestPlan"
+    },
+    "collection": {
+      "$ref": "#/$defs/FlowCollectionResult"
+    }
+  },
+  "required": [
+    "plan",
+    "collection"
+  ],
+  "title": "DispositionInput",
+  "type": "object"
+}

@@ -37,12 +37,21 @@ steps:
   - require_reference
   - lookup
   - draft
-  - assemble
 output:
-  pointer: /steps/assemble/result
-  optional: true
-  default: null
+  fields:
+    queue:
+      literal: billing
+    account_reference:
+      pointer: /steps/extract/result/account_reference
+    reply:
+      pointer: /steps/draft/result/reply
+      default: null
 ```
+
+Use `literal: cancellation` in the cancellation branch. The object output
+assembles the host payload `{queue, account_reference, reply}` directly from
+the step results; `reply` needs a default because an earlier step may stop the
+flow for review.
 
 Create `require_reference.step.yaml` in each branch:
 
@@ -54,12 +63,26 @@ input:
     pointer: /steps/extract/result/account_reference
 ```
 
-Register `require_reference` in your host with frozen input/output schemas;
-the [example handler](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/handlers.py) returns
-`needs_review=True` when the extracted reference is null. It projects a
-non-null string only for a usable reference. `prepare_application` receives
-that registration before compilation. This guard is a business policy check,
-not proof that the model extracted the correct customer's reference.
+Declare the handler's contract in `my_support/config/settings.yaml`, copying
+the two schema files from the example's
+[`contracts/`](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/contracts/require_reference.input.json)
+directory:
+
+```yaml
+handlers:
+  require_reference:
+    input_schema: contracts/require_reference.input.json
+    output_schema: contracts/require_reference.output.json
+    effect: read
+```
+
+With the declaration, `foliqant validate` checks the workflow without any
+Python. The [example handler](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/handlers.py)
+returns `needs_review=True` with the issue `no_supported_answer` when the
+extracted reference is null, and projects a non-null string only for a usable
+reference. The host registers the callable with `prepare_application`. This
+guard is a business policy check, not proof that the model extracted the
+correct customer's reference.
 
 Create `lookup.step.yaml` in each branch:
 
@@ -83,19 +106,19 @@ as the concrete shape. Bind only `/payload/message` and the validated
 model to acknowledge the request without claiming a refund or cancellation
 has happened.
 
-The final snapshot adds `assemble.step.yaml` to pair the draft with the trusted
-route and guarded reference, and routes either branch to `finalize`. Its
-[`select_reply` handler](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/handlers.py)
-projects `{queue, account_reference, reply}` to the workflow payload. On a
-review route, the configured output default is `{disposition: needs_review}`.
-Use the [final workflow](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/support_email/workflow.yaml)
-and [finalize flow](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/support_email/finalize/flow.yaml)
-for exact bindings. This last projection makes the host's result useful
-without parsing internal step records.
+The workflow output from chapter 3 (`first_of` over both branch results)
+now returns `{queue, account_reference, reply}` from whichever branch ran. When
+`classify` needs review, no branch ran and the output default
+`{disposition: needs_review}` applies; when `require_reference` stops a branch,
+that branch's object output carries `reply: null`. Use the
+[final workflow](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/support_email/workflow.yaml)
+and [billing flow](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/support_email/billing/flow.yaml)
+for exact bindings. The projection makes the host's result useful without
+parsing internal step records.
 
 ## Open your application with its handlers
 
-Put the [handler implementations and registrations](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/handlers.py)
+Put the [handler implementation and registration](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/handlers.py)
 in `my_support/handlers.py`. Create `my_support/run.py` to connect your
 configuration, handlers, and client lifecycle:
 
@@ -135,7 +158,8 @@ asyncio.run(main())
 After setting `MODEL_ID` and `MODEL_BASE_URL` in `my_support/config/.env`,
 run `uv run --no-sync python -m my_support.run` from the repository root.
 This calls your configured model and the local synthetic MCP server. Handler
-registrations belong in Python; YAML never imports arbitrary application code.
+contracts are reviewed configuration; the callables are registered in Python,
+and YAML never imports application code.
 
 For an **offline comparison** without a model endpoint, run the finished snapshot:
 
@@ -144,4 +168,5 @@ uv run --no-sync python -m examples.support_email_tutorial.run
 ```
 
 Expect `payload.queue: billing`, `payload.account_reference: A-100`, and a
-reviewable `payload.reply`. Continue with [a model tool loop](model-tool-loop.md).
+reviewable `payload.reply`. Continue with [retrying a lookup](retry-lookup.md) or
+[a model tool loop](model-tool-loop.md).

@@ -85,3 +85,46 @@ def load_step(
         body = "\n".join(lines[end + 1 :]).strip() or None
         return data, body, SourceLocation(relative, 2, 1), source
     return load_yaml(text, relative_path=relative), None, SourceLocation(relative, 1, 1), source
+
+
+class YamlLocator:
+    """Map authored key paths to 1-based source coordinates for diagnostics.
+
+    The text was already accepted by :func:`load_yaml`; only node marks are read.
+    A path that does not fully exist resolves to its deepest existing key.
+    """
+
+    def __init__(self, text: str, *, relative_path: str, line_offset: int = 0) -> None:
+        self._path = relative_path
+        self._offset = line_offset
+        try:
+            self._root: yaml.Node | None = yaml.compose(text, Loader=_UniqueSafeLoader)
+        except (yaml.YAMLError, RecursionError):
+            self._root = None
+
+    def locate(self, *path: str | int) -> SourceLocation:
+        node = self._root
+        mark = node.start_mark if node is not None else None
+        for token in path:
+            if isinstance(node, MappingNode):
+                match = next(
+                    (
+                        (key, value)
+                        for key, value in node.value
+                        if isinstance(key, yaml.ScalarNode) and key.value == str(token)
+                    ),
+                    None,
+                )
+                if match is None:
+                    break
+                mark, node = match[0].start_mark, match[1]
+            elif isinstance(node, yaml.SequenceNode) and isinstance(token, int):
+                if not 0 <= token < len(node.value):
+                    break
+                node = node.value[token]
+                mark = node.start_mark
+            else:
+                break
+        if mark is None:
+            return SourceLocation(self._path, 1 + self._offset, 1)
+        return SourceLocation(self._path, mark.line + 1 + self._offset, mark.column + 1)

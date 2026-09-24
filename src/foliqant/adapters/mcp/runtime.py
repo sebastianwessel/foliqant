@@ -95,6 +95,8 @@ class McpTools:
             for key, value in carrier.items()
         ):
             raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+        # Captured per call; the HTTP transport mirrors this request's carrier as
+        # W3C headers of the same request.
         meta: dict[str, object] = dict(carrier)
         identity = self._context.caller.identity
         if self._identity_meta_key is not None:

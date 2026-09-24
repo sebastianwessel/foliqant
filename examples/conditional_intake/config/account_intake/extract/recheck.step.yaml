@@ -1,0 +1,6 @@
+type: handler
+handler: check_reference
+input:
+  reference:
+    pointer: /steps/repair/result/account_reference
+    default: null

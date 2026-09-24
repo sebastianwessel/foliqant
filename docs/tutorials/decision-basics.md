@@ -33,7 +33,6 @@ flows:
       outcome: needs_review
 output:
   pointer: /flows/classify/result
-  optional: true
   default: null
 ```
 
@@ -44,7 +43,6 @@ steps:
   - classify
 output:
   pointer: /steps/classify/selection/category/id
-  optional: true
   default: null
 ```
 

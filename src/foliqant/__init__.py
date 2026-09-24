@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from .contracts.envelope import Envelope
     from .contracts.execution import ExecutionResult
     from .core.identity import Identity
+    from .graph import WorkflowGraph, explain
 
 __all__ = [
     "Envelope",
@@ -22,6 +23,8 @@ __all__ = [
     "PreparedApplication",
     "RuntimePlugins",
     "WorkflowApplication",
+    "WorkflowGraph",
+    "explain",
     "load_environment",
     "open_application",
     "prepare_application",
@@ -54,4 +57,8 @@ def __getattr__(name: str) -> object:
         from .core.identity import Identity
 
         return Identity
+    if name in {"explain", "WorkflowGraph"}:
+        from . import graph
+
+        return cast(object, getattr(graph, name))
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

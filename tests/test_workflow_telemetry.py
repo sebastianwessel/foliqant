@@ -148,7 +148,8 @@ async def test_outcome_status_and_context_restored(tmp_path: Path, telemetry, mo
             StatusCode.UNSET if mode == "review" else StatusCode.ERROR
         )
         assert "PRIVATE" not in span.to_json()
-        assert not span.events
+        # Exception events are dropped; only fixed runtime events remain.
+        assert {event.name for event in span.events} <= {"route.selected", "handler.review"}
     assert not trace_api.get_current_span().get_span_context().is_valid
 
 

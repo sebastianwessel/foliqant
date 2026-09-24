@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "queue": {
+      "type": "string",
+      "enum": [
+        "billing",
+        "cancellation"
+      ]
+    },
+    "action": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "queue",
+    "action",
+    "message"
+  ],
+  "additionalProperties": false
+}

@@ -101,3 +101,8 @@ def render_prompt(template: PromptTemplate, inputs: FrozenObject) -> str:
         except (ValueError, TypeError, RecursionError):
             raise ServiceError(ErrorCode.INVALID_INPUT) from None
     return "".join(rendered)
+
+
+def prompt_inputs(template: PromptTemplate) -> frozenset[str]:
+    """Return the input names a compiled template references."""
+    return frozenset(part.name for part in template.parts if isinstance(part, _Input))

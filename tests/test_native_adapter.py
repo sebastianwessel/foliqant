@@ -159,7 +159,7 @@ def test_rejects_missing_extra_nonstring_and_blank_sources(
     assert str(error.value) == "The input does not satisfy the required contract."
 
 
-def test_single_choice_is_unwrapped_immutable_and_keeps_exact_route_key() -> None:
+def test_single_choice_is_unwrapped_immutable_and_keeps_exact_answer_key() -> None:
     step = _step(_choice())
     task = build_decision_input(step, _sources())
     result = validate_decision_result(
@@ -169,7 +169,7 @@ def test_single_choice_is_unwrapped_immutable_and_keeps_exact_route_key() -> Non
     )
 
     assert result.answerable is True
-    assert result.route_key == "billing.queue-v2"
+    assert result.answer_key == "billing.queue-v2"
     assert thaw_json(result.value) == _choice_result()
     assert isinstance(result.value, Mapping)
     with pytest.raises(TypeError):
@@ -194,7 +194,7 @@ def test_predicate_routes_only_validated_true_or_false() -> None:
     }
     result = validate_decision_result(step, task, raw)
     assert result.answerable is True
-    assert result.route_key == "false"
+    assert result.answer_key == "false"
 
 
 def test_ordinal_route_preserves_the_validated_level_id() -> None:
@@ -214,7 +214,7 @@ def test_ordinal_route_preserves_the_validated_level_id() -> None:
     }
     result = validate_decision_result(step, task, raw)
     assert result.answerable is True
-    assert result.route_key == "High.Priority-v2"
+    assert result.answer_key == "High.Priority-v2"
 
 
 def test_any_uncertainty_disables_routing_and_multi_question_retains_wrapper() -> None:
@@ -238,7 +238,7 @@ def test_any_uncertainty_disables_routing_and_multi_question_retains_wrapper() -
     }
     result = validate_decision_result(step, task, raw)
     assert result.answerable is False
-    assert result.route_key is None
+    assert result.answer_key is None
     assert thaw_json(result.value) == raw
 
 
@@ -270,7 +270,7 @@ def test_answerable_multiselect_remains_inside_multi_question_wrapper() -> None:
     }
     result = validate_decision_result(step, task, raw)
     assert result.answerable is True
-    assert result.route_key is None
+    assert result.answer_key is None
     assert thaw_json(result.value) == raw
 
 
@@ -281,7 +281,7 @@ def test_existing_decision_output_is_reparsed_before_acceptance() -> None:
 
     result = validate_decision_result(step, task, output)
     assert result.answerable is True
-    assert result.route_key == "billing.queue-v2"
+    assert result.answer_key == "billing.queue-v2"
 
 
 def test_multiple_results_follow_supplied_question_order_without_mutating_model_output() -> None:
@@ -306,7 +306,7 @@ def test_limited_support_does_not_override_answerability_or_choice_routing() -> 
         step, build_decision_input(step, _sources()), {"results": [raw]}
     )
     assert result.answerable is True
-    assert result.route_key == "billing.queue-v2"
+    assert result.answer_key == "billing.queue-v2"
 
 
 @pytest.mark.parametrize("kind", ["choice", "predicate"])
@@ -324,7 +324,7 @@ def test_assessed_abstention_keeps_unresolved_routing(kind, status, strength) ->
         {"results": [result]},
     )
     assert validated.answerable is False
-    assert validated.route_key is None
+    assert validated.answer_key is None
     assert thaw_json(validated.value)["evidence_strength"] == strength
 
 

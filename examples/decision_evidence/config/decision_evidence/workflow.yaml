@@ -3,7 +3,6 @@ defaults:
 input_schema: input.schema.json
 output:
   pointer: /flows/assessment/result
-  optional: true
   default: null
 flows:
   assessment:

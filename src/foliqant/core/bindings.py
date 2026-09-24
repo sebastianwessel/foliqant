@@ -12,25 +12,15 @@ _INVALID_ESCAPE = re.compile(r"~(?:[^01]|$)")
 _INDEX = re.compile(r"(?:0|[1-9][0-9]*)\Z", flags=re.ASCII)
 
 
-def resolve_binding(binding: BindingPlan, context: FrozenJson) -> FrozenJson:
-    """Resolve an RFC 6901 pointer or copy an explicit literal/default.
+def lookup_pointer(pointer: str, context: FrozenJson) -> tuple[bool, FrozenJson]:
+    """Return ``(found, value)`` for an RFC 6901 pointer; null is found.
 
-    Null is present. An optional binding requires its authored default. Invalid
-    pointer syntax is configuration failure, never a reason to use a default.
+    Invalid pointer syntax is a configuration failure, never "not found".
     """
-    if binding.kind == "literal":
-        return freeze_json(binding.literal)
-    pointer = binding.pointer
-    if (
-        binding.kind != "pointer"
-        or pointer is None
-        or (pointer and not pointer.startswith("/"))
-        or _INVALID_ESCAPE.search(pointer)
-        or binding.optional != binding.has_default
-    ):
+    if (pointer and not pointer.startswith("/")) or _INVALID_ESCAPE.search(pointer):
         raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
     if not pointer:
-        return context
+        return True, context
     parts = pointer[1:].split("/")
     if len(parts) > MAX_JSON_DEPTH:
         raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
@@ -48,10 +38,43 @@ def resolve_binding(binding: BindingPlan, context: FrozenJson) -> FrozenJson:
         ):
             value = value[int(key)]
         else:
-            if binding.optional:
-                return freeze_json(binding.default)
-            raise ServiceError(ErrorCode.MISSING_BINDING)
-    return value
+            return False, None
+    return True, value
+
+
+def resolve_binding(binding: BindingPlan, context: FrozenJson) -> FrozenJson:
+    """Resolve a literal, pointer, ``first_of`` or object ``fields`` binding.
+
+    For a pointer, null is present. ``first_of`` selects the first member that
+    resolves to a non-null value. A missing value uses the authored default;
+    without one the binding fails with ``MISSING_BINDING``. Invalid pointer
+    syntax is configuration failure, never a reason to use a default.
+    """
+    if binding.kind == "literal":
+        return freeze_json(binding.literal)
+    if binding.kind == "fields":
+        if not binding.fields or binding.has_default:
+            raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+        return resolve_bindings(binding.fields, context)
+    if binding.kind == "pointer":
+        if binding.pointer is None or binding.members:
+            raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+        found, value = lookup_pointer(binding.pointer, context)
+        if found:
+            return value
+    elif binding.kind == "first_of":
+        if binding.pointer is not None or not binding.members:
+            raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+        # Validate every member before selecting, so syntax errors never hide.
+        candidates = [lookup_pointer(member, context) for member in binding.members]
+        for found, value in candidates:
+            if found and value is not None:
+                return value
+    else:
+        raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+    if binding.has_default:
+        return freeze_json(binding.default)
+    raise ServiceError(ErrorCode.MISSING_BINDING)
 
 
 def resolve_bindings(
@@ -64,3 +87,23 @@ def resolve_bindings(
             raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
         values[name] = resolve_binding(binding, context)
     return MappingProxyType(values)
+
+
+def resolve_source(binding: BindingPlan, context: FrozenJson) -> tuple[bool, FrozenJson]:
+    """Resolve a condition source to ``(present, value)``; null counts as absent."""
+    if binding.kind == "literal":
+        value = freeze_json(binding.literal)
+        return value is not None, value
+    if binding.has_default or binding.kind not in {"pointer", "first_of"}:
+        raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+    pointers = (binding.pointer,) if binding.kind == "pointer" else binding.members
+    if any(pointer is None for pointer in pointers) or not pointers:
+        raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+    candidates = [lookup_pointer(pointer, context) for pointer in pointers if pointer is not None]
+    for found, value in candidates:
+        if found and value is not None:
+            return True, value
+    return False, None
+
+
+__all__ = ["lookup_pointer", "resolve_binding", "resolve_bindings", "resolve_source"]

@@ -433,7 +433,8 @@ async def _child(*, embedded: bool = False) -> None:
         "private-server-name",
     ):
         assert private not in serialized
-    assert all(not span.events for span in spans)
+    # Only fixed runtime events survive; SDK exception events never do.
+    assert {event.name for span in spans for event in span.events} <= {"route.selected"}
     assert all(span.status.description is None for span in spans)
     provider.shutdown()
     assert await asyncio.to_thread(logging_runtime.close, timeout=1)
@@ -474,9 +475,14 @@ def test_real_mcp_trace_continuity_and_privacy_in_isolated_process(embedded: boo
         "step_failed",
         "flow_failed",
         "run_failed",
+        "route_selected",
     }
-    scope_rows = [row for row in log_rows if row["event"] != "external_event"]
+    scope_rows = [
+        row for row in log_rows if row["event"] not in {"external_event", "route_selected"}
+    ]
     assert len(scope_rows) == 12
+    # Each start reports its route; only the completed run selects a transition.
+    assert sum(row["event"] == "route_selected" for row in log_rows) == 3
     assert all("trace_id" in row and "span_id" in row for row in scope_rows)
     report = json.loads(completed.stdout)
     assert report["traces"] == 2

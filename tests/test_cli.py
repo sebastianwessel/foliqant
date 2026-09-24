@@ -109,16 +109,17 @@ def test_scaffold_validate_explain_doctor_offline(tmp_path: Path) -> None:
     assert validation["status"] == "valid"
     assert validation["workflows"] == ["demo"]
     assert len(validation["configuration_digest"]) == 64
+    assert validation["diagnostics"] == []
 
     explained = _cli("explain", "--config", str(config), "--workflow", "demo")
     assert explained.returncode == 0
     report = json.loads(explained.stdout)
     plan = report["workflows"][0]
-    assert plan["name"] == "demo" and plan["start"] == "summarize"
+    assert plan["name"] == "demo" and plan["start"] == {"flow": "summarize"}
     assert len(plan["revision"]) == 64
     assert plan["flows"][0]["transition"] == {"outcome": "completed"}
     step = plan["flows"][0]["steps"][0]
-    assert step["name"] == "summarize" and step["type"] == "llm"
+    assert step["id"] == "summarize" and step["type"] == "llm"
     assert step["model"] == "local"
 
     diagnosed = _cli("doctor", "--config", str(config))
@@ -260,6 +261,7 @@ def test_explain_includes_flow_edges_and_alias_without_prompt_content(tmp_path):
     flow = json.loads(process.stdout)["workflows"][0]["flows"][0]
     assert flow["steps"][0]["model"] == "local"
     assert flow["transition"] == {
+        "binding": {"literal": True},
         "cases": {"yes": {"outcome": "completed"}},
         "default": {"outcome": "needs_review"},
     }

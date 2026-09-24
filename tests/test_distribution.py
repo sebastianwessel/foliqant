@@ -216,7 +216,11 @@ def _assert_installed_core_run(binary, bundle, environment):
     import subprocess
 
     config = bundle / "handler.yaml"
-    config.write_text("workflows: {demo: handler}\n")
+    config.write_text(
+        "workflows: {demo: handler}\n"
+        "handlers:\n  echo:\n    input_schema: {type: object}\n"
+        "    output_schema: {type: string}\n    effect: read\n"
+    )
     flow = bundle / "handler"
     flow.mkdir()
     (flow / "workflow.yaml").write_text(
@@ -247,7 +251,7 @@ async def echo(inputs, context):
 
 async def main():
     prepared = prepare_application(Path(sys.argv[1]), handlers={
-        'echo': HandlerRegistration(echo, {'type': 'object'}, {'type': 'string'})
+        'echo': HandlerRegistration(echo)
     })
     async with open_application(prepared, environment={}) as app:
         result = await app.run('demo', Envelope(payload={'value': 'installed'}))

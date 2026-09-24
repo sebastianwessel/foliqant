@@ -12,7 +12,6 @@ steps:
   - extract
 output:
   pointer: /steps/classify/selection/category/id
-  optional: true
   default: null
 ```
 

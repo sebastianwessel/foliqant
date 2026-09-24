@@ -23,6 +23,18 @@ flowchart TD
   generation, a trusted Python `handler`, an `mcp` tool call, or a bounded
   `flow_collection` of explicitly planned callable flows.
 
+Control flow is configuration, checked before any request runs:
+
+- **Routes**: exact `cases` with coverage checks, ordered `route` entries with a
+  closed condition language (`equals`, `in`, `matches`, `length`, `all`/`any`/`not`, ...),
+  and a routed `start`.
+- **Conditional steps** with `when`, and **bounded retries** with `repeat` and a
+  retry flow, while the graph stays acyclic.
+- **Projections** with `first_of` and object `fields` instead of glue code.
+- **Declared handler contracts** in settings, so `validate` and `explain` work
+  without host code; `explain --format mermaid` draws the graph and lists
+  compiler diagnostics.
+
 The model interprets data; it does not invent the workflow graph. Typed results
 and explicit review paths make its output usable by application code, but do
 not guarantee model accuracy. Measure that with reviewed evaluation data.
@@ -117,6 +129,7 @@ The runnable example includes synthetic ground truth and an offline mode.
 | Understand workflows, flows, steps, and results | [Runtime concepts](docs/concepts/runtime.md) |
 | Learn the folder layout and configuration | [Configuration guide](docs/configuration/index.md) |
 | Define workflows, flows, bindings, and routes | [Workflow guide](docs/configuration/workflows.md) |
+| Route on conditions, skip steps, and retry a flow | [Conditions](docs/configuration/conditions.md) · [Repeat](docs/configuration/repeat.md) |
 | Configure decisions, extraction, handlers, MCP, and agent loops | [Step types](docs/steps/index.md) |
 | Understand input/output shapes, reasons, evidence strength, and errors | [Inputs, results, and errors](docs/reference/inputs-and-results.md) |
 | Connect providers and tools | [Provider choice](docs/configuration/providers.md) · [Models](docs/configuration/models.md) · [MCP](docs/configuration/mcp.md) |

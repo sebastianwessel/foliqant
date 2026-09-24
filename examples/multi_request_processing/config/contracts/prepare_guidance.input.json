@@ -1,0 +1,18 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "language": {
+      "enum": [
+        "en",
+        "de"
+      ],
+      "title": "Language",
+      "type": "string"
+    }
+  },
+  "required": [
+    "language"
+  ],
+  "title": "GuidanceInput",
+  "type": "object"
+}

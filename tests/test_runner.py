@@ -54,7 +54,7 @@ def make_plan(
     flow = {
         "input": flow_input
         if flow_input is not None
-        else {"message": {"pointer": "/payload/message", "optional": True, "default": None}},
+        else {"message": {"pointer": "/payload/message", "default": None}},
         "definition": {
             "steps": [
                 {"id": name, "definition": load_yaml(body, relative_path="workflow.yaml")}
@@ -183,9 +183,10 @@ async def test_uncertainty_stops_local_sequence_before_successful_dispatch(tmp_p
 async def test_routes_only_to_configured_flow_target(
     tmp_path: Path, route: str, selected: str
 ) -> None:
+    # A handler without a declared output schema: the route value is runtime-checked.
     plan = make_plan(
         tmp_path,
-        {"first": _DECISION},
+        {"first": _HANDLER},
         output={"pointer": "/steps/first/result"},
         transition={
             "binding": {"pointer": "/flows/main/result"},
@@ -403,7 +404,7 @@ async def test_unmatched_routes_review_and_invalid_types_fail_safely(
 ) -> None:
     plan = make_plan(
         tmp_path,
-        {"first": _DECISION},
+        {"first": _HANDLER},
         output={"pointer": "/steps/first/result"},
         transition={
             "binding": {"pointer": "/flows/main/result"},

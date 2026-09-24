@@ -391,7 +391,7 @@ async def test_decision_output_is_semantically_validated_and_uncertainty_routes_
         _context(step.name),
     )
     assert outcome.needs_review is True
-    assert outcome.route_key is None
+    assert not hasattr(outcome, "route_key")
 
     async def invalid(_messages: Any, info: Any) -> ModelResponse:
         return _structured_response(info, _decision_result(option_id="unknown"))

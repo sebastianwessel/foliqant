@@ -344,7 +344,8 @@ class TelemetryRuntime:
             shutdown_on_exit=False,
             span_limits=SpanLimits(
                 max_attributes=64,
-                max_events=0,
+                # Only fixed runtime events survive SafeSpanProcessor filtering.
+                max_events=128,
                 max_links=32,
                 max_span_attributes=64,
                 max_event_attributes=16,

@@ -15,24 +15,31 @@ from foliqant.decisions import (
 from foliqant.decisions.category_catalog import CategoryDescription, CategoryKey
 
 from .base import BoundaryModel
+from .conditions import Condition, JsonPointer
 from .identifiers import Id as Id
 from .models import StepModel
 
 NonBlank = Annotated[str, Field(min_length=1, pattern=r".*\S.*")]
-JsonPointer = Annotated[str, Field(pattern=r"^(?:/(?:[^~/]|~[01])*)*$")]
 
 
 class PointerBinding(BoundaryModel):
+    """An RFC 6901 pointer; a declared ``default`` makes the binding optional."""
+
     pointer: JsonPointer
-    optional: StrictBool = False
     default: JsonValue | None = None
 
-    @model_validator(mode="after")
-    def explicit_fallback_only_for_optional(self) -> "PointerBinding":
-        has_default = "default" in self.model_fields_set
-        if self.optional != has_default:
-            raise ValueError("optional pointers require one explicit default")
-        return self
+
+class PointerMember(BoundaryModel):
+    """One `first_of` candidate; defaults belong to the enclosing binding."""
+
+    pointer: JsonPointer
+
+
+class FirstOfBinding(BoundaryModel):
+    """The first member that resolves to a non-null value, otherwise ``default``."""
+
+    first_of: Annotated[list[PointerMember], Field(min_length=1, max_length=16)]
+    default: JsonValue | None = None
 
 
 class LiteralBinding(BoundaryModel):
@@ -41,20 +48,45 @@ class LiteralBinding(BoundaryModel):
 
 def _binding_kind(value: object) -> str | None:
     if isinstance(value, Mapping):
-        if "pointer" in value and "literal" not in value:
-            return "pointer"
-        if "literal" in value and "pointer" not in value:
-            return "literal"
+        kinds = [kind for kind in ("pointer", "literal", "first_of") if kind in value]
+        return kinds[0] if len(kinds) == 1 else None
     if isinstance(value, PointerBinding):
         return "pointer"
     if isinstance(value, LiteralBinding):
         return "literal"
+    if isinstance(value, FirstOfBinding):
+        return "first_of"
     return None
 
 
 Binding = Annotated[
-    Annotated[PointerBinding, Tag("pointer")] | Annotated[LiteralBinding, Tag("literal")],
+    Annotated[PointerBinding, Tag("pointer")]
+    | Annotated[LiteralBinding, Tag("literal")]
+    | Annotated[FirstOfBinding, Tag("first_of")],
     Discriminator(_binding_kind),
+]
+
+
+class ObjectOutput(BoundaryModel):
+    """Project an object with exactly these keys, each resolved from one binding."""
+
+    fields: Annotated[dict[Id, Binding], Field(min_length=1, max_length=128)]
+
+
+def _output_kind(value: object) -> str | None:
+    if isinstance(value, Mapping) and "fields" in value:
+        return "fields"
+    if isinstance(value, ObjectOutput):
+        return "fields"
+    return _binding_kind(value)
+
+
+OutputBinding = Annotated[
+    Annotated[PointerBinding, Tag("pointer")]
+    | Annotated[LiteralBinding, Tag("literal")]
+    | Annotated[FirstOfBinding, Tag("first_of")]
+    | Annotated[ObjectOutput, Tag("fields")],
+    Discriminator(_output_kind),
 ]
 
 
@@ -107,10 +139,6 @@ QuestionShorthand = Annotated[
 ]
 
 
-class WorkflowDefaults(BoundaryModel):
-    model: Id | None = None
-
-
 class FallbackCategory(BoundaryModel):
     """Caller-defined fallback category, excluded from the model's options."""
 
@@ -136,6 +164,12 @@ class SourcePointerBinding(PointerBinding):
     format: Literal["text", "json"] = "text"
 
 
+class SourceFirstOfBinding(FirstOfBinding):
+    """The first present decision source candidate with explicit rendering."""
+
+    format: Literal["text", "json"] = "text"
+
+
 class SourceLiteralBinding(LiteralBinding):
     """A literal decision source with explicit optional JSON rendering."""
 
@@ -144,7 +178,8 @@ class SourceLiteralBinding(LiteralBinding):
 
 SourceBinding = Annotated[
     Annotated[SourcePointerBinding, Tag("pointer")]
-    | Annotated[SourceLiteralBinding, Tag("literal")],
+    | Annotated[SourceLiteralBinding, Tag("literal")]
+    | Annotated[SourceFirstOfBinding, Tag("first_of")],
     Discriminator(_binding_kind),
 ]
 
@@ -254,17 +289,29 @@ StepAuthoring = Annotated[
 
 
 class NamedStep(BoundaryModel):
-    """One ordered operation with an identity independent of its definition file."""
+    """One ordered operation with an identity independent of its definition file.
+
+    A step with ``when`` runs only when the condition holds; otherwise it is
+    recorded as ``skipped`` and the flow continues with the next step.
+    """
 
     id: Id
     definition: StepAuthoring | NonBlank | None = None
+    when: Condition | None = None
+
+
+class FlowDefaults(BoundaryModel):
+    """Defaults for the steps of one flow definition, overriding the workflow's."""
+
+    model: Id | None = None
 
 
 class FlowDefinition(BoundaryModel):
     """A reusable sequence; the containing workflow owns its instance identity."""
 
+    defaults: FlowDefaults = Field(default_factory=FlowDefaults)
     input_schema: NonBlank | dict[str, JsonValue] | None = None
-    output: Binding | None = None
+    output: OutputBinding | None = None
     steps: Annotated[list[NamedStep | Id], Field(min_length=1)]
 
     @field_validator("steps")
@@ -287,11 +334,56 @@ TransitionTarget = FlowTarget | OutcomeTarget
 
 
 class MatchRouting(BoundaryModel):
-    """Exact string matching with an explicit default, without coercion."""
+    """Exact string matching with an explicit default, without coercion.
+
+    ``default_covers`` lists the statically allowed values that deliberately
+    fall to ``default``; it must equal the uncovered set the compiler derives.
+    """
 
     binding: Binding
     cases: Annotated[dict[str, TransitionTarget], Field(min_length=1)]
     default: TransitionTarget
+    default_covers: Annotated[list[str], Field(min_length=1, max_length=256)] | None = None
+
+    @field_validator("default_covers")
+    @classmethod
+    def unique_covered_values(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and len(value) != len(set(value)):
+            raise ValueError("covered values must be unique")
+        return value
+
+
+class RouteEntry(BoundaryModel):
+    """One ordered route entry; the first entry whose condition holds is selected."""
+
+    when: Condition | None = None
+    flow: Id | None = None
+    outcome: Literal["completed", "needs_review"] | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_target(self) -> "RouteEntry":
+        if (self.flow is None) == (self.outcome is None):
+            raise ValueError("a route entry requires exactly one target")
+        return self
+
+
+class ConditionalRouting(BoundaryModel):
+    """Ordered conditional targets; the last entry is the unconditional otherwise."""
+
+    route: Annotated[list[RouteEntry], Field(min_length=1, max_length=32)]
+
+
+class StartRouteEntry(BoundaryModel):
+    """A start candidate; conditions read only ``/payload`` and ``/metadata``."""
+
+    when: Condition | None = None
+    flow: Id
+
+
+class StartRouting(BoundaryModel):
+    """Select the first flow from the accepted envelope."""
+
+    route: Annotated[list[StartRouteEntry], Field(min_length=1, max_length=32)]
 
 
 class UnresolvedRouting(BoundaryModel):
@@ -303,40 +395,140 @@ class UnresolvedRouting(BoundaryModel):
     multiple_valid_options: TransitionTarget | None = None
 
 
+def _route_kind(value: object) -> str | None:
+    """Select a routing form by its distinguishing key for precise diagnostics."""
+    if isinstance(value, Mapping):
+        for key, kind in (
+            ("route", "route"),
+            ("cases", "cases"),
+            ("binding", "cases"),
+            ("flow", "flow"),
+            ("outcome", "outcome"),
+            ("default", "issues"),
+        ):
+            if key in value:
+                return kind
+        return None
+    for model, kind in (
+        (ConditionalRouting, "route"),
+        (MatchRouting, "cases"),
+        (FlowTarget, "flow"),
+        (OutcomeTarget, "outcome"),
+        (UnresolvedRouting, "issues"),
+    ):
+        if isinstance(value, model):
+            return kind
+    return None
+
+
+Transition = Annotated[
+    Annotated[FlowTarget, Tag("flow")]
+    | Annotated[OutcomeTarget, Tag("outcome")]
+    | Annotated[MatchRouting, Tag("cases")]
+    | Annotated[ConditionalRouting, Tag("route")],
+    Discriminator(_route_kind),
+]
+ReviewRouting = Annotated[
+    Annotated[FlowTarget, Tag("flow")]
+    | Annotated[OutcomeTarget, Tag("outcome")]
+    | Annotated[UnresolvedRouting, Tag("issues")]
+    | Annotated[ConditionalRouting, Tag("route")],
+    Discriminator(_route_kind),
+]
+
+
+def _start_kind(value: object) -> str | None:
+    if isinstance(value, str):
+        return "flow"
+    if isinstance(value, Mapping | StartRouting):
+        return "route"
+    return None
+
+
+Start = Annotated[
+    Annotated[Id, Tag("flow")] | Annotated[StartRouting, Tag("route")],
+    Discriminator(_start_kind),
+]
+
+
+def _review_targets(
+    route: TransitionTarget | UnresolvedRouting | ConditionalRouting | None,
+) -> list[TransitionTarget | RouteEntry | None]:
+    if isinstance(route, UnresolvedRouting):
+        return [
+            route.default,
+            route.no_supported_answer,
+            route.conflicting_information,
+            route.multiple_valid_options,
+        ]
+    if isinstance(route, ConditionalRouting):
+        return list(route.route)
+    return [route]
+
+
+def _completes(target: TransitionTarget | RouteEntry | None) -> bool:
+    return (isinstance(target, OutcomeTarget) and target.outcome == "completed") or (
+        isinstance(target, RouteEntry) and target.outcome == "completed"
+    )
+
+
+class WorkflowDefaults(BoundaryModel):
+    """Workflow-wide defaults: step model and the inherited review route."""
+
+    model: Id | None = None
+    on_unresolved: ReviewRouting | None = None
+
+    @model_validator(mode="after")
+    def unresolved_does_not_complete(self) -> "WorkflowDefaults":
+        if any(_completes(target) for target in _review_targets(self.on_unresolved)):
+            raise ValueError("unresolved flows cannot directly complete the workflow")
+        return self
+
+
+class RepeatRetry(BoundaryModel):
+    """A callable flow run between two attempts of the repeated flow."""
+
+    flow: Id
+    input: dict[Id, Binding] = Field(default_factory=dict)
+    continue_when: Condition | None = None
+
+
+class Repeat(BoundaryModel):
+    """Bounded repetition of one flow instance; the static graph stays acyclic."""
+
+    max_attempts: Annotated[int, Field(strict=True, ge=2, le=64)]
+    until: Condition
+    retry: RepeatRetry | None = None
+    retry_input: dict[Id, Binding] = Field(default_factory=dict)
+
+
 class FlowInstance(BoundaryModel):
     """One named flow invocation with explicit boundary data and authored targets."""
 
     definition: FlowDefinition | NonBlank | None = None
     input: dict[Id, Binding]
-    transition: TransitionTarget | MatchRouting
-    on_unresolved: TransitionTarget | UnresolvedRouting | None = None
+    transition: Transition
+    on_unresolved: ReviewRouting | None = None
+    repeat: Repeat | None = None
 
     @model_validator(mode="after")
     def unresolved_does_not_complete(self) -> "FlowInstance":
-        route = self.on_unresolved
-        targets = (
-            [
-                route.default,
-                route.no_supported_answer,
-                route.conflicting_information,
-                route.multiple_valid_options,
-            ]
-            if isinstance(route, UnresolvedRouting)
-            else [route]
-        )
-        if any(
-            isinstance(target, OutcomeTarget) and target.outcome == "completed"
-            for target in targets
-        ):
+        if any(_completes(target) for target in _review_targets(self.on_unresolved)):
             raise ValueError("unresolved flows cannot directly complete the workflow")
         return self
 
 
 class CallableFlow(BoundaryModel):
-    """A flow available only to explicit collection calls, without boundary routes."""
+    """A flow available only to explicit collection or retry calls, without routes.
+
+    ``repeat`` repeats every collection item invocation; its bindings and
+    conditions read the item scope: ``/payload`` (the item input), ``/metadata``,
+    ``/flows/<self>/result|attempts`` and ``/flows/<retry>/result|attempts``.
+    """
 
     callable: Literal[True]
     definition: FlowDefinition | NonBlank | None = None
+    repeat: Repeat | None = None
 
     @field_validator("callable", mode="before")
     @classmethod
@@ -350,10 +542,10 @@ class WorkflowAuthoring(BoundaryModel):
     """A finite graph of explicit, sequential flow instances."""
 
     name: Id | None = None
-    start: Id | None = None
+    start: Start | None = None
     defaults: WorkflowDefaults = Field(default_factory=WorkflowDefaults)
     input_schema: NonBlank | dict[str, JsonValue] | None = None
-    output: Binding | None = None
+    output: OutputBinding | None = None
     flows: Annotated[dict[Id, FlowInstance | CallableFlow], Field(min_length=1)]
 
 

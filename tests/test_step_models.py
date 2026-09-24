@@ -419,9 +419,9 @@ def test_explain_names_provider_model_and_source_profile_without_credentials(tmp
         {"first": step(selection)},
         models={"local": profile(api_key="private-credential-sentinel")},
     )
-    report = _explain(path, "demo")
+    report = _explain(path, "demo", "json")
     model_step = next(
-        item for item in report["workflows"][0]["flows"][0]["steps"] if item["name"] == "first"
+        item for item in report["workflows"][0]["flows"][0]["steps"] if item["id"] == "first"
     )
     expected = {"provider": "openai_compatible", "model": "$STEP_MODEL"}
     if not inline:

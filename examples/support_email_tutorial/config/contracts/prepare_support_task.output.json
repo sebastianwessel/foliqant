@@ -1,0 +1,37 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "queue": {
+      "enum": [
+        "billing",
+        "cancellation"
+      ],
+      "title": "Queue",
+      "type": "string"
+    },
+    "account_reference": {
+      "title": "Account Reference",
+      "type": "string"
+    },
+    "plan": {
+      "title": "Plan",
+      "type": "string"
+    },
+    "next_step": {
+      "enum": [
+        "review_invoice",
+        "review_cancellation"
+      ],
+      "title": "Next Step",
+      "type": "string"
+    }
+  },
+  "required": [
+    "queue",
+    "account_reference",
+    "plan",
+    "next_step"
+  ],
+  "title": "PreparedTask",
+  "type": "object"
+}

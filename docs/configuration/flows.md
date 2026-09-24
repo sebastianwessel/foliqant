@@ -92,10 +92,58 @@ steps:
       output: text
 ```
 
-An explicit path is relative to `flow.yaml` and must remain inside that flow
-definition's directory. Markdown bodies are supported only for `decision` and
+An explicit path is relative to `flow.yaml` and may point anywhere inside the
+configuration root, so several flows can share one step file:
+
+```yaml
+steps:
+  - id: correct
+    definition: ../shared/correct.step.md
+```
+
+A shared step keeps its own resources: its schema paths are relative to the
+step file and must stay inside the step file's directory. Conventional lookup
+(without `definition`) still searches only beside `flow.yaml`. Markdown bodies
+are supported only for `decision` and
 `llm` steps. For those types, use either the Markdown body or an `instructions`
 field, never both.
+
+## Skip a step with `when`
+
+A step entry may carry a [condition](conditions.md). When it is false, the step
+is recorded as `skipped` and the flow continues with the next step:
+
+```yaml
+steps:
+  - check
+  - id: repair
+    when:
+      binding:
+        pointer: /steps/check/result/status
+      equals: invalid
+  - id: recheck
+    when:
+      binding:
+        pointer: /steps/repair/result
+      present: true
+```
+
+The `steps` list accepts a bare ID or an object with `id` and optional
+`definition` and `when`. A step condition reads `/payload`, `/metadata` and the
+records of **earlier** steps; a later step, or the step itself, can never have
+run and is rejected. Any step type may be conditional. A skipped step consumes
+no step budget and appears as `{"status": "skipped"}` in the result.
+
+Because a conditional step may not run, a binding to its result needs a
+`default`, exactly like a binding to a later step:
+
+```yaml
+repaired:
+  pointer: /steps/repair/result
+  default: null
+```
+
+Its `/steps/{id}/status` is always available.
 
 ## Project the flow result
 
@@ -110,13 +158,13 @@ output:
 Flow-local output pointers can read `/payload`, `/metadata`, and local
 `/steps/{id}` records. They cannot read `/flows` or another flow's step records.
 
-Every operation may stop the flow for review. A projection from any step after
-the first therefore needs a missing-value policy:
+Every operation may stop the flow for review, and a conditional step may be
+skipped. A projection from any step after the first, or from a conditional
+step, therefore needs a missing-value policy:
 
 ```yaml
 output:
   pointer: /steps/draft/result
-  optional: true
   default:
     disposition: review
 ```
@@ -125,6 +173,40 @@ This permits a prior step to return `needs_review` before `draft` runs. It does
 not turn that review into completion; it only gives the flow record a useful
 projected result. Technical failure preserves completed step records and the
 accepted input according to the public result contract.
+
+Project several values as one object with `fields`, and choose between
+alternative steps with `first_of`:
+
+```yaml
+output:
+  fields:
+    status:
+      pointer: /steps/check/result/status
+    fields:
+      first_of:
+        - pointer: /steps/recheck/result/fields
+        - pointer: /steps/check/result/fields
+    repaired:
+      pointer: /steps/repair/result
+      default: null
+```
+
+The projected value has exactly these keys. The compiler knows the object's
+shape, so later flows can bind `/flows/extract_fields/result/status` and route
+on it with coverage checks.
+
+## Set a flow model default
+
+A flow definition may declare `defaults.model`. It applies to the flow's
+`decision` and `llm` steps that select no model, and takes precedence over the
+workflow's `defaults.model`:
+
+```yaml
+defaults:
+  model: large
+steps:
+  - extract
+```
 
 ## Reuse definitions and distinguish callable flows
 
@@ -155,10 +237,12 @@ own IDs and flow records. The complete workflow graph must make every instance
 reachable and acyclic.
 
 A callable flow is different. Declare `callable: true` on its workflow entry,
-then invoke it only through a `flow_collection` step. It has no workflow input
-bindings or transition and cannot be the workflow start or a route target. Its
-`/payload` is the collection item's explicit `input`, and its result stays
-nested in the collection ledger. See
+then invoke it through a `flow_collection` step or as the retry flow of a
+[`repeat`](repeat.md). It has no workflow input bindings or transition and
+cannot be the workflow start or a route target. In a collection its `/payload`
+is the item's explicit `input` and its result stays nested in the collection
+ledger; as a retry flow its `/payload` is the resolved `retry.input` and its
+records appear under `/flows/{id}`. See
 [Flow collection steps](../steps/flow-collection.md) for item and limit rules.
 
 ## Work through an ordered example
@@ -180,7 +264,6 @@ In `config/support_intake/respond/flow.yaml`:
 ```yaml
 output:
   pointer: /steps/draft/result
-  optional: true
   default:
     disposition: review
 steps:

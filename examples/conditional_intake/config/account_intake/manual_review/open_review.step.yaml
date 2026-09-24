@@ -1,0 +1,7 @@
+type: handler
+handler: open_review
+input:
+  reference_status:
+    pointer: /payload/reference_status
+  plan:
+    pointer: /payload/plan

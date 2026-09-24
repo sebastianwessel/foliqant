@@ -1,0 +1,102 @@
+defaults:
+  model: local_qwen
+  on_unresolved:
+    flow: manual_review
+start:
+  route:
+    - when:
+        binding:
+          pointer: /payload/form/request_type
+        present: true
+      flow: extract
+    - flow: classify
+input_schema: input.schema.json
+output:
+  fields:
+    queue:
+      first_of:
+        - pointer: /payload/form/request_type
+        - pointer: /flows/classify/result
+      default: null
+    account:
+      pointer: /flows/lookup/result
+      default: null
+    review:
+      pointer: /flows/manual_review/result
+      default: null
+flows:
+  classify:
+    input:
+      message:
+        pointer: /payload/message
+    transition:
+      binding:
+        pointer: /flows/classify/result
+      cases:
+        billing:
+          flow: extract
+        cancellation:
+          flow: extract
+      default:
+        flow: manual_review
+  extract:
+    input:
+      message:
+        pointer: /payload/message
+      form_reference:
+        pointer: /payload/form/account_reference
+        default: null
+    transition:
+      route:
+        - when:
+            binding:
+              pointer: /flows/extract/result/status
+            equals: valid
+          flow: lookup
+        - flow: manual_review
+  lookup:
+    input:
+      account_reference:
+        pointer: /flows/extract/result/account_reference
+    repeat:
+      max_attempts: 2
+      until:
+        binding:
+          pointer: /flows/lookup/result/plan
+        not_equals: Unknown
+      retry:
+        flow: correct
+        input:
+          message:
+            pointer: /payload/message
+          rejected_reference:
+            pointer: /flows/lookup/result/account_reference
+        continue_when:
+          binding:
+            pointer: /flows/correct/result/status
+          equals: corrected
+      retry_input:
+        account_reference:
+          pointer: /flows/correct/result/account_reference
+    transition:
+      route:
+        - when:
+            binding:
+              pointer: /flows/lookup/result/plan
+            not_equals: Unknown
+          outcome: completed
+        - flow: manual_review
+  manual_review:
+    input:
+      reference_status:
+        pointer: /flows/extract/result/status
+        default: null
+      plan:
+        pointer: /flows/lookup/result/plan
+        default: null
+    transition:
+      outcome: needs_review
+    on_unresolved:
+      outcome: needs_review
+  correct:
+    callable: true

@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 import yaml
+from handler_contracts import declare
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 
@@ -34,7 +35,7 @@ async def _noop(inputs, context):
 def _prepare(path, *, handlers=None):
     registered = {"noop": HandlerRegistration(_noop, schema({}), schema({}))}
     registered.update(handlers or {})
-    return prepare_application(path, handlers=registered)
+    return prepare_application(declare(path, registered), handlers=registered)
 
 
 def settings(

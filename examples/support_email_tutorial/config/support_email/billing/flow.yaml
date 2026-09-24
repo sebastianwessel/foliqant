@@ -3,8 +3,12 @@ steps:
   - require_reference
   - lookup
   - draft
-  - assemble
 output:
-  pointer: /steps/assemble/result
-  optional: true
-  default: null
+  fields:
+    queue:
+      literal: billing
+    account_reference:
+      pointer: /steps/extract/result/account_reference
+    reply:
+      pointer: /steps/draft/result/reply
+      default: null

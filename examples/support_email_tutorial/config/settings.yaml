@@ -64,3 +64,20 @@ execution:
   run_timeout: 620
   model_timeout: 300
   tool_timeout: 3
+handlers:
+  require_reference:
+    input_schema: contracts/require_reference.input.json
+    output_schema: contracts/require_reference.output.json
+    effect: read
+  plan_support_requests:
+    input_schema: contracts/plan_support_requests.input.json
+    output_schema: contracts/plan_support_requests.output.json
+    effect: read
+  prepare_support_task:
+    input_schema: contracts/prepare_support_task.input.json
+    output_schema: contracts/prepare_support_task.output.json
+    effect: read
+  decide_support_disposition:
+    input_schema: contracts/decide_support_disposition.input.json
+    output_schema: contracts/decide_support_disposition.output.json
+    effect: read

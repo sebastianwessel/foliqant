@@ -1,13 +1,13 @@
 """Synchronous privacy filtering for OpenTelemetry spans before export queues."""
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import cast
 
 from opentelemetry import context as context_api
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor
+from opentelemetry.sdk.trace import Event, ReadableSpan, Span, SpanProcessor
 from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import Link, SpanContext, Status, StatusCode, TraceState
 from opentelemetry.util.types import AttributeValue
@@ -21,6 +21,32 @@ _GEN_AI_OPERATIONS = frozenset({"chat", "execute_tool", "inference", "invoke_age
 _MCP_METHODS = frozenset({"initialize", "server/discover", "ping", "tools/call", "tools/list"})
 _OUTCOMES = frozenset({"cancelled", "completed", "failed", "needs_review", "skipped"})
 _ERROR_TYPES = frozenset(item.value for item in ErrorCode)
+_CONDITION = re.compile(r"[^\x00-\x1f\x7f]{1,512}\Z")
+_EXECUTION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+_LOCATION = re.compile(r"[a-z0-9_.]{1,200}\Z")
+_ROLES = frozenset({"routed", "callable", "retry"})
+_ROUTE_KINDS = frozenset({"direct", "cases", "route", "review"})
+_OUTCOME_TARGETS = frozenset({"completed", "needs_review"})
+_STOPS = frozenset({"until", "exhausted", "continue_when", "review", "failure"})
+_ISSUES = frozenset({"no_supported_answer", "conflicting_information", "multiple_valid_options"})
+_OPERATORS = frozenset(
+    {
+        "present",
+        "empty",
+        "equals",
+        "not_equals",
+        "in",
+        "not_in",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "matches",
+        "length",
+    }
+)
+_MISMATCHES = frozenset({"incompatible_type", "value_too_long"})
+_MAX_EVENTS = 128
 
 _STRING_ATTRIBUTES = {
     "service.name": "services",
@@ -70,6 +96,10 @@ class TelemetryLabels:
     workflows: frozenset[str] = frozenset()
     steps: frozenset[str] = frozenset()
     flows: frozenset[str] = frozenset()
+    cases: frozenset[str] = frozenset()
+    """Configured `cases` keys, reported by `route.selected` events."""
+    conditions: frozenset[str] = frozenset()
+    """Condensed step conditions (pointers and operators only) for `step.skipped`."""
 
     def __post_init__(self) -> None:
         for values in (
@@ -80,12 +110,36 @@ class TelemetryLabels:
             self.workflows,
             self.steps,
             self.flows,
+            self.cases,
         ):
             if type(values) is not frozenset or len(values) > 1024:
                 raise ValueError("invalid telemetry label allowlist")
             for value in values:
                 if type(value) is not str or _LABEL.fullmatch(value) is None:
                     raise ValueError("invalid telemetry label")
+        if type(self.conditions) is not frozenset or len(self.conditions) > 4096:
+            raise ValueError("invalid telemetry condition allowlist")
+        for value in self.conditions:
+            if type(value) is not str or _CONDITION.fullmatch(value) is None:
+                raise ValueError("invalid telemetry condition label")
+
+    @classmethod
+    def accepted(cls, **groups: Iterable[str]) -> tuple["TelemetryLabels", int]:
+        """Keep representable labels only and return how many values were dropped.
+
+        Configuration values that cannot be exported safely (for example a model
+        ID with characters outside the label alphabet) are omitted from telemetry;
+        they never fail activation or disable the remaining observations.
+        """
+        kept: dict[str, frozenset[str]] = {}
+        dropped = 0
+        for name, values in groups.items():
+            pattern, limit = (_CONDITION, 4096) if name == "conditions" else (_LABEL, 1024)
+            unique = sorted(set(values))
+            valid = [value for value in unique if type(value) is str and pattern.fullmatch(value)]
+            dropped += len(unique) - min(len(valid), limit)
+            kept[name] = frozenset(valid[:limit])
+        return cls(**kept), dropped
 
 
 _DEFAULT_LABELS = TelemetryLabels()
@@ -179,7 +233,90 @@ def _safe_attributes(
         value = attributes.get(key)
         if type(value) is int and 0 <= value <= _MAX_COUNT:
             output[key] = value
+    role = attributes.get("foliqant.flow.role")
+    if type(role) is str and role in _ROLES:
+        output["foliqant.flow.role"] = role
+    for key, low, high in (
+        ("foliqant.flow.attempt", 1, 64),
+        ("foliqant.flow.max_attempts", 2, 64),
+        ("foliqant.collection.index", 0, 1023),
+    ):
+        value = attributes.get(key)
+        if type(value) is int and low <= value <= high:
+            output[key] = value
+    if attributes.get("foliqant.step.skipped") is True:
+        output["foliqant.step.skipped"] = True
+    execution = attributes.get("foliqant.execution.id")
+    if type(execution) is str and _EXECUTION_ID.fullmatch(execution):
+        output["foliqant.execution.id"] = execution
     return output
+
+
+def safe_event_attributes(
+    name: str, attributes: Mapping[str, object], labels: TelemetryLabels
+) -> dict[str, AttributeValue] | None:
+    """Keep only fixed event names and their allowlisted, content-free attributes.
+
+    Applied when an event is recorded and again on export, so spans on a
+    host-owned provider carry the same event content as exported runtime spans.
+    """
+    output: dict[str, AttributeValue] = {}
+    if name == "route.selected":
+        kind, target = attributes.get("kind"), attributes.get("target")
+        if type(kind) is not str or kind not in _ROUTE_KINDS:
+            return None
+        output["kind"] = kind
+        if type(target) is str and (target in labels.flows or target in _OUTCOME_TARGETS):
+            output["target"] = target
+        index = attributes.get("index")
+        if type(index) is int and 0 <= index <= 31:
+            output["index"] = index
+        case = attributes.get("case")
+        if type(case) is str and (case in labels.cases or case in _ISSUES):
+            output["case"] = case
+        return output
+    if name == "repeat.stopped":
+        stopped = attributes.get("stopped_by")
+        return {"stopped_by": stopped} if type(stopped) is str and stopped in _STOPS else None
+    if name == "step.skipped":
+        condition = attributes.get("condition")
+        if type(condition) is str and condition in labels.conditions:
+            output["condition"] = condition
+        return output
+    if name in {"condition.evaluated", "condition.type_mismatch"}:
+        location = attributes.get("location")
+        if type(location) is not str or _LOCATION.fullmatch(location) is None:
+            return None
+        output["location"] = location
+        result = attributes.get("result")
+        if name == "condition.evaluated" and type(result) is bool:
+            output["result"] = result
+        operator = attributes.get("operator")
+        if name == "condition.type_mismatch" and type(operator) is str and operator in _OPERATORS:
+            output["operator"] = operator
+        reason = attributes.get("reason")
+        if name == "condition.type_mismatch" and type(reason) is str and reason in _MISMATCHES:
+            output["reason"] = reason
+        return output
+    if name == "handler.review":
+        issues = attributes.get("issues")
+        if isinstance(issues, tuple) and all(
+            type(issue) is str and issue in _ISSUES for issue in issues
+        ):
+            output["issues"] = tuple(cast(tuple[str, ...], issues))
+        return output
+    return None
+
+
+def _safe_events(span: ReadableSpan, labels: TelemetryLabels) -> tuple[Event, ...]:
+    events: list[Event] = []
+    for event in span.events[:_MAX_EVENTS]:
+        safe = safe_event_attributes(
+            event.name, cast(Mapping[str, object], event.attributes or {}), labels
+        )
+        if safe is not None:
+            events.append(Event(event.name, safe, event.timestamp))
+    return tuple(events)
 
 
 def _safe_resource(resource: Resource, labels: TelemetryLabels) -> Resource:
@@ -205,7 +342,7 @@ def _safe_span(span: ReadableSpan, labels: TelemetryLabels) -> ReadableSpan:
         parent=_clean_context(span.parent),
         resource=_safe_resource(span.resource, labels),
         attributes=safe_attributes,
-        events=(),
+        events=_safe_events(span, labels),
         links=links,
         kind=span.kind,
         instrumentation_info=None,

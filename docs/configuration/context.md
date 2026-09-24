@@ -13,19 +13,25 @@ binding is declared:
 | Declaring location | Available pointer roots | Meaning |
 | --- | --- | --- |
 | Routed flow `input` | `/payload`, `/metadata`, `/flows/{id}/result` | Original workflow input, accepted metadata, and results of earlier dominating routed flows |
-| Workflow `output` or match `transition.binding` | `/payload`, `/metadata`, `/flows/{id}/result` | Original workflow boundary and completed routed flow results |
-| Step `input`, decision `sources`, or MCP `arguments` | `/payload`, `/metadata`, `/steps/{id}` | Current flow input, accepted metadata, and earlier local step records |
+| Workflow `output` or `transition.binding` | `/payload`, `/metadata`, `/flows/{id}/result` | Original workflow boundary and completed routed flow results |
+| `route` conditions (`transition`, `on_unresolved`) | `/payload`, `/metadata`, `/flows/{id}/result` | Any flow that may have run before this point; absence is tolerated |
+| `start.route` conditions | `/payload`, `/metadata` | The accepted envelope only |
+| `repeat` bindings and conditions | Workflow roots plus `/flows/{self}/result`, `/flows/{self}/attempts` | The repeated flow's latest attempt; `retry_input` and `continue_when` also see the retry flow |
+| Step `input`, decision `sources`, MCP `arguments`, step `when` | `/payload`, `/metadata`, `/steps/{id}` | Current flow input, accepted metadata, and earlier local step records |
 | Flow `output` | `/payload`, `/metadata`, `/steps/{id}` | Current flow input and local step records |
-| Callable flow | Same local flow scope | `/payload` is the collection item's explicit child `input` |
+| Callable flow | Same local flow scope | `/payload` is the collection item's `input` or the resolved `retry.input` |
 
 Workflow-boundary bindings cannot reach `/steps`. Flow-local bindings cannot
-reach `/flows`. Callable results stay inside their collection step record and
-do not become top-level `/flows` entries.
+reach `/flows`. Collection results stay inside their collection step record
+and do not become top-level `/flows` entries; a retry flow's records do appear
+under `/flows/{id}`, readable only with a `default`.
 
 A pointer to a prior routed flow must refer to its projected
-`/flows/{id}/result`, not its internal steps. The compiler also checks graph
-dominance: a required reference is valid only when that flow completed on every
-path to the binding.
+`/flows/{id}/result` (or, for a repeated flow, `/flows/{id}/attempts`), not its
+internal steps. Each attempt entry holds `attempt`, `status` and, when present,
+`result` and `error`; step records, usage and timing appear only in the
+execution result. The compiler also checks graph dominance: a required reference
+is valid only when that flow completed on every path to the binding.
 
 ## Use literals, pointers, and missing-value defaults
 
@@ -43,19 +49,18 @@ message:
 empty pointer selects the complete context available at that boundary, although
 named, narrow pointers are usually easier to review.
 
-Required pointers fail if the value is missing. To permit absence, set
-`optional: true` and provide an explicit `default`:
+Required pointers fail if the value is missing. A binding becomes optional by
+declaring a `default`; there is no separate flag:
 
 ```yaml
 language:
   pointer: /payload/language
-  optional: true
   default: en
 ```
 
-`optional` and `default` must appear together. A default on a required pointer
-is invalid. Defaults apply only to a missing path; explicit `null`, `false`,
-zero, and empty collections are present values and are preserved.
+`default: null` is a valid default. Defaults apply only to a missing path;
+explicit `null`, `false`, zero, and empty collections are present values and are
+preserved.
 
 Where schemas make source and target types knowable, compilation rejects
 missing properties and incompatible bindings. Open or complex schemas are
@@ -80,14 +85,13 @@ model selection is separately available under
 Bindings can also inspect public fields such as `status`, `kind`, and safe
 `error` where the operation contract exposes them.
 
-A required step pointer may refer only to an earlier entry in the same flow.
-When early review can prevent a later step from running, an output or later
-optional consumer can state a default explicitly:
+A required step pointer may refer only to an earlier, unconditional entry in
+the same flow. When early review or a step `when` can prevent a step from
+running, a later consumer or the output states a default explicitly:
 
 ```yaml
 draft:
   pointer: /steps/draft/result
-  optional: true
   default: null
 ```
 
@@ -108,6 +112,46 @@ flows:
 This boundary prevents a downstream flow from reaching into
 `/flows/classify/steps/...`. Project the needed value from `classify`, then bind
 that value explicitly.
+
+## Combine candidates and build objects
+
+After alternative paths, `first_of` selects the first member that is present:
+it resolves and is not `null`. Without a present member it uses `default`;
+without a `default` the binding is required and a run with no present member
+fails with `missing_binding`:
+
+```yaml
+lookup:
+  first_of:
+    - pointer: /flows/lookup_corrected_fund/result
+    - pointer: /flows/lookup_fund/result
+  default: null
+```
+
+Members are pointers without their own default (1 to 16). `first_of` is allowed
+wherever a binding is: flow and step `input`, MCP `arguments`, decision
+`sources` (with `format`), `output`, and as a condition source. Without a
+`default`, at least one member must be available on every path (the payload,
+metadata, a dominating flow or an earlier unconditional step), otherwise
+compilation fails with `unavailable_flow_reference` or
+`unavailable_step_reference`. Every member is type-checked.
+
+A flow or workflow `output` may be an object built from bindings:
+
+```yaml
+output:
+  fields:
+    status:
+      pointer: /steps/check/result/status
+    repaired:
+      pointer: /steps/repair/result
+      default: null
+```
+
+`fields` maps IDs to bindings of any form. The projected object has exactly
+these keys, the same availability rules as `input` apply to every field, and
+the compiler derives the object's static shape from its members, so later
+bindings and route coverage checks can see into it.
 
 Decision sources add one rendering choice:
 

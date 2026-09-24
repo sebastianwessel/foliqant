@@ -110,18 +110,30 @@ class StepRecord:
 
 @dataclass(frozen=True, slots=True)
 class StepOutcome:
-    """Validated adapter output with explicit business review/routing facts."""
+    """Validated adapter output with explicit business review facts.
+
+    ``unresolved_issues`` select issue-specific review routes; they require
+    ``needs_review``. ``selection`` is an effective classification whose origin
+    is ``fallback`` exactly when the step needs review.
+    """
 
     result: FrozenJson
     needs_review: bool = False
-    route_key: str | None = None
     selection: Selection | None = None
     unresolved_issues: tuple[DecisionIssue, ...] = ()
 
 
+type RepeatStop = Literal["until", "exhausted", "continue_when", "review", "failure"]
+
+
 @dataclass(frozen=True, slots=True)
 class FlowRecord:
-    """One sequential flow, including unvisited steps and an explicit result presence."""
+    """One sequential flow, including unvisited steps and an explicit result presence.
+
+    For a repeated or retry flow, the top-level fields describe the last run and
+    ``attempts`` retains every run in order; ``stopped_by`` explains why a
+    repeated flow stopped.
+    """
 
     status: StepStatus
     steps: tuple[tuple[str, StepRecord], ...]
@@ -130,16 +142,65 @@ class FlowRecord:
     usage: Usage | None = None
     elapsed_seconds: float | None = None
     error: Failure | None = None
+    attempts: tuple["FlowRecord", ...] = ()
+    stopped_by: RepeatStop | None = None
+
+    @property
+    def attempt_count(self) -> int:
+        """Number of executions: zero for a skipped flow."""
+        if self.attempts:
+            return len(self.attempts)
+        return 0 if self.status == "skipped" else 1
+
+    @property
+    def total_usage(self) -> Usage | None:
+        """Usage of every run, counted once."""
+        if not self.attempts:
+            return self.usage
+        total = Usage()
+        for attempt in self.attempts:
+            if attempt.usage is not None:
+                total = total.plus(attempt.usage)
+        return total
+
+    @property
+    def total_elapsed_seconds(self) -> float | None:
+        if not self.attempts:
+            return self.elapsed_seconds
+        return sum(attempt.elapsed_seconds or 0.0 for attempt in self.attempts)
+
+
+type RouteKind = Literal["direct", "cases", "route", "review"]
 
 
 @dataclass(frozen=True, slots=True)
 class TransitionRecord:
-    """An authored boundary selected after a completed or unresolved flow."""
+    """An authored boundary selected after a completed or unresolved flow.
+
+    ``route_kind`` names the configuration form that selected the target;
+    ``route_index`` is the ``route`` entry index and ``route_case`` the matched
+    case key or review issue.
+    """
 
     source: str
     reason: Literal["completed", "needs_review"]
     flow: str | None = None
     outcome: Literal["completed", "needs_review"] | None = None
+    route_kind: RouteKind = "direct"
+    route_index: int | None = None
+    route_case: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StartRecord:
+    """The first flow of a run and the ``start`` form that selected it.
+
+    ``route_index`` is the selected entry of a routed ``start``.
+    """
+
+    flow: str
+    route_kind: Literal["direct", "route"] = "direct"
+    route_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +215,8 @@ class RunResult:
     usage: Usage
     error: Failure | None = None
     transitions: tuple[TransitionRecord, ...] = ()
+    trace: tuple[str, str] | None = None
+    start: StartRecord | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +252,25 @@ def step_record_value(record: StepRecord) -> FrozenObject:
 
 def flow_record_value(record: FlowRecord) -> FrozenObject:
     """Include every local step exactly once in a flow's public ledger record."""
+    value = _flow_value(record)
+    value["attempt_count"] = record.attempt_count
+    if record.attempts:
+        value["attempts"] = tuple(
+            MappingProxyType({"attempt": index, **_flow_value(attempt)})
+            for index, attempt in enumerate(record.attempts, start=1)
+        )
+        total = record.total_usage
+        if total is not None:
+            value["attempts_usage"] = usage_value(total)
+        elapsed = record.total_elapsed_seconds
+        if elapsed is not None:
+            value["attempts_elapsed_seconds"] = elapsed
+    if record.stopped_by is not None:
+        value["repeat"] = MappingProxyType({"stopped_by": record.stopped_by})
+    return MappingProxyType(value)
+
+
+def _flow_value(record: FlowRecord) -> dict[str, FrozenJson]:
     value = _record_value(record)
     steps: dict[str, FrozenJson] = {}
     for name, step in record.steps:
@@ -196,7 +278,7 @@ def flow_record_value(record: FlowRecord) -> FrozenObject:
             raise ServiceError(ErrorCode.INVALID_OUTPUT)
         steps[name] = step_record_value(step)
     value["steps"] = MappingProxyType(steps)
-    return MappingProxyType(value)
+    return value
 
 
 def _record_value(record: StepRecord | FlowRecord) -> dict[str, FrozenJson]:

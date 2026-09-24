@@ -226,7 +226,6 @@ async def test_early_review_can_project_explicit_missing_default() -> None:
         output=BindingPlan(
             kind="pointer",
             pointer="/steps/step_1/result",
-            optional=True,
             has_default=True,
             default=None,
         ),

@@ -117,6 +117,13 @@ class Usage(_ExecutionBoundary):
         return self
 
 
+class TraceIds(_ExecutionBoundary):
+    """OpenTelemetry identifiers of the run span, for host log correlation."""
+
+    trace_id: Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{32}$")]
+    span_id: Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{16}$")]
+
+
 class ExecutionInfo(_ExecutionBoundary):
     model_config = ConfigDict(
         json_schema_extra={
@@ -139,12 +146,15 @@ class ExecutionInfo(_ExecutionBoundary):
     status: RunStatus
     usage: Usage
     error: SafeError | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+    trace: TraceIds | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
 
     @model_validator(mode="after")
     def status_matches_error_presence(self) -> Self:
         has_error = "error" in self.model_fields_set
         if has_error and self.error is None:
             raise ValueError("error must be omitted rather than null")
+        if "trace" in self.model_fields_set and self.trace is None:
+            raise ValueError("trace must be omitted rather than null")
         if self.status in {"failed", "cancelled"}:
             if not has_error:
                 raise ValueError("terminal failure status requires an error")
@@ -155,8 +165,9 @@ class ExecutionInfo(_ExecutionBoundary):
     @model_serializer(mode="wrap")
     def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
         values = cast(dict[str, JsonValue], handler(self))
-        if "error" not in self.model_fields_set:
-            values.pop("error", None)
+        for name in ("error", "trace"):
+            if name not in self.model_fields_set:
+                values.pop(name, None)
         return values
 
 
@@ -287,8 +298,14 @@ class StepResult(_ExecutionBoundary):
             expected_status = "completed" if self.selection.origin == "model" else "needs_review"
             if self.status != expected_status:
                 raise ValueError("selection origin must match step status")
-            if not isinstance(self.result, dict) or self.result.get("type") != "choice":
-                raise ValueError("selection requires a native choice result")
+        # A native choice result (decision steps) must agree with its selection;
+        # a trusted handler may attach a selection to its own result shape.
+        if (
+            "selection" in self.model_fields_set
+            and self.selection is not None
+            and isinstance(self.result, dict)
+            and self.result.get("type") == "choice"
+        ):
             ChoiceResult.model_validate(self.result, strict=True)
             answerability = self.result.get("answerability")
             if not isinstance(answerability, dict):
@@ -350,37 +367,38 @@ class StepResult(_ExecutionBoundary):
         return values
 
 
-class FlowResult(_ExecutionBoundary):
-    """A flow's scoped step records and explicitly present projected result."""
+_FLOW_STATUS_RULES: JsonDict = {
+    "oneOf": [
+        {
+            "properties": {"status": {"const": "completed"}},
+            "required": ["result"],
+            "not": {"required": ["error"]},
+        },
+        {
+            "properties": {"status": {"const": "needs_review"}},
+            "not": {"required": ["error"]},
+        },
+        {
+            "properties": {"status": {"const": "failed"}},
+            "required": ["error"],
+            "not": {"required": ["result"]},
+        },
+        {
+            "properties": {"status": {"const": "cancelled"}},
+            "not": {"required": ["result"]},
+        },
+        {
+            "properties": {"status": {"const": "skipped"}},
+            "not": {"anyOf": [{"required": ["result"]}, {"required": ["error"]}]},
+        },
+    ]
+}
 
-    model_config = ConfigDict(
-        json_schema_extra={
-            "oneOf": [
-                {
-                    "properties": {"status": {"const": "completed"}},
-                    "required": ["result"],
-                    "not": {"required": ["error"]},
-                },
-                {
-                    "properties": {"status": {"const": "needs_review"}},
-                    "not": {"required": ["error"]},
-                },
-                {
-                    "properties": {"status": {"const": "failed"}},
-                    "required": ["error"],
-                    "not": {"required": ["result"]},
-                },
-                {
-                    "properties": {"status": {"const": "cancelled"}},
-                    "not": {"required": ["result"]},
-                },
-                {
-                    "properties": {"status": {"const": "skipped"}},
-                    "not": {"anyOf": [{"required": ["result"]}, {"required": ["error"]}]},
-                },
-            ]
-        }
-    )
+
+class _FlowRun(_ExecutionBoundary):
+    """One execution of a flow: scoped step records and a projected result."""
+
+    model_config = ConfigDict(json_schema_extra=_FLOW_STATUS_RULES)
 
     status: StepStatus
     steps: dict[Id, StepResult]
@@ -405,13 +423,56 @@ class FlowResult(_ExecutionBoundary):
     @model_serializer(mode="wrap")
     def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
         values = cast(dict[str, JsonValue], handler(self))
-        for name in ("result", "error"):
+        for name in ("result", "error", "attempts", "repeat", "retry"):
             if name not in self.model_fields_set:
                 values.pop(name, None)
-        for name in ("usage", "elapsed_seconds"):
-            if getattr(self, name) is None:
+        for name in ("usage", "elapsed_seconds", "attempts_usage", "attempts_elapsed_seconds"):
+            if getattr(self, name, None) is None:
                 values.pop(name, None)
         return values
+
+
+class FlowAttempt(_FlowRun):
+    """One attempt of a repeated flow, or one run of a retry flow."""
+
+    attempt: Annotated[int, Field(strict=True, ge=1, le=64)]
+
+
+class RepeatInfo(_ExecutionBoundary):
+    """Why a repeated flow stopped; exhaustion is not a review."""
+
+    stopped_by: Literal["until", "exhausted", "continue_when", "review", "failure"]
+
+
+class FlowResult(_FlowRun):
+    """A flow's scoped step records and explicitly present projected result.
+
+    ``attempt_count`` counts executions (zero when skipped). Repeated and retry
+    flows list every run in ``attempts``; the top-level fields describe the last
+    run and ``attempts_usage`` / ``attempts_elapsed_seconds`` sum all runs.
+    """
+
+    attempt_count: Annotated[int, Field(strict=True, ge=0, le=64)]
+    attempts: (
+        Annotated[list[FlowAttempt], Field(min_length=1, max_length=64)] | SkipJsonSchema[None]
+    ) = Field(default=None, json_schema_extra=_omit_default)
+    attempts_usage: Usage | None = None
+    attempts_elapsed_seconds: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    repeat: RepeatInfo | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+
+    @model_validator(mode="after")
+    def attempts_match_count(self) -> Self:
+        for name in ("attempts", "repeat"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError("absent attempt facts are omitted rather than null")
+        if self.attempts is not None:
+            if len(self.attempts) != self.attempt_count or [
+                item.attempt for item in self.attempts
+            ] != list(range(1, len(self.attempts) + 1)):
+                raise ValueError("attempts must be numbered from one and match the count")
+        elif self.attempt_count != (0 if self.status == "skipped" else 1):
+            raise ValueError("a flow without attempts ran once or was skipped")
+        return self
 
 
 class FlowCollectionItem(_ExecutionBoundary):
@@ -423,10 +484,21 @@ class FlowCollectionItem(_ExecutionBoundary):
 
 
 class FlowCollectionItemResult(FlowResult):
-    """One collection item's complete flow record, including skipped local steps."""
+    """One collection item's complete flow record, including skipped local steps.
+
+    A callable flow with ``repeat`` carries its attempts like a routed flow;
+    ``retry`` records the item's retry flow runs (last run plus ``attempts``).
+    """
 
     id: Id
     flow: Id
+    retry: FlowResult | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+
+    @model_validator(mode="after")
+    def retry_is_omitted_rather_than_null(self) -> Self:
+        if "retry" in self.model_fields_set and self.retry is None:
+            raise ValueError("retry must be omitted rather than null")
+        return self
 
 
 class FlowCollectionResult(_ExecutionBoundary):
@@ -442,8 +514,32 @@ class FlowCollectionResult(_ExecutionBoundary):
 
 
 StepResult.model_rebuild()
+FlowAttempt.model_rebuild()
 FlowResult.model_rebuild()
 FlowCollectionItemResult.model_rebuild()
+
+
+class RouteSelection(_ExecutionBoundary):
+    """Which configuration form selected a target.
+
+    ``index`` is the selected ``route`` entry; ``case`` is the matched case key
+    (``cases``) or the review issue that selected an issue-specific target.
+    Both are omitted when they do not apply, for example for ``default``.
+    """
+
+    kind: Literal["direct", "cases", "route", "review"]
+    index: Annotated[int, Field(strict=True, ge=0, le=31)] | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+    case: _NonBlank | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        for name in ("index", "case"):
+            if name not in self.model_fields_set:
+                values.pop(name, None)
+        return values
 
 
 class TransitionResult(_ExecutionBoundary):
@@ -464,6 +560,7 @@ class TransitionResult(_ExecutionBoundary):
     outcome: Literal["completed", "needs_review"] | SkipJsonSchema[None] = Field(
         default=None, json_schema_extra=_omit_default
     )
+    route: RouteSelection
 
     @model_validator(mode="after")
     def exactly_one_target(self) -> Self:
@@ -484,12 +581,55 @@ class TransitionResult(_ExecutionBoundary):
         return values
 
 
+class StartRoute(_ExecutionBoundary):
+    """Which ``start`` form selected the first flow; ``index`` for a routed start."""
+
+    kind: Literal["direct", "route"]
+    index: Annotated[int, Field(strict=True, ge=0, le=31)] | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        if "index" not in self.model_fields_set:
+            values.pop("index", None)
+        return values
+
+
+class StartResult(_ExecutionBoundary):
+    """The first flow of a workflow run and how it was selected."""
+
+    flow: Id
+    route: StartRoute
+
+
 class ExecutionResult(_ExecutionBoundary):
+    """One run: projected payload, flow records, transitions and terminal facts.
+
+    ``start`` is present for workflow runs and omitted for isolated flow or step
+    runs, which have no start selection.
+    """
+
     payload: JsonValue
     metadata: Metadata
     flows: dict[Id, FlowResult]
+    start: StartResult | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
     transitions: list[TransitionResult]
     execution: ExecutionInfo
+
+    @model_validator(mode="after")
+    def start_is_omitted_rather_than_null(self) -> Self:
+        if "start" in self.model_fields_set and self.start is None:
+            raise ValueError("start must be omitted rather than null")
+        return self
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        if "start" not in self.model_fields_set:
+            values.pop("start", None)
+        return values
 
     @field_validator("metadata", mode="before")
     @classmethod
@@ -548,6 +688,12 @@ def to_execution_result(value: RunResult) -> ExecutionResult:
                 item["flow"] = transition.flow
             if transition.outcome is not None:
                 item["outcome"] = transition.outcome
+            route: dict[str, JsonValue] = {"kind": transition.route_kind}
+            if transition.route_index is not None:
+                route["index"] = transition.route_index
+            if transition.route_case is not None:
+                route["case"] = transition.route_case
+            item["route"] = route
             transitions.append(item)
         execution: dict[str, JsonValue] = {
             "id": value.execution_id,
@@ -558,15 +704,20 @@ def to_execution_result(value: RunResult) -> ExecutionResult:
         }
         if value.error is not None:
             execution["error"] = _safe_error(value.error)
-        return ExecutionResult.model_validate(
-            {
-                "payload": thaw_json(value.payload),
-                "metadata": thaw_json(value.metadata),
-                "flows": flows,
-                "transitions": transitions,
-                "execution": execution,
-            },
-            strict=True,
-        )
+        if value.trace is not None:
+            execution["trace"] = {"trace_id": value.trace[0], "span_id": value.trace[1]}
+        document: dict[str, JsonValue] = {
+            "payload": thaw_json(value.payload),
+            "metadata": thaw_json(value.metadata),
+            "flows": flows,
+            "transitions": transitions,
+            "execution": execution,
+        }
+        if value.start is not None:
+            start_route: dict[str, JsonValue] = {"kind": value.start.route_kind}
+            if value.start.route_index is not None:
+                start_route["index"] = value.start.route_index
+            document["start"] = {"flow": value.start.flow, "route": start_route}
+        return ExecutionResult.model_validate(document, strict=True)
     except (ServiceError, TypeError, ValueError, ValidationError):
         raise ServiceError(ErrorCode.INVALID_OUTPUT) from None

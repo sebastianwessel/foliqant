@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "enum": [
+        "unclassified",
+        "reference_missing",
+        "reference_invalid",
+        "account_unknown"
+      ]
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false
+}

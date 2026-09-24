@@ -20,11 +20,15 @@ Handler = Callable[[FrozenObject, StepContext], Awaitable[StepOutcome]]
 
 @dataclass(frozen=True, slots=True)
 class HandlerRegistration:
-    """Register trusted code explicitly; YAML can only select its registered name."""
+    """Register trusted code explicitly; YAML can only select its declared name.
+
+    The contract (schemas and effect) is declared in ``settings.yaml``. Schemas
+    given here are optional; when present they must equal the declaration.
+    """
 
     handler: Handler
-    input_schema: FrozenObject
-    output_schema: FrozenObject
+    input_schema: FrozenObject | None = None
+    output_schema: FrozenObject | None = None
     effect: Literal["read", "write"] = "read"
 
     def __post_init__(self) -> None:
@@ -34,7 +38,10 @@ class HandlerRegistration:
         if not is_async or self.effect not in {"read", "write"}:
             raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
         for field in ("input_schema", "output_schema"):
-            frozen = freeze_json(getattr(self, field))
+            value = getattr(self, field)
+            if value is None:
+                continue
+            frozen = freeze_json(value)
             if not isinstance(frozen, Mapping):
                 raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
             object.__setattr__(self, field, frozen)
@@ -54,6 +61,8 @@ class HandlerExecutor:
         self._handlers: dict[str, _Binding] = {}
         try:
             for name, registration in handlers.items():
+                if registration.input_schema is None or registration.output_schema is None:
+                    raise ValueError("handler contract is not resolved")
                 self._handlers[name] = _Binding(
                     registration,
                     validate_confined_tool_schema(
@@ -96,4 +105,10 @@ class HandlerExecutor:
             binding.output.validate(thaw_json(frozen))
         except Exception:
             raise ServiceError(ErrorCode.INVALID_OUTPUT) from None
-        return StepOutcome(frozen, needs_review=outcome.needs_review, route_key=outcome.route_key)
+        # Review facts pass through unchanged; the runner validates their shape.
+        return StepOutcome(
+            frozen,
+            needs_review=outcome.needs_review,
+            selection=outcome.selection,
+            unresolved_issues=outcome.unresolved_issues,
+        )

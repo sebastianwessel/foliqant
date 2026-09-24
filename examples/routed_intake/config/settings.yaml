@@ -17,3 +17,12 @@ execution:
   queue_limit: 0
   model_timeout: 300
   run_timeout: 610
+handlers:
+  prepare_billing:
+    input_schema: contracts/handoff.input.json
+    output_schema: contracts/handoff.output.json
+    effect: read
+  prepare_cancellation:
+    input_schema: contracts/handoff.input.json
+    output_schema: contracts/handoff.output.json
+    effect: read

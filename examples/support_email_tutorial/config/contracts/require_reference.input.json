@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "account_reference": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "account_reference"
+  ],
+  "additionalProperties": false
+}

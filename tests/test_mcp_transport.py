@@ -725,3 +725,200 @@ async def test_http_auth_requests_cannot_leave_configured_origins(
         "https://auth.example.test/authorize",
     ]
     assert allowed_provider.scopes[0].identity == Identity("tenant", "bob")
+
+
+async def test_streamable_http_requests_carry_the_w3c_carrier_of_each_call() -> None:
+    """Remote MCP servers join the trace: every HTTP request carries traceparent."""
+    from foliqant.adapters.mcp.runtime import McpRuntime
+
+    server = MCPServer("test-tools")
+
+    @server.tool()
+    async def echo(value: str) -> str:
+        return value
+
+    app = server.streamable_http_app(stateless_http=True, host="tools.example.test")
+    seen: list[tuple[str | None, str | None]] = []
+
+    async def capture(scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") == "http" and scope.get("method") == "POST":
+            headers = dict(scope["headers"])
+            seen.append(
+                (
+                    headers.get(b"traceparent", b"").decode() or None,
+                    headers.get(b"tracestate", b"").decode() or None,
+                )
+            )
+        await app(scope, receive, send)
+
+    def create_client(
+        *,
+        auth: httpx2.Auth | None,
+        timeout: httpx2.Timeout,
+        request_hooks: list[Callable[[httpx2.Request], Awaitable[None]]],
+    ) -> httpx2.AsyncClient:
+        return httpx2.AsyncClient(
+            auth=auth,
+            timeout=timeout,
+            follow_redirects=False,
+            trust_env=False,
+            event_hooks={"request": request_hooks},
+            transport=httpx2.ASGITransport(app=capture),
+        )
+
+    async with app.router.lifespan_context(app):
+        discovery = McpClientSessionFactory(
+            _profiles(), credential_providers={}, http_client_factory=create_client
+        )
+        async with discovery.open("tools", _context(Identity("tenant", "alice"))) as client:
+            declared = (await client.list_tools()).tools[0]
+        profiles = _profiles().model_dump(mode="json")
+        profiles["servers"]["tools"]["catalog"]["tools"] = {
+            "echo": {
+                "input_schema": declared.input_schema,
+                "output_schema": declared.output_schema,
+                "effect": "read",
+            }
+        }
+        current: dict[str, str] = {}
+
+        def carrier() -> dict[str, str]:
+            return current
+
+        class Allow:
+            async def authorize(self, server, tool, arguments, context):  # type: ignore[no-untyped-def]
+                return None
+
+        runtime = McpRuntime(
+            McpProfiles.model_validate(profiles, strict=True),
+            McpClientSessionFactory(
+                McpProfiles.model_validate(profiles, strict=True),
+                credential_providers={},
+                http_client_factory=create_client,
+            ),
+            Allow(),
+            trace_carrier=carrier,
+        )
+        seen.clear()
+        context = _context(Identity("tenant", "alice"))
+        async with runtime.open("tools", ("echo",), context) as tools:
+            current = {"traceparent": f"00-{'1' * 32}-{'2' * 16}-01", "tracestate": "vendor=a"}
+            assert await tools.call("echo", {"value": "hello"}) is not None
+    discovery_headers = seen[:-1]
+    assert seen[-1] == (f"00-{'1' * 32}-{'2' * 16}-01", "vendor=a")
+    # Discovery ran before a carrier existed: no stale or foreign headers are sent.
+    assert all(header == (None, None) for header in discovery_headers)
+
+
+async def test_concurrent_calls_on_one_session_each_send_their_own_carrier() -> None:
+    """Parallel tool calls never exchange traceparents: headers mirror each request."""
+    import contextvars
+    from dataclasses import replace
+
+    from foliqant.adapters.mcp.runtime import McpRuntime
+
+    server = MCPServer("test-tools")
+    both_started = asyncio.Event()
+    started: list[str] = []
+
+    @server.tool()
+    async def echo(value: str) -> str:
+        started.append(value)
+        if len(started) == 2:
+            both_started.set()
+        # Both requests are in flight before either answers.
+        await asyncio.wait_for(both_started.wait(), timeout=2)
+        return value
+
+    app = server.streamable_http_app(stateless_http=True, host="tools.example.test")
+    seen: list[tuple[str | None, str | None]] = []
+
+    async def capture(scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http" or scope.get("method") != "POST":
+            await app(scope, receive, send)
+            return
+        headers = dict(scope["headers"])
+        chunks: list[bytes] = []
+
+        async def tee() -> Any:
+            message = await receive()
+            if message.get("type") != "http.request":
+                return message
+            chunks.append(message.get("body", b""))
+            if not message.get("more_body"):
+                body = json.loads(b"".join(chunks) or b"{}")
+                if body.get("method") == "tools/call":
+                    seen.append(
+                        (
+                            headers.get(b"traceparent", b"").decode() or None,
+                            body["params"]["arguments"]["value"],
+                        )
+                    )
+            return message
+
+        await app(scope, tee, send)
+
+    def create_client(
+        *,
+        auth: httpx2.Auth | None,
+        timeout: httpx2.Timeout,
+        request_hooks: list[Callable[[httpx2.Request], Awaitable[None]]],
+    ) -> httpx2.AsyncClient:
+        return httpx2.AsyncClient(
+            auth=auth,
+            timeout=timeout,
+            follow_redirects=False,
+            trust_env=False,
+            event_hooks={"request": request_hooks},
+            transport=httpx2.ASGITransport(app=capture),
+        )
+
+    parents = {
+        "first": f"00-{'1' * 32}-{'a' * 16}-01",
+        "second": f"00-{'2' * 32}-{'b' * 16}-01",
+    }
+    current: contextvars.ContextVar[str | None] = contextvars.ContextVar("carrier", default=None)
+
+    class Allow:
+        async def authorize(self, server, tool, arguments, context):  # type: ignore[no-untyped-def]
+            return None
+
+    async with app.router.lifespan_context(app):
+        discovery = McpClientSessionFactory(
+            _profiles(), credential_providers={}, http_client_factory=create_client
+        )
+        async with discovery.open("tools", _context(Identity("tenant", "alice"))) as client:
+            declared = (await client.list_tools()).tools[0]
+        profiles = _profiles().model_dump(mode="json")
+        profiles["servers"]["tools"]["catalog"]["tools"] = {
+            "echo": {
+                "input_schema": declared.input_schema,
+                "output_schema": declared.output_schema,
+                "effect": "read",
+            }
+        }
+        validated = McpProfiles.model_validate(profiles, strict=True)
+        runtime = McpRuntime(
+            validated,
+            McpClientSessionFactory(
+                validated, credential_providers={}, http_client_factory=create_client
+            ),
+            Allow(),
+            trace_carrier=lambda: {"traceparent": value} if (value := current.get()) else {},
+        )
+        context = replace(
+            _context(Identity("tenant", "alice")),
+            budget=StepBudget(model_requests=0, tool_calls=2),
+        )
+        async with runtime.open("tools", ("echo",), context) as tools:
+
+            async def call(value: str) -> object:
+                current.set(parents[value])
+                return await tools.call("echo", {"value": value})
+
+            await asyncio.gather(call("first"), call("second"))
+    assert sorted(started) == ["first", "second"]
+    assert sorted(seen, key=lambda item: item[1]) == [
+        (parents["first"], "first"),
+        (parents["second"], "second"),
+    ]

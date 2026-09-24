@@ -15,6 +15,8 @@ installed `foliqant.contracts.workflow` models or
 - [Workflow fields](#workflow-fields)
 - [Bindings and scope](#bindings-and-scope)
 - [Routing and unresolved outcomes](#routing-and-unresolved-outcomes)
+- [Conditions](#conditions)
+- [Replace helper handlers with configuration](#replace-helper-handlers-with-configuration)
 - [Operation fields](#operation-fields)
 - [Map multiple intentions to work](#map-multiple-intentions-to-work)
 - [Flow collection](#flow-collection)
@@ -36,8 +38,11 @@ Work through the process in this order:
 2. Identify sequential boundaries with independently meaningful inputs/outputs.
 3. Put each boundary in one flow and order its operations explicitly.
 4. Bind only the context each flow and operation needs.
-5. Route completed flow results and unresolved outcomes explicitly.
-6. Add pipeline gold for business behavior, then flow and step gold for
+5. Route completed flow results and unresolved outcomes explicitly: `cases` for
+   one enumerated value, `route` with conditions for everything else, and one
+   workflow `defaults.on_unresolved` for review.
+6. Guard optional work with step `when`; retry bounded work with `repeat`.
+7. Add pipeline gold for business behavior, then flow and step gold for
    diagnosis.
 
 Do not create a flow merely to wrap every step. A flow should express a business
@@ -54,7 +59,7 @@ billing request. Map the process before writing files:
 | Accept and finish one support request | `support_intake` workflow | This is the capability invoked by the host and the final result it returns. |
 | Classify and extract from the same message | `triage` flow with `classify`, then `extract` steps | Both operations share one sequential boundary; extraction can consume only explicitly bound context. |
 | Read an account from a remote system | `account_lookup` flow with one MCP step | This is a separate capability and failure/review boundary with its own resolved input. |
-| Unsupported, conflicting, or multi-queue request | `triage.on_unresolved -> needs_review` | Review is explicit and cannot fall through to account access. |
+| Unsupported, conflicting, or multi-queue request | `defaults.on_unresolved -> needs_review` | Review is explicit, inherited by every flow, and cannot fall through to account access. |
 | Billing route with an account reference | `triage.transition -> account_lookup` | The flow route, rather than a model step, controls whether the tool may run. |
 | Other supported queues | terminal `completed` or another authored flow | Every case and default is visible in the workflow graph. |
 
@@ -65,10 +70,13 @@ name: support_intake
 start: triage
 defaults:
   model: local
+  on_unresolved:
+    outcome: needs_review
 input_schema: input.schema.json
 output:
-  pointer: /flows/triage/result
-  optional: true
+  first_of:
+    - pointer: /flows/account_lookup/result
+    - pointer: /flows/triage/result
   default:
     status: needs_review
 flows:
@@ -86,25 +94,33 @@ flows:
           outcome: completed
       default:
         outcome: needs_review
-    on_unresolved:
-      outcome: needs_review
   account_lookup:
     input:
       account_id:
         pointer: /flows/triage/result/account_id
     transition:
       outcome: completed
-    on_unresolved:
-      outcome: needs_review
 ```
 
-The `triage` flow declares its order explicitly:
+The `triage` flow declares its order explicitly and projects one object:
 
 ```yaml
 steps:
   - classify
   - extract
+output:
+  fields:
+    queue:
+      pointer: /steps/classify/selection/category/id
+      default: null
+    account_id:
+      pointer: /steps/extract/result/account_id
+      default: null
 ```
+
+Because the compiler knows the classify catalog through `fields`, it checks the
+`cases` keys: a typo is `unmatched_case`, a category without a case is an
+`uncovered_value` warning.
 
 The filesystem does not infer this list. Give the choice question at least two
 described categories and criteria that distinguish billing from cancellation.
@@ -159,8 +175,10 @@ settings file and stays out of Git. `foliqant init` also supplies an
 | `input.schema.json`, `output.schema.json` | Recommended descriptive names, not automatically discovered schemas. Reference them explicitly through `input_schema` or `output.schema`. |
 
 There is no automatically discovered `steps/` container. To use one, provide
-explicit step `definition` paths. Resolve each path from its declaring file;
-step resources and their schemas must remain inside the flow definition's directory.
+explicit step `definition` paths. Resolve each path from its declaring file; an
+explicit step path may point anywhere inside the configuration root (share one
+step file across flows with `definition: ../shared/correct.step.md`), while a
+step's own schemas resolve from the step file and stay inside its directory.
 Unlisted step files are not loaded or executed. Markdown step bodies supply
 instructions; YAML steps use an explicit `instructions` field.
 Conventional lookup uses the exact `.yaml` and `.md` names above; `.yml` is
@@ -193,10 +211,11 @@ described under decision fields; do not apply that normalization to runtime IDs.
 | Field | Shape | Rule |
 | --- | --- | --- |
 | `name` | ID, optional | Defaults to workflow directory |
-| `start` | flow ID, optional | Inferred only for exactly one routed flow, excluding callable flows |
+| `start` | flow ID or `route`, optional | Inferred only for exactly one routed flow; a `route` selects the first flow from `/payload` and `/metadata` |
 | `defaults.model` | model profile ID, optional | Default for decision/LLM operations |
+| `defaults.on_unresolved` | review route, optional | Inherited by every routed flow without its own `on_unresolved` |
 | `input_schema` | JSON Schema object or local path, optional | Validates workflow payload |
-| `output` | binding, optional | Projects final top-level payload |
+| `output` | binding or `fields`, optional | Projects final top-level payload |
 | `flows` | nonempty map | Each key is a flow instance ID |
 
 Each flow instance has:
@@ -205,27 +224,34 @@ Each flow instance has:
 | --- | --- | --- |
 | `definition` | inline flow or local path, optional | Convention is `<flow>/flow.yaml` |
 | `input` | binding map | Resolves the flow payload |
-| `transition` | target or match route | Required completed-flow route |
-| `on_unresolved` | target or unresolved route, optional | Defaults to terminal review |
+| `transition` | target, `cases` match, or `route` | Required completed-flow route |
+| `on_unresolved` | target, issue map, or `route`, optional | Defaults to the workflow default, else terminal review |
+| `repeat` | repeat config, optional | Bounded attempts with an optional callable retry flow |
 
 A callable flow is a separate workflow-flow form with `callable: true` and an
-optional `definition`. It has no `input`, `transition`, or `on_unresolved` and
-can be invoked only by an allowlisted flow-collection step. It cannot be the
-workflow start or a route target.
+optional `definition`. It has no `input`, `transition`, or `on_unresolved`. An
+allowlisted flow-collection step invokes it, or a `repeat` runs it as its retry
+flow. It cannot be the workflow start or a route target.
 
-A flow definition has optional `input_schema`, optional `output`, and a
-nonempty ordered `steps` list. Step IDs are unique within the flow.
+A flow definition has optional `defaults.model`, optional `input_schema`,
+optional `output` (binding or `fields`), and a nonempty ordered `steps` list.
+Each entry is an ID or `{id, definition?, when?}`. Step IDs are unique within
+the flow.
 
 ### Omitted fields and defaults
 
 | Omitted field | Effective behavior |
 | --- | --- |
-| Workflow `defaults.model` | No automatic model selection. Each decision/LLM step must select a model or inherit an explicit workflow default. |
+| Workflow `defaults.model` | No automatic model selection. Each decision/LLM step must select a model or inherit an explicit workflow or flow default. |
+| Flow `defaults.model` | The workflow default applies. |
 | Workflow or flow `input_schema` | No additional authored input-schema constraint at that boundary; normal envelope and binding validation still applies. |
 | Workflow `output` | Returned `ExecutionResult.payload` is the accepted workflow input payload. |
 | Flow `output` | Flow `result` is its bound input payload. Neither output default selects the last step automatically. |
-| Routed flow `on_unresolved` | End with `needs_review`. |
-| Pointer `optional` | `false`; missing values fail. `optional: true` requires an explicit `default`, used only for missing values, not present JSON `null`. |
+| Routed flow `on_unresolved` | `defaults.on_unresolved`, else end with `needs_review` (reported as `review_ends_run`). |
+| Binding `default` | The binding is required; missing values fail. A declared `default` (also `null`) makes it optional and is used only for missing values, not present JSON `null`. |
+| Step `when` | The step always runs. |
+| `repeat` | The flow runs once. |
+| `cases` `default_covers` | Every allowed value without a case is an `uncovered_value` warning. |
 | Decision source `format` | `text`; select `json` explicitly for structured evidence. |
 | Decision `fallback` | No fallback selection; preserve the unresolved assessment. |
 | LLM `prompt` | Send the selected input object as the default JSON user message. |
@@ -240,8 +266,8 @@ step records remain in `ExecutionResult.flows`.
 
 ## Bindings and scope
 
-A binding contains either `literal` or `pointer`. Optional pointers also
-declare their default:
+A binding contains exactly one of `literal`, `pointer`, or `first_of`. A binding
+is optional exactly when it declares `default`:
 
 ```yaml
 fixed_value:
@@ -250,16 +276,25 @@ required_value:
   pointer: /payload/value
 optional_value:
   pointer: /payload/value
-  optional: true
   default: <any JSON>
+branch_result:
+  first_of:
+    - pointer: /flows/billing/result
+    - pointer: /flows/cancellation/result
+  default: null
 ```
 
-Optional pointers require an explicit default. Required pointers cannot have a
-default. JSON null is present and does not trigger a default.
+JSON null is present for a pointer and does not trigger its default. `first_of`
+picks the first member that resolves to a non-null value; without a default at
+least one member must be available on every path. Flow and workflow `output` may
+also be `fields`, a map of IDs to bindings projecting one object; the compiler
+knows its shape for later bindings and route coverage.
 
 At workflow scope use `/payload`, `/metadata`, and completed
-`/flows/{flow}`. At flow scope use `/payload`, `/metadata`, and preceding
-`/steps/{step}`. Public results use
+`/flows/{flow}/result` (plus `/flows/{flow}/attempts` of a repeated flow). At
+flow scope use `/payload`, `/metadata`, and preceding `/steps/{step}`. A result
+of a later or conditional (`when`) step needs a default; its `status` does not.
+A repeat retry flow's result is readable only with a default. Public results use
 `/flows/{flow}/steps/{step}`.
 
 Every model step starts a fresh conversation. There is no implicit history or
@@ -272,12 +307,18 @@ A direct target names a flow or terminal outcome:
 ```yaml
 transition:
   flow: next_flow
-# or
+```
+
+```yaml
 transition:
   outcome: completed
 ```
 
-Exact match routing uses:
+Exact match routing on one enumerated value uses `cases`. The compiler checks
+the keys against the field's `enum`/`const`, decision catalog (plus fallback),
+predicate answers and declared handler/MCP/LLM schemas: an impossible key is
+`unmatched_case`, an uncovered value an `uncovered_value` warning unless listed
+in `default_covers`:
 
 ```yaml
 transition:
@@ -288,9 +329,31 @@ transition:
       flow: billing
   default:
     outcome: needs_review
+  default_covers:
+    - cancellation
 ```
 
-An unresolved route can be one target or:
+Everything else uses an ordered `route`; the first true `when` wins and the
+last entry, without `when`, is mandatory:
+
+```yaml
+transition:
+  route:
+    - when:
+        binding:
+          pointer: /flows/lookup/result/status
+        equals: found
+      flow: enrich
+    - when:
+        binding:
+          pointer: /flows/lookup/result/candidates
+        length:
+          gt: 1
+      flow: disambiguate
+    - flow: request_details
+```
+
+An unresolved route can be one target, an issue map, or a `route`:
 
 ```yaml
 on_unresolved:
@@ -304,8 +367,49 @@ on_unresolved:
     outcome: needs_review
 ```
 
-Unresolved routes cannot directly complete a workflow. Do not parse public
-reason text to route.
+Decision steps and trusted handlers report the issues. Unresolved routes cannot
+directly complete a workflow or target their own flow. Put the common review
+route in `defaults.on_unresolved`; its target flow normally declares its own
+review route so no cycle arises. `start` may be a `route` whose conditions read
+the envelope only. Do not parse public reason text to route.
+
+## Conditions
+
+A condition is a leaf with one source (`binding` pointer or `first_of`, or
+`literal`) and one operator, or `all`/`any` (1–32) or `not`, nested at most
+eight levels:
+
+| Operator | True when |
+| --- | --- |
+| `present: true/false` | the value resolves and is not null |
+| `empty: true/false` | absent, `""`, `[]` or `{}` |
+| `equals`, `not_equals` | deep JSON equality without coercion; absent equals `null` |
+| `in`, `not_in` | the value equals one of up to 64 values |
+| `gt`, `gte`, `lt`, `lte` | a number compares; other types are false |
+| `matches` | a string fully matches a Python regular expression (≤ 256 characters) |
+| `length: {gt/gte/lt/lte/equals: n}` | a string, array or object length compares |
+
+Absent values never raise; incompatible runtime types evaluate to false and
+emit `condition.type_mismatch`. Compilation rejects malformed conditions
+(`invalid_condition`), operators the field's known type can never satisfy
+(`condition_type_mismatch`), and pointers into flows that can never have run
+(`unavailable_flow_reference`). Conditions appear in `transition.route`,
+`on_unresolved.route`, `start.route`, step `when`, `repeat.until` and
+`repeat.retry.continue_when`.
+
+## Replace helper handlers with configuration
+
+| Former idiom | Current configuration |
+| --- | --- |
+| A handler whose only output is a routing key, plus a flow hosting it | `route` with conditions on the data, or `cases` on the enumerated field |
+| A flow that exists only to skip work (`if invalid then repair`) | Step `when` on `repair` and `recheck` inside one flow |
+| Copies of a flow for a retry (`lookup`, `correct`, `lookup_corrected`) | `repeat` with `until`, a callable retry flow and `retry_input` |
+| A join flow or handler selecting whichever branch ran | `first_of` over the branch results |
+| A projection handler assembling an object from step results | `output.fields` |
+| Repeating `on_unresolved` on every flow | `defaults.on_unresolved` |
+
+Keep handlers for real application logic: normalization, planning, policy with
+review reasons, and disposition.
 
 ## Operation fields
 
@@ -506,9 +610,12 @@ input:
     pointer: /payload/value
 ```
 
-YAML selects only a host-registered handler name. Register an async callable with
-explicit input/output schemas and `effect: read`. The current runner rejects
-write handlers.
+YAML selects only a handler declared under `handlers` in `settings.yaml`
+(`input_schema`, `output_schema`, `effect`). The host registers the async
+callable; schemas given in the registration must equal the declaration. The
+current runner rejects write handlers. A handler may return
+`StepOutcome(result, needs_review=True, unresolved_issues=(...))` to select an
+issue-specific review route, and a `selection` for classification results.
 
 ### Map multiple intentions to work
 
@@ -603,10 +710,13 @@ customer data, and private gold remain private.
 ## Deliverables and checks
 
 Deliver the workflow file, each referenced flow and step definition, local
-schemas, and the explicit routing/review decisions. Compile the graph offline
-using CLI validation/explanation for configurations without host registrations,
-or registered `prepare_application` and `prepared.plans` for custom handlers.
-When gold exists, use CLI `evaluate --check` or `load_dataset(prepared)` with
-that registered application.
+schemas, handler declarations, and the explicit routing/review decisions.
+Compile the graph offline with `foliqant validate --strict` (declared handlers
+need no registration) and fix every warning; render it with
+`foliqant explain --format mermaid` and review routes, dashed review edges,
+dotted retry/collection calls and repeat annotations. Read the `diagnostics`:
+`uncovered_value`, `route_unreachable_entry` and `review_ends_run` usually point
+at missing business decisions. When gold exists, use CLI `evaluate --check` or
+`load_dataset(prepared)` with the registered application.
 Report business rules or tool permissions that still need the application's
 owner to define instead of inventing them.

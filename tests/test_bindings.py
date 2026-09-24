@@ -54,9 +54,7 @@ def test_missing_never_becomes_null(pointer: str) -> None:
 
 
 def test_default_applies_only_to_missing_not_explicit_null() -> None:
-    binding = BindingPlan(
-        kind="pointer", pointer="/value", optional=True, has_default=True, default=7
-    )
+    binding = BindingPlan(kind="pointer", pointer="/value", has_default=True, default=7)
     assert resolve_binding(binding, freeze_json({})) == 7
     assert resolve_binding(binding, freeze_json({"value": None})) is None
 
@@ -65,7 +63,7 @@ def test_default_applies_only_to_missing_not_explicit_null() -> None:
 def test_invalid_pointer_cannot_be_hidden_by_default(pointer: str) -> None:
     with pytest.raises(ServiceError) as error:
         resolve_binding(
-            BindingPlan(kind="pointer", pointer=pointer, optional=True, has_default=True),
+            BindingPlan(kind="pointer", pointer=pointer, has_default=True),
             freeze_json({}),
         )
     assert error.value.code == ErrorCode.INVALID_CONFIGURATION

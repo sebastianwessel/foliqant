@@ -140,8 +140,9 @@ selection. Score answerability/issues and selection origin independently.
 
 ## Choose the execution mode
 
-The generic CLI has no host handler registrations. When the configuration uses
-trusted Python handlers, prepare through the host and check gold offline with:
+Handlers are declared in `settings.yaml`, so `foliqant evaluate --check`
+validates gold for workflows with handlers without registrations. Executing
+suites needs the registrations; prepare through the host:
 
 ```python
 from foliqant import prepare_application
@@ -155,7 +156,13 @@ Here `handlers` is the application's registration map and `config_path` is its
 settings path. `load_dataset` resolves the configured/conventional dataset and
 validates its targets against that prepared application without opening adapters.
 Use Python `evaluate` with the same application's public scoped run functions
-for execution; do not remove handlers to make a generic CLI check pass.
+for execution; do not remove handlers to make a generic CLI command pass.
+Gold paths may target repeat facts such as `/flows/{flow}/attempt_count`,
+`/flows/{flow}/attempts/0/result/...`, `/flows/{flow}/repeat/stopped_by`,
+skipped conditional steps (`/flows/{flow}/steps/{step}/status`) and the route
+that selected a transition (`/transitions/0/route/kind`) or the start flow
+(`/start/flow`, `/start/route/index`). A `run_flow` suite
+executes one attempt of a repeated flow.
 
 - `foliqant evaluate --check` validates dataset structure, targets, pointers,
   catalogs, and spans without opening providers.
@@ -218,7 +225,8 @@ Do not claim a small suite proves general quality, security, or efficiency.
 Deliver the dataset manifest, any referenced case files, and a note identifying
 which expectations have been independently reviewed. Run
 `foliqant evaluate --check` from the application root, or add `--config PATH`
-for nondefault settings. With host handlers, use registered preparation and
-`load_dataset` above. Report structural failures separately from missing
+for nondefault settings; declared handlers need no registration for the check.
+For execution with host handlers, use registered preparation and `load_dataset`
+above. Report structural failures separately from missing
 business gold. Execute live suites only when their configured external calls
 are intended for the task.

@@ -9,14 +9,60 @@ input rather than fabricating a successful output.
 | --- | --- |
 | `payload` | The workflow's configured output projection; without one, the accepted input payload. |
 | `metadata` | Accepted caller context. |
-| `flows` | Records by flow instance ID, with local `steps` and optional projected `result`. |
-| `transitions` | Routes or terminal outcomes selected at flow boundaries. |
-| `execution` | Run ID, workflow, revision, status, measured usage, and safe error on failure. |
+| `flows` | Records by flow instance ID, with local `steps`, optional projected `result`, and `attempt_count`. |
+| `start` | The first flow of a workflow run and the `start` form that selected it; omitted for `run_flow` and `run_step`. |
+| `transitions` | Routes or terminal outcomes selected at flow boundaries, with the `route` form that selected each. |
+| `execution` | Run ID, workflow, revision, status, measured usage, safe error on failure, and `trace` IDs when telemetry is enabled. |
 
 A completed step result is at `result.flows[flow_id].steps[step_id].result`.
 Its `result` can be JSON `null`; an omitted `result` means something else. Flow
 and step records can be `completed`, `needs_review`, `failed`, `cancelled`, or
-`skipped`. The root execution cannot be `skipped`.
+`skipped`. A step whose [`when`](../configuration/flows.md#skip-a-step-with-when)
+condition was false, or that did not run because the flow stopped earlier, is
+`skipped` and has no `result`. The root execution cannot be `skipped`.
+
+## See which route was taken
+
+Each transition names the configuration form that selected its target:
+
+```json
+{
+  "source": "lookup_fund",
+  "reason": "completed",
+  "flow": "enrich",
+  "route": {"kind": "route", "index": 0}
+}
+```
+
+`route.kind` is `direct`, `cases`, `route` or `review`. `index` is the selected
+`route` entry; `case` is the matched `cases` key, or for `review` the issue that
+selected an issue-specific target. Both are omitted when they do not apply, for
+example when `cases` fell to `default`.
+
+The first flow is recorded the same way in `start`:
+
+```json
+{"flow": "extract", "route": {"kind": "route", "index": 0}}
+```
+
+`start.route.kind` is `direct` for `start: <flow>` and `route` for a routed
+[`start`](../configuration/workflows.md), with the selected entry's `index`. The
+`route.selected` event on the workflow span carries the same values.
+
+## Read repeated flows
+
+`attempt_count` counts executions: `0` for a skipped flow, `1` normally. A flow
+with [`repeat`](../configuration/repeat.md) and a retry flow additionally carry
+`attempts`, one record per run; the top-level fields describe the last run, and
+`attempts_usage` / `attempts_elapsed_seconds` sum every run. A repeated flow's
+`repeat.stopped_by` is `until`, `exhausted`, `continue_when`, `review` or
+`failure`. The root `execution.usage` counts every attempt and retry run once.
+
+## Correlate with traces
+
+With telemetry enabled, `execution.trace` holds the `trace_id` and `span_id`
+of the run span. Log them in the host to link your records with the runtime's
+spans; see [observability](observability.md).
 
 ## Read a decision
 

@@ -20,9 +20,9 @@
       "title": "ErrorCode",
       "type": "string"
     },
-    "FlowCollectionItemResult": {
+    "FlowAttempt": {
       "additionalProperties": false,
-      "description": "One collection item's complete flow record, including skipped local steps.",
+      "description": "One attempt of a repeated flow, or one run of a retry flow.",
       "oneOf": [
         {
           "not": {
@@ -101,6 +101,12 @@
         }
       ],
       "properties": {
+        "attempt": {
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
         "elapsed_seconds": {
           "anyOf": [
             {
@@ -117,16 +123,6 @@
         "error": {
           "$ref": "#/$defs/SafeError",
           "title": "Error"
-        },
-        "flow": {
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "title": "Flow",
-          "type": "string"
-        },
-        "id": {
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "title": "Id",
-          "type": "string"
         },
         "result": {
           "$ref": "#/$defs/JsonValue"
@@ -158,6 +154,197 @@
       "required": [
         "status",
         "steps",
+        "attempt"
+      ],
+      "title": "FlowAttempt",
+      "type": "object"
+    },
+    "FlowCollectionItemResult": {
+      "additionalProperties": false,
+      "description": "One collection item's complete flow record, including skipped local steps.\n\nA callable flow with ``repeat`` carries its attempts like a routed flow;\n``retry`` records the item's retry flow runs (last run plus ``attempts``).",
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "needs_review"
+            }
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          }
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "result"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "skipped"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "attempt_count": {
+          "maximum": 64,
+          "minimum": 0,
+          "title": "Attempt Count",
+          "type": "integer"
+        },
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/FlowAttempt"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Attempts",
+          "type": "array"
+        },
+        "attempts_elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempts Elapsed Seconds"
+        },
+        "attempts_usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "error": {
+          "$ref": "#/$defs/SafeError",
+          "title": "Error"
+        },
+        "flow": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Flow",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "repeat": {
+          "$ref": "#/$defs/RepeatInfo",
+          "title": "Repeat"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "retry": {
+          "$ref": "#/$defs/FlowResult",
+          "title": "Retry"
+        },
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "steps": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "$ref": "#/$defs/StepResult"
+            }
+          },
+          "title": "Steps",
+          "type": "object"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "status",
+        "steps",
+        "attempt_count",
         "id",
         "flow"
       ],
@@ -181,6 +368,182 @@
         "items"
       ],
       "title": "FlowCollectionResult",
+      "type": "object"
+    },
+    "FlowResult": {
+      "additionalProperties": false,
+      "description": "A flow's scoped step records and explicitly present projected result.\n\n``attempt_count`` counts executions (zero when skipped). Repeated and retry\nflows list every run in ``attempts``; the top-level fields describe the last\nrun and ``attempts_usage`` / ``attempts_elapsed_seconds`` sum all runs.",
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "error"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "needs_review"
+            }
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "result"
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            }
+          }
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "result"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "status": {
+              "const": "skipped"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "attempt_count": {
+          "maximum": 64,
+          "minimum": 0,
+          "title": "Attempt Count",
+          "type": "integer"
+        },
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/FlowAttempt"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Attempts",
+          "type": "array"
+        },
+        "attempts_elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempts Elapsed Seconds"
+        },
+        "attempts_usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "error": {
+          "$ref": "#/$defs/SafeError",
+          "title": "Error"
+        },
+        "repeat": {
+          "$ref": "#/$defs/RepeatInfo",
+          "title": "Repeat"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "steps": {
+          "patternProperties": {
+            "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$": {
+              "$ref": "#/$defs/StepResult"
+            }
+          },
+          "title": "Steps",
+          "type": "object"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "status",
+        "steps",
+        "attempt_count"
+      ],
+      "title": "FlowResult",
       "type": "object"
     },
     "JsonValue": {
@@ -213,6 +576,28 @@
           "type": "null"
         }
       ]
+    },
+    "RepeatInfo": {
+      "additionalProperties": false,
+      "description": "Why a repeated flow stopped; exhaustion is not a review.",
+      "properties": {
+        "stopped_by": {
+          "enum": [
+            "until",
+            "exhausted",
+            "continue_when",
+            "review",
+            "failure"
+          ],
+          "title": "Stopped By",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stopped_by"
+      ],
+      "title": "RepeatInfo",
+      "type": "object"
     },
     "SafeError": {
       "additionalProperties": false,

@@ -2,10 +2,11 @@
 
 import hashlib
 import json
-from collections.abc import Collection, Mapping
-from dataclasses import replace
+import os
+from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, Never, Protocol, cast
+from typing import Literal, Never, cast
 
 from jsonschema import Draft202012Validator, SchemaError
 from pydantic import TypeAdapter, ValidationError
@@ -15,8 +16,10 @@ from foliqant.contracts.workflow import (
     Binding,
     CallableFlow,
     ChoiceQuestionShorthand,
+    ConditionalRouting,
     DecisionStepAuthoring,
     DeclaredToolCatalog,
+    FirstOfBinding,
     FlowCollectionStepAuthoring,
     FlowDefinition,
     FlowInstance,
@@ -28,9 +31,15 @@ from foliqant.contracts.workflow import (
     McpStepAuthoring,
     MultiselectQuestionShorthand,
     NamedStep,
+    ObjectOutput,
     OrdinalQuestionShorthand,
+    PointerBinding,
     PredicateQuestionShorthand,
     RequestUnitsQuestionShorthand,
+    ReviewRouting,
+    RouteEntry,
+    StartRouteEntry,
+    StartRouting,
     StepAuthoring,
     TransitionTarget,
     UnresolvedRouting,
@@ -43,6 +52,8 @@ from foliqant.core.plan import (
     BindingPlan,
     CategoryPlan,
     CompiledStep,
+    ConditionalRoutingPlan,
+    ConditionPlan,
     DecisionOptionPlan,
     DecisionQuestionPlan,
     DecisionStepPlan,
@@ -53,6 +64,8 @@ from foliqant.core.plan import (
     LlmStepPlan,
     MatchRoutingPlan,
     McpStepPlan,
+    RepeatPlan,
+    RouteEntryPlan,
     SchemaResourcePlan,
     SourceLocation,
     ToolPolicyPlan,
@@ -60,7 +73,7 @@ from foliqant.core.plan import (
     UnresolvedRoutingPlan,
     WorkflowPlan,
 )
-from foliqant.core.prompt import compile_prompt
+from foliqant.core.prompt import compile_prompt, prompt_inputs
 from foliqant.decisions import (
     ChoiceQuestion,
     MultiselectQuestion,
@@ -69,8 +82,10 @@ from foliqant.decisions import (
     RequestUnitsQuestion,
 )
 
-from ._loader import load_step, load_yaml
+from ._loader import YamlLocator, load_step, load_yaml
 from .collections import validate_collection_literals
+from .conditions import check_condition, compile_condition, condition_pointers
+from .diagnostics import Diagnostics, safe_text
 from .errors import CompilationError
 from .models import ModelRegistry
 from .schema_helpers import (
@@ -82,7 +97,9 @@ from .schema_helpers import (
 from .schema_helpers import (
     walk_schema_nodes as _walk_schema_nodes,
 )
+from .scopes import FlowScope, HandlerSchemas, WorkflowScope, binding_static, tokens
 from .static_schema import SchemaView, incompatible_types, json_type, schema_types
+from .static_values import Const, Obj, Static, allows_empty_string, of, types, values
 
 _WORKFLOW_ADAPTER = TypeAdapter(WorkflowAuthoring)
 _FLOW_ADAPTER = TypeAdapter(FlowDefinition)
@@ -96,19 +113,115 @@ type NativeQuestion = (
     | RequestUnitsQuestion
 )
 
+# Compiler-owned field names that are safe to echo in error field paths.
+_FIELD_NAMES = frozenset(
+    {
+        "name",
+        "start",
+        "defaults",
+        "model",
+        "input_schema",
+        "output",
+        "steps",
+        "flows",
+        "id",
+        "callable",
+        "items",
+        "max_items",
+        "definition",
+        "transition",
+        "binding",
+        "cases",
+        "default_covers",
+        "flow",
+        "format",
+        "prompt",
+        "type",
+        "on_unresolved",
+        "fallback",
+        "category",
+        "on",
+        "sources",
+        "question",
+        "questions",
+        "instructions",
+        "input",
+        "tools",
+        "server",
+        "tool",
+        "arguments",
+        "handler",
+        "outcome",
+        "schema",
+        "pointer",
+        "optional",
+        "default",
+        "literal",
+        "first_of",
+        "fields",
+        "route",
+        "when",
+        "repeat",
+        "max_attempts",
+        "until",
+        "retry",
+        "retry_input",
+        "continue_when",
+        "all",
+        "any",
+        "not",
+        "present",
+        "empty",
+        "equals",
+        "not_equals",
+        "in",
+        "not_in",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "matches",
+        "length",
+    }
+)
 
-class HandlerSchemas(Protocol):
-    """Structural schema interface implemented by trusted handler registrations."""
 
-    @property
-    def input_schema(self) -> FrozenObject: ...
+@dataclass(frozen=True, slots=True)
+class _Where:
+    """Resolve authored key paths inside one file, below an optional prefix."""
 
-    @property
-    def output_schema(self) -> FrozenObject: ...
+    locator: YamlLocator
+    prefix: tuple[str | int, ...] = ()
+
+    def at(self, *path: str | int) -> SourceLocation:
+        return self.locator.locate(*self.prefix, *path)
+
+    def below(self, *path: str | int) -> "_Where":
+        return _Where(self.locator, (*self.prefix, *path))
 
 
 def _fail(reason: str, location: SourceLocation, field: str | None = None) -> Never:
     raise CompilationError(reason, location, field=field) from None
+
+
+def _condition_position(loc: tuple[str | int, ...]) -> bool:
+    """True when the error lies inside a condition field, judged by position.
+
+    A business key that happens to be named ``when`` or ``until`` (an input or
+    output field) is not a condition: step ``when`` follows the step entry,
+    route ``when`` a route index, ``until`` the ``repeat`` and ``continue_when``
+    the ``retry`` object.
+    """
+    for index, part in enumerate(loc):
+        previous = loc[index - 1] if index else None
+        if part == "when" and (
+            previous == "NamedStep"
+            or (isinstance(previous, int) and index >= 2 and loc[index - 2] == "route")
+        ):
+            return True
+        if (part, previous) in {("until", "repeat"), ("continue_when", "retry")}:
+            return True
+    return False
 
 
 def _validate[T](adapter: TypeAdapter[T], value: object, location: SourceLocation) -> T:
@@ -116,67 +229,83 @@ def _validate[T](adapter: TypeAdapter[T], value: object, location: SourceLocatio
         return adapter.validate_python(value, strict=True)
     except ValidationError as error:
         issue = error.errors(include_url=False, include_context=False, include_input=False)[0]
-        allowed = {
-            "name",
-            "start",
-            "defaults",
-            "model",
-            "input_schema",
-            "output",
-            "steps",
-            "flows",
-            "id",
-            "callable",
-            "items",
-            "max_items",
-            "definition",
-            "transition",
-            "binding",
-            "cases",
-            "flow",
-            "format",
-            "prompt",
-            "type",
-            "on_unresolved",
-            "fallback",
-            "category",
-            "on",
-            "sources",
-            "question",
-            "questions",
-            "instructions",
-            "input",
-            "tools",
-            "server",
-            "tool",
-            "arguments",
-            "handler",
-            "outcome",
-            "schema",
-            "pointer",
-            "optional",
-            "default",
-            "literal",
-        }
         parts = [
-            str(part) if isinstance(part, int) or part in allowed else "*" for part in issue["loc"]
+            str(part) if isinstance(part, int) or part in _FIELD_NAMES else "*"
+            for part in issue["loc"]
         ]
-        _fail("invalid_contract", location, ".".join(parts) or None)
+        reason = "invalid_contract"
+        if _condition_position(issue["loc"]):
+            reason = "invalid_condition"
+        elif issue["type"] == "extra_forbidden":
+            reason = "unknown_field"
+        _fail(reason, location, ".".join(parts) or None)
 
 
-def _binding(value: Binding, location: SourceLocation) -> BindingPlan:
+def _binding(value: Binding | ObjectOutput, location: SourceLocation) -> BindingPlan:
     try:
         if isinstance(value, LiteralBinding):
             return BindingPlan(kind="literal", literal=freeze_json(value.literal))
+        if isinstance(value, ObjectOutput):
+            return BindingPlan(
+                kind="fields",
+                fields=tuple((key, _binding(item, location)) for key, item in value.fields.items()),
+            )
+        has_default = "default" in value.model_fields_set
+        default = freeze_json(value.default) if has_default else None
+        if isinstance(value, FirstOfBinding):
+            return BindingPlan(
+                kind="first_of",
+                members=tuple(member.pointer for member in value.first_of),
+                has_default=has_default,
+                default=default,
+            )
+        assert isinstance(value, PointerBinding)
         return BindingPlan(
-            kind="pointer",
-            pointer=value.pointer,
-            optional=value.optional,
-            has_default="default" in value.model_fields_set,
-            default=(freeze_json(value.default) if "default" in value.model_fields_set else None),
+            kind="pointer", pointer=value.pointer, has_default=has_default, default=default
         )
     except ServiceError:
         _fail("invalid_contract", location)
+
+
+def _bindings_map(
+    values: Mapping[str, Binding], location: SourceLocation
+) -> tuple[tuple[str, BindingPlan], ...]:
+    return tuple((key, _binding(value, location)) for key, value in sorted(values.items()))
+
+
+def _pointers(binding: BindingPlan) -> tuple[str, ...]:
+    """Every pointer of a binding, including object fields and candidates."""
+    if binding.kind == "fields":
+        return tuple(pointer for _, item in binding.fields for pointer in _pointers(item))
+    if binding.kind == "pointer" and binding.pointer is not None:
+        return (binding.pointer,)
+    return binding.members
+
+
+def _require(
+    binding: BindingPlan,
+    *,
+    check: Callable[[str], None],
+    available: Callable[[str], bool],
+    fail: Callable[[], Never],
+) -> None:
+    """Validate every pointer; a binding without default needs an available source.
+
+    A ``first_of`` without default needs at least one available member.
+    """
+    if binding.kind == "literal":
+        return
+    if binding.kind == "fields":
+        for _, item in binding.fields:
+            _require(item, check=check, available=available, fail=fail)
+        return
+    pointers = _pointers(binding)
+    for pointer in pointers:
+        check(pointer)
+    if binding.has_default:
+        return
+    if not any(available(pointer) for pointer in pointers):
+        fail()
 
 
 def _question(
@@ -468,11 +597,38 @@ def _target(value: TransitionTarget) -> TransitionTargetPlan:
     return TransitionTargetPlan(outcome=value.outcome)
 
 
+def _route(value: ConditionalRouting | StartRouting, where: _Where) -> ConditionalRoutingPlan:
+    """Compile ordered entries; only the last entry may (and must) omit ``when``."""
+    entries: list[RouteEntryPlan] = []
+    authored: list[RouteEntry | StartRouteEntry] = list(value.route)
+    last = len(authored) - 1
+    for index, entry in enumerate(authored):
+        if entry.when is None and index != last:
+            _fail("misplaced_otherwise", where.at("route", index), "route")
+        if entry.when is not None and index == last:
+            _fail("route_without_otherwise", where.at("route", index), "route")
+        outcome = getattr(entry, "outcome", None)
+        target = (
+            TransitionTargetPlan(flow=entry.flow)
+            if entry.flow is not None
+            else TransitionTargetPlan(outcome=outcome)
+        )
+        when = (
+            compile_condition(entry.when, where.at("route", index, "when"))
+            if entry.when is not None
+            else None
+        )
+        entries.append(RouteEntryPlan(target, when))
+    return ConditionalRoutingPlan(tuple(entries))
+
+
 def _unresolved(
-    value: TransitionTarget | UnresolvedRouting | None,
-) -> TransitionTargetPlan | UnresolvedRoutingPlan | None:
+    value: ReviewRouting | None, where: _Where
+) -> TransitionTargetPlan | UnresolvedRoutingPlan | ConditionalRoutingPlan | None:
     if value is None:
         return None
+    if isinstance(value, ConditionalRouting):
+        return _route(value, where)
     if isinstance(value, UnresolvedRouting):
         return UnresolvedRoutingPlan(
             default=_target(value.default),
@@ -487,6 +643,35 @@ def _unresolved(
             ),
         )
     return _target(value)
+
+
+def _transition(
+    value: TransitionTarget | MatchRouting | ConditionalRouting,
+    where: _Where,
+    location: SourceLocation,
+) -> TransitionTargetPlan | MatchRoutingPlan | ConditionalRoutingPlan:
+    if isinstance(value, ConditionalRouting):
+        return _route(value, where)
+    if isinstance(value, MatchRouting):
+        return MatchRoutingPlan(
+            _binding(value.binding, location),
+            tuple((key, _target(target)) for key, target in sorted(value.cases.items())),
+            _target(value.default),
+            tuple(value.default_covers or ()),
+        )
+    return _target(value)
+
+
+def _route_targets(
+    route: TransitionTargetPlan | MatchRoutingPlan | ConditionalRoutingPlan | UnresolvedRoutingPlan,
+) -> list[TransitionTargetPlan]:
+    if isinstance(route, MatchRoutingPlan):
+        return [route.default, *(target for _, target in route.cases)]
+    if isinstance(route, ConditionalRoutingPlan):
+        return [entry.target for entry in route.entries]
+    if isinstance(route, UnresolvedRoutingPlan):
+        return [route.default, *(target for _, target in route.issues)]
+    return [route]
 
 
 def _compile_step(
@@ -678,42 +863,454 @@ def _step_reference(pointer: str) -> str | None:
     return parts[2].replace("~1", "/").replace("~0", "~")
 
 
-def _validate_bindings(steps: Mapping[str, CompiledStep]) -> None:
+def _step_available(pointer: str, prior: Collection[str], conditional: Collection[str]) -> bool:
+    """A required step pointer needs an earlier step; a conditional one only its status."""
+    reference = _step_reference(pointer)
+    if reference is None:
+        return True
+    if reference not in prior:
+        return False
+    if reference in conditional:
+        parts = tokens(pointer)
+        return len(parts) == 2 or (len(parts) == 3 and parts[2] == "status")
+    return True
+
+
+def _flow_pointer_check(
+    steps: Mapping[str, CompiledStep], location: SourceLocation, field: str | None = None
+) -> Callable[[str], None]:
+    def check(pointer: str) -> None:
+        parts = pointer.split("/")
+        if pointer and (len(parts) < 2 or parts[1] not in {"payload", "metadata", "steps"}):
+            _fail("dangling_pointer", location, field)
+        reference = _step_reference(pointer)
+        if reference is not None and reference not in steps:
+            _fail("dangling_pointer", location, field)
+
+    return check
+
+
+def _validate_bindings(
+    steps: Mapping[str, CompiledStep],
+    conditional: Collection[str],
+    when_locations: Mapping[str, SourceLocation],
+) -> None:
     prior: set[str] = set()
     for name, step in steps.items():
+        check = _flow_pointer_check(steps, step.location)
+
+        def unavailable(step: CompiledStep = step) -> Never:
+            _fail("unavailable_step_reference", step.location)
+
         for binding in _bindings(step):
-            if binding.kind != "pointer" or binding.pointer is None:
-                continue
-            parts = binding.pointer.split("/")
-            if binding.pointer and (
-                len(parts) < 2 or parts[1] not in {"payload", "metadata", "steps"}
-            ):
-                _fail("dangling_pointer", step.location)
-            reference = _step_reference(binding.pointer)
-            if reference is not None:
-                if reference not in steps:
-                    _fail("dangling_pointer", step.location)
-                if reference not in prior and not binding.optional:
-                    _fail("unavailable_step_reference", step.location)
+            _require(
+                binding,
+                check=check,
+                available=lambda pointer: _step_available(pointer, prior, conditional),
+                fail=unavailable,
+            )
+        if step.when is not None:
+            location = when_locations[name]
+            when_check = _flow_pointer_check(steps, location, "when")
+            for pointer in condition_pointers(step.when):
+                when_check(pointer)
+                reference = _step_reference(pointer)
+                # A condition tolerates absence, but a later step can never have run.
+                if reference is not None and reference not in prior:
+                    _fail("unavailable_step_reference", location, "when")
         prior.add(name)
 
 
 def _validate_output(
-    output: BindingPlan | None, steps: Mapping[str, CompiledStep], location: SourceLocation
+    output: BindingPlan | None,
+    steps: Mapping[str, CompiledStep],
+    conditional: Collection[str],
+    location: SourceLocation,
 ) -> None:
-    if output is None or output.kind != "pointer" or output.pointer is None:
+    if output is None:
         return
-    parts = output.pointer.split("/")
-    if output.pointer and (len(parts) < 2 or parts[1] not in {"payload", "metadata", "steps"}):
+    first = next(iter(steps))
+
+    def check(pointer: str) -> None:
+        parts = pointer.split("/")
+        if pointer and (len(parts) < 2 or parts[1] not in {"payload", "metadata", "steps"}):
+            _fail("incompatible_output_binding", location)
+        reference = _step_reference(pointer)
+        if reference is not None and reference not in steps:
+            _fail("dangling_pointer", location)
+
+    def available(pointer: str) -> bool:
+        # Every operation may stop for review and a conditional step may be
+        # skipped. A later or conditional result needs an explicit default.
+        reference = _step_reference(pointer)
+        return reference is None or (reference == first and reference not in conditional)
+
+    def fail() -> Never:
         _fail("incompatible_output_binding", location)
-    reference = _step_reference(output.pointer)
-    if reference is None:
+
+    _require(output, check=check, available=available, fail=fail)
+
+
+def _without_default(binding: BindingPlan) -> BindingPlan:
+    return replace(binding, has_default=False, default=None)
+
+
+def _binding_value(
+    binding: BindingPlan,
+    resolve: Callable[[str], Static],
+    location: SourceLocation,
+    field: str,
+) -> Static:
+    """Static value without the default; an impossible path must declare one."""
+    if binding.kind == "fields":
+        return of(
+            Obj(
+                {
+                    name: _binding_value(item, resolve, location, field)
+                    for name, item in binding.fields
+                }
+            )
+        )
+    base = binding_static(_without_default(binding), resolve)
+    if base.impossible:
+        if binding.has_default:
+            return of(Const(thaw_json(binding.default)))
+        _fail("dangling_pointer", location, field)
+    return base
+
+
+def _check_default_type(
+    binding: BindingPlan, target: set[str] | None, location: SourceLocation, field: str
+) -> None:
+    if binding.kind == "fields":
         return
-    if reference not in steps:
-        _fail("dangling_pointer", location)
-    # Every operation may stop for review. A later result needs an explicit default.
-    if reference != next(iter(steps)) and not output.optional:
-        _fail("incompatible_output_binding", location)
+    if binding.has_default and incompatible_types({json_type(binding.default)}, target):
+        _fail("incompatible_binding_type", location, field)
+
+
+def _validate_schema_bindings(
+    steps: Mapping[str, CompiledStep],
+    scope: FlowScope,
+    output: BindingPlan | None,
+    location: SourceLocation,
+    diagnostics: Diagnostics,
+    when_locations: Mapping[str, SourceLocation],
+) -> None:
+    for step in steps.values():
+        pairs: tuple[tuple[str, BindingPlan], ...] = ()
+        expected: SchemaView | None = None
+        field = "input"
+        if isinstance(step, DecisionStepPlan):
+            pairs, field = step.sources, "sources"
+        elif isinstance(step, LlmStepPlan):
+            pairs = step.input
+        elif isinstance(step, McpStepPlan):
+            pairs, field = step.arguments, "arguments"
+            expected = scope.view(
+                cast(dict[str, object], scope.catalogs[step.server].tools[step.tool].input_schema)
+            )
+        elif isinstance(step, FlowCollectionStepPlan):
+            pairs = step.input
+            expected = scope.view({"type": "object", "properties": {"items": {"type": "array"}}})
+        elif isinstance(step, HandlerStepPlan):
+            pairs = step.input
+            contract = scope.handlers.get(step.handler)
+            if contract is not None and contract.input_schema is not None:
+                expected = scope.view(cast(dict[str, object], thaw_json(contract.input_schema)))
+        if expected is not None:
+            node = expected.resolved().node
+            if isinstance(node, dict):
+                required = node.get("required", [])
+                if isinstance(required, list) and not set(required).issubset(dict(pairs)):
+                    _fail("invalid_input_bindings", step.location, field)
+                if incompatible_types({"object"}, schema_types(expected)):
+                    _fail("incompatible_binding_type", step.location, field)
+        for key, binding in pairs:
+            actual = _binding_value(binding, scope, step.location, field + ".*.pointer")
+            if (
+                isinstance(step, DecisionStepPlan)
+                and dict(step.source_formats).get(key, "text") == "text"
+            ):
+                if incompatible_types(types(actual), {"string"}):
+                    _fail("incompatible_binding_type", step.location, field + ".*")
+                if binding.has_default and not isinstance(binding.default, str):
+                    _fail("incompatible_binding_type", step.location, field + ".*.default")
+                if allows_empty_string(actual) or binding.default == "":
+                    diagnostics.add(
+                        "empty_text_source",
+                        step.location,
+                        f"Decision source `{key}` of step `{step.name}` may be an empty "
+                        "string, which fails the run with invalid_input; require a nonempty "
+                        "value, bind another field or use `format: json`.",
+                        field_path=field + ".*",
+                    )
+            if expected is None:
+                continue
+            target = expected.child(key)
+            if target is None:
+                _fail("invalid_input_bindings", step.location, field)
+            if incompatible_types(types(actual), schema_types(target)):
+                _fail("incompatible_binding_type", step.location, field + ".*")
+            _check_default_type(binding, schema_types(target), step.location, field + ".*.default")
+        if isinstance(step, LlmStepPlan) and step.prompt is not None:
+            unused = sorted(set(dict(step.input)) - prompt_inputs(step.prompt))
+            if unused:
+                diagnostics.add(
+                    "unused_llm_input",
+                    step.location,
+                    f"Step `{step.name}` declares inputs its prompt never references and "
+                    f"therefore never sends: {', '.join(unused)}.",
+                    field_path="input",
+                )
+        if step.when is not None:
+            check_condition(
+                step.when,
+                resolve=scope,
+                location=when_locations[step.name],
+                field="when",
+                diagnostics=diagnostics,
+            )
+    if output is not None:
+        _binding_value(output, scope, location, "output.pointer")
+
+
+def _repeat(
+    value: FlowInstance | CallableFlow, where: _Where, location: SourceLocation
+) -> RepeatPlan | None:
+    authored = value.repeat
+    if authored is None:
+        return None
+    retry = authored.retry
+    return RepeatPlan(
+        max_attempts=authored.max_attempts,
+        until=compile_condition(authored.until, where.at("repeat", "until")),
+        retry_flow=retry.flow if retry is not None else None,
+        retry_flow_input=_bindings_map(retry.input, location) if retry is not None else (),
+        continue_when=(
+            compile_condition(retry.continue_when, where.at("repeat", "retry", "continue_when"))
+            if retry is not None and retry.continue_when is not None
+            else None
+        ),
+        retry_input=_bindings_map(authored.retry_input, location),
+    )
+
+
+def _compile_flow(
+    name: str,
+    instance: FlowInstance | CallableFlow,
+    *,
+    workflow: WorkflowAuthoring,
+    workflow_path: Path,
+    workflow_where: _Where,
+    root: Path,
+    cache: dict[Path, bytes],
+    registry: ModelRegistry,
+    model_aliases: Mapping[str, str],
+    model_profiles: Mapping[str, ModelConfig] | None,
+    catalogs: Mapping[str, DeclaredToolCatalog],
+    handler_names: Collection[str],
+    handler_schemas: Mapping[str, HandlerSchemas],
+    default_review: TransitionTargetPlan | UnresolvedRoutingPlan | ConditionalRoutingPlan | None,
+    diagnostics: Diagnostics,
+) -> tuple[FlowPlan, dict[str, dict[str, object]]]:
+    assert workflow.name is not None
+    path = workflow_path
+    location = SourceLocation(path.relative_to(root).as_posix(), 1, 1)
+    instance_where = workflow_where.below("flows", name)
+    if instance.definition is None or isinstance(instance.definition, str):
+        flow_reference = (
+            instance.definition if instance.definition is not None else f"{name}/flow.yaml"
+        )
+        path = _definition_path(root, workflow_path.parent, flow_reference, location, flow=True)
+        location = SourceLocation(path.relative_to(root).as_posix(), 1, 1)
+        try:
+            text = _read(path, root, cache).decode("utf-8")
+        except UnicodeError:
+            _fail("invalid_definition_file", location)
+        definition = _validate(
+            _FLOW_ADAPTER, load_yaml(text, relative_path=location.path), location
+        )
+        flow_where = _Where(YamlLocator(text, relative_path=location.path))
+    else:
+        definition = instance.definition
+        flow_where = instance_where.below("definition")
+    bundle = path.parent
+    schemas: dict[str, dict[str, object]] = {}
+    sources = {
+        item.relative_to(bundle).as_posix(): source
+        for item, source in cache.items()
+        if item.is_relative_to(bundle)
+    }
+    validated_nodes: set[tuple[str, int]] = set()
+    input_schema_path: str | None = None
+    input_schema: FrozenObject | None = None
+    if definition.input_schema is not None:
+        input_schema_path, input_schema = _load_schema(
+            bundle,
+            cast(str | dict[str, object], definition.input_schema),
+            location,
+            schemas,
+            sources,
+            validated_nodes,
+            inline_name=f"flow-{name}-input",
+        )
+    compiled: dict[str, CompiledStep] = {}
+    when_locations: dict[str, SourceLocation] = {}
+    effective_aliases = dict(model_aliases)
+    effective_profiles = dict(model_profiles or {})
+    default_model = definition.defaults.model or workflow.defaults.model
+    for index, item in enumerate(definition.steps):
+        entry = NamedStep(id=item) if isinstance(item, str) else item
+        step_path = path
+        step_location = location
+        reference = entry.definition
+        if reference is None:
+            candidates = [
+                f"{entry.id}.step.yaml",
+                f"{entry.id}.step.md",
+                f"{entry.id}/step.yaml",
+                f"{entry.id}/step.md",
+            ]
+            found = [
+                candidate
+                for candidate in candidates
+                if (bundle / candidate).exists() or (bundle / candidate).is_symlink()
+            ]
+            if len(found) != 1:
+                _fail("ambiguous_step_file" if found else "missing_step_file", location)
+            reference = found[0]
+        if isinstance(reference, str):
+            # An explicit definition may be shared from anywhere in the configuration
+            # root; conventional discovery stays inside the flow bundle.
+            step_path = _definition_path(
+                root if entry.definition is not None else bundle,
+                path.parent,
+                reference,
+                location,
+                flow=False,
+            )
+            raw, body, local_location, _ = load_step(
+                step_path, bundle=root, source=_read(step_path, root, cache)
+            )
+            step_location = SourceLocation(
+                step_path.relative_to(root).as_posix(), local_location.line, local_location.column
+            )
+            if not isinstance(raw, dict):
+                _fail("invalid_contract", step_location)
+            raw = cast(dict[str, object], raw)
+            if body is not None:
+                if raw.get("type") not in {"llm", "decision"}:
+                    _fail("unexpected_step_body", step_location)
+                if "instructions" in raw:
+                    _fail("ambiguous_instructions", step_location, "instructions")
+                raw["instructions"] = body
+            authored = _validate(_STEP_ADAPTER, raw, step_location)
+        else:
+            authored = reference
+        if isinstance(authored, (DecisionStepAuthoring, LlmStepAuthoring)):
+            alias = registry.select(
+                authored.model,
+                default=default_model,
+                aliases=model_aliases,
+                workflow=workflow.name,
+                flow=name,
+                step=entry.id,
+                location=step_location,
+            )
+            if alias in registry.profiles:
+                effective_profiles[alias] = registry.profiles[alias]
+                effective_aliases[alias] = registry.profiles[alias].model
+            authored = authored.model_copy(update={"model": alias})
+        # A step outside the flow bundle keeps its own resources: its schemas are
+        # relative to the step file and confined to the step's directory.
+        step_bundle = bundle if step_path.is_relative_to(bundle) else step_path.parent
+        shared = step_bundle != bundle
+        step_schemas: dict[str, dict[str, object]] = {} if shared else schemas
+        step_sources = (
+            {
+                item.relative_to(step_bundle).as_posix(): source
+                for item, source in cache.items()
+                if item.is_relative_to(step_bundle)
+            }
+            if shared
+            else sources
+        )
+        step = _compile_step(
+            authored,
+            step_id=entry.id,
+            location=step_location,
+            default_model=default_model,
+            origin=step_path.parent,
+            schema_identity=f"{name}-{entry.id}",
+            model_aliases=effective_aliases,
+            catalogs=catalogs,
+            handler_names=handler_names,
+            bundle=step_bundle,
+            schemas=step_schemas,
+            schema_sources=step_sources,
+            validated_schema_nodes=set() if shared else validated_nodes,
+        )
+        if shared:
+            # Re-key the step's resources relative to the flow bundle for this plan.
+            def rebase(relative: str, base: Path = step_bundle) -> str:
+                return os.path.relpath(base / relative, bundle).replace(os.sep, "/")
+
+            for relative, value in step_schemas.items():
+                schemas[rebase(relative)] = value
+            for relative, source in step_sources.items():
+                cache[step_bundle / relative] = source
+            if isinstance(step, LlmStepPlan) and step.output_schema_path is not None:
+                step = replace(step, output_schema_path=rebase(step.output_schema_path))
+        if entry.when is not None:
+            when_locations[entry.id] = flow_where.at("steps", index, "when")
+            step = replace(step, when=compile_condition(entry.when, when_locations[entry.id]))
+        compiled[entry.id] = step
+    conditional = frozenset(when_locations)
+    _validate_bindings(compiled, conditional, when_locations)
+    output = _binding(definition.output, location) if definition.output is not None else None
+    _validate_output(output, compiled, conditional, location)
+    _validate_model_capabilities(compiled, effective_profiles, allow_missing=model_profiles is None)
+    local_scope = FlowScope(compiled, input_schema_path, schemas, catalogs, handler_schemas)
+    _validate_schema_bindings(compiled, local_scope, output, location, diagnostics, when_locations)
+
+    # Resource keys are global to this compiled workflow, while references retain
+    # their authored relative bases. No schema bytes are reopened at execution.
+    def resource_path(relative: str) -> str:
+        return Path(os.path.normpath(bundle / relative)).relative_to(root).as_posix()
+
+    for relative, source in sources.items():
+        cache[Path(os.path.normpath(bundle / relative))] = source
+    steps = tuple(
+        replace(step, output_schema_path=resource_path(step.output_schema_path))
+        if isinstance(step, LlmStepPlan) and step.output_schema_path is not None
+        else step
+        for step in compiled.values()
+    )
+    routed = isinstance(instance, FlowInstance)
+    own_review = (
+        _unresolved(instance.on_unresolved, instance_where.below("on_unresolved"))
+        if isinstance(instance, FlowInstance)
+        else None
+    )
+    inherited = routed and own_review is None and default_review is not None
+    return FlowPlan(
+        name=name,
+        input=_bindings_map(instance.input, location) if isinstance(instance, FlowInstance) else (),
+        steps=steps,
+        input_schema_path=resource_path(input_schema_path)
+        if input_schema_path is not None
+        else None,
+        input_schema=input_schema,
+        output=output,
+        transition=_transition(instance.transition, instance_where.below("transition"), location)
+        if isinstance(instance, FlowInstance)
+        else None,
+        on_unresolved=default_review if inherited else own_review,
+        callable=isinstance(instance, CallableFlow),
+        location=location,
+        repeat=_repeat(instance, instance_where, location),
+        on_unresolved_inherited=inherited,
+    ), {resource_path(key): value for key, value in schemas.items()}
 
 
 def _validate_model_capabilities(
@@ -741,186 +1338,6 @@ def _validate_model_capabilities(
             or (schema_output and profile.output_mode == "tool" and not profile.supports_tools)
         ):
             _fail("unsupported_model_capability", step.location, "model")
-
-
-def _collection_result_schema() -> dict[str, object]:
-    """Known ledger structure; child business results keep their authored types."""
-    return {
-        "type": "object",
-        "required": ["items"],
-        "additionalProperties": False,
-        "properties": {
-            "items": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "flow": {"type": "string"},
-                        "status": {"type": "string"},
-                        "steps": {"type": "object"},
-                        "result": {},
-                        "usage": {"type": "object"},
-                        "elapsed_seconds": {"type": "number"},
-                        "error": {"type": "object"},
-                    },
-                    "additionalProperties": False,
-                },
-            }
-        },
-    }
-
-
-def _validate_schema_bindings(
-    steps: Mapping[str, CompiledStep],
-    input_path: str | None,
-    schemas: Mapping[str, dict[str, object]],
-    catalogs: Mapping[str, DeclaredToolCatalog],
-    handlers: Mapping[str, HandlerSchemas],
-    output: BindingPlan | None,
-    location: SourceLocation,
-) -> None:
-    def view(schema: dict[str, object], path: str = "") -> SchemaView:
-        return SchemaView(schema, schema, path, schemas)
-
-    def frozen_view(schema: FrozenObject) -> SchemaView:
-        return view(cast(dict[str, object], thaw_json(schema)))
-
-    def result_schema(step: CompiledStep) -> SchemaView:
-        if isinstance(step, FlowCollectionStepPlan):
-            return view(_collection_result_schema())
-        if isinstance(step, LlmStepPlan):
-            if step.output_schema_path is not None:
-                return view(schemas[step.output_schema_path], step.output_schema_path)
-            return view({"type": "string"})
-        if isinstance(step, McpStepPlan):
-            return view(
-                cast(dict[str, object], catalogs[step.server].tools[step.tool].output_schema or {})
-            )
-        if isinstance(step, HandlerStepPlan) and step.handler in handlers:
-            return frozen_view(handlers[step.handler].output_schema)
-        return view({})
-
-    def source(binding: BindingPlan, at: SourceLocation, field: str) -> SchemaView:
-        if binding.kind == "literal":
-            return view({"type": json_type(binding.literal)})
-        tokens = [
-            (part.replace("~1", "/").replace("~0", "~"))
-            for part in (binding.pointer or "").split("/")[1:]
-        ]
-        schema = view({})
-        if not tokens:
-            return schema
-        if tokens[0] == "payload":
-            if input_path is not None:
-                schema = view(schemas[input_path], input_path)
-            tokens = tokens[1:]
-        elif tokens[0] == "metadata":
-            schema = view({"type": "object"})
-            tokens = tokens[1:]
-        elif tokens[0] == "steps" and len(tokens) >= 2 and tokens[1] in steps:
-            referenced = steps[tokens[1]]
-            if len(tokens) >= 3 and tokens[2] == "result":
-                schema = result_schema(referenced)
-                tokens = tokens[3:]
-            else:
-                schema = view(
-                    {
-                        "type": "object",
-                        "properties": {
-                            "status": {"type": "string"},
-                            "kind": {"const": "flow_collection"},
-                            "result": {},
-                            "partial_result": _collection_result_schema(),
-                            "selection": {
-                                "type": "object",
-                                "properties": {
-                                    "origin": {"type": "string"},
-                                    "category": {
-                                        "type": "object",
-                                        "properties": {
-                                            "id": {"type": "string"},
-                                            "description": {"type": "string"},
-                                        },
-                                        "additionalProperties": False,
-                                    },
-                                },
-                                "additionalProperties": False,
-                            },
-                            "error": {
-                                "type": "object",
-                                "properties": {
-                                    "code": {"type": "string"},
-                                    "message": {"type": "string"},
-                                    "retryable": {"type": "boolean"},
-                                },
-                                "additionalProperties": False,
-                            },
-                        },
-                        "additionalProperties": False,
-                    }
-                )
-                tokens = tokens[2:]
-        else:
-            return schema
-        resolved = schema.pointer(tokens)
-        if resolved is None:
-            if binding.optional:
-                return view({"type": json_type(binding.default)})
-            _fail("dangling_pointer", at, field)
-        return resolved
-
-    for step in steps.values():
-        pairs: tuple[tuple[str, BindingPlan], ...] = ()
-        expected: SchemaView | None = None
-        field = "input"
-        if isinstance(step, DecisionStepPlan):
-            pairs, field = step.sources, "sources"
-        elif isinstance(step, LlmStepPlan):
-            pairs = step.input
-        elif isinstance(step, McpStepPlan):
-            pairs, field = step.arguments, "arguments"
-            expected = view(
-                cast(dict[str, object], catalogs[step.server].tools[step.tool].input_schema)
-            )
-        elif isinstance(step, FlowCollectionStepPlan):
-            pairs = step.input
-            expected = view({"type": "object", "properties": {"items": {"type": "array"}}})
-        elif isinstance(step, HandlerStepPlan):
-            pairs = step.input
-            if step.handler in handlers:
-                expected = frozen_view(handlers[step.handler].input_schema)
-        if expected is not None:
-            node = expected.resolved().node
-            if isinstance(node, dict):
-                required = node.get("required", [])
-                if isinstance(required, list) and not set(required).issubset(dict(pairs)):
-                    _fail("invalid_input_bindings", step.location, field)
-                if incompatible_types({"object"}, schema_types(expected)):
-                    _fail("incompatible_binding_type", step.location, field)
-        for key, binding in pairs:
-            actual = source(binding, step.location, field + ".*.pointer")
-            if (
-                isinstance(step, DecisionStepPlan)
-                and dict(step.source_formats).get(key, "text") == "text"
-            ):
-                if incompatible_types(schema_types(actual), {"string"}):
-                    _fail("incompatible_binding_type", step.location, field + ".*")
-                if binding.optional and not isinstance(binding.default, str):
-                    _fail("incompatible_binding_type", step.location, field + ".*.default")
-            if expected is None:
-                continue
-            target = expected.child(key)
-            if target is None:
-                _fail("invalid_input_bindings", step.location, field)
-            if incompatible_types(schema_types(actual), schema_types(target)):
-                _fail("incompatible_binding_type", step.location, field + ".*")
-            if binding.optional and incompatible_types(
-                {json_type(binding.default)}, schema_types(target)
-            ):
-                _fail("incompatible_binding_type", step.location, field + ".*.default")
-    if output is not None:
-        source(output, location, "output.pointer")
 
 
 def _catalogs(
@@ -1044,239 +1461,170 @@ def _read(path: Path, root: Path, cache: dict[Path, bytes]) -> bytes:
     return cache[path]
 
 
-def _compile_flow(
-    name: str,
-    instance: FlowInstance | CallableFlow,
-    *,
-    workflow: WorkflowAuthoring,
-    workflow_path: Path,
-    root: Path,
-    cache: dict[Path, bytes],
-    registry: ModelRegistry,
-    model_aliases: Mapping[str, str],
-    model_profiles: Mapping[str, ModelConfig] | None,
-    catalogs: Mapping[str, DeclaredToolCatalog],
-    handler_names: Collection[str],
-    handler_schemas: Mapping[str, HandlerSchemas],
-) -> tuple[FlowPlan, dict[str, dict[str, object]]]:
-    assert workflow.name is not None
-    path = workflow_path
-    location = SourceLocation(path.relative_to(root).as_posix(), 1, 1)
-    if instance.definition is None or isinstance(instance.definition, str):
-        flow_reference = (
-            instance.definition if instance.definition is not None else f"{name}/flow.yaml"
-        )
-        path = _definition_path(root, workflow_path.parent, flow_reference, location, flow=True)
-        location = SourceLocation(path.relative_to(root).as_posix(), 1, 1)
-        try:
-            text = _read(path, root, cache).decode("utf-8")
-        except UnicodeError:
-            _fail("invalid_definition_file", location)
-        definition = _validate(
-            _FLOW_ADAPTER, load_yaml(text, relative_path=location.path), location
-        )
-    else:
-        definition = instance.definition
-    bundle = path.parent
-    schemas: dict[str, dict[str, object]] = {}
-    sources = {
-        item.relative_to(bundle).as_posix(): source
-        for item, source in cache.items()
-        if item.is_relative_to(bundle)
-    }
-    validated_nodes: set[tuple[str, int]] = set()
-    input_schema_path: str | None = None
-    input_schema: FrozenObject | None = None
-    if definition.input_schema is not None:
-        input_schema_path, input_schema = _load_schema(
-            bundle,
-            cast(str | dict[str, object], definition.input_schema),
-            location,
-            schemas,
-            sources,
-            validated_nodes,
-            inline_name=f"flow-{name}-input",
-        )
-    compiled: dict[str, CompiledStep] = {}
-    effective_aliases = dict(model_aliases)
-    effective_profiles = dict(model_profiles or {})
-    for item in definition.steps:
-        entry = NamedStep(id=item) if isinstance(item, str) else item
-        step_path = path
-        step_location = location
-        reference = entry.definition
-        if reference is None:
-            candidates = [
-                f"{entry.id}.step.yaml",
-                f"{entry.id}.step.md",
-                f"{entry.id}/step.yaml",
-                f"{entry.id}/step.md",
-            ]
-            found = [
-                candidate
-                for candidate in candidates
-                if (bundle / candidate).exists() or (bundle / candidate).is_symlink()
-            ]
-            if len(found) != 1:
-                _fail("ambiguous_step_file" if found else "missing_step_file", location)
-            reference = found[0]
-        if isinstance(reference, str):
-            step_path = _definition_path(bundle, path.parent, reference, location, flow=False)
-            raw, body, local_location, _ = load_step(
-                step_path, bundle=bundle, source=_read(step_path, root, cache)
-            )
-            step_location = SourceLocation(
-                step_path.relative_to(root).as_posix(), local_location.line, local_location.column
-            )
-            if not isinstance(raw, dict):
-                _fail("invalid_contract", step_location)
-            raw = cast(dict[str, object], raw)
-            if body is not None:
-                if raw.get("type") not in {"llm", "decision"}:
-                    _fail("unexpected_step_body", step_location)
-                if "instructions" in raw:
-                    _fail("ambiguous_instructions", step_location, "instructions")
-                raw["instructions"] = body
-            authored = _validate(_STEP_ADAPTER, raw, step_location)
-        else:
-            authored = reference
-        if isinstance(authored, (DecisionStepAuthoring, LlmStepAuthoring)):
-            alias = registry.select(
-                authored.model,
-                default=workflow.defaults.model,
-                aliases=model_aliases,
-                workflow=workflow.name,
-                flow=name,
-                step=entry.id,
-                location=step_location,
-            )
-            if alias in registry.profiles:
-                effective_profiles[alias] = registry.profiles[alias]
-                effective_aliases[alias] = registry.profiles[alias].model
-            authored = authored.model_copy(update={"model": alias})
-        compiled[entry.id] = _compile_step(
-            authored,
-            step_id=entry.id,
-            location=step_location,
-            default_model=workflow.defaults.model,
-            origin=step_path.parent,
-            schema_identity=f"{name}-{entry.id}",
-            model_aliases=effective_aliases,
-            catalogs=catalogs,
-            handler_names=handler_names,
-            bundle=bundle,
-            schemas=schemas,
-            schema_sources=sources,
-            validated_schema_nodes=validated_nodes,
-        )
-    _validate_bindings(compiled)
-    output = _binding(definition.output, location) if definition.output is not None else None
-    _validate_output(output, compiled, location)
-    _validate_model_capabilities(compiled, effective_profiles, allow_missing=model_profiles is None)
-    _validate_schema_bindings(
-        compiled, input_schema_path, schemas, catalogs, handler_schemas, output, location
-    )
-
-    # Resource keys are global to this compiled workflow, while references retain
-    # their authored relative bases. No schema bytes are reopened at execution.
-    def resource_path(relative: str) -> str:
-        return (bundle / relative).relative_to(root).as_posix()
-
-    for relative, source in sources.items():
-        cache[bundle / relative] = source
-    steps = tuple(
-        replace(step, output_schema_path=resource_path(step.output_schema_path))
-        if isinstance(step, LlmStepPlan) and step.output_schema_path is not None
-        else step
-        for step in compiled.values()
-    )
-    route = instance.transition if isinstance(instance, FlowInstance) else None
-    transition = (
-        MatchRoutingPlan(
-            _binding(route.binding, location),
-            tuple((key, _target(target)) for key, target in sorted(route.cases.items())),
-            _target(route.default),
-        )
-        if isinstance(route, MatchRouting)
-        else _target(route)
-        if route is not None
-        else None
-    )
-    return FlowPlan(
-        name=name,
-        input=tuple(
-            (key, _binding(binding, location)) for key, binding in sorted(instance.input.items())
-        )
-        if isinstance(instance, FlowInstance)
-        else (),
-        steps=steps,
-        input_schema_path=resource_path(input_schema_path)
-        if input_schema_path is not None
-        else None,
-        input_schema=input_schema,
-        output=output,
-        transition=transition,
-        on_unresolved=_unresolved(instance.on_unresolved)
-        if isinstance(instance, FlowInstance)
-        else None,
-        callable=isinstance(instance, CallableFlow),
-        location=location,
-    ), {resource_path(key): value for key, value in schemas.items()}
-
-
 def _flow_targets(flow: FlowPlan) -> tuple[TransitionTargetPlan, ...]:
-    targets = (
-        [flow.transition.default, *(target for _, target in flow.transition.cases)]
-        if isinstance(flow.transition, MatchRoutingPlan)
-        else [flow.transition]
-        if flow.transition is not None
-        else []
-    )
-    unresolved = flow.on_unresolved
-    if isinstance(unresolved, UnresolvedRoutingPlan):
-        targets.extend([unresolved.default, *(target for _, target in unresolved.issues)])
-    elif unresolved is not None:
-        targets.append(unresolved)
+    targets: list[TransitionTargetPlan] = []
+    if flow.transition is not None:
+        targets.extend(_route_targets(flow.transition))
+    if flow.on_unresolved is not None:
+        targets.extend(_route_targets(flow.on_unresolved))
     return tuple(targets)
 
 
+def _review_flow_targets(flow: FlowPlan) -> tuple[str, ...]:
+    if flow.on_unresolved is None:
+        return ()
+    return tuple(
+        target.flow for target in _route_targets(flow.on_unresolved) if target.flow is not None
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _Graph:
+    """Dominators, may-precede sets and retry ownership of the routed graph.
+
+    ``retry_of`` holds the retry flows of routed flows only; their records are
+    workflow-level. A callable flow's retry flow is item-local.
+    """
+
+    dominators: Mapping[str, frozenset[str]]
+    ancestors: Mapping[str, frozenset[str]]
+    retry_of: Mapping[str, str]
+
+    def retry_for(self, name: str) -> Collection[str]:
+        return {retry for retry, owner in self.retry_of.items() if owner == name}
+
+    def may_have_run(self, name: str) -> frozenset[str]:
+        """Flows that can have produced a record when ``name``'s routes are evaluated."""
+        routed = self.ancestors[name] | {name}
+        return frozenset(routed | {retry for flow in routed for retry in self.retry_for(flow)})
+
+
+def _repeat_input_keys(flow: FlowPlan, schemas: Mapping[str, dict[str, object]]) -> set[str] | None:
+    """Keys ``retry_input`` may override: bound inputs, or a callable's declared input.
+
+    None means an open callable input without declared properties.
+    """
+    if not flow.callable:
+        return set(dict(flow.input))
+    if flow.input_schema_path is None:
+        return None
+    schema = dict(schemas[flow.input_schema_path])
+    node = SchemaView(schema, schema, flow.input_schema_path, schemas).resolved().node
+    properties = node.get("properties") if isinstance(node, dict) else None
+    return set(properties) if isinstance(properties, dict) else None
+
+
+def _validate_repeats(
+    flows: Mapping[str, FlowPlan], where: _Where, schemas: Mapping[str, dict[str, object]]
+) -> dict[str, str]:
+    """Check repeat shapes and return each retry flow's single owning flow."""
+    retry_of: dict[str, str] = {}
+    for name, flow in flows.items():
+        repeat = flow.repeat
+        if repeat is None:
+            continue
+        here = where.below("flows", name, "repeat")
+        keys = _repeat_input_keys(flow, schemas)
+        if keys is not None and not set(dict(repeat.retry_input)) <= keys:
+            _fail("invalid_repeat", here.at("retry_input"), "repeat.retry_input")
+        if repeat.retry_flow is None:
+            if any(
+                (parts := tokens(pointer))[:1] == ["flows"]
+                and len(parts) > 1
+                and parts[1] in flows
+                and parts[1] != name
+                and flows[parts[1]].callable
+                for _, binding in repeat.retry_input
+                for pointer in _pointers(binding)
+            ):
+                _fail("invalid_repeat", here.at("retry_input"), "repeat.retry_input")
+            continue
+        target = flows.get(repeat.retry_flow)
+        if (
+            target is None
+            or not target.callable
+            or repeat.retry_flow == name
+            or repeat.retry_flow in retry_of
+            # A retry run is one execution; a retry flow cannot repeat itself.
+            or target.repeat is not None
+        ):
+            _fail("invalid_repeat", here.at("retry", "flow"), "repeat.retry.flow")
+        retry_of[repeat.retry_flow] = name
+    return retry_of
+
+
+def _reaches(graph: Mapping[str, tuple[str, ...]], start: str, goal: str) -> bool:
+    pending, seen = [start], set[str]()
+    while pending:
+        current = pending.pop()
+        if current == goal:
+            return True
+        if current in seen:
+            continue
+        seen.add(current)
+        pending.extend(graph.get(current, ()))
+    return False
+
+
 def _validate_graph(
-    flows: Mapping[str, FlowPlan], start: str, location: SourceLocation
-) -> dict[str, set[str]]:
-    if start not in flows or flows[start].callable:
-        _fail("missing_start", location)
+    flows: Mapping[str, FlowPlan],
+    starts: tuple[str, ...],
+    retry_of: Mapping[str, str],
+    location: SourceLocation,
+    where: _Where,
+) -> _Graph:
+    for start in starts:
+        if start not in flows or flows[start].callable:
+            _fail("missing_start", where.at("start"))
     routed = {
         name: tuple(
             dict.fromkeys(target.flow for target in _flow_targets(flow) if target.flow is not None)
         )
         for name, flow in flows.items()
     }
-    graph: dict[str, tuple[str, ...]] = {}
+    graph: dict[str, tuple[tuple[str, int], ...]] = {}
     for name, flow in flows.items():
         for target in routed[name]:
             if target not in flows:
                 _fail("missing_flow", flow.location)
             if flows[target].callable:
                 _fail("invalid_routed_flow", flow.location)
-        calls = []
+        calls: list[tuple[str, int]] = []
         for step in flow.steps:
             if not isinstance(step, FlowCollectionStepPlan):
                 continue
             for target in step.flows:
                 if target not in flows or not flows[target].callable:
                     _fail("invalid_callable_flow", step.location, "flows")
-                calls.append(target)
-        graph[name] = tuple(dict.fromkeys((*routed[name], *calls)))
+                calls.append((target, 1))
+        # A retry flow runs at the workflow level; it adds no collection nesting.
+        calls.extend((retry, 0) for retry, owner in retry_of.items() if owner == name)
+        graph[name] = tuple(dict.fromkeys((*((target, 0) for target in routed[name]), *calls)))
+    for name, flow in flows.items():
+        review_targets = _review_flow_targets(flow)
+        if flow.on_unresolved_inherited:
+            for target in review_targets:
+                if target == name or _reaches(routed, target, name):
+                    _fail(
+                        "invalid_default_review_route",
+                        where.at("defaults", "on_unresolved"),
+                        "defaults.on_unresolved",
+                    )
+        elif name in review_targets:
+            _fail(
+                "review_route_to_self",
+                where.at("flows", name, "on_unresolved"),
+                "on_unresolved",
+            )
     visited: set[str] = set()
     active: set[str] = set()
     call_depths: dict[str, int] = {}
-    pending = [(start, False)]
+    pending = [(start, False) for start in reversed(starts)]
     while pending:
         name, exiting = pending.pop()
         if exiting:
             call_depths[name] = max(
-                (call_depths[target] + int(flows[target].callable) for target in graph[name]),
-                default=0,
+                (call_depths[target] + weight for target, weight in graph[name]), default=0
             )
             if call_depths[name] > MAX_COLLECTION_DEPTH:
                 _fail("collection_depth_exceeded", flows[name].location)
@@ -1289,21 +1637,23 @@ def _validate_graph(
             continue
         active.add(name)
         pending.append((name, True))
-        pending.extend((target, False) for target in reversed(graph[name]))
+        pending.extend((target, False) for target, _ in reversed(graph[name]))
     if visited != set(flows):
         _fail("unreachable_flow", flows[sorted(set(flows) - visited)[0]].location)
     routed_flows = {name for name, flow in flows.items() if not flow.callable}
+    entry = ""  # A virtual root precedes every start candidate; it is never a flow ID.
     predecessors = {name: set[str]() for name in routed_flows}
     for name, targets in routed.items():
         for target in targets:
             predecessors[target].add(name)
-    dominators = {name: ({name} if name == start else set(routed_flows)) for name in routed_flows}
+    for start in starts:
+        predecessors[start].add(entry)
+    dominators: dict[str, set[str]] = {name: set(routed_flows) | {entry} for name in routed_flows}
+    dominators[entry] = {entry}
     changed = True
     while changed:
         changed = False
         for name in routed_flows:
-            if name == start:
-                continue
             parents = predecessors[name]
             common = (
                 set.intersection(*(dominators[parent] for parent in parents)) if parents else set()
@@ -1312,144 +1662,251 @@ def _validate_graph(
             if updated != dominators[name]:
                 dominators[name] = updated
                 changed = True
-    return dominators
+    ancestors: dict[str, frozenset[str]] = {}
+    for name in routed_flows:
+        seen: set[str] = set()
+        pending_names = [parent for parent in predecessors[name] if parent != entry]
+        while pending_names:
+            current = pending_names.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            pending_names.extend(parent for parent in predecessors[current] if parent != entry)
+        ancestors[name] = frozenset(seen)
+    return _Graph(
+        {name: frozenset(dominators[name] - {entry}) for name in routed_flows},
+        ancestors,
+        # Retry flows of callable flows run per collection item, never at the boundary.
+        {retry: owner for retry, owner in retry_of.items() if not flows[owner].callable},
+    )
 
 
-def _boundary_binding(
-    binding: BindingPlan,
+def _flow_reference_check(
     flows: Mapping[str, FlowPlan],
-    available: set[str],
+    graph: _Graph,
     location: SourceLocation,
-) -> None:
-    if binding.kind != "pointer" or binding.pointer is None:
-        return
-    tokens = [part.replace("~1", "/").replace("~0", "~") for part in binding.pointer.split("/")[1:]]
-    if not tokens:
-        return
-    if tokens[0] not in {"payload", "metadata", "flows"}:
-        _fail("dangling_pointer", location)
-    if tokens[0] != "flows":
-        return
-    if (
-        len(tokens) < 3
-        or tokens[2] != "result"
-        or tokens[1] not in flows
-        or flows[tokens[1]].callable
-    ):
-        _fail("invalid_flow_reference", location)
-    if tokens[1] not in available and not binding.optional:
-        _fail("unavailable_flow_reference", location)
+    field: str | None,
+) -> Callable[[str], None]:
+    def check(pointer: str) -> None:
+        parts = tokens(pointer)
+        if not parts:
+            return
+        if parts[0] not in {"payload", "metadata", "flows"}:
+            _fail("dangling_pointer", location, field)
+        if parts[0] != "flows":
+            return
+        if len(parts) < 3 or parts[1] not in flows or parts[2] not in {"result", "attempts"}:
+            _fail("invalid_flow_reference", location, field)
+        target = flows[parts[1]]
+        retry = parts[1] in graph.retry_of
+        if target.callable and not retry:
+            _fail("invalid_flow_reference", location, field)
+        if parts[2] == "attempts" and target.repeat is None and not retry:
+            _fail("invalid_flow_reference", location, field)
+
+    return check
 
 
-def _boundary_schema(
-    binding: BindingPlan,
+def _flow_available(available: Collection[str]) -> Callable[[str], bool]:
+    def check(pointer: str) -> bool:
+        parts = tokens(pointer)
+        return not parts or parts[0] != "flows" or parts[1] in available
+
+    return check
+
+
+def _boundary_bindings(
+    pairs: tuple[tuple[str, BindingPlan], ...],
     *,
-    workflow_input_path: str | None,
-    flows: Mapping[str, FlowPlan],
+    expected_path: str | None,
     schemas: Mapping[str, dict[str, object]],
-    catalogs: Mapping[str, DeclaredToolCatalog],
-    handlers: Mapping[str, HandlerSchemas],
-) -> SchemaView:
-    def view(schema: dict[str, object], path: str = "") -> SchemaView:
-        return SchemaView(schema, schema, path, schemas)
+    scope: WorkflowScope,
+    check: Callable[[str], None],
+    available: Callable[[str], bool],
+    location: SourceLocation,
+    field: str,
+) -> None:
+    """Check boundary bindings for availability, schema paths and target types."""
+    expected = (
+        SchemaView(
+            dict(schemas[expected_path]), dict(schemas[expected_path]), expected_path, schemas
+        )
+        if expected_path is not None
+        else None
+    )
+    if expected is not None:
+        node = expected.resolved().node
+        if incompatible_types({"object"}, schema_types(expected)):
+            _fail("incompatible_binding_type", location, field)
+        if isinstance(node, dict) and isinstance(node.get("required"), list):
+            if not set(node["required"]).issubset(dict(pairs)):
+                _fail("invalid_input_bindings", location, field)
 
-    if binding.kind == "literal":
-        return view({"type": json_type(binding.literal)})
-    tokens = [
-        part.replace("~1", "/").replace("~0", "~")
-        for part in (binding.pointer or "").split("/")[1:]
-    ]
-    result = view({})
-    if tokens and tokens[0] == "payload":
-        if workflow_input_path is not None:
-            result = view(schemas[workflow_input_path], workflow_input_path)
-        tokens = tokens[1:]
-    elif len(tokens) >= 3 and tokens[0] == "flows" and tokens[1] in flows and tokens[2] == "result":
-        flow = flows[tokens[1]]
-        output = flow.output
-        if output is None:
-            result = (
-                view(schemas[flow.input_schema_path], flow.input_schema_path)
-                if flow.input_schema_path
-                else view({"type": "object"})
+    def unavailable() -> Never:
+        _fail("unavailable_flow_reference", location, field)
+
+    for key, binding in pairs:
+        _require(binding, check=check, available=available, fail=unavailable)
+        actual = _binding_value(binding, scope, location, field)
+        if expected is None:
+            continue
+        target = expected.child(key)
+        if target is None:
+            _fail("invalid_input_bindings", location, field)
+        if incompatible_types(types(actual), schema_types(target)):
+            _fail("incompatible_binding_type", location, field)
+        _check_default_type(binding, schema_types(target), location, field)
+
+
+def _check_route_conditions(
+    route: ConditionalRoutingPlan,
+    *,
+    allowed: Collection[str],
+    flows: Mapping[str, FlowPlan],
+    graph: _Graph,
+    scope: WorkflowScope,
+    where: _Where,
+    field: str,
+    diagnostics: Diagnostics,
+    start: bool = False,
+) -> None:
+    """Scope and type checks for route entries; warn about unreachable entries."""
+    decided = False
+    for index, entry in enumerate(route.entries):
+        location = where.at("route", index)
+        if decided:
+            diagnostics.add(
+                "route_unreachable_entry",
+                location,
+                f"Entry {index} of `{field}` follows an entry whose condition always holds.",
+                field_path=f"{field}.route",
             )
-            tokens = tokens[3:]
-        elif output.kind == "literal":
-            result = view({"type": json_type(output.literal)})
-            tokens = tokens[3:]
-        else:
-            local = [
-                part.replace("~1", "/").replace("~0", "~")
-                for part in (output.pointer or "").split("/")[1:]
-            ]
-            if local and local[0] == "payload":
-                result = (
-                    view(schemas[flow.input_schema_path], flow.input_schema_path)
-                    if flow.input_schema_path
-                    else view({"type": "object"})
-                )
-                tokens = local[1:] + tokens[3:]
-            elif len(local) >= 3 and local[0] == "steps" and local[2] == "result":
-                step = flow.step(local[1])
-                if isinstance(step, LlmStepPlan):
-                    result = (
-                        view(schemas[step.output_schema_path], step.output_schema_path)
-                        if step.output_schema_path
-                        else view({"type": "string"})
-                    )
-                elif isinstance(step, FlowCollectionStepPlan):
-                    result = view(_collection_result_schema())
-                elif isinstance(step, HandlerStepPlan) and step.handler in handlers:
-                    result = view(
-                        cast(dict[str, object], thaw_json(handlers[step.handler].output_schema))
-                    )
-                elif isinstance(step, McpStepPlan):
-                    result = view(
-                        cast(
-                            dict[str, object],
-                            catalogs[step.server].tools[step.tool].output_schema or {},
-                        )
-                    )
-                tokens = local[3:] + tokens[3:]
-            else:
-                return result
-            # An optional output may have a differently typed authored fallback.
-            # Avoid false static rejection; runtime input validation remains exact.
-            if output.optional:
-                return view({})
-    else:
-        return result
-    resolved = result.pointer(tokens)
-    if resolved is None:
-        if binding.optional:
-            return view({"type": json_type(binding.default)})
-        return view({"type": []})
-    return resolved
+            continue
+        if entry.when is None:
+            continue
+        condition_location = where.at("route", index, "when")
+        _check_scope(
+            entry.when,
+            allowed=allowed,
+            flows=flows,
+            graph=graph,
+            location=condition_location,
+            field=f"{field}.route.when",
+            start=start,
+        )
+        verdict = check_condition(
+            entry.when,
+            resolve=scope,
+            location=condition_location,
+            field=f"{field}.route.when",
+            diagnostics=diagnostics,
+        )
+        if verdict is False:
+            diagnostics.add(
+                "route_unreachable_entry",
+                location,
+                f"Entry {index} of `{field}` can never be selected: its condition is "
+                "statically false.",
+                field_path=f"{field}.route",
+            )
+        elif verdict is True:
+            decided = True
+
+
+def _check_scope(
+    condition: ConditionPlan,
+    *,
+    allowed: Collection[str],
+    flows: Mapping[str, FlowPlan],
+    graph: _Graph,
+    location: SourceLocation,
+    field: str,
+    start: bool = False,
+) -> None:
+    """A condition tolerates absence, but not flows that can never have run."""
+    check = _flow_reference_check(flows, graph, location, field)
+    for pointer in condition_pointers(condition):
+        parts = tokens(pointer)
+        if start and parts[:1] == ["flows"]:
+            _fail("unavailable_flow_reference", location, field)
+        check(pointer)
+        if parts[:1] == ["flows"] and parts[1] not in allowed:
+            _fail("unavailable_flow_reference", location, field)
+
+
+def _coverage(
+    flow: FlowPlan,
+    route: MatchRoutingPlan,
+    scope: WorkflowScope,
+    where: _Where,
+    diagnostics: Diagnostics,
+) -> None:
+    """Compare case keys with the statically allowed values of the routed field."""
+    location = where.at("flows", flow.name, "transition", "cases")
+    allowed = values(scope.binding(route.binding))
+    if allowed is None:
+        if route.default_covers:
+            _fail(
+                "default_covers_mismatch",
+                where.at("flows", flow.name, "transition", "default_covers"),
+                "transition.default_covers",
+            )
+        diagnostics.add(
+            "case_on_unknown_type",
+            location,
+            f"The allowed values of the field routed by flow `{flow.name}` are unknown "
+            "(no enum or const in its schema); case keys cannot be checked.",
+            field_path="transition.cases",
+        )
+        return
+    strings = [value for value in allowed.values() if isinstance(value, str)]
+    keys = [key for key, _ in route.cases]
+    for key in keys:
+        if key not in strings:
+            _fail("unmatched_case", location, "transition.cases")
+    uncovered = [value for value in strings if value not in keys]
+    if route.default_covers:
+        if sorted(route.default_covers) != sorted(uncovered):
+            _fail(
+                "default_covers_mismatch",
+                where.at("flows", flow.name, "transition", "default_covers"),
+                "transition.default_covers",
+            )
+    elif uncovered:
+        diagnostics.add(
+            "uncovered_value",
+            location,
+            f"Flow `{flow.name}` routes these allowed values to `default` without a case: "
+            + ", ".join(safe_text(value) for value in uncovered)
+            + ". List them in `default_covers` when that is intended.",
+            field_path="transition.cases",
+        )
 
 
 def _validate_boundaries(
     flows: Mapping[str, FlowPlan],
-    dominators: Mapping[str, set[str]],
+    graph: _Graph,
     output: BindingPlan | None,
-    workflow_input_path: str | None,
+    start: str | ConditionalRoutingPlan,
+    scope: WorkflowScope,
     schemas: Mapping[str, dict[str, object]],
-    catalogs: Mapping[str, DeclaredToolCatalog],
-    handlers: Mapping[str, HandlerSchemas],
     location: SourceLocation,
+    where: _Where,
+    diagnostics: Diagnostics,
 ) -> None:
-    def source(binding: BindingPlan) -> SchemaView:
-        result = _boundary_schema(
-            binding,
-            workflow_input_path=workflow_input_path,
+    dominators = graph.dominators
+    if isinstance(start, ConditionalRoutingPlan):
+        _check_route_conditions(
+            start,
+            allowed=(),
             flows=flows,
-            schemas=schemas,
-            catalogs=catalogs,
-            handlers=handlers,
+            graph=graph,
+            scope=scope,
+            where=where.below("start"),
+            field="start",
+            diagnostics=diagnostics,
+            start=True,
         )
-        if schema_types(result) == set():
-            _fail("dangling_pointer", location)
-        return result
-
     for name, flow in flows.items():
         if flow.callable:
             if flow.input_schema_path is not None:
@@ -1457,48 +1914,87 @@ def _validate_boundaries(
                 view = SchemaView(schema, schema, flow.input_schema_path, schemas)
                 if incompatible_types({"object"}, schema_types(view)):
                     _fail("incompatible_binding_type", flow.location, "input_schema")
+            if flow.repeat is not None:
+                _validate_item_repeat(
+                    flow,
+                    flows=flows,
+                    scope=scope,
+                    schemas=schemas,
+                    where=where.below("flows", name, "repeat"),
+                    diagnostics=diagnostics,
+                )
             continue
-        expected = (
-            SchemaView(
-                dict(schemas[flow.input_schema_path]),
-                dict(schemas[flow.input_schema_path]),
-                flow.input_schema_path,
-                schemas,
-            )
-            if flow.input_schema_path is not None
-            else None
+        flow_where = where.below("flows", name)
+        _boundary_bindings(
+            flow.input,
+            expected_path=flow.input_schema_path,
+            schemas=schemas,
+            scope=scope,
+            check=_flow_reference_check(flows, graph, flow.location, None),
+            available=_flow_available(dominators[name] - {name}),
+            location=flow.location,
+            field="input",
         )
-        if expected is not None:
-            node = expected.resolved().node
-            if incompatible_types({"object"}, schema_types(expected)):
-                _fail("incompatible_binding_type", flow.location, "input")
-            if isinstance(node, dict) and isinstance(node.get("required"), list):
-                if not set(node["required"]).issubset(dict(flow.input)):
-                    _fail("invalid_input_bindings", flow.location, "input")
-        for key, binding in flow.input:
-            _boundary_binding(binding, flows, dominators[name] - {name}, flow.location)
-            actual = source(binding)
-            if expected is not None:
-                target = expected.child(key)
-                if target is None:
-                    _fail("invalid_input_bindings", flow.location, "input")
-                if incompatible_types(schema_types(actual), schema_types(target)):
-                    _fail("incompatible_binding_type", flow.location, "input")
-                if binding.optional and incompatible_types(
-                    {json_type(binding.default)}, schema_types(target)
-                ):
-                    _fail("incompatible_binding_type", flow.location, "input")
-        if isinstance(flow.transition, MatchRoutingPlan):
-            binding = flow.transition.binding
-            _boundary_binding(binding, flows, dominators[name], flow.location)
-            if incompatible_types(schema_types(source(binding)), {"string", "null"}):
+        allowed = graph.may_have_run(name)
+        transition = flow.transition
+        if isinstance(transition, MatchRoutingPlan):
+            binding = transition.binding
+
+            def unavailable(flow: FlowPlan = flow) -> Never:
+                _fail("unavailable_flow_reference", flow.location)
+
+            _require(
+                binding,
+                check=_flow_reference_check(flows, graph, flow.location, None),
+                available=_flow_available(dominators[name]),
+                fail=unavailable,
+            )
+            value = _binding_value(binding, scope, flow.location, "transition.binding")
+            if incompatible_types(types(value), {"string", "null"}):
                 _fail("incompatible_route_type", flow.location, "transition.binding")
             if (
-                binding.optional
+                binding.has_default
                 and binding.default is not None
                 and not isinstance(binding.default, str)
             ):
                 _fail("incompatible_route_type", flow.location, "transition.binding.default")
+            _coverage(flow, transition, scope, where, diagnostics)
+        elif isinstance(transition, ConditionalRoutingPlan):
+            _check_route_conditions(
+                transition,
+                allowed=allowed,
+                flows=flows,
+                graph=graph,
+                scope=scope,
+                where=flow_where.below("transition"),
+                field="transition",
+                diagnostics=diagnostics,
+            )
+        if isinstance(flow.on_unresolved, ConditionalRoutingPlan):
+            _check_route_conditions(
+                flow.on_unresolved,
+                allowed=allowed,
+                flows=flows,
+                graph=graph,
+                scope=scope,
+                where=(
+                    where.below("defaults", "on_unresolved")
+                    if flow.on_unresolved_inherited
+                    else flow_where.below("on_unresolved")
+                ),
+                field="on_unresolved",
+                diagnostics=diagnostics,
+            )
+        if flow.repeat is not None:
+            _validate_repeat_bindings(
+                flow,
+                flows=flows,
+                graph=graph,
+                scope=scope,
+                schemas=schemas,
+                where=flow_where.below("repeat"),
+                diagnostics=diagnostics,
+            )
     if output is not None:
         terminals = [
             name
@@ -1509,11 +2005,280 @@ def _validate_boundaries(
                 or any(target.outcome is not None for target in _flow_targets(flow))
             )
         ]
-        available = (
-            set.intersection(*(dominators[name] for name in terminals)) if terminals else set()
+        available: set[str] = (
+            set.intersection(*(set(dominators[name]) for name in terminals)) if terminals else set()
         )
-        _boundary_binding(output, flows, available, location)
-        source(output)
+
+        def unavailable_output() -> Never:
+            _fail("unavailable_flow_reference", location)
+
+        _require(
+            output,
+            check=_flow_reference_check(flows, graph, location, None),
+            available=_flow_available(available),
+            fail=unavailable_output,
+        )
+        _binding_value(output, scope, location, "output")
+
+
+def _validate_repeat_bindings(
+    flow: FlowPlan,
+    *,
+    flows: Mapping[str, FlowPlan],
+    graph: _Graph,
+    scope: WorkflowScope,
+    schemas: Mapping[str, dict[str, object]],
+    where: _Where,
+    diagnostics: Diagnostics,
+) -> None:
+    repeat = flow.repeat
+    assert repeat is not None
+    name = flow.name
+    dominators = graph.dominators[name]
+    allowed = graph.may_have_run(name)
+    _check_scope(
+        repeat.until,
+        allowed=allowed,
+        flows=flows,
+        graph=graph,
+        location=where.at("until"),
+        field="repeat.until",
+    )
+    check_condition(
+        repeat.until,
+        resolve=scope,
+        location=where.at("until"),
+        field="repeat.until",
+        diagnostics=diagnostics,
+    )
+    retry = repeat.retry_flow
+    if retry is not None:
+        location = where.at("retry", "input")
+        _boundary_bindings(
+            repeat.retry_flow_input,
+            expected_path=flows[retry].input_schema_path,
+            schemas=schemas,
+            scope=scope,
+            check=_flow_reference_check(flows, graph, location, "repeat.retry.input"),
+            available=_flow_available(dominators),
+            location=location,
+            field="repeat.retry.input",
+        )
+        if repeat.continue_when is not None:
+            condition_location = where.at("retry", "continue_when")
+            _check_scope(
+                repeat.continue_when,
+                allowed=allowed | {retry},
+                flows=flows,
+                graph=graph,
+                location=condition_location,
+                field="repeat.retry.continue_when",
+            )
+            check_condition(
+                repeat.continue_when,
+                resolve=scope,
+                location=condition_location,
+                field="repeat.retry.continue_when",
+                diagnostics=diagnostics,
+            )
+    if repeat.retry_input:
+        location = where.at("retry_input")
+        expected = flow.input_schema_path
+        pairs = repeat.retry_input
+        _boundary_bindings(
+            pairs,
+            expected_path=None,
+            schemas=schemas,
+            scope=scope,
+            check=_flow_reference_check(flows, graph, location, "repeat.retry_input"),
+            available=_flow_available(dominators | ({retry} if retry is not None else set())),
+            location=location,
+            field="repeat.retry_input",
+        )
+        if expected is not None:
+            view = SchemaView(dict(schemas[expected]), dict(schemas[expected]), expected, schemas)
+            for key, binding in pairs:
+                target = view.child(key)
+                actual = _binding_value(binding, scope, location, "repeat.retry_input")
+                if target is not None and incompatible_types(types(actual), schema_types(target)):
+                    _fail("incompatible_binding_type", location, "repeat.retry_input")
+                if target is not None:
+                    _check_default_type(
+                        binding, schema_types(target), location, "repeat.retry_input"
+                    )
+
+
+def _validate_item_repeat(
+    flow: FlowPlan,
+    *,
+    flows: Mapping[str, FlowPlan],
+    scope: WorkflowScope,
+    schemas: Mapping[str, dict[str, object]],
+    where: _Where,
+    diagnostics: Diagnostics,
+) -> None:
+    """Check a callable flow's repeat in its item scope.
+
+    Pointers see ``/payload`` (the item input), ``/metadata`` and the records of
+    this flow and its retry flow only; no workflow-level flow result exists there.
+    """
+    repeat = flow.repeat
+    assert repeat is not None
+    name, retry = flow.name, repeat.retry_flow
+    local = {key: flows[key] for key in (name, retry) if key is not None}
+    item_scope = WorkflowScope(local, scope.flow_scopes, flow.input_schema_path, schemas)
+
+    def reference_check(location: SourceLocation, field: str) -> Callable[[str], None]:
+        def check(pointer: str) -> None:
+            parts = tokens(pointer)
+            if not parts:
+                return
+            if parts[0] not in {"payload", "metadata", "flows"}:
+                _fail("dangling_pointer", location, field)
+            if parts[0] == "flows" and (
+                len(parts) < 3 or parts[1] not in local or parts[2] not in {"result", "attempts"}
+            ):
+                _fail("invalid_flow_reference", location, field)
+
+        return check
+
+    def condition(value: ConditionPlan, location: SourceLocation, field: str) -> None:
+        check = reference_check(location, field)
+        for pointer in condition_pointers(value):
+            check(pointer)
+        check_condition(
+            value, resolve=item_scope, location=location, field=field, diagnostics=diagnostics
+        )
+
+    condition(repeat.until, where.at("until"), "repeat.until")
+    if retry is not None:
+        location = where.at("retry", "input")
+        _boundary_bindings(
+            repeat.retry_flow_input,
+            expected_path=flows[retry].input_schema_path,
+            schemas=schemas,
+            scope=item_scope,
+            check=reference_check(location, "repeat.retry.input"),
+            available=_flow_available({name}),
+            location=location,
+            field="repeat.retry.input",
+        )
+        if repeat.continue_when is not None:
+            condition(
+                repeat.continue_when,
+                where.at("retry", "continue_when"),
+                "repeat.retry.continue_when",
+            )
+    if repeat.retry_input:
+        location = where.at("retry_input")
+        _boundary_bindings(
+            repeat.retry_input,
+            expected_path=None,
+            schemas=schemas,
+            scope=item_scope,
+            check=reference_check(location, "repeat.retry_input"),
+            available=_flow_available(set(local)),
+            location=location,
+            field="repeat.retry_input",
+        )
+        if flow.input_schema_path is not None:
+            schema = dict(schemas[flow.input_schema_path])
+            view = SchemaView(schema, schema, flow.input_schema_path, schemas)
+            for key, binding in repeat.retry_input:
+                target = view.child(key)
+                actual = _binding_value(binding, item_scope, location, "repeat.retry_input")
+                if target is not None and incompatible_types(types(actual), schema_types(target)):
+                    _fail("incompatible_binding_type", location, "repeat.retry_input")
+
+
+def _flow_steps(flow: FlowPlan) -> int:
+    return len(flow.steps)
+
+
+def _worst_steps(flow: FlowPlan, flows: Mapping[str, FlowPlan]) -> int:
+    """Steps one invocation may visit, including every repeat attempt and retry run."""
+    repeat = flow.repeat
+    if repeat is None:
+        return _flow_steps(flow)
+    retry = flows[repeat.retry_flow] if repeat.retry_flow is not None else None
+    return repeat.max_attempts * _flow_steps(flow) + (repeat.max_attempts - 1) * (
+        _flow_steps(retry) if retry is not None else 0
+    )
+
+
+def _validate_budgets(
+    flows: Mapping[str, FlowPlan],
+    max_steps: int | None,
+    where: _Where,
+    diagnostics: Diagnostics,
+) -> None:
+    if max_steps is None:
+        return
+    for name, flow in flows.items():
+        repeat = flow.repeat
+        if repeat is not None:
+            if _worst_steps(flow, flows) > max_steps:
+                _fail("repeat_budget", where.at("flows", name, "repeat", "max_attempts"), "repeat")
+        for step in flow.steps:
+            if not isinstance(step, FlowCollectionStepPlan):
+                continue
+            child = max((_worst_steps(flows[target], flows) for target in step.flows), default=0)
+            if step.max_items * child > max_steps:
+                diagnostics.add(
+                    "collection_budget",
+                    step.location,
+                    f"Collection step `{step.name}` may visit {step.max_items * child} steps "
+                    f"({step.max_items} items x {child} steps), more than execution.max_steps "
+                    f"({max_steps}).",
+                    field_path="max_items",
+                )
+
+
+def _review_output(output: BindingPlan | None, ran: Collection[str]) -> str:
+    """Describe what the host receives when a run ends in review after ``ran``."""
+    if output is None:
+        return "the accepted input as payload"
+    read = {
+        parts[1]
+        for pointer in _pointers(output)
+        if len(parts := tokens(pointer)) > 1 and parts[0] == "flows"
+    }
+    if output.kind in {"pointer", "first_of"} and output.has_default:
+        default = safe_text(thaw_json(output.default))
+        if read and not read & set(ran):
+            return f"the workflow output default {default}"
+        return f"the workflow output resolved from the flows that ran, or its default {default}"
+    return "the workflow output resolved from the flows that ran"
+
+
+def _flow_diagnostics(
+    flows: Mapping[str, FlowPlan],
+    output: BindingPlan | None,
+    graph: _Graph,
+    where: _Where,
+    diagnostics: Diagnostics,
+) -> None:
+    for name, flow in flows.items():
+        if flow.repeat is not None and flow.repeat.retry_flow is None:
+            if any(isinstance(step, (DecisionStepPlan, LlmStepPlan)) for step in flow.steps):
+                diagnostics.add(
+                    "repeat_without_retry",
+                    where.at("flows", name, "repeat"),
+                    f"Flow `{name}` repeats a model step with identical input; add a `retry` "
+                    "flow that changes the input.",
+                    field_path="repeat",
+                )
+        if flow.callable:
+            continue
+        if flow.on_unresolved is None:
+            received = _review_output(output, graph.may_have_run(name))
+            diagnostics.add(
+                "review_ends_run",
+                where.at("flows", name),
+                f"Flow `{name}` has no review route: when it stops for review the run ends "
+                f"with needs_review and the host receives {received}.",
+                field_path="on_unresolved",
+            )
 
 
 def compile_workflow(
@@ -1525,6 +2290,7 @@ def compile_workflow(
     model_profiles: Mapping[str, ModelConfig] | None = None,
     handler_schemas: Mapping[str, HandlerSchemas] | None = None,
     configuration_root: Path | None = None,
+    max_steps: int | None = None,
     _model_registry: ModelRegistry | None = None,
 ) -> WorkflowPlan:
     """Compile conventional or explicit definitions without contacting dependencies.
@@ -1534,6 +2300,8 @@ def compile_workflow(
     directory, with paths resolved from the declaring file. All dependency bytes
     are frozen before clients open. Conventional lookup resolves definitions;
     the declared step list and transitions alone determine execution order.
+    ``max_steps`` enables the static budget checks for ``repeat`` and collections.
+    Non-fatal findings are returned in ``WorkflowPlan.diagnostics``.
     """
     try:
         bundle = directory.resolve(strict=True)
@@ -1566,6 +2334,8 @@ def compile_workflow(
     workflow = _validate(_WORKFLOW_ADAPTER, raw_workflow, location)
     if workflow.name is None or workflow.start is None:
         _fail("missing_start", location)
+    where = _Where(YamlLocator(workflow_text, relative_path=location.path))
+    diagnostics = Diagnostics()
     _validate_registries(model_aliases, handler_names, location)
     catalogs = _catalogs(tool_catalogs, location)
     registry = _model_registry if _model_registry is not None else ModelRegistry(model_profiles)
@@ -1591,6 +2361,9 @@ def compile_workflow(
             }
         )
         cache.update({bundle / key: value for key, value in sources.items()})
+    default_review = _unresolved(
+        workflow.defaults.on_unresolved, where.below("defaults", "on_unresolved")
+    )
     flows: dict[str, FlowPlan] = {}
     for name, instance in workflow.flows.items():
         flow, resources = _compile_flow(
@@ -1598,6 +2371,7 @@ def compile_workflow(
             instance,
             workflow=workflow,
             workflow_path=workflow_path,
+            workflow_where=where,
             root=root,
             cache=cache,
             registry=registry,
@@ -1606,22 +2380,50 @@ def compile_workflow(
             catalogs=catalogs,
             handler_names=handler_names,
             handler_schemas=handler_schemas or {},
+            default_review=default_review,
+            diagnostics=diagnostics,
         )
         flows[name] = flow
         schemas.update(resources)
-    dominators = _validate_graph(flows, workflow.start, location)
+    start: str | ConditionalRoutingPlan = (
+        workflow.start
+        if isinstance(workflow.start, str)
+        else _route(workflow.start, where.below("start"))
+    )
+    starts = (
+        (start,)
+        if isinstance(start, str)
+        else tuple(dict.fromkeys(entry.target.flow for entry in start.entries if entry.target.flow))
+    )
+    retry_of = _validate_repeats(flows, where, schemas)
+    graph = _validate_graph(flows, starts, retry_of, location, where)
     validate_collection_literals(flows, schemas)
     output = _binding(workflow.output, location) if workflow.output is not None else None
-    _validate_boundaries(
-        flows,
-        dominators,
-        output,
-        input_schema_path,
-        schemas,
-        catalogs,
-        handler_schemas or {},
-        location,
-    )
+    flow_scopes = {
+        name: FlowScope(
+            {step.name: step for step in flow.steps},
+            flow.input_schema_path,
+            schemas,
+            catalogs,
+            handler_schemas or {},
+        )
+        for name, flow in flows.items()
+    }
+    scope = WorkflowScope(flows, flow_scopes, input_schema_path, schemas)
+    _validate_boundaries(flows, graph, output, start, scope, schemas, location, where, diagnostics)
+    _validate_budgets(flows, max_steps, where, diagnostics)
+    _flow_diagnostics(flows, output, graph, where, diagnostics)
+    flows = {
+        name: replace(
+            flow,
+            available_flows=tuple(
+                other
+                for other in flows
+                if other in graph.dominators.get(name, ()) and other != name
+            ),
+        )
+        for name, flow in flows.items()
+    }
     return WorkflowPlan(
         name=workflow.name,
         revision=_revision(
@@ -1632,7 +2434,7 @@ def compile_workflow(
             model_profiles,
             handler_schemas or {},
         ),
-        start=workflow.start,
+        start=start,
         default_model=workflow.defaults.model,
         input_schema_path=input_schema_path,
         input_schema=input_schema,
@@ -1643,4 +2445,5 @@ def compile_workflow(
         output=output,
         flows=tuple(flows.values()),
         location=location,
+        diagnostics=diagnostics.result(),
     )

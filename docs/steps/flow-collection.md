@@ -103,6 +103,10 @@ With one successful task, `result.items[0]` includes `id: request_1`,
 `flow: billing_task`, and `status: completed`, plus that callable flow's
 result, step ledger, usage, and timing.
 
+A callable flow with [`repeat`](../configuration/repeat.md#repeat-every-collection-item)
+repeats each item: its ledger entry adds `attempt_count`, `attempts`,
+`repeat.stopped_by` and, when a retry ran, `retry` with the retry flow's runs.
+
 A child `needs_review` stays in the ledger and later independent items continue.
 After all items, the collection becomes `needs_review`; the enclosing routed
 flow uses its `on_unresolved` policy. A later trusted handler can inspect the

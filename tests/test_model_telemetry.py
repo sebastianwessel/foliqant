@@ -378,3 +378,68 @@ async def test_provider_exception_is_removed_from_exported_model_span() -> None:
         ErrorCode.DEPENDENCY_FAILURE.value
     )
     assert "gen_ai.client.token.usage" not in _metrics(reader)
+
+
+@pytest.mark.parametrize(
+    ("model_id", "labelled"), [("reviewed-test-model", True), ("model@2026-09", False)]
+)
+async def test_environment_model_references_resolve_to_telemetry_labels(
+    tmp_path, monkeypatch, caplog, model_id, labelled
+) -> None:
+    """Regression: `$MODEL_ID` profiles made activation reject the telemetry labels."""
+    import logging
+    from contextlib import asynccontextmanager
+
+    from pydantic_ai.messages import TextPart
+    from test_bootstrap import settings
+
+    from foliqant.bootstrap import RuntimePlugins, open_application, prepare_application
+    from foliqant.contracts.envelope import Envelope
+
+    path = settings(
+        tmp_path,
+        "type: llm\nmodel: local\ninstructions: 'Summarize.'\ninput: {}\noutput: text\n",
+        "models:\n  local:\n    provider: openai_compatible\n    model: $MODEL_ID\n"
+        "    base_url: https://provider.example/v1\n    output_mode: tool\n"
+        "telemetry:\n  service_name: test\n"
+        "  traces_endpoint: https://collector.example/v1/traces\n"
+        "  span_schedule_delay: 3600.0\n",
+    )
+    captured = InMemorySpanExporter()
+    monkeypatch.setattr(
+        "foliqant.adapters.telemetry.runtime.OTLPSpanExporter", lambda **kwargs: captured
+    )
+
+    async def request(messages, info):
+        return ModelResponse(parts=[TextPart("summary")])
+
+    @asynccontextmanager
+    async def factory(profiles, *, environment):
+        assert profiles.models["local"].model == model_id
+        yield {
+            "local": ModelBinding(
+                model=FunctionModel(request, model_name=model_id),
+                settings={},
+                admission=CapacityLimiter(concurrency=1, queue_limit=0),
+                output_mode="tool",
+            )
+        }
+
+    caplog.set_level(logging.WARNING)
+    async with open_application(
+        prepare_application(path),
+        environment={"MODEL_ID": model_id},
+        plugins=RuntimePlugins(model_factory=factory),
+    ) as application:
+        result = await application.run("demo", Envelope(payload={}))
+    assert result.execution.status == "completed"
+    assert result.execution.trace is not None
+    spans = captured.get_finished_spans()
+    assert {span.name for span in spans} >= {"foliqant.workflow", "foliqant.flow", "foliqant.step"}
+    client = [span for span in spans if span.kind is SpanKind.CLIENT]
+    assert client, "model request spans must still be exported"
+    models = {span.attributes.get("gen_ai.request.model") for span in client}
+    assert models == ({model_id} if labelled else {None})
+    assert "$MODEL_ID" not in "".join(span.to_json() for span in spans)
+    dropped = [record for record in caplog.records if record.msg == "telemetry_labels_dropped"]
+    assert bool(dropped) is not labelled

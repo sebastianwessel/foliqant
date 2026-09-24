@@ -48,8 +48,8 @@ therefore in the records that result contains.
 
 | Call | Use it when | What Foliqant executes | `ExecutionResult.payload` | `flows` and `transitions` |
 | --- | --- | --- | --- | --- |
-| `await app.run(workflow, envelope)` | Normal application request | The workflow start, routed flows, and configured output projection | The workflow output projection, or accepted input when no output is configured; a failed run preserves accepted input | Records every non-callable workflow flow; unvisited flows are `skipped`. Records the selected routing boundaries. |
-| `await app.run_flow(workflow, flow_id, envelope)` | Focused flow test or evaluation | One named flow, with the already resolved flow input | That flow's projected result, or accepted input if it fails | Contains only the named flow. Does not follow its transition, so `transitions` is empty. |
+| `await app.run(workflow, envelope)` | Normal application request | The workflow start, routed flows, repeat attempts and retry flows, and configured output projection | The workflow output projection, or accepted input when no output is configured; a failed run preserves accepted input | Records every non-callable workflow flow and every retry flow; unvisited flows are `skipped`. Records the selected routing boundaries. |
+| `await app.run_flow(workflow, flow_id, envelope)` | Focused flow test or evaluation | One named flow (one attempt of a repeated flow), with the already resolved flow input | That flow's projected result, or accepted input if it fails | Contains only the named flow. Does not follow its transition, so `transitions` is empty. |
 | `await app.run_step(workflow, flow_id, step_id, envelope)` | Focused step test or evaluation | One named step, with exactly its resolved input names | That step's validated result, or accepted input if it fails | Contains only the named flow and step. It does not run preceding steps or routes, so `transitions` is empty. |
 
 `run_flow` and `run_step` still enforce the selected flow or step's input
@@ -179,6 +179,7 @@ ExecutionResult                    ← app.run(), app.run_flow(), app.run_step()
 ├── payload                         ← public workflow / focused-boundary output
 ├── metadata                        ← accepted caller metadata
 ├── execution                       ← run-wide status, usage, and safe failure
+├── start                           ← only full workflow runs: first flow and its selection
 ├── transitions[]                   ← only full workflow routing
 └── flows[flow_id] : FlowResult      ← executed or skipped workflow flow
     ├── result                       ← flow output projection
@@ -194,7 +195,7 @@ ExecutionResult                    ← app.run(), app.run_flow(), app.run_step()
 | Public type | Produced by | Where you receive it | When it exists |
 | --- | --- | --- | --- |
 | `ExecutionResult` | `WorkflowApplication.run`, `run_flow`, or `run_step` | The awaited return value | A call was admitted and reached execution. Invalid admission can instead raise `ServiceError`; caller cancellation propagates. |
-| `FlowResult` | The runtime after a configured flow runs, fails, reviews, or is skipped | `result.flows[flow_id]` | Every non-callable flow in a whole workflow run, or the selected flow for `run_flow` / `run_step`. |
+| `FlowResult` | The runtime after a configured flow runs, fails, reviews, or is skipped | `result.flows[flow_id]` | Every non-callable flow and every repeat retry flow in a whole workflow run, or the selected flow for `run_flow` / `run_step`. |
 | `StepResult` | The runtime after a configured step runs, fails, reviews, or is skipped | `result.flows[flow_id].steps[step_id]` | Every step belonging to a flow record. `run_step` executes only the selected step. |
 | `FlowCollectionItemResult` | A `flow_collection` step after each callable child flow | `step.result.items[index]` or `step.partial_result.items[index]` | Only a flow-collection step. It is a flow record plus the planned child `id` and `flow`. |
 | `SafeError` | The failing runtime boundary | `execution.error`, `flow.error`, or `step.error` | A returned technical failure. It is absent for `needs_review`. |
@@ -214,8 +215,9 @@ The exception is a local fake for an evaluation or integration test; see
 | `payload` | Any JSON value | Workflow output binding for `run`; selected flow or step result for scoped calls | Your primary business result after checking `execution.status`. It defaults to accepted input for a whole run without an output binding. |
 | `metadata` | `Metadata` | Accepted envelope metadata, including trusted identity consistency checks | Correlate a result with non-secret caller context. Do not treat it as authentication proof. |
 | `flows` | Map of `FlowResult` | Configured flow execution records | Inspect detailed outcomes, decision evidence, tool results, and skipped branches. |
-| `transitions` | List of `TransitionResult` | Authored route selected after each full-flow boundary | Explain why `run` visited a flow or finished. Scoped calls do not route, so this is empty. |
-| `execution` | `ExecutionInfo` | The complete invocation | Read this first for the overall status, ID, revision, measured usage, and safe technical error. |
+| `start` | `StartResult`, omitted for scoped calls | The first flow of `run`: `flow` and `route` (`kind` of `direct` or `route`, optional `index` of the routed `start` entry) | See which start candidate a routed `start` selected. It agrees with the workflow span's `route.selected` event. |
+| `transitions` | List of `TransitionResult` | Authored route selected after each full-flow boundary: `source`, `reason`, one of `flow`/`outcome`, and `route` (`kind` of `direct`, `cases`, `route` or `review`, optional `index` and `case`) | Explain why `run` visited a flow or finished. Scoped calls do not route, so this is empty. |
+| `execution` | `ExecutionInfo` | The complete invocation | Read this first for the overall status, ID, revision, measured usage, and safe technical error. With telemetry, `trace` holds the run span's `trace_id` and `span_id`. |
 
 ### Flow fields: `result.flows[flow_id]`
 
@@ -224,8 +226,12 @@ The exception is a local fake for an evaluation or integration test; see
 | `status` | Always | `completed`, `needs_review`, `failed`, `cancelled`, or `skipped`. |
 | `steps` | Always | Map of the flow's configured steps to `StepResult` records. |
 | `result` | Completed; may be present for review | The flow's configured output projection. Without one, it is the resolved flow input. It may be explicit JSON `null`. |
-| `usage`, `elapsed_seconds` | When measured | Local measurements. Root usage already includes this work; do not add both levels. |
+| `usage`, `elapsed_seconds` | When measured | Local measurements of the (last) run. Root usage already includes this work; do not add both levels. |
 | `error` | Failed or cancelled | A safe technical failure. It is never present for a review outcome. |
+| `attempt_count` | Always | Number of executions: `0` when skipped, otherwise `1`, or the number of attempts or retry runs. |
+| `attempts` | A repeated flow or a retry flow ran | One `FlowAttempt` per run with `attempt` (1-based), `status`, `steps`, optional `result`, `usage`, `elapsed_seconds`, `error`. The top-level fields repeat the last run. |
+| `attempts_usage`, `attempts_elapsed_seconds` | With `attempts` | Sums over every run. |
+| `repeat` | A repeated flow ran | `stopped_by`: `until`, `exhausted`, `continue_when`, `review` or `failure`. |
 
 ### Step fields: `result.flows[flow_id].steps[step_id]`
 
@@ -246,7 +252,7 @@ The exception is a local fake for an evaluation or integration test; see
 | `needs_review` | Optional | Absent | A valid business outcome needs a person or an authored follow-up policy. |
 | `failed` | Absent | Required | A technical failure stopped this boundary. Completed upstream records remain available. |
 | `cancelled` | Absent | May be present in a serialized record | No successful result is claimed. A caller cancellation normally propagates instead of returning an `ExecutionResult`. |
-| `skipped` | Absent | Absent | The whole workflow took another route. Skipped records have no timing or usage. |
+| `skipped` | Absent | Absent | The workflow took another route, the flow stopped before the step, or the step's `when` condition was false. Skipped records have no timing or usage. |
 
 Root `execution.status` is `completed`, `needs_review`, `failed`, or
 `cancelled`; it is never `skipped`. A technical failure does not create a route

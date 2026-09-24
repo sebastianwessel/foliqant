@@ -86,9 +86,16 @@ context may be used. Baggage, credentials and business metadata are not forwarde
 Trace context cannot grant permission, enable debugging or change execution.
 
 One invocation returns one `ExecutionResult` with projected `payload`, accepted
-`metadata`, `flows` keyed by flow instance ID, selected `transitions` and terminal
-`execution` information. A flow report contains status, local `steps`, optional
-projected `result`, safe error and measured time/usage. Step IDs are scoped to
+`metadata`, `flows` keyed by flow instance ID, the workflow run's `start`
+(`{flow, route: {kind: direct|route, index?}}`, omitted for isolated flow and
+step runs, agreeing with the workflow span's `route.selected` event), selected
+`transitions` (each with `route: {kind: direct|cases|route|review, index?,
+case?}`) and terminal
+`execution` information (with `trace` IDs when telemetry is enabled). A flow
+report contains status, local `steps`, optional projected `result`, safe error,
+measured time/usage and `attempt_count`; repeated and retry flows add
+`attempts`, `attempts_usage`, `attempts_elapsed_seconds` and, for repeated
+flows, `repeat.stopped_by`. Step IDs are scoped to
 that flow. No flattened result alias is exposed. Workflow output defaults to its
 accepted input; flow output defaults to its bound input when no projection exists.
 Output absence is distinct from explicit null.
@@ -137,16 +144,24 @@ Configuration, prompts and business outputs use generic names; the actual
 package/import/CLI identity remains `foliqant` until a replacement is chosen.
 
 A workflow declares a `flows` mapping, optional `name`, `start`, `defaults.model`,
-input schema and output binding. Omitted name derives from its directory. Start
-is inferred only for one routed flow; multiple routed flows require an explicit start.
-Callable flows are explicitly declared with `callable: true` and have no transition,
-input bindings or unresolved route. See [collections](collections.md).
+`defaults.on_unresolved`, input schema and output binding. Omitted name derives
+from its directory. Start is inferred only for one routed flow; multiple routed
+flows require an explicit start. `start` names a flow or is an ordered `route`
+whose conditions read only `/payload` and `/metadata` and whose targets are
+flows. Callable flows are explicitly declared with `callable: true` and have no
+transition, input bindings or unresolved route; a collection or one `repeat`
+invokes them. See [collections](collections.md).
 A routed flow instance declares named `input` bindings, required `transition`, optional
-`on_unresolved`, and optional `definition` (inline or file). Omitted definition
-resolves `<flow-id>/flow.yaml` beside workflow.yaml. A flow definition declares
-an optional input schema, output binding and a nonempty ordered `steps` list.
+`on_unresolved`, optional `repeat`, and optional `definition` (inline or file).
+Omitted definition resolves `<flow-id>/flow.yaml` beside workflow.yaml. A flow
+definition declares optional `defaults.model` (precedence over the workflow
+default for its steps), an optional input schema, output binding and a
+nonempty ordered `steps` list. A flow without its own `on_unresolved` inherits
+`defaults.on_unresolved`; an inherited flow target must be reachable from every
+inheriting flow without a cycle (`invalid_default_review_route`), and a review
+route never targets its own flow (`review_route_to_self`).
 
-A step list entry is an ID or `{id, definition?}`. Without an explicit definition,
+A step list entry is an ID or `{id, definition?, when?}`. Without an explicit definition,
 resolve exactly one of `<id>.step.yaml`, `<id>.step.md`, `<id>/step.yaml`, or
 `<id>/step.md` beside flow.yaml. Missing or ambiguous candidates fail; there is
 no extension precedence. Explicit inline definitions and file references use
@@ -164,27 +179,116 @@ The step kinds are:
 - `flow_collection`: a bounded sequential list of explicitly planned callable-flow
   invocations, sharing the parent execution and retaining individual records.
 
-Steps advance in list order; they declare no routes or terminal operations.
-A flow transition is `{flow: id}`, `{outcome: completed|needs_review}`, or a
-match object with `binding`, `cases` and a required `default` target. Case keys
-match strings exactly; null/unmatched strings take default, other JSON types fail.
-No coercion, expression evaluator or model-selected graph exists. Missing bindings
-fail unless optional with an explicit default. All configured flow targets must
-exist and the reachable graph must be acyclic; unused definitions are rejected.
+Steps advance in list order; they declare no routes or terminal operations. A
+step with `when` runs only when its condition holds; otherwise it is recorded as
+`skipped`, consumes no step budget and the flow continues.
+A flow transition is `{flow: id}`, `{outcome: completed|needs_review}`, a
+match object with `binding`, `cases`, a required `default` target and optional
+`default_covers`, or an ordered `route`. Case keys match strings exactly;
+null/unmatched strings take default, other JSON types fail. `route` entries are
+evaluated in order and the first true condition selects its target; every entry
+but the last has `when`, the last has none (`route_without_otherwise`,
+`misplaced_otherwise`). `on_unresolved` accepts a target, an issue map or a
+`route`. No coercion, expression evaluator or model-selected graph exists.
+
+A binding is `literal`, `pointer`, or `first_of` (1–16 pointer members, the
+first that resolves to a non-null value). A pointer or `first_of` binding is
+optional exactly when it declares `default` (also `null`); without one a
+missing value fails with `missing_binding`. There is no `optional` flag. Flow
+and workflow `output` may also be `fields`: an object with exactly these keys,
+each any binding. All configured flow targets must exist and the reachable
+graph must be acyclic; unused definitions are rejected.
+
+### Conditions
+
+A condition is a leaf with exactly one source (`binding` pointer or `first_of`
+without default, or `literal`) and exactly one operator (`present`, `empty`,
+`equals`, `not_equals`, `in`, `not_in`, `gt`, `gte`, `lt`, `lte`, `matches`,
+`length`), or `all`/`any` (1–32 operands) or `not`, nested at most eight levels.
+A pointer that does not resolve or resolves to `null` is absent; every operator
+defines its result for absence, and absence equals `null` for `equals`/`in`.
+Equality is deep JSON equality without coercion (numbers by value, booleans
+distinct from numbers). Comparisons, `matches` (Python regular expression,
+implicitly anchored, compiled offline) and `length` are false for incompatible
+types and never raise; the runtime reports such mismatches as events.
+A condition evaluates in bounded time: `matches` compares only strings of at
+most 1024 characters (longer values are false, reported with reason
+`value_too_long`), and the compiler walks each pattern's standard-library parse
+tree and rejects unbounded backtracking with `unsafe_pattern`: an unbounded
+quantifier on a group containing a backtracking unbounded quantifier, a
+variable-length ambiguous part or an overlapping alternation, or estimated
+choices above three independent unbounded quantifiers. Bounded quantifiers on a
+group cost bound × inner work (ambiguous bounded iterations multiply);
+fixed-width alternations with distinct first literals are deterministic;
+possessive quantifiers do not backtrack.
+Evaluation is pure and implemented once in `core/conditions.py`. Conditions
+appear in `start.route`, `transition.route`, `on_unresolved.route`, step `when`,
+`repeat.until` and `repeat.retry.continue_when`. They read bound data only and
+never code, environment or prompt text.
+
+### Bounded repetition
+
+A routed flow (or a callable flow, per collection item; see
+[collections](collections.md)) may declare `repeat` with `max_attempts` (2–64), a required
+`until` condition, an optional callable `retry` flow with `input` bindings and
+an optional `continue_when`, and `retry_input` overriding `input` keys for
+attempts two and later. After an attempt, review stops (the flow follows
+`on_unresolved`), failure fails the run, a true `until` stops, the last attempt
+stops as exhausted; otherwise the retry flow runs (its review makes the repeated
+flow `needs_review` with the retry flow's issues, its failure fails the run, a
+false `continue_when` stops) and the next attempt runs. The flow result is the
+last attempt and its transition is followed as usual; exhaustion is not review.
+A retry flow whose input cannot be bound fails like a failing retry run; a next
+attempt whose input cannot be bound, or that would start after the deadline,
+fails the run before it starts. Either keeps the last attempt with
+`stopped_by: failure`. Attempt entries readable at the boundary hold `attempt`,
+`status`, `result` and `error` only.
+Attempts and retry runs share the run deadline and step budget. A callable flow
+serves at most one repeat; its `retry.input` is validated against its input
+schema. `run_flow` executes one attempt.
 
 Within a flow, pointers see `/payload` (that flow's bound input), `/metadata`,
 and `/steps/<id>` (only local records). At workflow boundaries they see the
-original `/payload`, `/metadata`, and `/flows/<id>/result`, not another flow's
-internal step records. Routed flow input bindings and explicit collection item
-inputs provide cross-flow data transfer. Callable results remain nested in their
-collection ledger. IDs are stable lowercase snake case. Missing differs from explicit null.
-The compiler validates earlier-step order, flow dominance, optional projections
-on early review, known closed-schema paths and type compatibility. Open/complex
-schemas remain runtime-checked. These checks do not prove business correctness.
+original `/payload`, `/metadata`, `/flows/<id>/result`, and for repeated or
+retry flows `/flows/<id>/attempts`, not another flow's internal step records.
+Routed flow input bindings, explicit collection item inputs and `retry.input`
+provide cross-flow data transfer. Collection results remain nested in their
+ledger; a retry flow's records appear under `/flows/<id>` and are readable only
+with a default. Route conditions may read any flow that may have run before
+them, but never a flow that can never have run (`unavailable_flow_reference`).
+IDs are stable lowercase snake case. Missing differs from explicit null.
+The compiler validates earlier-step order, flow dominance (with a virtual root
+over all start candidates), defaults for results of later, reviewable or
+conditional steps, `first_of` availability, known closed-schema paths and type
+compatibility of every member. Open/complex schemas remain runtime-checked.
+These checks do not prove business correctness.
 
-Files resolve relative to their declaring file. Step/schema references stay
-inside their flow bundle; workflow-to-flow and deployment-to-workflow references
-stay inside the configuration root, after symlink resolution. Inline and file
+### Diagnostics and static checks
+
+Errors raise `CompilationError`; non-fatal findings are returned as
+`Diagnostic(code, level: warning|info, location, message, field)` on
+`WorkflowPlan.diagnostics` and `PreparedApplication.diagnostics`, with line and
+column locations. Messages name configured identifiers and authored values,
+never runtime data or secrets. The compiler derives the allowed values of a
+field from `enum`/`const` (including `anyOf`/`oneOf`), decision catalogs plus
+fallback, predicate answers, handler/MCP/LLM output schemas and object outputs.
+It reports `unmatched_case` (error), `uncovered_value` (warning, silenced by an
+exact `default_covers`, else `default_covers_mismatch`), `case_on_unknown_type`
+(info), `invalid_condition`, `unsafe_pattern`, `condition_type_mismatch` (errors),
+`condition_always_false`/`condition_always_true`, `route_unreachable_entry`,
+`repeat_without_retry`, `unused_llm_input`, `collection_budget` (warnings),
+`review_ends_run`, `empty_text_source` (info), and `invalid_repeat`,
+`repeat_budget` (errors, the latter when
+`max_attempts × steps(flow) + (max_attempts − 1) × steps(retry)` exceeds
+`execution.max_steps`). `prepare_application(..., strict=True)` and
+`validate --strict` fail on the first warning.
+
+Files resolve relative to their declaring file. Conventional step discovery and
+schema references stay inside their flow bundle; an explicit step `definition`,
+workflow-to-flow and deployment-to-workflow references stay inside the
+configuration root, after symlink resolution. A step file outside its flow
+bundle keeps its own resources: its schemas resolve from the step file and stay
+inside the step's directory. Inline and file
 forms use one compiler. Markdown steps have exactly one instruction source:
 frontmatter or a nonempty body. Schemas may be inline or files. JSON Schema refs
 remain local and confined; remote, dynamic and unbounded recursive resolution is
@@ -243,9 +347,10 @@ serialize null. Expose selection through public step records and binding context
 
 A flow's `on_unresolved` accepts a target object or a map with `default` and
 optional keys from the three issue codes. Only a decision operation's validated
-issues select issue-specific targets. Resolve each issue through its entry or
-default; follow a shared target only if all agree, otherwise use default. Missing
-issues and nondecision review use default. Absent configuration ends with review.
+issues and a trusted handler's reported issues select issue-specific targets.
+Resolve each issue through its entry or default; follow a shared target only if
+all agree, otherwise use default. Missing issues use default. Absent
+configuration (own or inherited) ends with review.
 A direct unresolved target cannot be `{outcome: completed}`. It may select an
 explicit review-handling flow which later completes, retaining the earlier flow's
 review report. Fallback selection never bypasses review. All targets participate
@@ -322,8 +427,16 @@ Each invocation owns records and context; shared clients contain no mutable call
 identity, token, trace or result state. Shutdown stops admission, drains owned work
 within configured bounds and reports incomplete cleanup safely.
 
+Handler contracts (input/output schema files or inline objects and effect) are
+declared under `handlers` in the deployment file and compile without host code.
 Handler registrations are trusted Python objects supplied directly by the host;
-YAML cannot import them. The in-memory runtime permits read-only integrations.
+YAML cannot import them. A registration for an undeclared handler is
+`unknown_handler`; optional registration schemas and the effect must equal the
+declaration (`handler_contract_mismatch`); a declared handler without
+registration fails at `open_application` (`missing_handler_registration`).
+Handler outcomes carry `selection` and `unresolved_issues` like decisions.
+`StepContext` exposes `trace`, `attempt`, `collection_item` and `flow_role`.
+The in-memory runtime permits read-only integrations.
 Writes requiring durable operation identity, reconciliation or retry guarantees
 are outside scope and must fail before external I/O.
 
@@ -427,16 +540,33 @@ model, provider and tool labels only. Missing usage stays absent. Observation an
 export failure cannot replace a business result. Bootstrap owns installation and
 bounded shutdown; embedded hosts are never silently given a new global provider.
 Explicit owned providers preserve workflow → flow → step → model/tool attempt
-parentage in embedded applications as well as the CLI. Flow duration and step
-metrics retain flow identity. Lifecycle log events use the active trace IDs
-without recording business data. OTLP requests do not follow redirects and do
+parentage in embedded applications as well as the CLI. Labels come from resolved
+configuration; values that cannot be exported safely are dropped with one
+warning event, never failing activation. Flow spans carry the attempt, maximum
+attempts and role (`routed`, `callable`, `retry`); skipped steps have a span
+with `foliqant.step.skipped`. Fixed events report `route.selected`,
+`repeat.stopped`, `step.skipped` (condensed condition: pointers and operators
+only), `handler.review` and `condition.type_mismatch`; `condition.evaluated`
+is opt-in through `telemetry.conditions`. `ExecutionResult.execution.trace`
+returns the run span IDs. `RuntimePlugins(tracer_provider=...)` hands a
+host-owned provider to the runtime: spans join it, the runtime creates no
+provider, exporter or metrics of its own, never installs globals (combining it
+with `install_global_telemetry` is `invalid_configuration`) and never shuts it
+down; runtime spans and events are content-free at creation so they match the
+exported form. Each streamable-HTTP MCP request carries the W3C
+carrier of its own tool call as headers, derived from that request's `_meta`
+so concurrent calls never exchange it. Flow duration and step metrics retain flow identity with
+low-cardinality labels only. Lifecycle and routing log events use the active
+trace IDs and the execution ID without recording business data. OTLP requests do not follow redirects and do
 not log or consume unbounded collector response bodies. Shutdown failures are
 reported safely without replacing a completed business result.
 
 ## Entry points, example and acceptance
 
-The package exposes embedded composition plus offline `init`, `validate`,
-`explain`, `doctor`, foreground `run` and explicit `evaluate` commands. Evaluation
+The package exposes embedded composition plus offline `init`, `validate`
+(`--strict`), `explain` (`--format json|mermaid|dot`, backed by
+`foliqant.explain(prepared, workflow)`), `doctor`, foreground `run` and explicit
+`evaluate` commands. Evaluation
 check/replay modes are offline; ordinary evaluation executes configured targets.
 Offline commands do not open model/MCP endpoints. Commands default to
 `config/settings.yaml` relative to the current directory; `--config PATH`
@@ -460,8 +590,8 @@ Acceptance families require success and failure evidence:
 | Requirement / capability | Required evidence |
 | --- | --- |
 | `PACKAGE-CONTRACTS` | Strict envelopes/results, runtime reason/strength and one closed output shape, substantive/null/collection boundaries, subject occurrence, independent optional identity, W3C carrier, generated schema drift |
-| `PACKAGE-COMPILER` | Safe deterministic bundle compilation, graph/dataflow/schema checks, duplicate/path escape rejection and no endpoint I/O |
-| `PACKAGE-RUNTIME` | End-to-end in-memory decision/LLM/MCP/handler execution across sequential flows, bounded concurrency, cancellation and concurrent state isolation |
+| `PACKAGE-COMPILER` | Safe deterministic bundle compilation, graph/dataflow/schema checks, condition/route/repeat checks and diagnostics, duplicate/path escape rejection and no endpoint I/O |
+| `PACKAGE-RUNTIME` | End-to-end in-memory decision/LLM/MCP/handler execution across sequential flows, routed start, conditional routes and steps, bounded repeat with retry flows, bounded concurrency, cancellation and concurrent state isolation |
 | `PACKAGE-MCP` | Current SDK HTTP/stdio behavior, OAuth isolation, declared catalog/schema checks, budgets, authorization and protected context propagation |
 | `PACKAGE-PRIVACY` | Secret/PII sentinel checks across safe logs and optional observations; telemetry failure remains nonfatal |
 | `PACKAGE-DX` | Locked install, public schema drift, CLI/example execution, documentation/skill checks and independent review |

@@ -44,6 +44,11 @@ uv run --no-sync python -m examples.multi_request_processing.run
 uv run --no-sync python -m examples.multi_request_processing.evaluate
 ```
 
+The handler contracts are declared in `config/settings.yaml` with schemas in
+`config/contracts/`, generated from the Pydantic models in `policy.py`. The
+registrations pass the same model-derived schemas, so preparation fails with
+`handler_contract_mismatch` if the code and the reviewed declaration drift.
+
 The committed English and German gold covers the pipeline, routed and callable
 flows, collection step, and nested operations. It tests synthetic wiring and
 policy behavior, not live model quality.

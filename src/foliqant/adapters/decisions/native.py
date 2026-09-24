@@ -28,7 +28,7 @@ class ValidatedDecision:
 
     value: FrozenJson
     answerable: bool
-    route_key: str | None
+    answer_key: str | None
     selection: Selection | None = None
     unresolved_issues: tuple[DecisionIssue, ...] = ()
 
@@ -112,7 +112,7 @@ def build_decision_input(step: DecisionStepPlan, sources: FrozenObject) -> Decis
     return task
 
 
-def _route_key(item: DecisionResult) -> str | None:
+def _answer_key(item: DecisionResult) -> str | None:
     if isinstance(item, ChoiceResult):
         return None if item.answer is None else item.answer.optionId
     if isinstance(item, OrdinalResult):
@@ -150,7 +150,7 @@ def validate_decision_result(
     task: DecisionInput,
     raw_output: object,
 ) -> ValidatedDecision:
-    """Validate runtime structure and semantics, then return immutable route facts."""
+    """Validate runtime structure and semantics, then return immutable decision facts."""
 
     output = _validate_output(raw_output)
 
@@ -167,10 +167,10 @@ def validate_decision_result(
         if len(output.results) != 1:
             _fail(ErrorCode.INVALID_OUTPUT)
         item = output.results[0]
-        route_key = _route_key(item) if answerable else None
+        answer_key = _answer_key(item) if answerable else None
         dumped: object = item.model_dump(mode="json", by_alias=True)
     else:
-        route_key = None
+        answer_key = None
         dumped = output.model_dump(mode="json", by_alias=True)
 
     try:
@@ -191,7 +191,7 @@ def validate_decision_result(
     if step.question_mode == "single" and step.questions[0].type == "choice":
         item = output.results[0]
         if answerable:
-            option = next(option for option in step.questions[0].options if option.id == route_key)
+            option = next(option for option in step.questions[0].options if option.id == answer_key)
             selection = Selection(CategoryPlan(option.id, option.description), "model")
         elif (
             step.fallback is not None
@@ -203,7 +203,7 @@ def validate_decision_result(
     return ValidatedDecision(
         value=value,
         answerable=answerable,
-        route_key=route_key,
+        answer_key=answer_key,
         selection=selection,
         unresolved_issues=issues,
     )
