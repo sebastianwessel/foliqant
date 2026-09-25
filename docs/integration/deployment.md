@@ -44,7 +44,11 @@ if recovery after a crash matters.
 Configured admission capacity, deadlines, step visits, model/tool attempts, and
 collection item caps bound work *within one process*. They are not global rate
 limits or service-level guarantees. Scale-out hosts need their own shared
-admission policy if that matters. See [Configure limits](../configuration/limits.md).
+admission policy if that matters. A run that reaches a bound fails with that
+bound's own code ([error codes](errors.md#canonical-error-codes)); Foliqant never
+repeats a whole run, so a host with durable delivery decides whether to resubmit
+a run whose `execution.error.retryable` is `true`. See
+[Configure limits](../configuration/limits.md).
 
 ## Observe safely
 

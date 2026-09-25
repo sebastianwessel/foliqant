@@ -184,7 +184,7 @@ async def test_native_providers_reject_ambient_request_or_endpoint_overrides(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("kind", "expected"),
-    [("auth", ErrorCode.UNAUTHENTICATED), ("timeout", ErrorCode.TIMEOUT)],
+    [("auth", ErrorCode.UNAUTHENTICATED), ("timeout", ErrorCode.REQUEST_TIMEOUT)],
 )
 async def test_google_auth_and_timeout_are_safe_and_single_attempt(
     monkeypatch: pytest.MonkeyPatch,
@@ -373,7 +373,7 @@ async def test_bedrock_converse_native_and_tool_wire_without_network(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("kind", "expected"),
-    [("auth", ErrorCode.FORBIDDEN), ("timeout", ErrorCode.TIMEOUT)],
+    [("auth", ErrorCode.FORBIDDEN), ("timeout", ErrorCode.REQUEST_TIMEOUT)],
 )
 async def test_bedrock_auth_and_timeout_are_safe_and_single_attempt(
     monkeypatch: pytest.MonkeyPatch,
@@ -512,7 +512,8 @@ async def test_bedrock_interruption_keeps_started_thread_and_admission_until_don
         else:
             with pytest.raises(ServiceError) as error:
                 await task
-            assert error.value.code == ErrorCode.TIMEOUT
+            # The step's run deadline (0.1 s) is the bound, not the 10 s model timeout.
+            assert error.value.code == ErrorCode.RUN_TIMEOUT
         assert binding.admission.active == 0
 
 

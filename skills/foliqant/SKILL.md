@@ -81,6 +81,14 @@ resources are available through `importlib.resources.files("foliqant").joinpath(
   `multiple_valid_options`. Evidence strength measures support for the whole
   conclusion, including unresolved conclusions. It is not confidence or a
   routing threshold. Fallback routing is explicit caller policy.
+- A technical failure is never a business outcome. A failed model request, tool
+  call or handler fails its step, flow and run with one precise code (for
+  example `invalid_output`, `request_timeout`, `iteration_limit_reached`,
+  `rate_limited`, `tool_error`); no `on_unresolved`, `fallback`, binding
+  `default`, `first_of`, repeat condition or retry flow acts on it. Only native
+  abstention and an MCP server's input request are review outcomes. Invalid
+  structured output is corrected by the model up to `output_retries` (default
+  `1`) before it fails.
 - MCP catalogs and allowlists are declared, with validated arguments/results
   and read-only effects. Hosts may apply a `ToolAuthorizer`; tenant/principal
   context is not authentication. Configuration cannot import arbitrary code.

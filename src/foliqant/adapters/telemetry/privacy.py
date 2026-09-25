@@ -21,6 +21,7 @@ _GEN_AI_OPERATIONS = frozenset({"chat", "execute_tool", "inference", "invoke_age
 _MCP_METHODS = frozenset({"initialize", "server/discover", "ping", "tools/call", "tools/list"})
 _OUTCOMES = frozenset({"cancelled", "completed", "failed", "needs_review", "skipped"})
 _ERROR_TYPES = frozenset(item.value for item in ErrorCode)
+_FINISH_REASONS = frozenset({"stop", "length", "content_filter", "tool_call", "error"})
 _CONDITION = re.compile(r"[^\x00-\x1f\x7f]{1,512}\Z")
 _EXECUTION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 _LOCATION = re.compile(r"[a-z0-9_.]{1,200}\Z")
@@ -71,6 +72,7 @@ _USAGE_ATTRIBUTES = frozenset(
         "foliqant.usage.output_tokens",
         "foliqant.usage.reasoning_output_tokens",
         "foliqant.usage.tool_calls",
+        "foliqant.usage.output_retries",
         "foliqant.request.attempt",
         "gen_ai.aggregated_usage.cache_creation.input_tokens",
         "gen_ai.aggregated_usage.cache_read.input_tokens",
@@ -263,6 +265,18 @@ def _safe_attributes(
     error_type = attributes.get("error.type")
     if type(error_type) is str and error_type in _ERROR_TYPES:
         output["error.type"] = error_type
+    finish_reasons = attributes.get("gen_ai.response.finish_reasons")
+    if (
+        isinstance(finish_reasons, tuple)
+        and 0 < len(finish_reasons) <= 8
+        and all(type(reason) is str and reason in _FINISH_REASONS for reason in finish_reasons)
+    ):
+        output["gen_ai.response.finish_reasons"] = tuple(cast(tuple[str, ...], finish_reasons))
+    consumed = attributes.get("foliqant.response.reasoning_consumed_budget")
+    if type(consumed) is bool:
+        output["foliqant.response.reasoning_consumed_budget"] = consumed
+    if attributes.get("foliqant.request.output_retry") is True:
+        output["foliqant.request.output_retry"] = True
 
     for key in _USAGE_ATTRIBUTES:
         value = attributes.get(key)

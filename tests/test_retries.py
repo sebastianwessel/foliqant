@@ -38,12 +38,17 @@ def test_retry_config_rejects_unbounded_or_malformed_policy(raw):
         RetryConfig.model_validate(raw)
 
 
-def test_defaults_disable_retries_and_retry_after_is_bounded_safe_metadata():
-    assert RetryConfig().policy() == RetryPolicy(max_attempts=1)
+def test_defaults_retry_three_times_and_retry_after_is_bounded_safe_metadata():
+    # The first request plus up to three retries.
+    assert RetryConfig().policy() == RetryPolicy(
+        max_attempts=4, initial_delay_seconds=1.0, max_delay_seconds=30.0
+    )
     assert transient_response(429, {"Retry-After": "2"}).retry_after_seconds == 2
     future = format_datetime(datetime.now(UTC) + timedelta(seconds=30))
     assert 28 < transient_response(503, {"retry-after": future}).retry_after_seconds <= 30
-    for status in (400, 401, 403, 408, 409, 422, 504):
+    for status in (408, 504):
+        assert transient_response(status, {}).code is ErrorCode.REQUEST_TIMEOUT
+    for status in (400, 401, 403, 404, 409, 413, 422, 501):
         assert transient_response(status, {}) is None
     for value in ("nan", "inf", "-1", "PRIVATE INVALID HEADER", "9" * 129):
         assert transient_response(429, {"Retry-After": value}) is None
@@ -73,7 +78,7 @@ async def test_retry_after_is_not_shortened_to_fit_cap_or_deadline(retry_after, 
     async def operation(attempt):
         nonlocal calls
         calls += 1
-        raise TransientFailure(retry_after_seconds=retry_after)
+        raise TransientFailure(ErrorCode.RATE_LIMITED, retry_after_seconds=retry_after)
 
     deadline = asyncio.get_running_loop().time() + remaining
     with pytest.raises(TransientFailure):
@@ -113,13 +118,16 @@ async def test_model_transient_response_retries_exact_request_with_honest_usage(
 @pytest.mark.parametrize(
     "error,code",
     [
-        (ModelHTTPError(400, "test"), ErrorCode.DEPENDENCY_FAILURE),
+        (ModelHTTPError(400, "test"), ErrorCode.REQUEST_REJECTED),
         (ModelHTTPError(401, "test"), ErrorCode.UNAUTHENTICATED),
         (ModelHTTPError(403, "test"), ErrorCode.FORBIDDEN),
-        (ModelHTTPError(408, "test"), ErrorCode.TIMEOUT),
-        (ModelHTTPError(504, "test"), ErrorCode.TIMEOUT),
-        (ModelAPIError("test", "connection outcome unknown"), ErrorCode.DEPENDENCY_FAILURE),
-        (TimeoutError(), ErrorCode.TIMEOUT),
+        (ModelHTTPError(404, "test"), ErrorCode.MODEL_NOT_FOUND),
+        (
+            ModelHTTPError(400, "test", {"code": "context_length_exceeded"}),
+            ErrorCode.CONTEXT_LIMIT_EXCEEDED,
+        ),
+        # A client-side timeout is ambiguous and likely to recur: not repeated.
+        (TimeoutError(), ErrorCode.REQUEST_TIMEOUT),
     ],
 )
 async def test_model_terminal_errors_never_repeat(error, code):
@@ -137,6 +145,38 @@ async def test_model_terminal_errors_never_repeat(error, code):
         await _executor(step, binding).execute(step, {}, _context(step.name, budget=budget))
     assert raised.value.code == code and calls == 1
     assert budget.snapshot().model_requests == 1
+
+
+@pytest.mark.parametrize(
+    "error,code",
+    [
+        (ModelHTTPError(408, "test"), ErrorCode.REQUEST_TIMEOUT),
+        (ModelHTTPError(504, "test"), ErrorCode.REQUEST_TIMEOUT),
+        (ModelAPIError("test", "connection refused"), ErrorCode.DEPENDENCY_FAILURE),
+    ],
+)
+async def test_completed_timeouts_and_connection_failures_are_retried(error, code):
+    step = _text_step()
+    calls = 0
+
+    async def model(messages, info):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise error
+        return ModelResponse(parts=[TextPart("ok")])
+
+    binding = replace(_binding(model), retry=RetryPolicy(3, 0, 0))
+    budget = StepBudget(model_requests=3, tool_calls=0)
+    outcome = await _executor(step, binding).execute(step, {}, _context(step.name, budget=budget))
+    assert outcome.result == "ok" and calls == 3
+
+    calls = -10  # every attempt fails: the last failure keeps its code and permission
+    with pytest.raises(ServiceError) as raised:
+        await _executor(step, binding).execute(
+            step, {}, _context(step.name, budget=StepBudget(model_requests=3, tool_calls=0))
+        )
+    assert raised.value.code is code and raised.value.retryable
 
 
 async def test_invalid_model_output_is_not_a_recovery_attempt():
@@ -167,7 +207,8 @@ async def test_model_budget_limits_actual_attempts_before_wire():
     budget = StepBudget(model_requests=1, tool_calls=0)
     with pytest.raises(ServiceError) as raised:
         await _executor(step, binding).execute(step, {}, _context(step.name, budget=budget))
-    assert raised.value.code == ErrorCode.BUDGET_EXHAUSTED
+    # The limit refused the retry: the failure reports the overload it would have retried.
+    assert raised.value.code == ErrorCode.DEPENDENCY_OVERLOADED and raised.value.retryable
     assert calls == budget.snapshot().model_requests == 1
 
 
@@ -223,7 +264,7 @@ async def test_retry_does_not_restart_model_timeout_window(monkeypatch):
         await _executor(step, binding).execute(
             step, {}, _context(step.name, budget=budget, model_timeout=0.05)
         )
-    assert raised.value.code == ErrorCode.TIMEOUT and calls == 2
+    assert raised.value.code == ErrorCode.REQUEST_TIMEOUT and calls == 2
     assert budget.snapshot().model_requests == 2
 
 
@@ -283,7 +324,7 @@ async def test_anthropic_stale_thinking_400_has_no_hidden_sdk_recovery(monkeypat
         assert binding.model.profile.get("anthropic_binds_thinking_blocks") is False
         with pytest.raises(ServiceError) as raised:
             await _executor(step, binding).execute(step, {}, _context(step.name, budget=budget))
-    assert raised.value.code == ErrorCode.DEPENDENCY_FAILURE
+    assert raised.value.code == ErrorCode.REQUEST_REJECTED
     assert len(requests) == budget.snapshot().model_requests == 1
     assert requests[0].headers["x-stainless-retry-count"] == "0"
 
@@ -308,6 +349,6 @@ async def test_late_response_after_swallowed_cancellation_is_timeout_with_known_
         await _executor(step, binding).execute(
             step, {}, _context(step.name, budget=budget, model_timeout=0.01)
         )
-    assert raised.value.code == ErrorCode.TIMEOUT and calls == 1
+    assert raised.value.code == ErrorCode.REQUEST_TIMEOUT and calls == 1
     assert budget.snapshot().model_requests == 1
     assert budget.snapshot().tokens.input_tokens == 4

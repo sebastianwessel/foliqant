@@ -56,6 +56,8 @@ class ModelRegistry:
                 **base.options.model_dump(mode="python"),
                 **selected.options.model_dump(mode="python", exclude_unset=True),
             }
+            if selected.output_retries is not None:
+                document["output_retries"] = selected.output_retries
             try:
                 effective = type(base).model_validate(document, strict=True)
             except ValidationError:

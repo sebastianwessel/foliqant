@@ -12,7 +12,7 @@ from mcp import Client, MCPError, types
 from pydantic import TypeAdapter, ValidationError
 
 from foliqant.contracts.mcp import McpProfiles
-from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.core.errors import TIMEOUT_CODES, ErrorCode, ServiceError, timeout_code
 from foliqant.core.execution import StepOutcome
 from foliqant.core.json import FrozenJson, FrozenObject, JsonValue, freeze_json, thaw_json
 from foliqant.core.plan import McpStepPlan
@@ -125,8 +125,15 @@ class McpTools:
             # Durable effect identity/reconciliation must precede enabling writes.
             raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
         deadline = min(self._context.deadline, asyncio.get_running_loop().time() + self._timeout)
+
+        def expired() -> ServiceError:
+            """``run_timeout`` when the run deadline was the bound, else ``request_timeout``."""
+            return ServiceError(
+                timeout_code(asyncio.get_running_loop().time(), self._context.deadline)
+            )
+
         if deadline <= asyncio.get_running_loop().time():
-            raise ServiceError(ErrorCode.TIMEOUT)
+            raise expired()
 
         async def call_once(attempt: int) -> FrozenJson:
             if not self._active:
@@ -135,7 +142,7 @@ class McpTools:
                 async with asyncio.timeout_at(deadline):
                     await self._authorizer.authorize(self._server, name, arguments, self._context)
                 if asyncio.get_running_loop().time() >= deadline:
-                    raise ServiceError(ErrorCode.TIMEOUT)
+                    raise expired()
                 await self._context.budget.start_tool_call()
                 with (
                     self._telemetry.observe(name, attempt=attempt)
@@ -163,41 +170,60 @@ class McpTools:
                                         ),
                                     )
                                 except MCPError as error:
-                                    if error.code == types.REQUEST_TIMEOUT:
-                                        raise ServiceError(ErrorCode.TIMEOUT) from None
-                                    terminal = {
-                                        401: ErrorCode.UNAUTHENTICATED,
-                                        403: ErrorCode.FORBIDDEN,
-                                        408: ErrorCode.TIMEOUT,
-                                        504: ErrorCode.TIMEOUT,
-                                    }.get(observation.status or 0)
-                                    if terminal is not None:
-                                        raise ServiceError(terminal) from None
-                                    if (
-                                        error.code == types.INTERNAL_ERROR
-                                        and observation.transient is not None
-                                    ):
-                                        raise observation.transient from None
-                                    raise ServiceError(ErrorCode.DEPENDENCY_FAILURE) from None
+                                    failure = _call_failure(error, observation.failure, expired)
+                                    raise failure from None
                             if asyncio.get_running_loop().time() >= deadline:
-                                raise ServiceError(ErrorCode.TIMEOUT)
+                                raise expired()
                             if isinstance(result, types.InputRequiredResult):
                                 raise ToolInputRequired()
                             value = self._catalog.validate_result(name, result)
                             self.successful.add(name)
                             return value
                     except TimeoutError:
-                        raise ServiceError(ErrorCode.TIMEOUT) from None
+                        raise expired() from None
                     except ValidationError:
                         raise ServiceError(ErrorCode.INVALID_OUTPUT) from None
             except (asyncio.CancelledError, ServiceError, ToolInputRequired):
                 raise
             except TimeoutError:
-                raise ServiceError(ErrorCode.TIMEOUT) from None
+                raise expired() from None
             except Exception:
                 raise ServiceError(ErrorCode.DEPENDENCY_FAILURE) from None
 
-        return await retry(call_once, policy=self._retry, deadline=lambda: deadline)
+        try:
+            return await retry(call_once, policy=self._retry, deadline=lambda: deadline)
+        except ServiceError as error:
+            if error.code in TIMEOUT_CODES and not error.retryable:
+                raise expired() from None
+            raise
+
+
+#: JSON-RPC errors of a server that rejected a validated call.
+_REJECTED_CALL_CODES = frozenset(
+    {types.INVALID_PARAMS, types.INVALID_REQUEST, types.METHOD_NOT_FOUND}
+)
+
+
+def _call_failure(
+    error: MCPError, http: ServiceError | None, expired: Callable[[], ServiceError]
+) -> ServiceError:
+    """The canonical failure of one ``tools/call``; never uses the server's error text.
+
+    The HTTP status of the call chooses the code. It grants retry permission
+    only when the SDK normalized the response to an internal error, so a peer's
+    JSON-RPC error never authorizes a retry.
+    """
+    if error.code == types.REQUEST_TIMEOUT:
+        return expired()
+    if http is not None:
+        if http.code in TIMEOUT_CODES and not http.retryable:
+            return expired()
+        if http.retryable and error.code != types.INTERNAL_ERROR:
+            return ServiceError(http.code)
+        return http
+    if error.code in _REJECTED_CALL_CODES:
+        return ServiceError(ErrorCode.REQUEST_REJECTED)
+    return ServiceError(ErrorCode.DEPENDENCY_FAILURE)
 
 
 class McpRuntime:
@@ -294,13 +320,21 @@ class McpRuntime:
                         scope.close()
             if pending is not None:
                 raise pending
-        except (asyncio.CancelledError, ServiceError, ToolInputRequired):
+        except (asyncio.CancelledError, ToolInputRequired):
+            raise
+        except ServiceError as error:
+            if error.code in TIMEOUT_CODES and not error.retryable:
+                raise ServiceError(
+                    timeout_code(asyncio.get_running_loop().time(), context.deadline)
+                ) from None
             raise
         except TimeoutError:
-            raise ServiceError(ErrorCode.TIMEOUT) from None
+            raise ServiceError(
+                timeout_code(asyncio.get_running_loop().time(), context.deadline)
+            ) from None
         except MCPError as error:
             code = (
-                ErrorCode.TIMEOUT
+                timeout_code(asyncio.get_running_loop().time(), context.deadline)
                 if error.code == types.REQUEST_TIMEOUT
                 else ErrorCode.DEPENDENCY_FAILURE
             )
@@ -326,6 +360,7 @@ class McpExecutor:
         if profile is None:
             raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
         # A direct MCP step has one deadline across connect, discovery and call.
+        run_deadline = context.deadline
         context = replace(
             context,
             deadline=min(
@@ -338,4 +373,12 @@ class McpExecutor:
             async with self._runtime.open(step.server, (step.tool,), context) as tools:
                 return StepOutcome(await tools.call(step.tool, inputs))
         except ToolInputRequired:
+            # The server asked for human input (MCP elicitation): a protocol
+            # outcome that needs review, not a failure of the call.
             return StepOutcome(None, needs_review=True)
+        except ServiceError as error:
+            if error.code in TIMEOUT_CODES and not error.retryable:
+                # The step deadline is this step's own bound, not the run's.
+                now = asyncio.get_running_loop().time()
+                raise ServiceError(timeout_code(now, run_deadline)) from None
+            raise

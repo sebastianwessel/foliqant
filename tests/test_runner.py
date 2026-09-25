@@ -295,7 +295,7 @@ async def test_deadline_stops_work_and_returns_typed_failure(tmp_path: Path) -> 
     )
     assert stopped.is_set()
     assert result.status == "failed" and result.error is not None
-    assert result.error.code == ErrorCode.TIMEOUT
+    assert result.error.code == ErrorCode.RUN_TIMEOUT
     assert dict(dict(result.flows)["main"].steps)["first"].status == "failed"
 
 

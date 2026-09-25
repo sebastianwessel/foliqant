@@ -46,7 +46,7 @@ class ToolTelemetry:
                 if isinstance(error, ServiceError)
                 else ErrorCode.CANCELLED
                 if isinstance(error, asyncio.CancelledError)
-                else ErrorCode.TIMEOUT
+                else ErrorCode.REQUEST_TIMEOUT
                 if isinstance(error, TimeoutError)
                 else ErrorCode.DEPENDENCY_FAILURE
             )

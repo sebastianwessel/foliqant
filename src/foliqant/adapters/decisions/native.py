@@ -7,6 +7,11 @@ from typing import Never
 
 from pydantic import ValidationError
 
+from foliqant.adapters.validation.violations import (
+    contract_violation,
+    pydantic_violation,
+    schema_vocabulary,
+)
 from foliqant.contracts.decisions import (
     ChoiceResult,
     DecisionOutput,
@@ -123,6 +128,10 @@ def _answer_key(item: DecisionResult) -> str | None:
     return None
 
 
+#: Contract field names and type tags: the vocabulary of decision violation locations.
+_VOCABULARY = schema_vocabulary(DecisionOutput.model_json_schema(by_alias=True))
+
+
 def _validate_output(raw_output: object) -> DecisionOutput:
     """Revalidate models and reject non-JSON objects at the external boundary."""
 
@@ -130,6 +139,8 @@ def _validate_output(raw_output: object) -> DecisionOutput:
         try:
             serialized = raw_output.model_dump_json(by_alias=True, warnings=False)
             return DecisionOutput.model_validate_json(serialized, strict=True)
+        except ValidationError as error:
+            raise pydantic_violation(error.errors(), _VOCABULARY) from None
         except (TypeError, ValueError):
             _fail(ErrorCode.INVALID_OUTPUT)
 
@@ -141,6 +152,8 @@ def _validate_output(raw_output: object) -> DecisionOutput:
         _fail(ErrorCode.INVALID_OUTPUT)
     try:
         return DecisionOutput.model_validate(thaw_json(frozen), strict=True)
+    except ValidationError as error:
+        raise pydantic_violation(error.errors(), _VOCABULARY) from None
     except (TypeError, ValueError):
         _fail(ErrorCode.INVALID_OUTPUT)
 
@@ -154,8 +167,10 @@ def validate_decision_result(
 
     output = _validate_output(raw_output)
 
-    if validate_decision_output(task, output):
-        _fail(ErrorCode.INVALID_OUTPUT)
+    problems = validate_decision_output(task, output)
+    if problems:
+        questions = frozenset(question.id for question in task.questions)
+        raise contract_violation(problems, questions) from None
 
     # Question order belongs to the caller, not the model's generated list order.
     by_question = {item.questionId: item for item in output.results}
@@ -165,7 +180,7 @@ def validate_decision_result(
     answerable = bool(statuses) and all(status == "answerable" for status in statuses)
     if step.question_mode == "single":
         if len(output.results) != 1:
-            _fail(ErrorCode.INVALID_OUTPUT)
+            raise contract_violation(["result:result-count"], frozenset()) from None
         item = output.results[0]
         answer_key = _answer_key(item) if answerable else None
         dumped: object = item.model_dump(mode="json", by_alias=True)

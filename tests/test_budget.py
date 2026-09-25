@@ -16,9 +16,10 @@ async def test_reserves_failed_attempt_and_does_not_invent_usage() -> None:
     await budget.start_tool_call()
     with pytest.raises(ServiceError) as error:
         await budget.start_model_request("test-model")
-    assert error.value.code == ErrorCode.BUDGET_EXHAUSTED
-    with pytest.raises(ServiceError):
+    assert error.value.code == ErrorCode.MODEL_REQUEST_LIMIT_REACHED
+    with pytest.raises(ServiceError) as error:
         await budget.start_tool_call()
+    assert error.value.code == ErrorCode.TOOL_CALL_LIMIT_REACHED
     snapshot = budget.snapshot()
     assert snapshot.model_requests == snapshot.tool_calls == 1
     assert snapshot.tokens == TokenUsage()

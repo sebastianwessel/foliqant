@@ -16,7 +16,7 @@ from .bindings import resolve_binding, resolve_bindings
 from .budget import StepBudget
 from .conditions import ConditionTrace, describe_condition, evaluate_condition
 from .envelope import AcceptedEnvelope
-from .errors import ErrorCode, ServiceError
+from .errors import TIMEOUT_CODES, ErrorCode, ServiceError, timeout_code
 from .execution import (
     CallerContext,
     Failure,
@@ -60,12 +60,20 @@ from .plan import (
 
 @dataclass(frozen=True, slots=True)
 class ExecutionLimits:
-    run_timeout: float = 300.0
-    model_timeout: float = 60.0
+    """Safety nets against runaway runs, sized for the worst realistic case.
+
+    A model request may generate the default output budget of a reasoning model
+    (``model_timeout``); a run may make several such requests (``run_timeout``).
+    Step and request counts leave room for multi-item collections, repeats,
+    retries and multi-turn tool loops.
+    """
+
+    run_timeout: float = 900.0
+    model_timeout: float = 300.0
     tool_timeout: float = 30.0
-    max_steps: int = 32
-    model_requests_per_step: int = 4
-    tool_calls_per_step: int = 3
+    max_steps: int = 128
+    model_requests_per_step: int = 16
+    tool_calls_per_step: int = 16
 
     def __post_init__(self) -> None:
         for duration in (self.run_timeout, self.model_timeout, self.tool_timeout):
@@ -121,18 +129,19 @@ class _RepeatDecision:
     inputs: FrozenObject | None = None
 
 
-def _failure(error: Exception) -> Failure:
-    if isinstance(error, TimeoutError):
-        return Failure(ErrorCode.TIMEOUT)
+def _failure(error: Exception, deadline: float) -> Failure:
+    """The recorded failure; a timeout reports which bound it hit (see ``timeout_code``)."""
+    if isinstance(error, TimeoutError) or (
+        isinstance(error, ServiceError) and error.code in TIMEOUT_CODES and not error.retryable
+    ):
+        return Failure(timeout_code(asyncio.get_running_loop().time(), deadline))
     if isinstance(error, ServiceError):
-        return Failure(error.code, error.retryable)
+        return Failure.of(error)
     return Failure(ErrorCode.DEPENDENCY_FAILURE)
 
 
 def _error_value(failure: Failure) -> FrozenObject:
-    return MappingProxyType(
-        {"code": failure.code.value, "message": failure.message, "retryable": failure.retryable}
-    )
+    return MappingProxyType(failure.as_json())
 
 
 def _record_data(record: StepRecord | FlowRecord) -> FrozenObject:
@@ -380,7 +389,7 @@ class WorkflowRunner:
         except Exception:
             raise ServiceError(ErrorCode.DEPENDENCY_FAILURE) from None
         invocation = _Invocation(str(uuid4()))
-        async with self._admission.slot(deadline=end):
+        async with self._admission.slot(deadline=end, timeout=ErrorCode.RUN_TIMEOUT):
             with observe(
                 self._observer,
                 self._plan.name,
@@ -569,7 +578,7 @@ class WorkflowRunner:
             current: str | None = flow_id or (start.flow if start is not None else None)
             while current is not None:
                 if asyncio.get_running_loop().time() >= deadline:
-                    raise ServiceError(ErrorCode.TIMEOUT)
+                    raise ServiceError(ErrorCode.RUN_TIMEOUT)
                 if current in visited or len(visited) >= len(self._plan.flows):
                     raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
                 visited.add(current)
@@ -620,11 +629,11 @@ class WorkflowRunner:
             if status != "failed" and flow_id is None and self._plan.output is not None:
                 payload = resolve_binding(self._plan.output, _workflow_context(envelope, records))
             if asyncio.get_running_loop().time() >= deadline:
-                raise ServiceError(ErrorCode.TIMEOUT)
+                raise ServiceError(ErrorCode.RUN_TIMEOUT)
         except asyncio.CancelledError:
             raise
         except Exception as caught:
-            status, error, payload = "failed", _failure(caught), envelope.payload
+            status, error, payload = "failed", _failure(caught, deadline), envelope.payload
             if invocation.active is not None:
                 previous = records[invocation.active]
                 records[invocation.active] = FlowRecord(
@@ -669,7 +678,7 @@ class WorkflowRunner:
         max_attempts = repeat.max_attempts if repeat is not None else 1
         attempts: list[FlowRecord] = []
         if asyncio.get_running_loop().time() >= deadline:
-            raise ServiceError(ErrorCode.TIMEOUT)
+            raise ServiceError(ErrorCode.RUN_TIMEOUT)
         invocation.active = flow.name
         inputs = self._flow_input(flow.name, flow.input, envelope, records)
         for attempt in range(1, max_attempts + 1):
@@ -789,7 +798,7 @@ class WorkflowRunner:
                 failed = FlowRecord(
                     "failed",
                     _skipped(retry).steps,
-                    error=_failure(caught),
+                    error=_failure(caught, deadline),
                     usage=Usage(),
                     elapsed_seconds=0.0,
                 )
@@ -834,7 +843,7 @@ class WorkflowRunner:
                 return _RepeatDecision("continue_when", issues)
         try:
             if asyncio.get_running_loop().time() >= deadline:
-                raise ServiceError(ErrorCode.TIMEOUT)
+                raise ServiceError(ErrorCode.RUN_TIMEOUT)
             if item is None:
                 bindings = _overridden(flow.input, repeat.retry_input)
                 inputs = self._flow_input(flow.name, bindings, envelope, records)
@@ -848,7 +857,7 @@ class WorkflowRunner:
         except asyncio.CancelledError:
             raise
         except Exception as caught:
-            return _RepeatDecision("failure", issues, failure=_failure(caught))
+            return _RepeatDecision("failure", issues, failure=_failure(caught, deadline))
         return _RepeatDecision(None, issues, inputs=inputs)
 
     async def _execute_collection(
@@ -872,7 +881,7 @@ class WorkflowRunner:
         seen: set[str] = set()
         for item in raw:
             if asyncio.get_running_loop().time() >= deadline:
-                raise ServiceError(ErrorCode.TIMEOUT)
+                raise ServiceError(ErrorCode.RUN_TIMEOUT)
             if not isinstance(item, Mapping) or set(item) != {"id", "flow", "input"}:
                 raise ServiceError(ErrorCode.INVALID_INPUT)
             item_id, flow_id, payload = item["id"], item["flow"], item["input"]
@@ -1063,7 +1072,7 @@ class WorkflowRunner:
             for step in steps:
                 await asyncio.sleep(0)
                 if asyncio.get_running_loop().time() >= deadline:
-                    raise ServiceError(ErrorCode.TIMEOUT)
+                    raise ServiceError(ErrorCode.RUN_TIMEOUT)
                 attributes = {
                     **self._attributes(
                         invocation,
@@ -1088,7 +1097,7 @@ class WorkflowRunner:
                             skipped.event("step.skipped", condition=describe_condition(step.when))
                         continue
                 if invocation.consumed >= self._limits.max_steps:
-                    raise ServiceError(ErrorCode.BUDGET_EXHAUSTED)
+                    raise ServiceError(ErrorCode.STEP_LIMIT_REACHED)
                 invocation.consumed += 1
                 active, step_started, step_usage = (
                     step.name,
@@ -1160,11 +1169,19 @@ class WorkflowRunner:
                     try:
                         async with asyncio.timeout_at(deadline):
                             outcome = await self._executor.execute(step, inputs, context)
+                    except TimeoutError:
+                        raise ServiceError(ErrorCode.RUN_TIMEOUT) from None
+                    except ServiceError as raised:
+                        # The step span and the record report the same bound.
+                        if raised.code in TIMEOUT_CODES and not raised.retryable:
+                            now = asyncio.get_running_loop().time()
+                            raise ServiceError(timeout_code(now, deadline)) from None
+                        raise
                     finally:
                         step_usage = budget.snapshot()
                         usage = usage.plus(step_usage)
                     if asyncio.get_running_loop().time() >= deadline:
-                        raise ServiceError(ErrorCode.TIMEOUT)
+                        raise ServiceError(ErrorCode.RUN_TIMEOUT)
                     outcome = _validate_outcome(outcome, step)
                     try:
                         value = freeze_json(outcome.result)
@@ -1194,7 +1211,7 @@ class WorkflowRunner:
         except asyncio.CancelledError:
             raise
         except Exception as caught:
-            status, error, result = "failed", _failure(caught), None
+            status, error, result = "failed", _failure(caught, deadline), None
             if active is not None:
                 records[active] = StepRecord(
                     "failed",

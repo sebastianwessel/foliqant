@@ -75,24 +75,29 @@ output schema, its `result` is a string such as
 `"Account A-100 is on Basic."`. The declared catalog decides which form
 is valid.
 
-An MCP `InputRequiredResult` becomes a `needs_review` step with `result: null`.
-The enclosing flow handles it through `on_unresolved`. Other outcomes are
-technical failures:
+An MCP `InputRequiredResult` (elicitation) becomes a `needs_review` step with
+`result: null`. The enclosing flow handles it through `on_unresolved`. Every
+other outcome is a technical failure that fails the run; no review route acts
+on it:
 
 | Condition | Safe failure |
 | --- | --- |
 | Argument schema mismatch | `invalid_input` |
-| Missing/changed discovered tool or catalog mismatch | `dependency_failure` |
+| Missing or changed discovered tool schema | `tool_catalog_mismatch` |
 | Undeclared or unauthorized tool | `forbidden` |
-| Invalid, oversized, or wrong result form | `invalid_output` |
-| Request deadline reached | `timeout` |
+| The server reports `isError` | `tool_error` |
+| Result larger than `output_limit_bytes` | `tool_output_limit_exceeded` |
+| Invalid or wrong result form | `invalid_output` |
+| The tool's own timeout expired | `request_timeout` |
+| The run deadline expired | `run_timeout` |
 | Server/protocol failure | `dependency_failure` |
 
 The operation has one deadline across connection, discovery, authorization, and
-call. Configured retries apply only to safely observed transient responses; the
-runtime does not retry ambiguous timeouts or the whole step. The default
-`execution.tool_calls_per_step` is 3, though a direct step normally uses
-one call. `tool_timeout` defaults to 30 seconds; the root run deadline
+call. Configured retries (`retry.max_attempts` default `4`) apply only to
+completed transient responses (HTTP 408, 429, 500, 502, 503, 504, 529); the
+runtime does not retry client-side timeouts, tool errors or the whole step. The
+default `execution.tool_calls_per_step` is 16, though a direct step normally
+uses one call; reaching it fails with `tool_call_limit_reached`. `tool_timeout` defaults to 30 seconds; the root run deadline
 also applies. See [execution limits](../configuration/limits.md).
 
 Run the [read-only MCP tutorial](../tutorials/read-only-mcp.md) for a real local

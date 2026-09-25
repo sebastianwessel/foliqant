@@ -192,5 +192,5 @@ async def test_isolated_step_deadline_is_enforced(tmp_path: Path):
     result = await configured.run_step(
         "main", "first", accept_envelope(Envelope(payload={}), Identity()), identity=Identity()
     )
-    assert result.status == "failed" and result.error.code == ErrorCode.TIMEOUT
+    assert result.status == "failed" and result.error.code == ErrorCode.RUN_TIMEOUT
     assert dict(dict(result.flows)["main"].steps)["first"].elapsed_seconds >= 0.01

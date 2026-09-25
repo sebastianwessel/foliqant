@@ -203,7 +203,7 @@ class McpClientSessionFactory:
                 except asyncio.CancelledError:
                     raise
                 except TimeoutError:
-                    raise ServiceError(ErrorCode.TIMEOUT) from None
+                    raise ServiceError(ErrorCode.REQUEST_TIMEOUT) from None
                 except ServiceError:
                     raise
                 except Exception as error:

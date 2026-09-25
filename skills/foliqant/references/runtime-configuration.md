@@ -78,10 +78,11 @@ YAML files.
 | `evaluation` | No startup access to gold; explicit evaluation discovers `evaluation/dataset.json` beside `config/`. |
 | Model `provider`, `model`, `output_mode` | Required; no default provider, model ID, or output mode. |
 | OpenAI `api`; Azure `api` and `api_flavor` | Required; choose explicitly. Compatible `api` defaults to `chat`. |
-| Model `options.max_tokens` | `4096`. |
+| Model `options.max_tokens` | `32768` output tokens, reasoning included (sized for reasoning models). |
 | `temperature`, `top_p`, `seed`, reasoning/thinking options | Unset; the provider/model decides when no value is configured. |
 | Model capabilities | `supports_text`, `supports_json_schema`, and `supports_tools` are all `true`; configure the selected model's actual capabilities. |
-| Model admission and timeout | `concurrency: 4`, `queue_limit: 16`, `request_timeout: 60` seconds. |
+| Model admission and timeout | `concurrency: 4`, `queue_limit: 16`, `request_timeout: 300` seconds. |
+| Model `retry`, `output_retries` | `max_attempts: 4` (first request plus up to three retries), `initial_delay_seconds: 1`, `max_delay_seconds: 30`; `output_retries: 1`. |
 | Compatible `api_key` | Absent; OpenAI, Azure, Anthropic, and Google use their documented credential environment references. Bedrock uses the host credential chain. |
 | Compatible `allow_insecure_http`, `max_tokens_field` | `false`, `max_tokens`. |
 
@@ -107,8 +108,10 @@ Every model profile has:
 - `provider`, `model`, and `output_mode: native|tool`;
 - `supports_text` (default true), `supports_json_schema` (true), and
   `supports_tools` (true);
-- `concurrency` (4), `queue_limit` (16), and `request_timeout` (60);
-- `retry` (one attempt by default);
+- `concurrency` (4), `queue_limit` (16), and `request_timeout` (300);
+- `retry` (`max_attempts: 4` by default);
+- `output_retries` (`0`–`8`, default `1`): corrections of an invalid structured
+  output;
 - optional `pricing` (see [Pricing](#pricing));
 - provider-specific `options`.
 
@@ -117,10 +120,34 @@ must be supported. `model` is nonblank. `concurrency` is 1–1024,
 `queue_limit` is 0–10,000, and `request_timeout` is positive and at most
 3600 seconds.
 
-Common generation options are `max_tokens` (default 4096, 1–1,048,576),
+Common generation options are `max_tokens` (default 32768, 1–1,048,576),
 optional `temperature` (0–2), and optional `top_p` (greater than 0 and at
 most 1). OpenAI-family profiles also accept an optional strict-integer `seed`
 and `reasoning_effort: none|minimal|low|medium|high|xhigh`.
+
+`max_tokens` includes a reasoning model's reasoning tokens. A response stopped
+at the limit fails with `output_limit_reached` (not retryable; resending the
+same request hits the same limit), typically with `reasoning_output_tokens`
+equal to `output_tokens` in the step usage. Size `max_tokens` and
+`reasoning_effort` per profile, and per step where one step needs a different
+budget:
+
+```yaml
+model:
+  profile: local
+  options:
+    max_tokens: 2048
+    reasoning_effort: none
+```
+
+Measure the effect on evaluation cases; the report's `failures_by_code` shows
+how many attempts hit the limit, and `failures_by_reason` whether reasoning
+consumed the budget (`reasoning_consumed_budget`) or the answer was too long
+(`answer_exceeded_budget`). A model whose maximum output is below `max_tokens`
+rejects the request (`request_rejected`); an OpenAI-compatible server such as
+vLLM counts `max_tokens` against the context window
+(`context_limit_exceeded` when input plus `max_tokens` exceed it). Lower
+`max_tokens` for such a model.
 
 ### Pricing
 
@@ -165,7 +192,7 @@ model: $MODEL_ID
 api_key: $OPENAI_API_KEY     # default reference
 output_mode: native
 options:
-  max_tokens: 4096
+  max_tokens: 32768
   temperature: 0.1           # optional 0..2
   top_p: 0.9                 # optional (0,1]
   seed: 7                    # optional
@@ -184,7 +211,7 @@ allow_insecure_http: false
 max_tokens_field: max_tokens # or max_completion_tokens
 output_mode: native
 options:
-  max_tokens: 4096
+  max_tokens: 32768
 ```
 
 Plain HTTP requires explicit `allow_insecure_http: true`; prefer HTTPS outside
@@ -214,7 +241,7 @@ model: $MODEL_ID
 api_key: $ANTHROPIC_API_KEY
 output_mode: native
 options:
-  max_tokens: 4096
+  max_tokens: 32768
   thinking: adaptive         # disabled|adaptive, optional
   effort: high               # low|medium|high|xhigh|max; adaptive only
 ```
@@ -230,7 +257,7 @@ model: $GOOGLE_MODEL_ID
 api_key: $GOOGLE_API_KEY
 output_mode: native
 options:
-  max_tokens: 4096
+  max_tokens: 32768
 ```
 
 `api_key` defaults to `$GOOGLE_API_KEY`. This uses Google's native Gemini
@@ -248,7 +275,7 @@ region: $AWS_REGION
 model: $BEDROCK_MODEL_ID
 output_mode: tool
 options:
-  max_tokens: 4096
+  max_tokens: 32768
 ```
 
 `region` is required and may be a literal or an environment reference. The
@@ -278,7 +305,7 @@ model:
     max_tokens: 800
 ```
 
-The `model` and `options` overrides are optional. Option overrides are
+The `model`, `options` and `output_retries` overrides are optional. Option overrides are
 `max_tokens`, `temperature`, `top_p`, `seed`, `reasoning_effort`,
 `thinking`, `effort`, and `thinking_budget`; the compiler rejects options
 unsupported by the selected provider.
@@ -292,12 +319,12 @@ field keeps the remaining defaults.
 execution:
   concurrency: 4
   queue_limit: 16
-  run_timeout: 300
-  model_timeout: 60
+  run_timeout: 900
+  model_timeout: 300
   tool_timeout: 30
-  max_steps: 32
-  model_requests_per_step: 4
-  tool_calls_per_step: 3
+  max_steps: 128
+  model_requests_per_step: 16
+  tool_calls_per_step: 16
 ```
 
 `concurrency` is 1–1024 and `queue_limit` is 0–65,536. Durations are
@@ -309,8 +336,13 @@ Limits compose: the remaining run deadline still bounds each model/tool call.
 `model_timeout` bounds a logical model request while the profile's
 `request_timeout` configures its SDK/network timeout. For MCP, the effective
 tool timeout also respects the server's `request_timeout`. Raising a provider
-timeout alone does not raise the run deadline. LLM `max_iterations` limits logical
-turns independently of `model_requests_per_step`, which counts retry attempts.
+timeout alone does not raise the run deadline. LLM `max_iterations` (default 8)
+limits logical turns independently of `model_requests_per_step`, which counts
+retry attempts and output corrections. Each bound fails with its own code:
+`run_timeout` (run or caller deadline, including admission waits),
+`request_timeout` (a request's own timeout), `step_limit_reached`,
+`model_request_limit_reached`, `iteration_limit_reached`,
+`tool_call_limit_reached`.
 
 ## Provider retry policy
 
@@ -318,25 +350,41 @@ Model and MCP profiles accept:
 
 ```yaml
 retry:
-  max_attempts: 1
-  initial_delay_seconds: 0.25
-  max_delay_seconds: 5
+  max_attempts: 4
+  initial_delay_seconds: 1
+  max_delay_seconds: 30
 ```
 
-`max_attempts` is a strict integer from 1 through 8 and includes the initial
-request. Both delays are finite; the initial delay is 0–60 seconds, the maximum
-is 0–300 seconds, and the maximum cannot be lower than the initial value.
-Defaults therefore make exactly one request.
+These are the defaults. `max_attempts` is a strict integer from 1 through 8
+and includes the initial request (`1` disables retries). Both delays are finite;
+the initial delay is 0–60 seconds, the maximum is 0–300 seconds, and the
+maximum cannot be lower than the initial value.
 
-When more attempts are enabled, the runtime retries only safely observed
-completed HTTP responses with status 429, 500, 502, 503, or 529. Backoff is
-capped exponential full jitter. A valid `Retry-After` delta or date is a
-minimum delay bounded by the configured maximum and remaining absolute deadline.
-If it cannot fit, return the final transient failure.
+The runtime retries only completed HTTP responses: 408/504
+(`request_timeout`), 429 (`rate_limited`), 500/502 (`dependency_failure`) and
+503/529 (`dependency_overloaded`), and for models also a connection failure
+without a response. Backoff is capped exponential full jitter. A valid
+`Retry-After` delta or date is a minimum delay bounded by the configured
+maximum and remaining absolute deadline. If it cannot fit, return the final
+transient failure (`retryable: true`).
 
-Never retry a connection or stream interruption, timeout including 408/504,
-cancellation, authentication failure, schema/output failure, or whole
-step/flow/workflow. Provider SDK retries remain zero. Every request reserves and
+Never retry a client-side timeout, HTTP 400/422, a context window overflow,
+401/403/404, `output_limit_reached`, `output_refused`, a step limit, a tool
+error, an invalid tool call, a handler failure, cancellation, or a whole
+step/flow/workflow. Provider SDK retries remain zero. When the step's request or
+tool call limit refuses a retry, the failure reports the transient condition it
+would have retried (still `retryable`); a refused output correction reports the
+`invalid_output`.
+
+Invalid structured output (a schema step's JSON Schema violation, a decision
+contract violation, or unparseable JSON) is instead corrected up to the model
+profile's `output_retries` (`0`–`8`, default `1`; per step through a profile
+override with `profile` and `output_retries`): the model receives the
+validation problems of its own output and returns a corrected answer. Each
+correction is a model request against `model_requests_per_step` and
+`usage.output_retries`, not a `max_iterations` turn. Exhausted corrections fail
+with `invalid_output` and a content-free `reason`, `location` and `constraint`.
+A length stop, refusal or provider error is never corrected. Every request reserves and
 accounts against `model_requests_per_step` or `tool_calls_per_step`; failed
 attempt token usage remains unknown. Release and reacquire model request
 admission during backoff. Keep an MCP server's admitted authenticated session
@@ -363,7 +411,7 @@ application opens, not per request, and resolved values are not expanded again.
 Each profile contains `transport`, optional `auth`, optional
 `identity_meta_key`, a nonempty `catalog.tools`, `concurrency` (4),
 `queue_limit` (16), `request_timeout` (30), and
-`retry` (one attempt), and `output_limit_bytes` (1 MiB).
+`retry` (`max_attempts: 4`), and `output_limit_bytes` (1 MiB).
 `concurrency` is 1–1024, `queue_limit` is 0–10,000,
 `request_timeout` is positive and at most 3600 seconds, and
 `output_limit_bytes` is 1 byte–64 MiB.
@@ -393,6 +441,15 @@ transport:
 Stdio cannot use an HTTP auth hook. Each tool declaration has
 `input_schema`, optional `output_schema`, and `effect: read|write`; current
 runtime execution admits only read effects.
+
+MCP failures have their own codes: `tool_catalog_mismatch` (discovered schemas
+differ from the declared catalog), `tool_error` (a result with `isError`),
+`tool_output_limit_exceeded` (larger than `output_limit_bytes`),
+`invalid_output` (a result that violates `output_schema` or has the wrong
+form), `forbidden`, `request_timeout` and `dependency_failure`. A model's call
+to an unknown tool or with invalid arguments is `invalid_tool_call`. Only an
+MCP input request (elicitation) ends the step `needs_review`; every failure
+fails the run.
 
 `auth` is a provider name. For example, `auth: oauth` requires the host to
 pass `RuntimePlugins(mcp_credentials={"oauth": provider})`. The mapping key
@@ -450,7 +507,9 @@ A registration for an undeclared handler is `unknown_handler`; a declared
 handler without registration compiles (offline commands work) and fails at
 `open_application` with `missing_handler_registration`. Configuration cannot
 import code. Declared schemas drive compile-time binding and route-coverage
-checks and runtime validation. Exceptions become safe service errors.
+checks and runtime validation. A raised `ServiceError` keeps its code and
+`retryable`; any other exception fails the step with `handler_failed`, without
+its text.
 
 A handler returns `StepOutcome(result, needs_review=False, selection=None,
 unresolved_issues=())`. Issues require `needs_review` and select issue-specific

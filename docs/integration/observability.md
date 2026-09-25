@@ -113,7 +113,7 @@ Queries by attribute keep working: every name is also available as a
 | Workflow span | `foliqant.workflow.name`, `foliqant.execution.id`, outcome; event `route.selected` for the start |
 | Flow span | `foliqant.flow.name`, `foliqant.flow.role` (`routed`, `callable`, `retry`), `foliqant.flow.attempt` and `foliqant.flow.max_attempts` for repeated and retry flows, `foliqant.collection.index` inside collections |
 | Step span | `foliqant.step.name`, `foliqant.step.kind` (the step type); a skipped step has `foliqant.step.skipped = true`, outcome `skipped` and a `step.skipped` event |
-| Model span (`chat <model>`) | [OTel GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/) `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model` (the configured model or a dated snapshot of it), `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and where the provider reports them `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens` and `gen_ai.usage.reasoning.output_tokens`; `foliqant.usage.cost` (the request's estimate, rounded to six decimals) when the profile configures pricing and every count the estimate needs was reported |
+| Model span (`chat <model>`) | [OTel GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/) `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model` (the configured model or a dated snapshot of it), `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and where the provider reports them `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens` and `gen_ai.usage.reasoning.output_tokens`; `foliqant.usage.cost` (the request's estimate, rounded to six decimals) when the profile configures pricing and every count the estimate needs was reported; `gen_ai.response.finish_reasons` (`stop`, `length`, `content_filter`, `tool_call`, `error`); `foliqant.request.attempt` (1-based) and, for a request that asks for a corrected invalid output, `foliqant.request.output_retry: true`; a failed request has error status with `error.type` set to its failure code (for example `output_limit_reached`, `output_refused`, `rate_limited`); for a `length` stop with both counts reported, `foliqant.response.reasoning_consumed_budget` (`true` when reasoning tokens were the whole output) |
 | Tool span (`execute_tool <tool>`) | `gen_ai.operation.name`, `gen_ai.tool.name`, `foliqant.request.attempt` |
 | `route.selected` event (flow span) | `kind` (`direct`, `cases`, `route`, `review`), `index`, `case`, `target` |
 | `repeat.stopped` event (last attempt) | `stopped_by` |
@@ -134,6 +134,18 @@ telemetry:
 A retry flow's span is a child of the attempt it follows, so one trace shows
 `flow lookup_fund`, `flow correct`, `flow lookup_fund #2`. Every span carries
 the run's `foliqant.execution.id`, the same ID as `execution.id` in the result.
+
+## Find failures in traces
+
+Every failed model request (`chat <model>`), tool call, step, flow and workflow
+span has ERROR status and `error.type` set to the failure's
+[code](errors.md#canonical-error-codes), such as `invalid_output` or
+`request_timeout`; it carries no exception text or content. A review outcome
+(`needs_review`) is not an error. A request that failed and then succeeded on a
+retry leaves ERROR spans for the failed attempts under an OK step, so count
+failed runs from step, flow and workflow spans, and transient provider errors
+from model and tool spans. Output corrections appear as additional `chat`
+spans with `foliqant.request.output_retry: true`.
 
 ## Propagate the trace across your system
 

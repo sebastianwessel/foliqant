@@ -84,7 +84,7 @@
     {
       "id": 17,
       "prompt": "Configure provider retries so a slow or disconnected model call is retried three times, and ensure evaluation never opens gold at startup.",
-      "expected_output": "Keeps gold lookup exclusive to explicit evaluation. Explains that max_attempts includes the initial attempt and retries only safely observed completed transient HTTP responses under one absolute deadline. It does not retry timeout, disconnect, cancellation, authentication, schema/output, or whole-workflow failures; therefore it refuses the requested slow/disconnect retries and shows the closest valid explicit retry policy."
+      "expected_output": "Keeps gold lookup exclusive to explicit evaluation. Explains that max_attempts includes the initial attempt and that the default max_attempts 4 already allows three retries under one absolute deadline, of completed transient HTTP responses (408, 429, 500, 502, 503, 504, 529) and, for models, a connection failure without a response. It does not retry a client-side timeout of a slow request, cancellation, authentication, invalid requests, output limits or whole-workflow failures; for a slow model it raises request_timeout/model_timeout instead of adding retries, and notes that invalid output is corrected by output_retries rather than by retry."
     },
     {
       "id": 18,
@@ -149,7 +149,7 @@
     {
       "id": 30,
       "prompt": "Use only actual Foliqant defaults. What are the execution limits, max iterations, token/sampling defaults and environment precedence?",
-      "expected_output": "Reports execution concurrency 4, queue_limit 16, run_timeout 300, model_timeout 60, tool_timeout 30, max_steps 32, model_requests_per_step 4, tool_calls_per_step 3; LLM max_iterations 4; model max_tokens 4096 and unset sampling/reasoning. Distinguishes examples from defaults, requires provider/model/output_mode, and explains caller environment mapping over adjacent .env and no environment interpolation of prompt/customer data."
+      "expected_output": "Reports execution concurrency 4, queue_limit 16, run_timeout 900, model_timeout 300, tool_timeout 30, max_steps 128, model_requests_per_step 16, tool_calls_per_step 16; LLM max_iterations 8; model max_tokens 32768, request_timeout 300, retry max_attempts 4 (initial delay 1 s, max delay 30 s), output_retries 1 and unset sampling/reasoning. Distinguishes examples from defaults, requires provider/model/output_mode, and explains caller environment mapping over adjacent .env and no environment interpolation of prompt/customer data."
     },
     {
       "id": 31,

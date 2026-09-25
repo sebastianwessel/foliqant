@@ -66,7 +66,7 @@ async def test_classification_matrix_orientation_and_unavailable_denominators():
                     {},
                     (),
                     Usage(),
-                    Failure(ErrorCode.TIMEOUT),
+                    Failure(ErrorCode.RUN_TIMEOUT),
                 )
             )
         return result(predictions[index])
@@ -377,6 +377,7 @@ async def test_step_measurement_summary_preserves_missing_and_partial_token_fiel
     usage = BoundaryUsage(
         model_requests=1,
         tool_calls=0,
+        output_retries=0,
         input_tokens=10,
         output_tokens=None,
         cache_read_input_tokens=0,

@@ -42,14 +42,18 @@ class CapacityLimiter:
         return self._admitted - self._active
 
     @asynccontextmanager
-    async def slot(self, *, deadline: float) -> AsyncIterator[None]:
+    async def slot(
+        self, *, deadline: float, timeout: ErrorCode = ErrorCode.REQUEST_TIMEOUT
+    ) -> AsyncIterator[None]:
         """Acquire capacity by an absolute monotonic deadline and always release.
 
         Saturation fails immediately instead of growing an unbounded task queue.
-        Task cancellation propagates unchanged; timeout is a safe typed failure.
+        Task cancellation propagates unchanged; a wait past the deadline fails
+        with ``timeout``: ``request_timeout`` for an operation's slot,
+        ``run_timeout`` when the deadline is the run's own.
         """
         if not math.isfinite(deadline) or deadline <= asyncio.get_running_loop().time():
-            raise ServiceError(ErrorCode.TIMEOUT)
+            raise ServiceError(timeout)
         if self._admitted >= self._maximum:
             raise ServiceError(ErrorCode.CAPACITY_EXCEEDED, retryable=True)
         self._admitted += 1
@@ -59,13 +63,13 @@ class CapacityLimiter:
                 async with asyncio.timeout_at(deadline):
                     await self._semaphore.acquire()
             except TimeoutError:
-                raise ServiceError(ErrorCode.TIMEOUT) from None
+                raise ServiceError(timeout) from None
             acquired = True
             self._active += 1
             # A released waiter may already be runnable before the timeout
             # callback is scheduled. Recheck the deadline before starting work.
             if deadline <= asyncio.get_running_loop().time():
-                raise ServiceError(ErrorCode.TIMEOUT)
+                raise ServiceError(timeout)
             yield
         finally:
             if acquired:

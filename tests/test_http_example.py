@@ -137,3 +137,48 @@ async def test_example_responds_over_real_loopback_http() -> None:
     finally:
         server.should_exit = True
         await asyncio.wait_for(task, timeout=5)
+
+
+async def test_failed_run_is_a_server_error_response_never_a_success() -> None:
+    from foliqant.core.errors import ErrorCode
+    from foliqant.core.execution import Failure
+
+    responses: list[Failure] = [
+        Failure(ErrorCode.RATE_LIMITED, retryable=True),
+        Failure(ErrorCode.RUN_TIMEOUT),
+        Failure(ErrorCode.OUTPUT_LIMIT_REACHED),
+    ]
+
+    @asynccontextmanager
+    async def failing() -> AsyncIterator[SupportRun]:
+        async def run(envelope: Envelope) -> ExecutionResult:
+            failure = responses.pop(0)
+            return to_execution_result(
+                RunResult(
+                    str(uuid4()),
+                    "support_triage",
+                    "offline-test-revision",
+                    "failed",
+                    None,
+                    envelope.metadata.model_dump(mode="json"),
+                    (),
+                    Usage(),
+                    failure,
+                )
+            )
+
+        yield run
+
+    path = ROOT / "examples/http_workflow/server.py"
+    spec = importlib.util.spec_from_file_location("foliqant_http_failure_example", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    app = module.create_app(failing)
+    async with app.router.lifespan_context(app):
+        async with httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            body = {"payload": {"requestId": "http-003", "message": "Cancel."}, "metadata": {}}
+            statuses = [(await client.post("/run", json=body)).status_code for _ in range(3)]
+    assert statuses == [503, 504, 500]

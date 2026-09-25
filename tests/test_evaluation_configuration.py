@@ -1,5 +1,6 @@
 """Private ground truth is an evaluation input, never a runtime prerequisite."""
 
+import copy
 import json
 import stat
 from pathlib import Path
@@ -172,6 +173,7 @@ async def test_report_records_confusion_full_values_and_replays_without_clients(
     output = tmp_path / ".foliqant/report.json"
     summary, code = await evaluate_configuration(prepared, output=output)
     assert code == 1 and summary["status"] == "failed"
+    assert summary["failures_by_code"] == {}
     assert "private-email" not in json.dumps(summary)
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
     artifact = json.loads(output.read_text())
@@ -505,6 +507,7 @@ async def test_replay_rejects_different_workflow_even_all_invocations_failed(
     summary, code = await evaluate_configuration(prepared, replay=output)
     assert code == 4
     assert summary["status"] == "error"
+    assert summary["failures_by_code"] == {"run_timeout": summary["attempts"]}
     data["suites"][0]["workflow"] = "other"
     gold.write_text(json.dumps(data))
     with pytest.raises(ServiceError) as failure:
@@ -581,3 +584,98 @@ def test_shared_dataset_reader_materializes_references_without_configuration(tmp
     # Case-boundary instances are detached even when the file is shared.
     loaded.suites[0].gold_cases[0].id = "edited"
     assert loaded.suites[1].gold_cases[0].id != "edited"
+
+
+def test_cli_evaluate_checkpoint_resumes_and_progress_stays_content_free(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _, _ = _project(tmp_path)
+    monkeypatch.setattr("foliqant.bootstrap.prepare_application", _prepare)
+    checkpoint = tmp_path / ".foliqant" / "checkpoint.jsonl"
+    arguments = ["evaluate", "--config", str(config), "--checkpoint", str(checkpoint)]
+    assert main([*arguments, "--progress"]) == 1  # one gold mismatch
+    captured = capsys.readouterr()
+    lines = captured.err.splitlines()
+    assert lines[0].startswith("suite 1/1: 1/2 attempts, 0 resumed, 0 failed")
+    assert lines[1].startswith("suite 1/1: 2/2 attempts, 0 resumed, 0 failed")
+    assert "case-1" not in captured.err and "private-email" not in captured.err
+    assert len(checkpoint.read_text().splitlines()) == 2
+    assert stat.S_IMODE(checkpoint.stat().st_mode) == 0o600
+
+    assert main([*arguments, "--progress"]) == 1
+    captured = capsys.readouterr()
+    assert "2/2 attempts, 2 resumed" in captured.err
+    report = json.loads(Path(json.loads(captured.out)["report"]).read_text())
+    assert report["reports"][0]["resumed_attempts"] == 2
+    assert len(checkpoint.read_text().splitlines()) == 2  # nothing ran again
+
+    for invalid in (["--check"], ["--replay", str(checkpoint)]):
+        assert main([*arguments, *invalid]) == 2
+        capsys.readouterr()
+    compare = ["evaluate", "--compare", "a.json", "--baseline", "b.json"]
+    assert main([*compare, "--checkpoint", str(checkpoint)]) == 2
+    assert main([*compare, "--progress"]) == 2
+
+
+def test_flow_input_resolves_the_boundary_bindings_of_a_workflow_case(tmp_path: Path) -> None:
+    from foliqant.evaluation import flow_input
+
+    config, _, _ = _project(tmp_path)
+    prepared = _prepare(config)
+    envelope = Envelope(payload={"category": "billing"}, metadata={"language": "en"})
+    assert flow_input(prepared, "demo", "main", envelope) == {"document": {"category": "billing"}}
+    with pytest.raises(ValueError, match="workflow"):
+        flow_input(prepared, "other", "main", envelope)
+    with pytest.raises(ValueError, match="flow"):
+        flow_input(prepared, "demo", "other", envelope)
+
+
+def test_flow_input_takes_authored_upstream_results_and_defaults(tmp_path: Path) -> None:
+    from foliqant.evaluation import flow_input
+
+    step = {
+        "id": "done",
+        "definition": {
+            "type": "handler",
+            "handler": "passthrough",
+            "input": {"document": {"pointer": "/payload/document"}},
+        },
+    }
+    flow = {"output": {"pointer": "/steps/done/result"}, "steps": [step]}
+    workflow = tmp_path / "demo"
+    workflow.mkdir()
+    (workflow / "workflow.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "demo",
+                "start": "first",
+                "output": {"pointer": "/flows/second/result", "default": None},
+                "flows": {
+                    "first": {
+                        "input": {"document": {"pointer": "/payload"}},
+                        "definition": copy.deepcopy(flow),
+                        "transition": {"flow": "second"},
+                    },
+                    "second": {
+                        "input": {
+                            "document": {"pointer": "/flows/first/result"},
+                            "note": {"pointer": "/metadata/note", "default": None},
+                        },
+                        "definition": copy.deepcopy(flow),
+                        "transition": {"outcome": "completed"},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = tmp_path / "foliqant.yaml"
+    config.write_text("workflows:\n  demo: demo\n", encoding="utf-8")
+    prepared = _prepare(config)
+    envelope = Envelope(payload={"text": "x"})
+    resolved = flow_input(
+        prepared, "demo", "second", envelope, flow_results={"first": {"label": "gold"}}
+    )
+    assert resolved == {"document": {"label": "gold"}, "note": None}
+    with pytest.raises(ServiceError):
+        flow_input(prepared, "demo", "second", envelope)  # upstream result without default

@@ -90,7 +90,7 @@ the declaration before using it. Review both sides when a server changes.
 | `concurrency` / `queue_limit` | `4` active / `16` waiting sessions per process |
 | `request_timeout` | `30` seconds |
 | `output_limit_bytes` | `1048576` bytes |
-| `retry` | One attempt; see [retry policy](../reference/runtime-configuration.md#provider-retries) |
+| `retry` | `max_attempts: 4` (the first call plus up to three retries), `initial_delay_seconds: 1`, `max_delay_seconds: 30`; see [retry policy](../reference/runtime-configuration.md#provider-retries) |
 
 The catalog's `input_schema` and `output_schema` describe JSON values. They
 are not prompts. Declaring a write tool does not make it usable by the built-in
@@ -192,9 +192,11 @@ arbitrary credential or authorization functions.
 
 Run `foliqant validate` before starting clients. It checks declarations and
 bindings without contacting the server. Missing named credential providers fail
-when the application opens; catalog mismatch, invalid arguments, unauthorized
-calls, oversized responses, and invalid results are rejected at their runtime
-boundaries.
+when the application opens. At runtime each boundary fails with its own code:
+catalog mismatch `tool_catalog_mismatch`, invalid arguments `invalid_input`,
+unauthorized calls `forbidden`, a result with `isError` `tool_error`, an
+oversized result `tool_output_limit_exceeded` and an invalid result
+`invalid_output` (see [error codes](../integration/errors.md#canonical-error-codes)).
 
 Test valid and invalid arguments, server schema changes, denial, timeout, and
 output limits. Use local fakes for policy tests and an explicitly started test

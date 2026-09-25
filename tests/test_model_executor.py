@@ -37,6 +37,7 @@ from foliqant.core.plan import (
     ToolPolicyPlan,
     WorkflowPlan,
 )
+from foliqant.core.retry import RetryPolicy
 from foliqant.ports.execution import StepContext
 
 _LOCATION = SourceLocation("steps/test.yaml", 1, 1)
@@ -160,7 +161,11 @@ def _binding(
     settings: ModelSettings | None = None,
     supports_text: bool = True,
     supports_json_schema: bool = True,
+    retry: RetryPolicy | None = None,
+    output_retries: int = 0,
 ) -> ModelBinding:
+    # Fixtures disable output retries so one scripted response is one request;
+    # tests of the correction loop pass `output_retries` explicitly.
     return ModelBinding(
         model=FunctionModel(function),
         settings=settings or ModelSettings(),
@@ -168,6 +173,8 @@ def _binding(
         output_mode=output_mode,
         supports_text=supports_text,
         supports_json_schema=supports_json_schema,
+        retry=retry or RetryPolicy(),
+        output_retries=output_retries,
     )
 
 
@@ -495,7 +502,7 @@ async def test_each_request_obeys_model_timeout_within_absolute_deadline() -> No
             _frozen_object({}),
             _context(step.name, budget=budget, model_timeout=0.01),
         )
-    assert error.value.code == ErrorCode.TIMEOUT
+    assert error.value.code == ErrorCode.REQUEST_TIMEOUT
     assert budget.snapshot().model_requests == 1
     assert budget.snapshot().tokens == TokenUsage()
 
@@ -550,8 +557,18 @@ async def test_capacity_rejection_does_not_charge_an_attempt() -> None:
     assert budget.snapshot().model_requests == 0
 
 
-@pytest.mark.parametrize("finish_reason", ["length", "content_filter", "error"])
-async def test_nonfinal_responses_are_not_retried(finish_reason: str) -> None:
+@pytest.mark.parametrize(
+    ("finish_reason", "provider_details", "code"),
+    [
+        ("length", None, ErrorCode.OUTPUT_LIMIT_REACHED),
+        ("content_filter", None, ErrorCode.OUTPUT_REFUSED),
+        ("stop", {"refusal": "PRIVATE refusal text"}, ErrorCode.OUTPUT_REFUSED),
+        ("error", None, ErrorCode.DEPENDENCY_FAILURE),
+    ],
+)
+async def test_nonfinal_responses_fail_with_their_stop_reason_and_are_not_retried(
+    finish_reason: str, provider_details: dict[str, Any] | None, code: ErrorCode
+) -> None:
     step = _text_step()
     calls = 0
 
@@ -562,17 +579,22 @@ async def test_nonfinal_responses_are_not_retried(finish_reason: str) -> None:
             parts=[TextPart("PRIVATE partial output")],
             usage=_USAGE,
             finish_reason=cast(Any, finish_reason),
+            provider_details=provider_details,
         )
 
+    budget = StepBudget(model_requests=3, tool_calls=0)
     with pytest.raises(ServiceError) as error:
-        await _executor(step, _binding(model)).execute(
+        await _executor(step, _binding(model, retry=RetryPolicy(max_attempts=3))).execute(
             step,
             _frozen_object({}),
-            _context(step.name),
+            _context(step.name, budget=budget),
         )
-    assert error.value.code == ErrorCode.INVALID_OUTPUT
+    assert error.value.code == code
+    assert error.value.retryable is False
     assert "PRIVATE" not in str(error.value)
     assert calls == 1
+    # The stopped request consumed its reported tokens.
+    assert budget.snapshot().model_requests == 1
 
 
 async def test_unsupported_tools_and_capabilities_fail_before_model_io() -> None:

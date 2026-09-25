@@ -27,6 +27,7 @@ def _usage(count=1):
     return {
         "model_requests": count,
         "tool_calls": 0,
+        "output_retries": 0,
         "input_tokens": count * 2,
         "output_tokens": count,
         "cache_read_input_tokens": 0,

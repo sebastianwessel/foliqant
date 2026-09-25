@@ -446,7 +446,8 @@ async def open_application(
                 if set(models) != set(effective_models.models):
                     raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
                 model_profiles = effective_models.models
-                # Pricing is configuration, applied the same way to any model factory.
+                # Pricing and output retries are configuration, applied the same way
+                # to any model factory.
                 models = {
                     alias: replace(
                         binding,
@@ -460,6 +461,7 @@ async def open_application(
                             if (pricing := model_profiles[alias].pricing) is not None
                             else None
                         ),
+                        output_retries=model_profiles[alias].output_retries,
                     )
                     for alias, binding in models.items()
                 }

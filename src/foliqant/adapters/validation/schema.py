@@ -15,6 +15,7 @@ from foliqant.core.json import FrozenJson, JsonValue, thaw_json
 from foliqant.core.plan import LlmStepPlan, SchemaResourcePlan, WorkflowPlan
 
 from .provider_schema import inline_provider_schema
+from .violations import jsonschema_violation, schema_vocabulary
 
 _MAX_SCHEMA_DEPTH = 64
 _MAX_SCHEMA_NODES = 10_000
@@ -111,6 +112,11 @@ class WorkflowSchemas:
                         _fail(ErrorCode.INVALID_CONFIGURATION)
             self._outputs = outputs
             self._output_paths = output_paths
+            # Schema vocabulary of the workflow's own schemas, fixed at startup:
+            # content-free violation locations use only these names.
+            self._vocabulary = schema_vocabulary(
+                [*resources.values(), *(validator.schema for validator in outputs.values())]
+            )
         except ServiceError:
             raise
         except (
@@ -193,12 +199,27 @@ class WorkflowSchemas:
             self._validate(validator, payload, ErrorCode.INVALID_INPUT)
 
     def validate_output(self, flow_id: str, step_id: str, value: FrozenJson) -> None:
-        """Validate one schema-output LLM step by exact compiled flow and step IDs."""
+        """Validate one schema-output LLM step by exact compiled flow and step IDs.
+
+        A violation raises ``InvalidOutput``: ``invalid_output`` with a content-free
+        location and constraint, and correction feedback for the model only.
+        """
 
         validator = self._outputs.get((flow_id, step_id))
         if validator is None:
             _fail(ErrorCode.INVALID_CONFIGURATION)
-        self._validate(validator, value, ErrorCode.INVALID_OUTPUT)
+        try:
+            violation = jsonschema_violation(validator, thaw_json(value), self._vocabulary)
+        except (
+            LookupError,
+            RecursionError,
+            TypeError,
+            ValueError,
+            referencing_exceptions.Unresolvable,
+        ):
+            _fail(ErrorCode.INVALID_CONFIGURATION)
+        if violation is not None:
+            raise violation
 
     def provider_output_schema(self, flow_id: str, step_id: str) -> dict[str, JsonValue]:
         """Return an independent schema bundle with no external references or I/O."""

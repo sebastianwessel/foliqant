@@ -256,7 +256,7 @@ the flow.
 | Decision `fallback` | No fallback selection; preserve the unresolved assessment. |
 | LLM `prompt` | Send the selected input object as the default JSON user message. |
 | LLM `tools` | No MCP tools available to the model. When configured, `server`, `allow`, and `choice` are explicit. |
-| LLM `max_iterations` | `4` logical model turns, including the final answer. |
+| LLM `max_iterations` | `8` logical model turns, including the final answer. |
 | Collection `max_items` | `32` sequential child invocations. |
 
 Steps, routes, category semantics, LLM output type/schema, and tool permissions
@@ -554,7 +554,7 @@ input:
   message:
     pointer: /payload/message
 instructions: Return a concise structured extraction.
-max_iterations: 4                 # logical model turns, including final answer
+max_iterations: 8                 # logical model turns, including final answer
 prompt: Extract from {{ message }}.   # optional
 output:
   schema: output.schema.json         # or output: text
@@ -568,12 +568,17 @@ tools:                               # optional
 Prompt placeholders must exactly name declared inputs. Values render as compact
 JSON once. `{{{{` and `}}}}` produce literal double braces; expressions are
 invalid.
-`max_iterations` defaults to 4 and accepts 1–1024. It limits model turns in
+`max_iterations` defaults to 8 and accepts 1–1024. It limits model turns in
 one LLM step, including the final answer; retries of the same provider request
-do not consume another iteration. Going past it fails with
-`budget_exhausted`. The limit applies without tools too. Execution
+and output corrections do not consume another iteration. Going past it fails
+with `iteration_limit_reached`. The limit applies without tools too. Execution
 `model_requests_per_step` separately caps provider attempts, including
-retries, and `tool_calls_per_step` caps tool attempts.
+retries and output corrections (`model_request_limit_reached`), and
+`tool_calls_per_step` caps tool attempts (`tool_call_limit_reached`). Invalid
+structured output is returned to the model for correction up to the profile's
+`output_retries` (default `1`, or a step override with `profile` and
+`output_retries`) and then fails with `invalid_output`. A technical failure
+never becomes a review outcome or a `fallback`; the run fails with its code.
 
 ### MCP
 

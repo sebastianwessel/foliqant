@@ -82,7 +82,7 @@ def test_actual_readable_span_is_cloned_and_sanitized_before_delegate() -> None:
             "foliqant.workflow.name": "invoice_review",
             "foliqant.step.name": "classify",
             "foliqant.outcome": "completed",
-            "error.type": ErrorCode.TIMEOUT.value,
+            "error.type": ErrorCode.RUN_TIMEOUT.value,
             "tenant_id": "tenant-private-123",
             "principal_id": "private.person@example.invalid",
             "http.url": f"https://example.invalid/?token={_SECRET}",
@@ -122,7 +122,7 @@ def test_actual_readable_span_is_cloned_and_sanitized_before_delegate() -> None:
         "foliqant.workflow.name": "invoice_review",
         "foliqant.step.name": "classify",
         "foliqant.outcome": "completed",
-        "error.type": ErrorCode.TIMEOUT.value,
+        "error.type": ErrorCode.RUN_TIMEOUT.value,
     }
     assert dict(safe.resource.attributes) == {"service.name": "foliqant"}
     assert safe.resource.schema_url == ""
@@ -294,3 +294,39 @@ def test_on_start_never_exposes_mutable_raw_span() -> None:
 def test_invalid_startup_labels_are_rejected(label: str) -> None:
     with pytest.raises(ValueError, match="invalid telemetry label"):
         TelemetryLabels(models=frozenset({label}))
+
+
+@pytest.mark.parametrize(
+    ("finish_reasons", "consumed", "expected"),
+    [
+        (("length",), True, {"gen_ai.response.finish_reasons": ("length",), "consumed": True}),
+        (("stop",), False, {"gen_ai.response.finish_reasons": ("stop",), "consumed": False}),
+        ((_SECRET,), 1, {}),
+        (("length", _SECRET), "true", {}),
+        ((), None, {}),
+    ],
+)
+def test_finish_reasons_and_reasoning_budget_flag_are_allowlisted(
+    finish_reasons: tuple[str, ...], consumed: object, expected: dict[str, object]
+) -> None:
+    raw = ReadableSpan(
+        name="chat",
+        context=_context(1, 2),
+        attributes={
+            "gen_ai.operation.name": "chat",
+            "gen_ai.response.finish_reasons": finish_reasons,
+            **(
+                {"foliqant.response.reasoning_consumed_budget": consumed}
+                if consumed is not None
+                else {}
+            ),
+        },
+        kind=SpanKind.CLIENT,
+    )
+    delegate = RecordingProcessor()
+    SafeSpanProcessor(delegate, _labels()).on_end(raw)
+    attributes = dict(delegate.ended[0].attributes or {})
+    assert attributes.get("gen_ai.response.finish_reasons") == expected.get(
+        "gen_ai.response.finish_reasons"
+    )
+    assert attributes.get("foliqant.response.reasoning_consumed_budget") == expected.get("consumed")

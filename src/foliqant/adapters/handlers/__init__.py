@@ -9,7 +9,7 @@ from typing import Literal, cast
 from jsonschema import Draft202012Validator
 
 from foliqant.compiler.schema_helpers import validate_confined_tool_schema
-from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.core.errors import ErrorCode, ServiceError, timeout_code
 from foliqant.core.execution import StepOutcome
 from foliqant.core.json import FrozenObject, freeze_json, thaw_json
 from foliqant.core.plan import HandlerStepPlan
@@ -93,11 +93,15 @@ class HandlerExecutor:
         except asyncio.CancelledError:
             raise
         except TimeoutError:
-            raise ServiceError(ErrorCode.TIMEOUT) from None
+            now = asyncio.get_running_loop().time()
+            raise ServiceError(timeout_code(now, context.deadline)) from None
         except ServiceError:
+            # A handler's own typed failure (for example a retryable dependency
+            # failure of a service it calls) keeps its code and retry flag.
             raise
         except Exception:
-            raise ServiceError(ErrorCode.DEPENDENCY_FAILURE) from None
+            # An unexpected exception is the handler's failure, never an outcome.
+            raise ServiceError(ErrorCode.HANDLER_FAILED) from None
         try:
             if not isinstance(outcome, StepOutcome) or type(outcome.needs_review) is not bool:
                 raise ValueError("invalid outcome")

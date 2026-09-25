@@ -534,7 +534,9 @@ async def test_sdk_transport_timeout_is_classified_without_losing_attempt(
             await executor.execute(step, {}, context)
         assert bindings["configured"].admission.active == 0
 
-    assert error.value.code == (ErrorCode.TIMEOUT if timed_out else ErrorCode.DEPENDENCY_FAILURE)
+    assert error.value.code == (
+        ErrorCode.REQUEST_TIMEOUT if timed_out else ErrorCode.DEPENDENCY_FAILURE
+    )
     assert private_message not in str(error.value)
     assert error.value.__cause__ is None
     assert attempts == budget.snapshot().model_requests == 1

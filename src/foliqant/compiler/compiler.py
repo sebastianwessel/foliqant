@@ -3163,7 +3163,7 @@ def _validate_budgets(
         + " -> ".join(f"`{name}`" for name in path)
         + f" may visit {total} steps in the worst case (every step, repeat attempt, retry run "
         f"and collection item), more than execution.max_steps ({max_steps}); a run on this "
-        f"path fails with budget_exhausted at `{crossing}`.",
+        f"path fails with step_limit_reached at `{crossing}`.",
         field_path=where.field("flows", crossing),
     )
 

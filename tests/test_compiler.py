@@ -40,7 +40,7 @@ def test_llm_iteration_limit_compiles_and_changes_revision(tmp_path: Path) -> No
     default_plan = _compile(tmp_path)
     default_step = default_plan.flow("first").steps[0]
     assert isinstance(default_step, LlmStepPlan)
-    assert default_step.max_iterations == 4
+    assert default_step.max_iterations == 8
 
     _workflow(tmp_path, {"first": _flow(_llm(max_iterations=2))})
     limited_plan = _compile(tmp_path)

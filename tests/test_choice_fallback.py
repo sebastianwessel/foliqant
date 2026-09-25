@@ -175,6 +175,36 @@ async def test_invalid_native_results_never_receive_fallback(tmp_path, kind):
     await app.aclose()
 
 
+@pytest.mark.parametrize(
+    "status,code",
+    [(503, "dependency_overloaded"), (400, "context_limit_exceeded"), (401, "unauthenticated")],
+)
+async def test_provider_errors_never_receive_fallback_or_review(tmp_path, status, code):
+    from pydantic_ai.exceptions import ModelHTTPError
+
+    plan = _compiled(tmp_path)
+
+    def respond(messages, info):
+        raise ModelHTTPError(status, "test", {"code": "context_length_exceeded"})
+
+    executor = ModelExecutor({"local": _binding(respond)}, WorkflowSchemas(plan))
+
+    async def execute(step, inputs, context):
+        if context.flow_id != "main":
+            return StepOutcome(None)
+        return await executor.execute(step, inputs, context)
+
+    app = WorkflowApplication({plan.name: runner(plan, Scripted(execute))})
+    result = await app.run("inbox", Envelope(payload={"ticket": "Billing failed"}))
+    assert result.execution.status == "failed"
+    assert result.execution.error is not None and result.execution.error.code.value == code
+    record = result.flows["main"].steps["first"]
+    assert record.status == "failed" and record.selection is None
+    assert result.flows["other"].status == result.flows["review"].status == "skipped"
+    assert result.transitions == []
+    await app.aclose()
+
+
 async def test_selection_projection_and_cli_policy_description(tmp_path):
     plan = _compiled(
         tmp_path,

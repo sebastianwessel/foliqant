@@ -17,6 +17,7 @@ refinements made while building the features.
 | [handlers.md](handlers.md) | Declared handler contracts for the CLI, review issues from handlers, `route_key` removal, richer `StepContext` | CLI workarounds, dead fields |
 | [observability.md](observability.md) | Spans and events for routes, conditions, repeats and skips; host trace propagation; structured logs | ad-hoc logging in hosts |
 | [usage-and-pricing.md](usage-and-pricing.md) | Descriptive span names, usage by provider model, configured cost estimates | trace tooling that decodes attributes, application-side cost spreadsheets |
+| [evaluation-extensions.md](evaluation-extensions.md) | Null-aware `fields` metrics, `absent_as_null`, `text` / `contains`, `each` projections, checkpoint resume, progress, paired bootstrap intervals, member groups, cost summaries | application-side scoring layers, resume journals, bootstrap scripts |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Delivery plan: order, ownership, verification, documentation | — |
 
 Principles kept by every feature (see `../README.md`): reviewed configuration owns the topology;

@@ -28,10 +28,19 @@ class RetryPolicy:
 
 
 class TransientFailure(ServiceError):
-    """An adapter proved a completed transient response; never contains provider text."""
+    """An adapter proved a completed transient response; never contains provider text.
 
-    def __init__(self, *, retry_after_seconds: float | None = None) -> None:
-        super().__init__(ErrorCode.DEPENDENCY_FAILURE, retryable=True)
+    ``code`` names the transient condition: ``rate_limited``, ``dependency_overloaded``
+    or ``dependency_failure``.
+    """
+
+    def __init__(
+        self,
+        code: ErrorCode,
+        *,
+        retry_after_seconds: float | None = None,
+    ) -> None:
+        super().__init__(code, retryable=True)
         if retry_after_seconds is not None and (
             isinstance(retry_after_seconds, bool)
             or not math.isfinite(retry_after_seconds)
@@ -39,6 +48,11 @@ class TransientFailure(ServiceError):
         ):
             raise ValueError("invalid retry-after delay")
         self.retry_after_seconds = retry_after_seconds
+
+
+_ATTEMPT_LIMITS = frozenset(
+    {ErrorCode.MODEL_REQUEST_LIMIT_REACHED, ErrorCode.TOOL_CALL_LIMIT_REACHED}
+)
 
 
 async def retry[T](
@@ -51,13 +65,19 @@ async def retry[T](
 
     The first attempt may shorten the root deadline after admission. It may never
     extend it. Cancellation, timeout and all unclassified failures pass through.
+    An expired deadline raises ``request_timeout``; the caller reports
+    ``run_timeout`` when the run's own deadline was the bound. A retry that the
+    step's request or tool call limit refuses reports the transient failure it
+    would have retried, which is the actual cause.
     """
+    last: TransientFailure | None = None
     for attempt in range(1, policy.max_attempts + 1):
         if deadline() <= asyncio.get_running_loop().time():
-            raise ServiceError(ErrorCode.TIMEOUT)
+            raise ServiceError(ErrorCode.REQUEST_TIMEOUT)
         try:
             return await operation(attempt)
         except TransientFailure as error:
+            last = error
             if attempt == policy.max_attempts:
                 raise
             cap = min(policy.max_delay_seconds, policy.initial_delay_seconds * 2 ** (attempt - 1))
@@ -69,5 +89,9 @@ async def retry[T](
                 async with asyncio.timeout_at(end):
                     await asyncio.sleep(delay)
             except TimeoutError:
-                raise ServiceError(ErrorCode.TIMEOUT) from None
+                raise ServiceError(ErrorCode.REQUEST_TIMEOUT) from None
+        except ServiceError as error:
+            if last is not None and error.code in _ATTEMPT_LIMITS:
+                raise last from None
+            raise
     raise AssertionError("validated retry policy has at least one attempt")  # pragma: no cover

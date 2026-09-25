@@ -293,6 +293,7 @@ def test_public_usage_rejects_inconsistent_cost_and_model_fields(document):
     base = {
         "model_requests": 1,
         "tool_calls": 0,
+        "output_retries": 0,
         "input_tokens": None,
         "output_tokens": None,
         "cache_read_input_tokens": None,

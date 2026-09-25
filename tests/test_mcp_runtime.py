@@ -395,7 +395,7 @@ async def test_llm_iteration_limit_counts_final_turn_and_resets_per_invocation(
         else:
             with pytest.raises(ServiceError) as error:
                 await executor.execute(step, {"question": "one"}, ctx)
-            assert error.value.code == ErrorCode.BUDGET_EXHAUSTED
+            assert error.value.code == ErrorCode.ITERATION_LIMIT_REACHED
             assert ctx.budget.snapshot().model_requests == 1
         assert ctx.budget.snapshot().tool_calls == 1
 
@@ -463,7 +463,7 @@ async def test_llm_iterations_exclude_provider_retries_but_attempt_budget_counts
     else:
         with pytest.raises(ServiceError) as error:
             await executor.execute(step, {}, ctx)
-        assert error.value.code == ErrorCode.BUDGET_EXHAUSTED
+        assert error.value.code == ErrorCode.MODEL_REQUEST_LIMIT_REACHED
         assert calls == 2
     assert ctx.budget.snapshot().model_requests == provider_attempt_limit
     assert ctx.budget.snapshot().tool_calls == 1
@@ -533,7 +533,7 @@ async def test_sdk_request_timeout_is_safe_and_retains_only_actual_tool_attempts
     with pytest.raises(ServiceError) as error:
         async with runtime.open("records", ("lookup",), ctx) as tools:
             await tools.call("lookup", {"key": "one"})
-    assert error.value.code == ErrorCode.TIMEOUT
+    assert error.value.code == ErrorCode.REQUEST_TIMEOUT
     assert "PRIVATE" not in str(error.value)
     assert ctx.budget.snapshot().tool_calls == (1 if phase == "tools/call" else 0)
     assert factory.closed == 1
@@ -647,7 +647,7 @@ async def test_direct_step_has_one_deadline_across_connect_discover_and_call(
     )
     with pytest.raises(ServiceError) as error:
         await McpExecutor(runtime).execute(step, {"key": "x"}, ctx)
-    assert error.value.code == ErrorCode.TIMEOUT
+    assert error.value.code == ErrorCode.REQUEST_TIMEOUT
     assert call_entered.is_set()
     assert ctx.budget.snapshot().tool_calls == 1
     assert factory.closed == 1

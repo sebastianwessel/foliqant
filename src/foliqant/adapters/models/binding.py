@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
+from foliqant.contracts.models import DEFAULT_OUTPUT_RETRIES
 from foliqant.core.admission import CapacityLimiter
 from foliqant.core.pricing import PricingPlan
 from foliqant.core.retry import RetryPolicy
@@ -30,3 +31,5 @@ class ModelBinding:
     timeout_errors: tuple[type[Exception], ...] = ()
     retry: RetryPolicy = field(default_factory=RetryPolicy)
     pricing: PricingPlan | None = None
+    # Corrective requests after an invalid structured output (``output_retries``).
+    output_retries: int = DEFAULT_OUTPUT_RETRIES

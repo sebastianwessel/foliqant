@@ -137,7 +137,7 @@ async def test_root_step_budget_does_not_reset_at_flow_boundary() -> None:
         plan(flow("triage", next_flow="specialist"), flow("specialist")), executor, max_steps=1
     ).run(envelope(), identity=Identity())
     assert result.status == "failed"
-    assert result.error is not None and result.error.code == ErrorCode.BUDGET_EXHAUSTED
+    assert result.error is not None and result.error.code == ErrorCode.STEP_LIMIT_REACHED
     assert len(executor.calls) == 1
 
 
@@ -243,7 +243,7 @@ async def test_deadline_stops_before_later_flow() -> None:
         plan(flow("triage", next_flow="specialist"), flow("specialist")), executor
     ).run(envelope(), identity=Identity(), deadline=asyncio.get_running_loop().time() + 0.005)
     assert result.status == "failed"
-    assert result.error is not None and result.error.code == ErrorCode.TIMEOUT
+    assert result.error is not None and result.error.code == ErrorCode.RUN_TIMEOUT
     assert len(executor.calls) == 1
     assert dict(result.flows)["triage"].status == "failed"
     assert dict(dict(result.flows)["triage"].steps)["step_0"].status == "failed"
@@ -423,7 +423,7 @@ async def test_each_step_has_own_attempt_limit_but_failure_usage_is_not_lost() -
     )
     result = await engine.run(envelope(), identity=Identity())
     assert result.status == "failed"
-    assert result.error is not None and result.error.code == ErrorCode.BUDGET_EXHAUSTED
+    assert result.error is not None and result.error.code == ErrorCode.MODEL_REQUEST_LIMIT_REACHED
     assert result.usage.model_requests == 2
     assert result.usage.tokens.input_tokens == 20
     assert [record.usage.model_requests for _, record in result.flows] == [1, 1]

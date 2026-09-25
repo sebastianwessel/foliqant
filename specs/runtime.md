@@ -106,6 +106,26 @@ text, stack locals, credentials or unrelated SDK content. Technical
 failure preserves the accepted input and completed step records. Caller cancellation
 propagates without a returned result.
 Known business uncertainty produces `needs_review`; it is not a technical failure.
+A technical failure is never a business outcome: a failed model request, tool
+call or handler fails its step, flow and run with one precise code (the
+[canonical codes](../docs/integration/errors.md#canonical-error-codes)), and no
+`on_unresolved` route, review path, `fallback` category, binding `default` or
+`first_of` alternative, repeat `until`/`continue_when`, retry flow or later
+collection item acts on it. Only native abstention and an MCP server's
+input-required result are review outcomes. `SafeError` carries `code`, its fixed
+`message`, `retryable` (supplied by the failing boundary, never inferred from the
+code) and optional content-free `reason` (`json_parse_error`, `schema_violation`,
+`decision_contract`, `missing_output`, `reasoning_consumed_budget`,
+`answer_exceeded_budget`), `location` (a JSON pointer in schema vocabulary or
+`question:<id>`) and `constraint` (validator keyword or problem kind); absent
+fields are omitted and values outside their safe pattern are dropped. Every usage
+object has the required count `output_retries` after `tool_calls`: the model
+requests, included in `model_requests`, that asked for a corrected output.
+A provider stop before completion has its own code: `length` is
+`output_limit_reached`, `content_filter` or a reported refusal is
+`output_refused`, and a provider `error` stop is `dependency_failure`; all are
+non-retryable, because a limit stop recurs with unchanged input and options.
+Only a structurally complete response that fails validation is `invalid_output`.
 
 ## Deployment and authoring
 
@@ -418,12 +438,20 @@ placeholders fail compilation. Render once: no recursive substitution, expressio
 filters, attribute access, environment expansion or duplicate appended inputs.
 Decision steps retain their canonical task message and cannot use this template.
 An LLM step's `max_iterations` bounds logical model turns, including the final
-answer turn. It defaults to 4 and accepts integers 1–1024. A turn is one model
-request in the conversation; provider retries of that request remain the same
-turn. The step fails with `budget_exhausted` before a turn beyond this bound.
-The limit applies with or without tools and resets for every step invocation.
-It is independent of `execution.model_requests_per_step`, which counts actual
-provider attempts, including retries, and the tool-call attempt budget.
+answer turn. It defaults to 8 and accepts integers 1–1024. A turn is one model
+request in the conversation; provider retries and output corrections of that
+request remain the same turn. The step fails with `iteration_limit_reached`
+before a turn beyond this bound. The limit applies with or without tools and
+resets for every step invocation. It is independent of
+`execution.model_requests_per_step` (`model_request_limit_reached`), which counts
+actual provider attempts, including retries and output corrections, and the
+tool-call attempt budget (`tool_call_limit_reached`). `execution.max_steps`
+fails with `step_limit_reached`; the run deadline, including admission waits and
+a caller deadline, with `run_timeout`; a request's own timeout with
+`request_timeout`. Execution defaults are `run_timeout` 900, `model_timeout`
+300, `tool_timeout` 30, `max_steps` 128, `model_requests_per_step` 16 and
+`tool_calls_per_step` 16. A model call to an unknown tool or with arguments that
+violate its schema fails with `invalid_tool_call`.
 
 ## In-memory execution
 
@@ -498,9 +526,10 @@ PydanticAI executes decision and text/schema LLM steps. Decisions use the strict
 runtime output contract plus independent cross-field validation against the
 compiled questions and supplied sources. Both native and tool output modes append generic contract guidance to
 authored business instructions: allowed IDs, answerability/null rules, the
-unchanged status/issue meanings, concise reasons (aim 160 characters, hard maximum
-400), and evidence-strength semantics. This does not truncate responses, change
-criteria, retry invalid answers, or weaken validation.
+unchanged status/issue meanings, concise reasons (aim 160 characters, at most
+400), and evidence-strength semantics; the result contract accepts a `reason` of
+up to 2000 characters. This does not truncate responses, change criteria or
+weaken validation.
 The generated predicate schema expresses true/false with answerable and unknown
 with not_answerable/undetermined through complete object alternatives. Independent
 Python validation retains the same answerability rules; provider schema support
@@ -510,9 +539,22 @@ then results are checked against the original host schema. Unsupported recursive
 or dynamic schemas and unsupported provider/mode combinations fail before I/O;
 there is no prompt-only structured-output fallback. SDK retries are disabled.
 
+Invalid structured output of a decision or schema step, in native and tool output
+mode (a JSON Schema violation, a decision contract violation or unparseable
+JSON), is corrected up to the model profile's `output_retries` (0–8, default 1;
+per step through a profile override): the next request returns the validator's
+content-free problems about the model's own output to the model only. Each
+correction is a model request against `model_requests_per_step`, counted in
+`usage.output_retries`, and not a `max_iterations` turn. Exhausted corrections
+fail with `invalid_output` and a `reason`. A length stop, refusal or provider
+error is never corrected. Model `options.max_tokens` defaults to 32768 (reasoning
+included); profile `request_timeout` defaults to 300 seconds.
+
 MCP profiles use current maintained SDK transports for Streamable HTTP or stdio,
 one declared bounded catalog and read-only effects. Discovery must match the
-declared names and schemas. Validate and freeze arguments before authorization and
+declared names and schemas (`tool_catalog_mismatch` otherwise). A result with
+`isError` fails with `tool_error`, and one larger than `output_limit_bytes`
+(default 1 MiB) with `tool_output_limit_exceeded`. Validate and freeze arguments before authorization and
 I/O; validate results independently. Each step allowlists tools, and a host
 `ToolAuthorizer` may apply resource-specific business rules. Required or named
 tool choice is satisfied only by a successful validated call that entered model
@@ -535,18 +577,25 @@ tool connection; they do not add application authentication to the runner.
 
 ## Bounded transient retries
 
-Model and MCP profiles accept `retry` with `max_attempts` (1–8, default 1),
-`initial_delay_seconds` (0–60, default 0.25), and `max_delay_seconds`
-(0–300, default 5, at least the initial delay). Attempts include the first call.
-The default therefore sends one request with no recovery attempt.
+Model and MCP profiles accept `retry` with `max_attempts` (1–8, default 4),
+`initial_delay_seconds` (0–60, default 1), and `max_delay_seconds`
+(0–300, default 30, at least the initial delay). Attempts include the first call.
+The default therefore sends the first request plus up to three retries.
 
-Only explicitly classified completed HTTP responses with status 429, 500, 502,
-503 or 529 qualify. A generic error's `retryable` flag alone never authorizes
-re-execution. Timeouts, cancellation, disconnects, authentication failures,
-invalid arguments and invalid model/tool outputs are terminal. The runtime does
-not retry whole workflows, flows, agents or tool sessions. MCP calls remain
-read-only and each attempt repeats argument authorization and budget reservation.
-SDK automatic model retries and output-repair retries remain disabled.
+Only explicitly classified completed HTTP responses qualify: 408 and 504
+(`request_timeout`), 429 (`rate_limited`), 500 and 502 (`dependency_failure`),
+503 and 529 (`dependency_overloaded`); for models also a connection failure
+without a response. A generic error's `retryable` flag alone never authorizes
+re-execution. Client-side timeouts, cancellation, HTTP 400/422 (`request_rejected`),
+context window overflow (`context_limit_exceeded`), 401/403/404,
+`output_limit_reached`, `output_refused`, limits, tool errors, invalid tool calls
+and handler failures are terminal. A retry refused by the step's request or tool
+call limit reports the transient failure it would have retried (`retryable`); a
+refused output correction reports the `invalid_output`. The runtime does not retry
+whole workflows, flows, agents or tool sessions. MCP calls remain read-only and
+each attempt repeats argument authorization and budget reservation. SDK
+automatic model retries remain disabled; invalid output is corrected only through
+`output_retries`.
 
 Use capped exponential full-jitter backoff. A valid `Retry-After` is a minimum;
 if it cannot be honored within the delay cap or remaining operation deadline,
@@ -612,7 +661,16 @@ attempts and role (`routed`, `callable`, `retry`); step spans carry
 with `foliqant.step.skipped`. Model spans carry the reported OTel GenAI
 `gen_ai.usage.*` counts (input, output, cache read, cache creation, reasoning),
 `gen_ai.response.model` when it is the configured model or a dated snapshot of
-it, and `foliqant.usage.cost` when the request's estimate is known. Fixed events report `route.selected`,
+it, `foliqant.usage.cost` when the request's estimate is known, the allowlisted
+`gen_ai.response.finish_reasons`, `foliqant.request.attempt` (1-based),
+`foliqant.request.output_retry: true` on a correction request, and, for a
+`length` stop with both counts reported,
+`foliqant.response.reasoning_consumed_budget`. Every failed model request, tool
+call, step, flow and workflow span has ERROR status with `error.type` set to the
+content-free failure code; `needs_review` is not an error, and a request retried
+to success leaves ERROR spans for its failed attempts under an OK step. The request duration metric
+classifies the stop inside the recorded region, so its `error.type` equals the
+step's failure code. Fixed events report `route.selected`,
 `repeat.stopped`, `step.skipped` (condensed condition: pointers and operators
 only), `handler.review` and `condition.type_mismatch`; `condition.evaluated`
 is opt-in through `telemetry.conditions`. `ExecutionResult.execution.trace`
@@ -655,14 +713,20 @@ endpoint and provider extra. Init does not install packages or start a backend.
 Standard output carries one safe JSON object (the result, or the failure
 status with `error`, `problems` and `diagnostics`) or the requested graph text;
 standard error carries readable text, one rendered line per configuration
-problem plus a summary. Exit codes: `0` success, `1` gold mismatch or stale
-`explain --check` output, `2` invalid arguments, input or configuration, `3`
-missing optional dependency, `4` runtime failure, `130` interruption. There is
+problem plus a summary. Exit codes: `0` success (including `needs_review`), `1`
+gold mismatch or stale `explain --check` output, `2` invalid arguments, input or
+configuration, including run failures with `invalid_configuration`,
+`invalid_input`, `unauthenticated`, `forbidden`, `not_found`, `conflict`,
+`model_not_found`, `request_rejected` or `context_limit_exceeded`, `3` missing
+optional dependency, `4` runtime failure, `5` temporary runtime failure the
+boundary marked `retryable`, `130` interruption. There is
 no durable lookup/cancel operation or packaged HTTP server.
 
 The runnable HTTP example may use a small maintained ASGI library to decode one
 bounded request, invoke the in-memory application and return the terminal result.
-It must state that authentication, authorization, persistence, idempotency,
+A failed run returns a 5xx with the result body (503 for a `retryable` failure or
+`capacity_exceeded`, 504 for `request_timeout`/`run_timeout`, 500 otherwise);
+invalid input returns 400. It must state that authentication, authorization, persistence, idempotency,
 background execution, recovery and production hosting are the embedding
 application's responsibility. It may not create detached work or expose accepted,
 lookup or cancellation resources.

@@ -66,7 +66,9 @@ status, steps, projected result when present, error, usage, elapsed time and
 `needs_review` and uses the enclosing routed flow's explicit unresolved policy.
 First technical failure stops execution: failed collection `partial_result.items`
 retains completed/review/failed children and later `skipped` children. It has no
-success `result`. No failure is silently converted into a business disposition.
+success `result`, and the enclosing flow and run fail with the child's code; no
+later item, review route or `fallback` acts on it. No failure is silently
+converted into a business disposition.
 Caller cancellation propagates and joins owned work without launching later items.
 
 Root usage counts child attempts once through the collection subtotal. Durations

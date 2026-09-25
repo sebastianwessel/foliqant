@@ -66,7 +66,8 @@ identical input is not a retry strategy, so that combination reports the
 
 1. Run the flow with `input`.
 2. If the attempt needs review or fails, stop: review follows `on_unresolved`,
-   failure fails the run.
+   failure fails the run with its code. `until`, the retry flow and
+   `continue_when` never act on a failed attempt.
 3. If `until` holds, stop.
 4. If this was attempt `max_attempts`, stop: the flow is **exhausted**.
 5. Run the retry flow. If it needs review, the repeated flow becomes
@@ -110,7 +111,7 @@ attempt:
     {"attempt": 1, "status": "completed", "result": {"status": "not_found"}, "steps": {}},
     {"attempt": 2, "status": "completed", "result": {"status": "found"}, "steps": {}}
   ],
-  "attempts_usage": {"model_requests": 0, "tool_calls": 2},
+  "attempts_usage": {"model_requests": 0, "tool_calls": 2, "output_retries": 0},
   "repeat": {"stopped_by": "until"}
 }
 ```

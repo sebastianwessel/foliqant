@@ -34,6 +34,13 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
         "pricing": {
           "anyOf": [
             {
@@ -58,7 +65,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -114,7 +121,7 @@
           "title": "Effort"
         },
         "max_tokens": {
-          "default": 4096,
+          "default": 32768,
           "maximum": 1048576,
           "minimum": 1,
           "title": "Max Tokens",
@@ -251,6 +258,13 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
         "pricing": {
           "anyOf": [
             {
@@ -275,7 +289,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -339,6 +353,13 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
         "pricing": {
           "anyOf": [
             {
@@ -369,7 +390,7 @@
           "type": "string"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -471,6 +492,13 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
         "pricing": {
           "anyOf": [
             {
@@ -495,7 +523,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -534,7 +562,7 @@
       "description": "Common sampling options; absence means use the configured provider default.",
       "properties": {
         "max_tokens": {
-          "default": 4096,
+          "default": 32768,
           "maximum": 1048576,
           "minimum": 1,
           "title": "Max Tokens",
@@ -607,6 +635,13 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
         "pricing": {
           "anyOf": [
             {
@@ -631,7 +666,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -830,6 +865,13 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
         "pricing": {
           "anyOf": [
             {
@@ -854,7 +896,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -892,7 +934,7 @@
       "additionalProperties": false,
       "properties": {
         "max_tokens": {
-          "default": 4096,
+          "default": 32768,
           "maximum": 1048576,
           "minimum": 1,
           "title": "Max Tokens",
@@ -964,24 +1006,24 @@
     },
     "RetryConfig": {
       "additionalProperties": false,
-      "description": "Retries are disabled by default; max_attempts includes the first request.",
+      "description": "Repeat transient provider failures; ``max_attempts`` includes the first request.\n\nThe default of four attempts is the first request plus up to three retries,\nwith capped exponential full-jitter backoff that honours a valid Retry-After\nup to ``max_delay_seconds`` and never outlasts the request's deadline.",
       "properties": {
         "initial_delay_seconds": {
-          "default": 0.25,
+          "default": 1.0,
           "maximum": 60,
           "minimum": 0,
           "title": "Initial Delay Seconds",
           "type": "number"
         },
         "max_attempts": {
-          "default": 1,
+          "default": 4,
           "maximum": 8,
           "minimum": 1,
           "title": "Max Attempts",
           "type": "integer"
         },
         "max_delay_seconds": {
-          "default": 5.0,
+          "default": 30.0,
           "maximum": 300,
           "minimum": 0,
           "title": "Max Delay Seconds",

@@ -84,6 +84,16 @@ Status legend: ☐ open · ◐ in progress · ☑ done. Update this file as work
 | 6.7 | Docs (`integration/observability.md`, `integration/results.md`, `reference/inputs-and-results.md`, `configuration/models.md`), skill reference, `runtime.md`; tests in `tests/test_usage_pricing.py` and the telemetry suites | — | ☑ |
 | 6.8 | Platform follow-up: dashboards and queries that matched span names `foliqant.workflow|flow|step` select by instrumentation scope or `foliqant.*` attributes; add `pricing` to deployed profiles | — | ☐ |
 
+## Phase 7 — Evaluation extensions (library)
+
+| # | Work item | Spec | Status |
+|---|---|---|---|
+| 7.1 | Comparisons `one_of` / `text` / `contains`; expectation `each` projection and `absent_as_null`; shared `comparisons.py`; fingerprint unchanged for suites without them | evaluation-extensions.md | ☑ |
+| 7.2 | Metric kind `fields` (per-field outcomes, value/null support, rates, pooled and macro field accuracy); metric `each` and `expectation` selector; dataset boundary and schema | evaluation-extensions.md | ☑ |
+| 7.3 | `EvaluationCheckpoint` resume and `EvaluationProgress`; CLI `--checkpoint` / `--progress`; `CaseReport.resumed`, `resumed_attempts` | evaluation-extensions.md | ☑ |
+| 7.4 | Paired bootstrap intervals in `compare_reports`; `intervals.py`; cost in usage summaries and comparisons; array member groups | evaluation-extensions.md | ☑ |
+| 7.5 | Docs (`task-types.md`, `running.md`, `results.md`), skill reference, `specs/evaluation.md`; tests `test_evaluation_{comparisons,fields,checkpoint,intervals}.py` and additions | — | ☑ |
+
 ## Phase 4 — Review and hardening
 
 | # | Work item | Status |

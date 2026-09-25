@@ -142,36 +142,37 @@ class ToolCatalog:
         return cast(dict[str, JsonValue], thaw_json(frozen))
 
     def verify(self, discovered: Sequence[Tool]) -> None:
-        """Fail closed unless every declared tool has the exact discovered schemas."""
+        """Fail closed (``tool_catalog_mismatch``) unless every declared tool has the exact
+        discovered schemas."""
 
         by_name: dict[str, Tool] = {}
         try:
             for tool in discovered:
                 if not isinstance(tool, Tool) or tool.name in by_name:
-                    _fail(ErrorCode.DEPENDENCY_FAILURE)
+                    _fail(ErrorCode.TOOL_CATALOG_MISMATCH)
                 by_name[tool.name] = tool
             for name, declared in self._tools.items():
                 actual = by_name.get(name)
                 if actual is None:
-                    _fail(ErrorCode.DEPENDENCY_FAILURE)
-                input_digest = _schema_digest(actual.input_schema, ErrorCode.DEPENDENCY_FAILURE)
+                    _fail(ErrorCode.TOOL_CATALOG_MISMATCH)
+                input_digest = _schema_digest(actual.input_schema, ErrorCode.TOOL_CATALOG_MISMATCH)
                 if not hmac.compare_digest(input_digest, declared.input_digest):
-                    _fail(ErrorCode.DEPENDENCY_FAILURE)
+                    _fail(ErrorCode.TOOL_CATALOG_MISMATCH)
                 if actual.output_schema is None:
                     if declared.output_digest is not None:
-                        _fail(ErrorCode.DEPENDENCY_FAILURE)
+                        _fail(ErrorCode.TOOL_CATALOG_MISMATCH)
                 else:
                     output_digest = _schema_digest(
-                        actual.output_schema, ErrorCode.DEPENDENCY_FAILURE
+                        actual.output_schema, ErrorCode.TOOL_CATALOG_MISMATCH
                     )
                     if declared.output_digest is None or not hmac.compare_digest(
                         output_digest, declared.output_digest
                     ):
-                        _fail(ErrorCode.DEPENDENCY_FAILURE)
+                        _fail(ErrorCode.TOOL_CATALOG_MISMATCH)
         except ServiceError:
             raise
         except (AttributeError, RecursionError, TypeError, ValueError):
-            _fail(ErrorCode.DEPENDENCY_FAILURE)
+            _fail(ErrorCode.TOOL_CATALOG_MISMATCH)
 
     def validate_input(self, name: str, arguments: FrozenObject) -> None:
         """Validate immutable tool arguments using a fixed safe input failure."""
@@ -192,7 +193,8 @@ class ToolCatalog:
         if not isinstance(result, CallToolResult):
             _fail(ErrorCode.DEPENDENCY_FAILURE)
         if result.is_error:
-            _fail(ErrorCode.DEPENDENCY_FAILURE)
+            # The tool ran and reported failure: a failure, never a tool result.
+            _fail(ErrorCode.TOOL_ERROR)
         if "structured_content" in result.model_fields_set:
             if declared.output_validator is None:
                 _fail(ErrorCode.INVALID_OUTPUT)
@@ -204,7 +206,7 @@ class ToolCatalog:
             except (LookupError, TypeError, ValueError):
                 _fail(ErrorCode.INVALID_CONFIGURATION)
             if len(_canonical_bytes(frozen, ErrorCode.INVALID_OUTPUT)) > self._max_result_bytes:
-                _fail(ErrorCode.INVALID_OUTPUT)
+                _fail(ErrorCode.TOOL_OUTPUT_LIMIT_EXCEEDED)
             return frozen
         if declared.output_validator is not None:
             _fail(ErrorCode.INVALID_OUTPUT)
@@ -219,7 +221,7 @@ class ToolCatalog:
         except UnicodeError:
             _fail(ErrorCode.INVALID_OUTPUT)
         if size > self._max_result_bytes:
-            _fail(ErrorCode.INVALID_OUTPUT)
+            _fail(ErrorCode.TOOL_OUTPUT_LIMIT_EXCEEDED)
         return text
 
     def _tool(self, name: str, code: ErrorCode) -> _DeclaredToolSnapshot:

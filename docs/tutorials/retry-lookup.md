@@ -145,6 +145,8 @@ Read it top to bottom:
 - After the loop, the result is the last attempt, and the `route` decides: a
   known plan completes, anything else goes to review. Running out of attempts
   is not a failure and not a review by itself.
+- A technical failure of the lookup, such as `tool_error` or
+  `request_timeout`, is never retried by `repeat`: the run fails with that code.
 
 Validate and look at the graph. The repeat is annotated in the title of the
 `lookup` box (`repeat ≤ 2 until plan not_equals Unknown`), and the retry call

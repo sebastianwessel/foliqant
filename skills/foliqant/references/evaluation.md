@@ -86,7 +86,15 @@ optional `comparison`:
 | --- | --- |
 | `exact` | Preserve JSON type, array order, and value |
 | `set` | Expected and actual are top-level arrays; ignore order and duplicates |
+| `one_of` | Expected lists distinct acceptable values (first = primary); a classification metric counts an accepted alternative as its own label |
+| `text` | String gold equals the string result after case folding and whitespace collapsing |
+| `contains` | Nonblank normalized string gold occurs in the normalized string result |
 | `source_span` | Expected declares `input_path`, required `[start,end]`, and allowed `[start,end]` ranges |
+
+Optional expectation keys: `each` (relative pointer projected over every item of
+an array result; `exact`, `set`, `one_of` or custom only) and `absent_as_null: true` (an
+absent value inside an executed owner is JSON null; skipped/failed owners and
+missing records are not).
 
 `custom` comparison is Python-only. Construct
 `Expectation(..., comparison="custom", scorer="name")` and provide a matching
@@ -94,8 +102,14 @@ optional `comparison`:
 import scorer code.
 
 A metric has unique `name`, result `path`,
-`kind: classification|multilabel`, and a nonempty unique ordered `labels`
-catalog. Classification gold is one declared string or declared `null`;
+`kind: classification|multilabel|fields`, and a nonempty unique ordered `labels`
+catalog, plus optional `each` (projection, as on the expectation) and
+`expectation` (the assertion name to measure when a case asserts the path more
+than once). A `fields` metric's labels are field names of the object at `path`;
+its gold is each case's assertion at `path/<field>` (null gold = absent or null),
+and it reports per-field `correct_value`, `correct_null`, `hallucinated`,
+`missed`, `wrong_value` and `unavailable` counts with field accuracy,
+hallucination and miss rates. Classification gold is one declared string or declared `null`;
 multilabel gold is a unique array of declared strings. Every metric needs at
 least one matching expectation at its path. A missing nested result path is not
 the same observation as a present JSON `null`; choose an always-present path
@@ -109,7 +123,8 @@ or separate unanswered cases when declaring a metric.
    decision, LLM, MCP, handler, or flow-collection operation.
 
 A step without a flow is invalid. Scoped cases supply already-resolved boundary
-input; they do not execute upstream bindings. Do not treat the same examples at
+input; they do not execute upstream bindings. Build a flow case from a workflow
+case with `flow_input(prepared, workflow, flow, envelope, flow_results=...)`. Do not treat the same examples at
 three scopes as three independent gold samples.
 
 ## Author independent expectations
@@ -182,8 +197,10 @@ Invocation controls are:
 | CLI | Python `evaluate` | Meaning |
 | --- | --- | --- |
 | `--max-concurrency N` | `max_concurrency=N` | Concurrent case calls; default 1 |
-| `--timeout SECONDS` | `timeout=SECONDS` | Per-case deadline; default 300 |
+| `--timeout SECONDS` | `timeout=SECONDS` | Per-case deadline including scoring; CLI default the configured `execution.run_timeout` + 60 s, Python default 960 (900 + 60); exceeding it is `run_timeout` |
 | `--repeat N` | `repeat=N` | Equal attempts per source case; default 1 |
+| `--checkpoint PATH` | `checkpoint=EvaluationCheckpoint(path)` | Private journal; rerun resumes completed/reviewed attempts, rejects another configuration |
+| `--progress` | `progress=callback` | Content-free per-attempt progress (stderr / `EvaluationProgress`) |
 | `--output PATH` | Call `foliqant.evaluation.artifact.write_report` after evaluation | New private artifact; no overwrite |
 | n/a | `include_details=True` | Retain private input, gold, and complete result |
 
@@ -205,6 +222,22 @@ Missing, skipped, and error observations remain in denominators. Unknown usage
 is not zero. Flow and operation summaries are views of the same execution; do
 not add their usage to workflow totals.
 
+A failed case is an execution error (its checks have outcome `error`), counts
+in `failure_rate`, and is never a gold mismatch; the CLI exits `4`. Read
+`failures_by_code` on the report, its groups and each flow/step summary, and
+`failures_by_reason` on the report, each step summary and the CLI summary,
+before changing prompts: `output_limit_reached` with `reasoning_consumed_budget`
+asks for a larger `max_tokens` or lower reasoning effort, with
+`answer_exceeded_budget` for a shorter or more constrained answer;
+`request_timeout` and `run_timeout` for deadlines; the limit codes
+(`step_limit_reached`, `model_request_limit_reached`,
+`iteration_limit_reached`, `tool_call_limit_reached`) for execution limits;
+`invalid_output` (with `schema_violation`, `json_parse_error`,
+`decision_contract` or `missing_output`) for instructions, schemas or
+structured-output support. Case and step records carry `error_code` and
+`error_reason`. Step summaries add `output_retries` (correction requests) and
+`output_retry_recoveries` (invocations that succeeded after at least one).
+
 Flow and step summaries count `observed_invocations`, `skipped_invocations`,
 `failed_invocations`, and `review_invocations`. Decision steps additionally
 count `model_selected_invocations` and `fallback_selected_invocations`.
@@ -214,7 +247,10 @@ source-case count.
 Replay can measure changed gold or scorer logic, not a changed prompt or model.
 Comparison requires matching workflow/flow/step targets, cases, gold, scorers,
 catalogs, and repetitions. It reports both improvements and regressions without
-inventing a release threshold.
+inventing a release threshold; every rate delta carries a seeded 95% paired
+bootstrap interval over source cases (`excludes_zero`). Group a detailed report
+with `group_report(report, input_pointer="/metadata/split")`; an array input
+value (tags) forms overlapping member groups.
 
 Use scripted examples for deterministic wiring. Use representative live
 development cases to select a candidate and an untouched holdout to confirm it.

@@ -59,7 +59,10 @@ Set `MODEL_BASE_URL` to the API base, such as `http://127.0.0.1:1234/v1`, not
 the full `/chat/completions` path. Add `api_key: $MODEL_API_KEY` if the endpoint
 requires authentication. The token-limit field defaults to `max_tokens`; set
 `max_tokens_field: max_completion_tokens` only for a server that requires it.
-Use HTTPS outside intended local development.
+A server such as vLLM counts `max_tokens` (default `32768`) against the served
+context window, so the input plus `max_tokens` must fit it; otherwise the
+request fails with `context_limit_exceeded`. Lower `max_tokens` for a server
+with a small context. Use HTTPS outside intended local development.
 
 ## Google Gemini
 
@@ -110,7 +113,8 @@ The host must have permission to invoke the selected model.
 AWS credential discovery may contact your host's metadata or credential service;
 it does not discover or test model endpoints.
 
-The adapter owns client creation and cleanup, disables SDK retries, and keeps
+The adapter owns client creation and cleanup, disables SDK retries (the
+profile's `retry` applies instead), and keeps
 blocking AWS SDK work off the event loop. It retains ownership of in-flight
 work during cancellation. Generation options are the common `max_tokens`,
 `temperature`, and `top_p` fields.

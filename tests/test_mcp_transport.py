@@ -561,7 +561,7 @@ async def test_credential_resolution_is_inside_connection_deadline() -> None:
     with pytest.raises(ServiceError) as raised:
         async with factory.open("tools", _context(Identity("tenant", "alice"), tool_timeout=0.01)):
             pytest.fail("hanging credential provider was admitted")
-    assert raised.value.code == ErrorCode.TIMEOUT
+    assert raised.value.code == ErrorCode.REQUEST_TIMEOUT
 
 
 async def test_body_failure_and_cancellation_survive_sdk_cleanup_groups(

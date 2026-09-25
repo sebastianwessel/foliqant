@@ -158,11 +158,37 @@ async def test_malformed_pointers_fail(pointer):
         group_report(report, input_pointer=pointer)
 
 
-@pytest.mark.parametrize("value", [[], {}, ["de"], {"language": "de"}])
+@pytest.mark.parametrize("value", [{}, {"language": "de"}, [{"language": "de"}], [["de"]]])
 async def test_non_scalar_groups_fail(value):
     report = await report_for([{"group": value}])
     with pytest.raises(ValueError, match="scalars"):
         group_report(report, input_pointer="/metadata/group")
+
+
+async def test_array_values_form_overlapping_member_groups():
+    report = await report_for(
+        [
+            {"tags": ["reply", "german"]},
+            {"tags": ["reply", "reply"]},
+            {"tags": []},
+            {"tags": "reply"},
+            {},
+        ]
+    )
+    groups = group_report(report, input_pointer="/metadata/tags")
+    summary = [(g.value_present, g.member, g.value, g.source_case_count) for g in groups]
+    # Members count each attempt once per distinct element; an empty array joins no
+    # group; a scalar with the same text stays a separate, non-member group.
+    assert summary == [
+        (True, True, "reply", 2),
+        (True, True, "german", 1),
+        (True, False, "reply", 1),
+        (False, False, None, 1),
+    ]
+    assert groups[0].checks.total == 2
+    assert (groups[0].case_pass_rate, groups[0].failure_rate) == (1.0, 0.0)
+    assert groups[0].to_dict()["member"] is True
+    assert groups[0].metrics[0].support == 2
 
 
 async def test_grouping_requires_details_for_every_attempt():

@@ -61,9 +61,19 @@ async def test_wait_timeout_releases_queue_position() -> None:
         with pytest.raises(ServiceError) as error:
             async with limiter.slot(deadline=loop.time() + 0.01):
                 pytest.fail("busy limiter must time out")
-        assert error.value.code == ErrorCode.TIMEOUT
+        assert error.value.code == ErrorCode.REQUEST_TIMEOUT
         assert limiter.waiting == 0
     assert limiter.active == 0
+
+
+async def test_run_admission_wait_reports_the_run_timeout() -> None:
+    limiter = CapacityLimiter(concurrency=1, queue_limit=1)
+    loop = asyncio.get_running_loop()
+    async with limiter.slot(deadline=loop.time() + 2):
+        with pytest.raises(ServiceError) as error:
+            async with limiter.slot(deadline=loop.time() + 0.01, timeout=ErrorCode.RUN_TIMEOUT):
+                pytest.fail("busy limiter must time out")
+        assert error.value.code == ErrorCode.RUN_TIMEOUT
 
 
 async def test_expired_deadline_cannot_start_work_even_with_free_capacity() -> None:
@@ -71,7 +81,7 @@ async def test_expired_deadline_cannot_start_work_even_with_free_capacity() -> N
     with pytest.raises(ServiceError) as error:
         async with limiter.slot(deadline=asyncio.get_running_loop().time() - 1):
             pytest.fail("deadline already elapsed")
-    assert error.value.code == ErrorCode.TIMEOUT
+    assert error.value.code == ErrorCode.REQUEST_TIMEOUT
     assert limiter.active == 0
 
 
@@ -123,7 +133,7 @@ async def test_woken_waiter_past_deadline_cannot_enter(
     offset = 2.0
     with pytest.raises(ServiceError) as error:
         await task
-    assert error.value.code == ErrorCode.TIMEOUT
+    assert error.value.code == ErrorCode.REQUEST_TIMEOUT
     assert limiter.active == limiter.waiting == 0
     async with limiter.slot(deadline=loop.time() + 1):
         assert limiter.active == 1

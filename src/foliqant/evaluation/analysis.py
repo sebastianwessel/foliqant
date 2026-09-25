@@ -15,8 +15,17 @@ from foliqant.core.json import JsonValue
 from .artifact import MAX_REPORT_BYTES, report_document
 from .contracts import EvaluationCase, Expectation
 from .dataset import read_json
+from .intervals import (
+    DEFAULT_LEVEL,
+    DEFAULT_RESAMPLES,
+    DEFAULT_SEED,
+    Sample,
+    interval_json,
+    paired_difference_interval,
+)
 from .metrics import MetricObservation, MetricSpec, observe_metrics, summarize_metrics
 from .records import snapshot_execution
+from .summaries import count_failures, summarize_cost
 
 type CaseChange = Literal["improved", "regressed", "mixed", "unchanged"]
 
@@ -119,6 +128,16 @@ def _identity(
     return cast(tuple[str, str, str | None, str | None, str | None], values)
 
 
+def _failures(cases: list[dict[str, Any]]) -> dict[str, JsonValue]:
+    outcomes = []
+    for case in cases:
+        code = case.get("error_code")
+        if code is not None and not isinstance(code, str):
+            raise ValueError("report error code is invalid")
+        outcomes.append((cast(str, case["status"]), code))
+    return dict(count_failures(outcomes))
+
+
 def _repetition(case: dict[str, Any]) -> int:
     value = case.get("repetition", 1)
     if type(value) is not int or value < 1:
@@ -196,10 +215,14 @@ def _metric_specs(report: dict[str, Any]) -> list[MetricSpec]:
     for raw in _sequence(report.get("metrics", []), "report metrics are invalid"):
         metric = _mapping(raw, "report metric is invalid")
         labels = metric.get("labels")
+        each = metric.get("each")
+        selected = metric.get("expectation")
         if (
             not isinstance(metric.get("name"), str)
             or not isinstance(metric.get("path"), str)
-            or metric.get("kind") not in {"classification", "multilabel"}
+            or metric.get("kind") not in {"classification", "multilabel", "fields"}
+            or (each is not None and not isinstance(each, str))
+            or (selected is not None and not isinstance(selected, str))
             or not isinstance(labels, list)
             or not labels
             or not all(type(label) is str or label is None for label in labels)
@@ -212,6 +235,8 @@ def _metric_specs(report: dict[str, Any]) -> list[MetricSpec]:
                 metric["path"],
                 metric["kind"],
                 tuple(cast(list[str | None], labels)),
+                each,
+                selected,
             )
         )
     if len({item.name for item in specifications}) != len(specifications):
@@ -237,6 +262,8 @@ def _evaluation_case(raw: dict[str, Any]) -> EvaluationCase:
                 expected["expected"],
                 expected.get("comparison", "exact"),
                 expected.get("scorer"),
+                expected.get("each"),
+                expected.get("absent_as_null", False),
             )
         )
     if not isinstance(case_id, str):
@@ -244,7 +271,9 @@ def _evaluation_case(raw: dict[str, Any]) -> EvaluationCase:
     return EvaluationCase(case_id, envelope, tuple(expectations))
 
 
-def _metric_summary(cases: list[dict[str, Any]], specification: MetricSpec) -> dict[str, JsonValue]:
+def _metric_observations(
+    cases: list[dict[str, Any]], specification: MetricSpec
+) -> list[tuple[MetricObservation, ...]]:
     observations: list[tuple[MetricObservation, ...]] = []
     for case in cases:
         typed_case = _evaluation_case(case)
@@ -255,8 +284,43 @@ def _metric_summary(cases: list[dict[str, Any]], specification: MetricSpec) -> d
             document = snapshot_execution(result)[0]
         status = cast(str, case["status"])
         observations.append(observe_metrics((specification,), typed_case, document, status))
+    return observations
+
+
+def _metric_samples(
+    observations: list[tuple[MetricObservation, ...]], repeat: int, *, fields: bool
+) -> list[Sample]:
+    """One (correct, support) pair per source case: attempts, or scored fields."""
+    samples: list[Sample] = []
+    for offset in range(0, len(observations), repeat):
+        correct = support = 0
+        for (value,) in observations[offset : offset + repeat]:
+            if value.state == "excluded":
+                continue
+            if fields:
+                support += len(value.fields)
+                correct += sum(
+                    outcome in {"correct_value", "correct_null"} for _, outcome, _ in value.fields
+                )
+            else:
+                support += 1
+                correct += value.state == "observed" and (
+                    all(
+                        outcome in {"correct_value", "correct_null"}
+                        for _, outcome, _ in value.fields
+                    )
+                    if value.fields
+                    else value.actual == value.expected
+                )
+        samples.append((correct, support))
+    return samples
+
+
+def _metric_summary(
+    observations: list[tuple[MetricObservation, ...]], specification: MetricSpec
+) -> dict[str, JsonValue]:
     report = summarize_metrics((specification,), observations)[0]
-    return {
+    summary: dict[str, JsonValue] = {
         "name": report.name,
         "support": report.support,
         "excluded": report.excluded,
@@ -265,6 +329,10 @@ def _metric_summary(cases: list[dict[str, Any]], specification: MetricSpec) -> d
         "accuracy": report.accuracy,
         "coverage": report.coverage,
     }
+    if report.kind == "fields":
+        summary["field_accuracy"] = report.field_accuracy
+        summary["macro_field_accuracy"] = report.macro_field_accuracy
+    return summary
 
 
 def _delta(candidate: int | float | None, baseline: int | float | None) -> int | float | None:
@@ -304,12 +372,37 @@ def _usage(cases: list[dict[str, Any]]) -> dict[str, JsonValue]:
     return result
 
 
+def _cost(cases: list[dict[str, Any]]) -> dict[str, JsonValue]:
+    usages = []
+    for case in cases:
+        execution_result = _validated_result(case)
+        usages.append(execution_result.execution.usage if execution_result is not None else None)
+    summary = summarize_cost(usages)
+    return {
+        "observed": summary.observed,
+        "unknown": summary.unknown,
+        "total": summary.total,
+        "known_total": summary.known_total,
+        "currency": summary.currency,
+    }
+
+
 def _usage_comparison(
     baseline: list[dict[str, Any]], candidate: list[dict[str, Any]]
 ) -> dict[str, JsonValue]:
     before = _usage(baseline)
     after = _usage(candidate)
     result: dict[str, JsonValue] = {}
+    before_cost, after_cost = _cost(baseline), _cost(candidate)
+    result["cost"] = {
+        "baseline": before_cost,
+        "candidate": after_cost,
+        "total_delta": (
+            round(cast(float, after_cost["total"]) - cast(float, before_cost["total"]), 6)
+            if before_cost["total"] is not None and after_cost["total"] is not None
+            else None
+        ),
+    }
     for field in _USAGE_FIELDS:
         baseline_field = cast(dict[str, JsonValue], before[field])
         candidate_field = cast(dict[str, JsonValue], after[field])
@@ -358,6 +451,9 @@ def _compare_suite(
     *,
     baseline_mode: str,
     candidate_mode: str,
+    resamples: int,
+    level: float,
+    seed: int,
 ) -> dict[str, JsonValue]:
     _same(_identity(candidate), _identity(baseline), "report suite or target differs")
     _same(candidate.get("suite_revision"), baseline.get("suite_revision"), "suite revision differs")
@@ -379,6 +475,9 @@ def _compare_suite(
         raise ValueError("report repeat or source case count differs")
 
     compared_cases: list[JsonValue] = []
+    repeat = _attempt_contract(baseline, before_cases)[0]
+    case_samples: tuple[list[Sample], list[Sample]] = ([], [])
+    check_samples: tuple[list[Sample], list[Sample]] = ([], [])
     totals = {"improved": 0, "regressed": 0, "mixed": 0, "unchanged": 0}
     before_covered = after_covered = before_passed = after_passed = total_checks = 0
     for before, after in zip(before_cases, after_cases, strict=True):
@@ -433,6 +532,16 @@ def _compare_suite(
         after_covered += after_covered_case
         before_passed += before_passed_case
         after_passed += after_passed_case
+        if _repetition(before) == 1:
+            for samples in (*case_samples, *check_samples):
+                samples.append((0, 0))
+        for index, checks in enumerate((before_checks, after_checks)):
+            passed_attempt = all(check[4] == "passed" for check in checks)
+            num, den = case_samples[index][-1]
+            case_samples[index][-1] = (num + passed_attempt, den + 1)
+            num, den = check_samples[index][-1]
+            passed_checks = sum(check[4] == "passed" for check in checks)
+            check_samples[index][-1] = (num + passed_checks, den + len(checks))
         compared_cases.append(
             {
                 "id": before["id"],
@@ -471,23 +580,47 @@ def _compare_suite(
             }
         )
 
+    def paired(left: list[Sample], right: list[Sample]) -> JsonValue:
+        return cast(
+            JsonValue,
+            interval_json(
+                paired_difference_interval(left, right, resamples=resamples, level=level, seed=seed)
+            ),
+        )
+
     metrics: list[JsonValue] = []
     for specification in metric_specs:
-        before_metric = _metric_summary(before_cases, specification)
-        after_metric = _metric_summary(after_cases, specification)
-        metrics.append(
-            {
-                "name": specification.name,
-                "baseline": before_metric,
-                "candidate": after_metric,
-                "accuracy_delta": _delta(
-                    _numeric(after_metric["accuracy"]), _numeric(before_metric["accuracy"])
-                ),
-                "coverage_delta": _delta(
-                    _numeric(after_metric["coverage"]), _numeric(before_metric["coverage"])
-                ),
-            }
-        )
+        before_observations = _metric_observations(before_cases, specification)
+        after_observations = _metric_observations(after_cases, specification)
+        before_metric = _metric_summary(before_observations, specification)
+        after_metric = _metric_summary(after_observations, specification)
+        entry: dict[str, JsonValue] = {
+            "name": specification.name,
+            "baseline": before_metric,
+            "candidate": after_metric,
+            "accuracy_delta": _delta(
+                _numeric(after_metric["accuracy"]), _numeric(before_metric["accuracy"])
+            ),
+            "accuracy_delta_interval": paired(
+                _metric_samples(before_observations, repeat, fields=False),
+                _metric_samples(after_observations, repeat, fields=False),
+            ),
+            "coverage_delta": _delta(
+                _numeric(after_metric["coverage"]), _numeric(before_metric["coverage"])
+            ),
+        }
+        if specification.kind == "fields":
+            entry["field_accuracy_delta"] = _delta(
+                _numeric(after_metric["field_accuracy"]), _numeric(before_metric["field_accuracy"])
+            )
+            entry["field_accuracy_delta_interval"] = paired(
+                _metric_samples(before_observations, repeat, fields=True),
+                _metric_samples(after_observations, repeat, fields=True),
+            )
+        metrics.append(entry)
+    source_cases = len(case_samples[0])
+    before_case_rate = sum(n for n, _ in case_samples[0]) / len(before_cases)
+    after_case_rate = sum(n for n, _ in case_samples[1]) / len(after_cases)
     return {
         "suite_name": baseline["suite_name"],
         "suite_fingerprint": baseline["suite_fingerprint"],
@@ -506,6 +639,13 @@ def _compare_suite(
         },
         "attempt_count": len(before_cases),
         "case_changes": totals,
+        "case_pass": {
+            "source_cases": source_cases,
+            "baseline_rate": before_case_rate,
+            "candidate_rate": after_case_rate,
+            "rate_delta": after_case_rate - before_case_rate,
+            "rate_delta_interval": paired(*case_samples),
+        },
         "checks": {
             "total": total_checks,
             "baseline_covered": before_covered,
@@ -514,6 +654,7 @@ def _compare_suite(
             "baseline_passed": before_passed,
             "candidate_passed": after_passed,
             "pass_rate_delta": (after_passed - before_passed) / total_checks,
+            "pass_rate_delta_interval": paired(*check_samples),
         },
         "execution": {
             "baseline": {
@@ -534,6 +675,8 @@ def _compare_suite(
                 - sum(case["status"] == "needs_review" for case in before_cases)
             )
             / len(before_cases),
+            "baseline_failures_by_code": _failures(before_cases),
+            "candidate_failures_by_code": _failures(after_cases),
         },
         "metrics": metrics,
         "latency": _latency(baseline_mode, candidate_mode, before_cases, after_cases),
@@ -542,13 +685,22 @@ def _compare_suite(
     }
 
 
-def compare_reports(candidate: Path, baseline: Path) -> ReportComparison:
+def compare_reports(
+    candidate: Path,
+    baseline: Path,
+    *,
+    resamples: int = DEFAULT_RESAMPLES,
+    level: float = DEFAULT_LEVEL,
+    seed: int = DEFAULT_SEED,
+) -> ReportComparison:
     """Compare two saved full reports without clients, model calls, or mutation.
 
     Dataset, suite, target, case/input/gold, scorer, and metric semantics must
     match. Variant and configuration revisions may differ because those are the
     intended subjects of comparison. Every count is derived from case records;
-    saved aggregate summaries are not trusted as comparison input.
+    saved aggregate summaries are not trusted as comparison input. Rate deltas
+    carry a seeded paired percentile bootstrap interval over source cases
+    (``intervals``); an interval is descriptive, not a release threshold.
     """
     candidate_raw = _artifact(candidate)
     baseline_raw = _artifact(baseline)
@@ -563,6 +715,9 @@ def compare_reports(candidate: Path, baseline: Path) -> ReportComparison:
             after,
             baseline_mode=baseline_raw["mode"],
             candidate_mode=candidate_raw["mode"],
+            resamples=resamples,
+            level=level,
+            seed=seed,
         )
         for before, after in zip(baseline_reports, candidate_reports, strict=True)
     ]
@@ -579,7 +734,7 @@ def compare_reports(candidate: Path, baseline: Path) -> ReportComparison:
         "attempt_count": sum(cast(int, suite["attempt_count"]) for suite in suites),
         "case_changes": cast(JsonValue, case_changes),
         "suites": cast(JsonValue, suites),
-        "interpretation": "descriptive_only_no_statistical_significance",
+        "interpretation": "descriptive_paired_bootstrap_intervals_no_release_threshold",
     }
     return ReportComparison(document)
 

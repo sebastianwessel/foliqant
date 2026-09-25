@@ -122,7 +122,9 @@ def observe(
         outcome.error = (
             error.code
             if isinstance(error, ServiceError)
-            else ErrorCode.TIMEOUT
+            # Adapters convert their own timeouts; a raw TimeoutError here is
+            # the run deadline of the runner's `timeout_at`.
+            else ErrorCode.RUN_TIMEOUT
             if isinstance(error, TimeoutError)
             else ErrorCode.DEPENDENCY_FAILURE
         )

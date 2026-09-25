@@ -272,7 +272,18 @@ def test_explain_includes_flow_edges_and_alias_without_prompt_content(tmp_path):
     }
 
 
-def test_failed_execution_is_a_safe_cli_error_not_success_output(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize(
+    ("code_name", "retryable", "exit_code"),
+    [
+        ("DEPENDENCY_OVERLOADED", True, 5),
+        ("OUTPUT_LIMIT_REACHED", False, 4),
+        ("CONTEXT_LIMIT_EXCEEDED", False, 2),
+        ("REQUEST_TIMEOUT", False, 4),
+    ],
+)
+def test_failed_execution_is_a_safe_cli_error_not_success_output(
+    tmp_path, monkeypatch, capsys, code_name, retryable, exit_code
+):
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
 
@@ -286,7 +297,7 @@ def test_failed_execution_is_a_safe_cli_error_not_success_output(tmp_path, monke
         async def run(self, *args, **kwargs):
             return SimpleNamespace(
                 execution=SimpleNamespace(
-                    status="failed", error=ServiceError(ErrorCode.TIMEOUT, retryable=True)
+                    status="failed", error=ServiceError(ErrorCode[code_name], retryable=retryable)
                 )
             )
 
@@ -307,10 +318,13 @@ def test_failed_execution_is_a_safe_cli_error_not_success_output(tmp_path, monke
         ]
     )
     captured = capsys.readouterr()
-    assert code == 4
+    assert code == exit_code
     error = json.loads(captured.out)["error"]
-    assert error["code"] == "timeout" and error["retryable"] is True
-    assert captured.err.splitlines()[-1].startswith("foliqant: timeout: ")
+    code_value = ErrorCode[code_name].value
+    assert error["code"] == code_value and error["retryable"] is retryable
+    # Every canonical code keeps its own message, never a dependency-failure fallback.
+    assert error["message"] == str(ServiceError(ErrorCode[code_name]))
+    assert captured.err.splitlines()[-1] == f"foliqant: {code_value}: {error['message']}"
 
 
 def test_nonregular_input_is_rejected_without_waiting_for_writer(tmp_path):

@@ -124,7 +124,7 @@ Every result requires:
 | `questionId`, `type` | Matching input question and type. |
 | `answerability` | A `status` and an `issues` array. |
 | `answer` | Type-specific shape above, including `null` where permitted. |
-| `reason` | Nonblank human explanation, at most 400 characters; never truncated. |
+| `reason` | Nonblank human explanation; the runtime instructions ask for at most 400 characters and the result accepts up to 2000; never truncated. |
 | `evidence_strength` | `"strong"`, `"limited"`, or `null`; always present. |
 
 ### Reason and evidence strength
@@ -277,9 +277,11 @@ private step records.
 | `flow_collection` | `{"items": [FlowCollectionItemResult, ...]}` | On technical failure the same ledger is instead `partial_result`. |
 
 Every included `Usage` object has `model_requests`, `tool_calls`,
-`input_tokens`, `output_tokens`, `cache_read_input_tokens`,
+`output_retries`, `input_tokens`, `output_tokens`, `cache_read_input_tokens`,
 `cache_write_input_tokens`, and `reasoning_output_tokens`. Counts are
 nonnegative; token values may be `null` when a provider did not report them.
+`output_retries` counts the model requests that asked for a corrected invalid
+output; they are included in `model_requests`.
 Parent usage already aggregates child work, so do not add levels together.
 
 | `Usage` field | Presence | Meaning |
@@ -308,13 +310,22 @@ Review is valid output and has no `execution.error`. A technical failure may
 return a result with completed work preserved, while invalid admission can raise
 `ServiceError` before a result is available. Caller cancellation propagates.
 `SafeError` contains a canonical `code`, fixed safe `message`, required
-`retryable`, and optional nonblank `location`; see the [complete code
-table](../integration/errors.md#canonical-error-codes). Codes do not impose HTTP
-statuses. `foliqant run` prints completed and review results on stdout with exit
-code `0`; failed and cancelled results use its safe CLI error on stderr. CLI exit
-codes are `1` for evaluation mismatch, `2` for invalid argument/input/config,
-`3` for missing optional dependency, `4` for runtime failure, and `130` for
-interruption.
+`retryable`, and optional content-free `reason` (`json_parse_error`,
+`schema_violation`, `decision_contract`, `missing_output`,
+`reasoning_consumed_budget`, `answer_exceeded_budget`), `location` (a JSON
+pointer in schema vocabulary such as `/units/0/intent`, or `question:<id>`) and
+`constraint` (the violated validator keyword or problem kind, such as `enum` or
+`unknown_option`); absent optional fields are omitted. See the [complete code
+table](../integration/errors.md#canonical-error-codes) and
+[failure reasons](../integration/errors.md#failure-reasons). Codes do not impose
+HTTP statuses. `foliqant run` prints completed and review results on stdout with
+exit code `0`; failed and cancelled results use its safe CLI error. CLI exit
+codes are `1` for evaluation mismatch, `2` for invalid argument/input/config
+(including run failures with an input or configuration code such as
+`request_rejected` or `context_limit_exceeded`), `3` for missing optional
+dependency, `4` for runtime failure, `5` for a temporary runtime failure marked
+`retryable`, and `130` for interruption; see
+[exit codes](runtime-configuration.md#exit-codes).
 
 Unknown fields are rejected except application-defined envelope metadata.
 Protected metadata, errors, selections, category descriptions, collection

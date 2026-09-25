@@ -59,4 +59,4 @@ fallback:
     - no_supported_answer
 ```
 
-Add it at the top level of the step. This category is excluded from model choices and must have a distinct ID. It produces `selection.origin: "fallback"` only for a validated `not_answerable` result whose nonempty issues are all allowed by `on`. The native result stays unanswered and the step stays `needs_review`; fallback does not handle timeouts or invalid output. Include every issue you intend to allow explicitly. Evaluate unsupported, conflicting, and multi-queue emails before routing automatically.
+Add it at the top level of the step. This category is excluded from model choices and must have a distinct ID. It produces `selection.origin: "fallback"` only for a validated `not_answerable` result whose nonempty issues are all allowed by `on`. The native result stays unanswered and the step stays `needs_review`; fallback never handles a technical failure such as a timeout or invalid output; the run fails with its code. Include every issue you intend to allow explicitly. Evaluate unsupported, conflicting, and multi-queue emails before routing automatically.

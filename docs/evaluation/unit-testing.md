@@ -86,8 +86,8 @@ Adjust the asserted flow and step IDs to the compiled workflow. This pattern
 tests real input schemas, bindings, handler schemas, projections, transitions,
 and the public `ExecutionResult`. Return an invalid value from a second fake to
 assert the expected safe `invalid_output` failure. Raise a `ServiceError` to
-exercise an intentional operational code; unexpected fake exceptions are
-sanitized as dependency failures.
+exercise an intentional operational code; an unexpected exception from a fake
+handler fails the step with `handler_failed`, without its text.
 
 ## Test evaluation code with a result fake
 
@@ -107,6 +107,7 @@ from foliqant.evaluation import (
 USAGE = {
     "model_requests": 0,
     "tool_calls": 0,
+    "output_retries": 0,
     "input_tokens": 0,
     "output_tokens": 0,
     "cache_read_input_tokens": 0,

@@ -4,6 +4,7 @@ import asyncio
 import json
 import math
 import os
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -22,10 +23,11 @@ from .artifact import (
     write_private_json,
     write_report,
 )
+from .checkpoint import EvaluationCheckpoint, EvaluationProgress
 from .contracts import EvaluationReport, EvaluationVariant, Pipeline
 from .dataset import EvaluationDataset, SuiteSpec, load_dataset, metric_specs, read_json
-from .runner import evaluate
-from .summaries import summarize_latency
+from .runner import SCORING_GRACE_SECONDS, evaluate
+from .summaries import count_failures, summarize_latency
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,15 +168,25 @@ async def evaluate_configuration(
     replay: Path | None = None,
     output: Path | None = None,
     max_concurrency: int = 1,
-    timeout: float = 300.0,
+    timeout: float | None = None,
     repeat: int | None = None,
+    checkpoint: Path | None = None,
+    progress: bool = False,
 ) -> tuple[dict[str, object], int]:
     """Validate gold offline, execute configured targets, or rescore saved results.
 
     Execution is explicit; check and replay do not construct application clients
     or resolve secrets. CLI stdout stays content-free; full reports are private.
+    ``checkpoint`` resumes an interrupted execution (``EvaluationCheckpoint``);
+    ``progress`` writes one content-free line per finished attempt to stderr.
+    ``timeout`` (per case) defaults to the configured ``execution.run_timeout``
+    plus ``SCORING_GRACE_SECONDS``, so a run is never cut short by the evaluator.
     """
+    if timeout is None:
+        timeout = prepared.config.execution.run_timeout + SCORING_GRACE_SECONDS
     try:
+        if checkpoint is not None and (check or replay is not None):
+            raise ValueError("a checkpoint applies to execution only")
         if (
             type(max_concurrency) is not int
             or not 1 <= max_concurrency <= 64
@@ -207,6 +219,20 @@ async def evaluate_configuration(
     if destination.exists() or destination.is_symlink():
         raise ServiceError(ErrorCode.CONFLICT)
     reports: list[EvaluationReport] = []
+    journal = EvaluationCheckpoint(checkpoint) if checkpoint is not None else None
+    suite_numbers = {spec.name: index for index, spec in enumerate(dataset.suites, start=1)}
+
+    def report_progress(state: EvaluationProgress) -> None:
+        remaining = state.remaining_seconds
+        # Counts and timing only: suite and case identifiers are caller data.
+        sys.stderr.write(
+            f"suite {suite_numbers[state.suite]}/{len(dataset.suites)}: "
+            f"{state.completed}/{state.total} attempts, {state.resumed} resumed, "
+            f"{state.failed} failed, {state.elapsed_seconds:.0f}s elapsed"
+            + (f", ~{remaining:.0f}s left" if remaining is not None else "")
+            + "\n"
+        )
+        sys.stderr.flush()
 
     async def measure(spec: SuiteSpec, run: Pipeline) -> None:
         reports.append(
@@ -226,6 +252,8 @@ async def evaluate_configuration(
                 metrics=metric_specs(spec),
                 include_details=True,
                 repeat=selected_repeat,
+                checkpoint=journal if targets is None else None,
+                progress=report_progress if progress else None,
             )
         )
 
@@ -244,8 +272,6 @@ async def evaluate_configuration(
                 record = next(saved)
                 if record.result is not None:
                     return record.result
-                if record.error == "timeout":
-                    raise TimeoutError
                 try:
                     code = ErrorCode(record.error or "")
                 except (ValueError, TypeError):
@@ -302,6 +328,18 @@ async def evaluate_configuration(
         status="error" if runtime_error else "passed" if passed else "failed",
         passed_checks=sum(report.checks.passed for report in reports),
         total_checks=sum(report.checks.total for report in reports),
+        # Safe error codes only, e.g. {"output_limit_reached": 68}.
+        failures_by_code=dict(
+            count_failures(
+                (case.status, case.error_code) for report in reports for case in report.cases
+            )
+        ),
+        # Content-free reasons, e.g. {"schema_violation": 10, "answer_exceeded_budget": 1}.
+        failures_by_reason=dict(
+            count_failures(
+                (case.status, case.error_reason) for report in reports for case in report.cases
+            )
+        ),
         report=str(destination.absolute()),
     )
     return summary, 4 if runtime_error else 0 if passed else 1

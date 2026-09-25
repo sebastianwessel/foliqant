@@ -396,7 +396,7 @@ a review flow, or `outcome: needs_review` when ending the run is intended.
 A [`repeat`](repeat.md) runs 2–64 attempts. Its retry flow is a callable flow,
 serves one repeat and does not repeat itself. The worst case,
 `max_attempts × steps + (max_attempts − 1) × retry steps`, must fit
-`execution.max_steps` (32 by default).
+`execution.max_steps` (128 by default).
 
 ```yaml
 # demo/workflow.yaml: fails with invalid_repeat
@@ -430,7 +430,7 @@ flows:
       identifier:
         pointer: /payload/identifier
     repeat:
-      max_attempts: 17
+      max_attempts: 64
       until:
         binding:
           pointer: /flows/lookup/result/status
@@ -441,6 +441,18 @@ flows:
       outcome: completed
   correct:
     callable: true
+    definition:
+      steps:
+        - id: normalise
+          definition:
+            type: handler
+            handler: note
+            input: {}
+        - id: verify
+          definition:
+            type: handler
+            handler: note
+            input: {}
 ```
 
 Repeating a model step with identical input warns with
@@ -519,7 +531,7 @@ flows:
               pointer: /payload/items
             flows:
               - item
-            max_items: 4
+            max_items: 16
     transition:
       outcome: completed
     on_unresolved:
@@ -557,7 +569,7 @@ flows:
               pointer: /payload/items
             flows:
               - item
-            max_items: 10
+            max_items: 50
     repeat:
       max_attempts: 3
       until:

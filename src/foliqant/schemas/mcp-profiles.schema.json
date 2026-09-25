@@ -274,24 +274,24 @@
     },
     "RetryConfig": {
       "additionalProperties": false,
-      "description": "Retries are disabled by default; max_attempts includes the first request.",
+      "description": "Repeat transient provider failures; ``max_attempts`` includes the first request.\n\nThe default of four attempts is the first request plus up to three retries,\nwith capped exponential full-jitter backoff that honours a valid Retry-After\nup to ``max_delay_seconds`` and never outlasts the request's deadline.",
       "properties": {
         "initial_delay_seconds": {
-          "default": 0.25,
+          "default": 1.0,
           "maximum": 60,
           "minimum": 0,
           "title": "Initial Delay Seconds",
           "type": "number"
         },
         "max_attempts": {
-          "default": 1,
+          "default": 4,
           "maximum": 8,
           "minimum": 1,
           "title": "Max Attempts",
           "type": "integer"
         },
         "max_delay_seconds": {
-          "default": 5.0,
+          "default": 30.0,
           "maximum": 300,
           "minimum": 0,
           "title": "Max Delay Seconds",

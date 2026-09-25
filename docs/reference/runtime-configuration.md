@@ -26,9 +26,12 @@ are rejected.
 ## Execution limits
 
 Defaults under `execution` are `concurrency: 4`, `queue_limit: 16`,
-`run_timeout: 300`, `model_timeout: 60`, `tool_timeout: 30`, `max_steps: 32`,
-`model_requests_per_step: 4`, and `tool_calls_per_step: 3`. Time values are seconds.
-An LLM step separately defaults to `max_iterations: 4` logical model turns.
+`run_timeout: 900`, `model_timeout: 300`, `tool_timeout: 30`, `max_steps: 128`,
+`model_requests_per_step: 16`, and `tool_calls_per_step: 16`. Time values are seconds.
+An LLM step separately defaults to `max_iterations: 8` logical model turns. Each
+limit fails with its own code (`run_timeout`, `request_timeout`,
+`step_limit_reached`, `model_request_limit_reached`, `tool_call_limit_reached`,
+`iteration_limit_reached`).
 
 See [the limit tables](../configuration/limits.md) for scopes, allowed ranges,
 timeout precedence, retries, and a slow local-model configuration. These are
@@ -41,8 +44,9 @@ and `bedrock`. `model` and `output_mode` are required. Profiles have no reserved
 name and there is no implicit model selection or model-list request.
 
 Shared defaults: text/schema/tool capabilities enabled, four concurrent requests,
-16 waiting requests, a 60-second request timeout, one attempt, and 4096 output
-tokens. Explicit capabilities must match the actual model.
+16 waiting requests, a 300-second request timeout, `retry.max_attempts: 4`,
+`output_retries: 1`, and 32768 output tokens (`options.max_tokens`, reasoning
+included). Explicit capabilities must match the actual model.
 
 [Choose a provider](../configuration/providers.md) for native APIs, authentication,
 and endpoint differences. [Configure models](../configuration/models.md) for step
@@ -50,11 +54,17 @@ selection, profile overrides, generation options, and structured-output modes.
 
 ### Provider retries
 
-Both model and MCP profiles default to `max_attempts: 1`,
-`initial_delay_seconds: 0.25`, and `max_delay_seconds: 5`. Retries are opt-in and
-apply only to classified completed transient failures. They consume the existing
-attempt and time budgets. Timeouts and ambiguous connection failures are not
-automatically retried; see [retry behavior](../configuration/limits.md#enable-retries-only-for-completed-transient-failures).
+Both model and MCP profiles default to `max_attempts: 4` (the first request plus
+up to three retries), `initial_delay_seconds: 1`, and `max_delay_seconds: 30`.
+Retries apply only to completed transient responses: HTTP 408/504
+(`request_timeout`), 429 (`rate_limited`, `Retry-After` honoured), 500/502
+(`dependency_failure`) and 503/529 (`dependency_overloaded`), and for models a
+connection failure without a response. They consume the existing attempt and
+time budgets. Client-side timeouts, invalid requests, authentication failures,
+output limits, refusals, limits and tool errors are never retried; see
+[retry decisions](../integration/errors.md#retry-decisions). The model profile's
+`output_retries` (`0`–`8`, default `1`) separately bounds corrections of
+invalid structured output ([output retries](../integration/errors.md#output-retries)).
 
 ## Environment references
 
@@ -67,8 +77,8 @@ See [secrets and environment](../configuration/environment.md).
 ## MCP profiles
 
 Declare `transport`, an explicit `catalog`, and optional host credential/identity
-hooks. Defaults are four active sessions, 16 waiting, a 30-second timeout, one
-attempt, and a 1 MiB output limit. Built-in tool execution is read-only.
+hooks. Defaults are four active sessions, 16 waiting, a 30-second timeout,
+`retry.max_attempts: 4`, and a 1 MiB output limit. Built-in tool execution is read-only.
 See [MCP setup](../configuration/mcp.md), [direct calls](../steps/mcp.md), and
 [model-selected calls](../steps/agent-loops.md).
 
@@ -152,7 +162,15 @@ standard error.
 | `2` | Invalid arguments, input or configuration (every compiler error, and every warning under `--strict`) |
 | `3` | A required optional dependency is not installed |
 | `4` | Runtime failure of an operation |
+| `5` | Temporary runtime failure that the failing boundary marked `retryable` |
 | `130` | Interrupted |
+
+A failed `run` exits `2` for the input and configuration codes
+`invalid_configuration`, `invalid_input`, `unauthenticated`, `forbidden`,
+`not_found`, `conflict`, `model_not_found`, `request_rejected` and
+`context_limit_exceeded`; `130` for `cancelled`; `5` for any other failure
+marked `retryable`; and `4` otherwise. The JSON failure status carries the
+code and `retryable`.
 
 For business review versus operational errors, see
 [error handling](../integration/errors.md).
@@ -288,7 +306,7 @@ lists every error and warning with an example and its fix.
 | `repeat_without_retry` | warning | a repeated flow with a model step has no retry flow |
 | `unused_llm_input` | warning | an LLM input is not referenced by its `prompt` and is never sent |
 | `collection_budget` | warning | `max_items × worst(child)` (nested collections and item repeats included) may exceed `execution.max_steps` |
-| `run_budget` | warning | the most expensive path from a start, with every repeat attempt, retry run and collection item, may exceed `execution.max_steps` |
+| `run_budget` | warning | the most expensive path from a start, with every repeat attempt, retry run and collection item, may exceed `execution.max_steps` and fail with `step_limit_reached` |
 | `review_ends_run` | warning | a flow without a review route ends the run in review and the host would not receive that flow's projected result |
 | `review_ends_run` | info | the same, when the reviewing flow is the one the workflow output returns |
 | `case_on_unknown_type` | info | a `cases` field has no known value set |
@@ -296,8 +314,9 @@ lists every error and warning with an example and its fix.
 
 `PreparedApplication.diagnostics` exposes the same list.
 
-Evaluation defaults: one concurrent case, a 300-second case timeout, one attempt
-per case. Reports use a new file under `.foliqant/evaluations/` beside settings
+Evaluation defaults: one concurrent case, a case timeout of the configured
+`execution.run_timeout` plus 60 seconds for scoring (960 seconds with the
+default `run_timeout`), one attempt per case. Reports use a new file under `.foliqant/evaluations/` beside settings
 unless `--output` chooses another new path. Never commit private reports.
 
 ## Installed schemas

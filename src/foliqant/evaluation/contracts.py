@@ -9,6 +9,7 @@ import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
 from hashlib import sha256
+from types import MappingProxyType
 from typing import Literal, cast
 
 from pydantic import BaseModel
@@ -18,11 +19,17 @@ from foliqant.contracts.execution import ExecutionResult, Usage
 from foliqant.core.envelope import AcceptedEnvelope
 from foliqant.core.json import MAX_JSON_DEPTH, FrozenJson, JsonValue, freeze_json, thaw_json
 
+from .comparisons import canonical, normalized_text
 from .metrics import MetricReport
 from .spans import source_span, source_span_source
 from .summaries import LatencySummary, UsageSummary, summarize_latency, summarize_usage
 
-type Comparison = Literal["exact", "set", "source_span", "custom"]
+
+def _no_failures() -> Mapping[str, int]:
+    return MappingProxyType({})
+
+
+type Comparison = Literal["exact", "set", "one_of", "text", "contains", "source_span", "custom"]
 type CheckOutcome = Literal["passed", "failed", "missing", "skipped", "error"]
 type Pipeline = Callable[[Envelope], Awaitable[ExecutionResult]]
 type Scorer = Callable[[FrozenJson, FrozenJson], Awaitable[bool]]
@@ -33,8 +40,13 @@ def _identifier(value: str) -> None:
         raise ValueError("evaluation identifiers must be nonblank strings up to 512 characters")
 
 
-def canonical(value: FrozenJson) -> str:
-    return json.dumps(thaw_json(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+def _relative_pointer(value: str) -> bool:
+    return (
+        isinstance(value, str)
+        and value.startswith("/")
+        and not re.search(r"~(?:[^01]|$)", value)
+        and len(value.split("/")) <= MAX_JSON_DEPTH + 1
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,8 +55,20 @@ class Expectation:
 
     Exact comparison preserves array order and JSON scalar types. Set comparison
     requires arrays and ignores only their top-level ordering and duplicates.
+    One-of comparison lists the acceptable values (a nonempty array without
+    duplicates; the first is the primary gold) and passes when the result equals
+    any of them exactly. Text comparison requires string gold and a string result
+    that are equal after
+    Unicode case folding and whitespace collapsing; contains requires the normalized
+    nonblank gold string inside the normalized result string.
     Source-span comparison uses independently authored ranges over case input.
     A custom comparison names a registered async scorer; its revision is recorded.
+
+    ``each`` is a relative JSON pointer applied to every item of the array at
+    ``path``; the comparison then sees the array of projected values (exact, set
+    or custom only). ``absent_as_null`` treats an absent path inside a recorded,
+    executed owner as JSON null (e.g. an extraction that omits a field it did
+    not find); skipped or failed owners still yield skipped or error.
     """
 
     name: str
@@ -52,6 +76,8 @@ class Expectation:
     expected: FrozenJson
     comparison: Comparison = "exact"
     scorer: str | None = None
+    each: str | None = None
+    absent_as_null: bool = False
 
     def __post_init__(self) -> None:
         _identifier(self.name)
@@ -63,10 +89,35 @@ class Expectation:
         ):
             raise ValueError("expectation path must be an RFC 6901 JSON pointer")
         object.__setattr__(self, "expected", freeze_json(self.expected))
-        if self.comparison not in {"exact", "set", "source_span", "custom"}:
+        if self.comparison not in {
+            "exact",
+            "set",
+            "one_of",
+            "text",
+            "contains",
+            "source_span",
+            "custom",
+        }:
             raise ValueError("unknown comparison")
         if self.comparison == "set" and not isinstance(self.expected, tuple):
             raise ValueError("set expectations require a JSON array")
+        if self.comparison == "one_of" and (
+            not isinstance(self.expected, tuple)
+            or not self.expected
+            or len({canonical(item) for item in self.expected}) != len(self.expected)
+        ):
+            raise ValueError("one_of expectations require a nonempty array of distinct values")
+        if self.comparison in {"text", "contains"} and not isinstance(self.expected, str):
+            raise ValueError("text and contains expectations require string gold")
+        if self.comparison == "contains" and not normalized_text(cast(str, self.expected)):
+            raise ValueError("contains expectations require nonblank gold")
+        if self.each is not None:
+            if not _relative_pointer(self.each):
+                raise ValueError("each must be a nonempty relative JSON pointer")
+            if self.comparison not in {"exact", "set", "one_of", "custom"}:
+                raise ValueError("each projections support exact, set, one_of and custom")
+        if type(self.absent_as_null) is not bool:
+            raise ValueError("absent_as_null must be a boolean")
         if self.comparison == "source_span":
             source_span(self.expected)
         if self.comparison == "custom":
@@ -75,6 +126,26 @@ class Expectation:
             _identifier(self.scorer)
         elif self.scorer is not None:
             raise ValueError("only custom expectations accept a scorer")
+
+
+def expectation_identity(check: Expectation) -> dict[str, JsonValue]:
+    """The semantic identity of one assertion (fingerprints, replay and comparison).
+
+    Optional projection and absence semantics appear only when used, so suites
+    without them keep their established fingerprints.
+    """
+    identity: dict[str, JsonValue] = {
+        "name": check.name,
+        "path": check.path,
+        "expected": thaw_json(check.expected),
+        "comparison": check.comparison,
+        "scorer": check.scorer,
+    }
+    if check.each is not None:
+        identity["each"] = check.each
+    if check.absent_as_null:
+        identity["absent_as_null"] = True
+    return identity
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -154,16 +225,7 @@ class EvaluationSuite:
                     "id": case.id,
                     "payload": thaw_json(case.input.payload),
                     "metadata": thaw_json(case.input.metadata),
-                    "expectations": [
-                        {
-                            "name": check.name,
-                            "path": check.path,
-                            "expected": thaw_json(check.expected),
-                            "comparison": check.comparison,
-                            "scorer": check.scorer,
-                        }
-                        for check in case.expectations
-                    ],
+                    "expectations": [expectation_identity(check) for check in case.expectations],
                 }
                 for case in self.cases
             ],
@@ -259,6 +321,12 @@ class CaseDetails:
 
 @dataclass(frozen=True, slots=True)
 class StepReport:
+    """One recorded step invocation; ``error_code`` is its safe failure code.
+
+    ``error_reason`` explains an ``invalid_output`` or ``output_limit_reached``
+    failure without content (for example ``schema_violation``).
+    """
+
     flow: str
     name: str
     status: str
@@ -266,20 +334,27 @@ class StepReport:
     usage: Usage | None
     selection_origin: Literal["model", "fallback"] | None = None
     invocation_path: str | None = None
+    error_code: str | None = None
+    error_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class FlowReport:
+    """One recorded flow invocation; ``error_code`` is its safe failure code."""
+
     name: str
     status: str
     elapsed_seconds: float | None
     usage: Usage | None
     invocation_path: str | None = None
+    error_code: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class CaseReport:
     """One attempt; ``id`` retains source identity, ``repetition`` is one-based.
+
+    ``resumed`` marks an attempt reused from an evaluation checkpoint.
 
     ``elapsed_seconds`` measures invocation and output validation, excluding
     assertion scoring. Replay preserves the saved source invocation measurement.
@@ -299,6 +374,8 @@ class CaseReport:
     error_code: str | None
     details: CaseDetails | None = None
     repetition: int = 1
+    resumed: bool = False
+    error_reason: str | None = None
 
     @property
     def passed(self) -> bool:
@@ -327,7 +404,13 @@ class CheckSummary:
 
 @dataclass(frozen=True, slots=True)
 class StepSummary:
-    """Scoped record totals; repeated child invocations are separate observations."""
+    """Scoped record totals; repeated child invocations are separate observations.
+
+    ``failures_by_code`` counts failed and cancelled records by safe error code,
+    ``failures_by_reason`` those with a content-free reason. ``output_retries``
+    sums the requests that asked for a corrected output; ``output_retry_recoveries``
+    counts invocations that succeeded after at least one of them.
+    """
 
     flow: str
     name: str
@@ -342,11 +425,18 @@ class StepSummary:
     model_selected_invocations: int = 0
     fallback_selected_invocations: int = 0
     fallback_rate: float | None = None
+    failures_by_code: Mapping[str, int] = field(default_factory=_no_failures)
+    failures_by_reason: Mapping[str, int] = field(default_factory=_no_failures)
+    output_retries: int = 0
+    output_retry_recoveries: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class FlowSummary:
-    """Scoped record totals, including every repeated callable-flow invocation."""
+    """Scoped record totals, including every repeated callable-flow invocation.
+
+    ``failures_by_code`` counts failed and cancelled records by safe error code.
+    """
 
     name: str
     observed_invocations: int
@@ -355,6 +445,7 @@ class FlowSummary:
     review_invocations: int
     latency: LatencySummary = field(default_factory=lambda: summarize_latency(()))
     usage: UsageSummary = field(default_factory=lambda: summarize_usage(()))
+    failures_by_code: Mapping[str, int] = field(default_factory=_no_failures)
 
 
 @dataclass(frozen=True, slots=True)
@@ -368,6 +459,9 @@ class EvaluationReport:
     authored cases; ``len(cases)`` counts attempts, including failures. Suite wall
     ``elapsed_seconds`` includes scheduling/scoring; ``latency`` summarizes source
     invocation measurements. Per-step summaries retain missing observations.
+    ``failures_by_code`` counts the failed, cancelled and error attempts behind
+    ``failure_rate`` by their safe ``error_code``, most frequent first;
+    ``failures_by_reason`` counts those with a content-free ``error_reason``.
     """
 
     suite_name: str
@@ -395,6 +489,9 @@ class EvaluationReport:
     source_case_count: int = 0
     latency: LatencySummary | None = None
     usage: UsageSummary | None = None
+    resumed_attempts: int = 0
+    failures_by_code: Mapping[str, int] = field(default_factory=_no_failures)
+    failures_by_reason: Mapping[str, int] = field(default_factory=_no_failures)
 
     def to_dict(self) -> dict[str, JsonValue]:
         """Return a fresh JSON-compatible report, including explicit metric denominators."""

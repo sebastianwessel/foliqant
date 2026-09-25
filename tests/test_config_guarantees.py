@@ -803,7 +803,7 @@ def test_repeat_around_a_collection_counts_every_attempt(tmp_path):
                       pointer: /payload/items
                     flows:
                       - item
-                    max_items: 10
+                    max_items: 50
             repeat:
               max_attempts: 3
               until:
@@ -822,8 +822,8 @@ def test_repeat_around_a_collection_counts_every_attempt(tmp_path):
         marker="main:\n    input",
         field="flows.main",
     )
-    # 3 attempts x (1 collection step + 10 items x 1 step) = 33 > 32.
-    assert "may visit 33 steps" in problem.message
+    # 3 attempts x (1 collection step + 50 items x 1 step) = 153 > 128.
+    assert "may visit 153 steps" in problem.message
 
 
 # Bindings resolvable on every path ---------------------------------------------

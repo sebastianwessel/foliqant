@@ -19,12 +19,12 @@ class ExecutionConfig(BoundaryModel):
 
     concurrency: Annotated[int, Field(ge=1, le=1024)] = 4
     queue_limit: Annotated[int, Field(ge=0, le=65536)] = 16
-    run_timeout: Duration = 300.0
-    model_timeout: Duration = 60.0
+    run_timeout: Duration = 900.0
+    model_timeout: Duration = 300.0
     tool_timeout: Duration = 30.0
-    max_steps: Annotated[int, Field(ge=1, le=1024)] = 32
-    model_requests_per_step: Annotated[int, Field(ge=1, le=1024)] = 4
-    tool_calls_per_step: Annotated[int, Field(ge=1, le=1024)] = 3
+    max_steps: Annotated[int, Field(ge=1, le=1024)] = 128
+    model_requests_per_step: Annotated[int, Field(ge=1, le=1024)] = 16
+    tool_calls_per_step: Annotated[int, Field(ge=1, le=1024)] = 16
 
     def limits(self) -> ExecutionLimits:
         """Map validated settings to the standard-library runtime value."""

@@ -41,6 +41,7 @@ def _usage() -> dict[str, object]:
     return {
         "model_requests": 1,
         "tool_calls": 2,
+        "output_retries": 0,
         "input_tokens": 10,
         "output_tokens": None,
         "cache_read_input_tokens": 3,

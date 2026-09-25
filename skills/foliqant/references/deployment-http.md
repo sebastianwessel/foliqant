@@ -71,14 +71,18 @@ text; standard error carries readable lines, one per configuration problem:
 `<file>:<line>:<column>: <code> at <field>: <message> (hint: ...)`. Exit codes:
 `0` success (also `needs_review`), `1` gold mismatch or stale `--check`
 output, `2` invalid arguments, input or configuration (warnings too under
-`--strict`), `3` missing optional dependency, `4` runtime failure, `130`
-interruption.
+`--strict`, and run failures with `invalid_configuration`, `invalid_input`,
+`unauthenticated`, `forbidden`, `not_found`, `conflict`, `model_not_found`,
+`request_rejected` or `context_limit_exceeded`), `3` missing optional
+dependency, `4` runtime failure, `5` temporary runtime failure the failing
+boundary marked `retryable`, `130` interruption.
 `evaluate --replay` and `--compare` operate on saved artifacts without
 opening providers. Normal evaluation runs its configured pipeline, flow, or
 operation targets.
 
-Caught errors use fixed safe messages and optional sanitized locations. Never
-expose authored values, credentials, prompts, or raw exceptions.
+Caught errors use fixed safe messages and optional content-free `reason`,
+`location` and `constraint`. Never expose authored values, credentials,
+prompts, or raw exceptions.
 
 Host startup pattern: call `prepare_application(path, handlers=..., strict=True)`
 once at startup, before accepting work. On `CompilationError`, log every entry
@@ -210,7 +214,7 @@ handlers that only compute a routing key or pick a branch result: use `route`,
 | Invalid admission input, unavailable capacity, or another pre-run failure | `ServiceError` can be raised before a result exists | Map its canonical code and safe message into the host protocol. |
 | Successful work | `ExecutionResult`, `execution.status == "completed"` | Consume `payload`; retain `flows` when the use case needs evidence or intermediate results. |
 | Business review | Result with `needs_review` status | Apply the explicit review policy; this is not a provider outage or retry request. |
-| Admitted technical failure | Result with `failed` status and `execution.error` | Preserve the full result, including any partial collection ledger. Do not report a benign default payload as success. |
+| Admitted technical failure | Result with `failed` status and `execution.error` | Preserve the full result, including any partial collection ledger. Return a server error (5xx), never a success. Do not report a benign default payload as success. |
 | Caller cancellation | Cancellation propagates; a result is not guaranteed | Preserve cancellation and let host policy decide reconciliation. |
 
 Inspect `execution.status` before business payload. Serialize a complete result
@@ -222,7 +226,27 @@ Catch `ServiceError` at the host boundary; use `error.code.value`, its safe
 `str(error)`, and `error.retryable`. For returned failures, use
 `result.execution.error`. Do not infer retry permission from error text or
 automatically rerun a workflow: timeout/cancellation does not prove remote work
-stopped. Configured provider retry policy is narrower than whole-run retry.
+stopped. Configured provider retry policy (`retry.max_attempts` default `4`:
+HTTP 408, 429, 500, 502, 503, 504, 529, and for models a connection failure
+without a response) is narrower than whole-run retry; `retryable: true` on a
+returned failure means a transient condition a later host-level attempt may
+overcome. A technical failure is never a business outcome: no review route,
+`fallback`, binding `default`, `first_of`, repeat condition or retry flow acts
+on it. Model stop reasons have their own non-retryable codes:
+`output_limit_reached` (output token limit, fixed by configuration, not by
+resending), `output_refused` (refusal or content filter) and
+`dependency_failure` for a provider-side generation error. `invalid_output`
+means a complete response failed its contract after the configured
+`output_retries`; its `reason`, `location` and `constraint` say what was wrong.
+Other codes: `invalid_configuration`, `invalid_input`, `invalid_tool_call`,
+`context_limit_exceeded`, `request_rejected`, `model_not_found`,
+`unauthenticated`, `forbidden`, `not_found`, `missing_binding`,
+`request_timeout`, `run_timeout`, `step_limit_reached`,
+`model_request_limit_reached`, `iteration_limit_reached`,
+`tool_call_limit_reached`, `rate_limited`, `dependency_overloaded`,
+`tool_error`, `tool_output_limit_exceeded`, `tool_catalog_mismatch`,
+`handler_failed`, `conflict`, `uncertain_effect`, `cancelled` and
+`capacity_exceeded`.
 
 ## Identity and tool permission
 
@@ -260,7 +284,10 @@ dependency), wire these concrete boundaries:
 4. Apply the host's chosen identity policy. An unauthenticated demo should reject
    supplied tenant/principal metadata rather than treating it as verified.
 5. Await `app.run` and serialize its complete result. Choose and document HTTP
-   status mappings for both raised errors and returned failed results. A valid
+   status mappings for both raised errors and returned failed results; a failed
+   run is a 5xx with the result body (the repository example uses 503 for
+   `retryable` and `capacity_exceeded`, 504 for `request_timeout` and
+   `run_timeout`, 500 otherwise, and 400 for invalid input). A valid
    `needs_review` result can remain a successful HTTP response.
 6. Leave the lifespan on shutdown. Define disconnect handling at the host boundary;
    it does not imply the model or tool has stopped remotely.

@@ -131,14 +131,18 @@ The runtime maps contract problems to stable errors:
 | --- | --- |
 | Input fails the declared schema | `invalid_input` |
 | Return value is not `StepOutcome`, its result fails the output schema, or its review facts are inconsistent | `invalid_output` |
-| Handler exceeds the root deadline | `timeout` |
-| Handler raises `ServiceError` | That safe error is preserved |
-| Handler raises another exception | `dependency_failure` without raw exception text |
+| Handler exceeds the root deadline | `run_timeout` |
+| Handler raises `ServiceError` | That safe error, including `retryable`, is preserved |
+| Handler raises another exception | `handler_failed` without raw exception text |
+
+A failed handler fails its flow and the run; it never selects a review route.
+Raise `ServiceError` for an expected failure, for example a retryable
+`dependency_failure` of a service the handler calls.
 
 Cancellation propagates. Use native async I/O; the runtime does not move a
 blocking handler to a worker automatically or prove that external work stopped.
 Handlers are in-process code and share the host's trust boundary. The default
-root `run_timeout` is 300 seconds and applies to handlers too; see
+root `run_timeout` is 900 seconds and applies to handlers too; see
 [execution limits](../configuration/limits.md).
 
 ## Use the step context

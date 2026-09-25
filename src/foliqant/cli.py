@@ -31,24 +31,12 @@ _EXIT_STALE = 1
 _EXIT_INPUT = 2
 _EXIT_DEPENDENCY = 3
 _EXIT_RUNTIME = 4
+_EXIT_TEMPORARY = 5
 _EXIT_CANCELLED = 130
 
 _MESSAGES: dict[str, str] = {
     "invalid_arguments": "Invalid arguments; use --help for supported options.",
-    ErrorCode.INVALID_CONFIGURATION.value: "The workflow configuration is invalid.",
-    ErrorCode.INVALID_INPUT.value: "The input does not satisfy the required contract.",
-    ErrorCode.INVALID_OUTPUT.value: "An operation returned an invalid result.",
-    ErrorCode.UNAUTHENTICATED.value: "Authentication is required.",
-    ErrorCode.FORBIDDEN.value: "The operation is not authorized.",
-    ErrorCode.NOT_FOUND.value: "The requested resource was not found.",
-    ErrorCode.MISSING_BINDING.value: "A required input binding is unavailable.",
-    ErrorCode.TIMEOUT.value: "The operation exceeded its deadline.",
-    ErrorCode.BUDGET_EXHAUSTED.value: "The execution budget is exhausted.",
-    ErrorCode.DEPENDENCY_FAILURE.value: "A required dependency is unavailable.",
-    ErrorCode.CONFLICT.value: "The request conflicts with an existing operation.",
-    ErrorCode.UNCERTAIN_EFFECT.value: "An external operation requires reconciliation.",
-    ErrorCode.CANCELLED.value: "The execution was cancelled.",
-    ErrorCode.CAPACITY_EXCEEDED.value: "The service has reached its admission limit.",
+    **{code.value: str(ServiceError(code)) for code in ErrorCode},
     "stale_output": "The generated file differs from the current configuration.",
 }
 
@@ -243,9 +231,20 @@ def _parser() -> argparse.ArgumentParser:
     )
     evaluation.add_argument("--max-concurrency", type=int)
     evaluation.add_argument(
-        "--timeout", type=float, help="per-case deadline in seconds (default: 300)"
+        "--timeout",
+        type=float,
+        help="per-case deadline in seconds (default: execution.run_timeout + 60)",
     )
     evaluation.add_argument("--repeat", type=int, help="attempts per source case (default: 1)")
+    evaluation.add_argument(
+        "--checkpoint",
+        type=Path,
+        metavar="PATH",
+        help="private journal of finished attempts; rerun with it to resume",
+    )
+    evaluation.add_argument(
+        "--progress", action="store_true", help="content-free progress lines on stderr"
+    )
 
     return parser
 
@@ -324,18 +323,30 @@ def _diagnostics(items: Sequence[Diagnostic]) -> list[dict[str, object]]:
     return result
 
 
-def _exit_for_service_error(error: ServiceError) -> int:
-    if error.code in {
+#: Failures fixed by changing the arguments, input, configuration or credentials.
+_INPUT_CODES = frozenset(
+    {
         ErrorCode.INVALID_CONFIGURATION,
         ErrorCode.INVALID_INPUT,
         ErrorCode.UNAUTHENTICATED,
         ErrorCode.FORBIDDEN,
         ErrorCode.NOT_FOUND,
         ErrorCode.CONFLICT,
-    }:
+        ErrorCode.MODEL_NOT_FOUND,
+        ErrorCode.REQUEST_REJECTED,
+        ErrorCode.CONTEXT_LIMIT_EXCEEDED,
+    }
+)
+
+
+def _exit_for_service_error(error: ServiceError) -> int:
+    if error.code in _INPUT_CODES:
         return _EXIT_INPUT
     if error.code is ErrorCode.CANCELLED:
         return _EXIT_CANCELLED
+    if error.retryable:
+        # The failing boundary proved a transient condition; a later attempt may succeed.
+        return _EXIT_TEMPORARY
     return _EXIT_RUNTIME
 
 
@@ -633,10 +644,14 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object] | str, int]:
                 or args.max_concurrency is not None
                 or args.timeout is not None
                 or args.repeat is not None
+                or args.checkpoint is not None
+                or args.progress
             ):
                 raise _CliFailure("invalid_arguments", _EXIT_INPUT)
             return compare_report_files(args.compare, args.baseline, output=args.output)
-        if args.baseline is not None:
+        if args.baseline is not None or (
+            args.checkpoint is not None and (args.check or args.replay is not None)
+        ):
             raise _CliFailure("invalid_arguments", _EXIT_INPUT)
         return asyncio.run(
             evaluate_configuration(
@@ -645,8 +660,10 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object] | str, int]:
                 replay=args.replay,
                 output=args.output,
                 max_concurrency=1 if args.max_concurrency is None else args.max_concurrency,
-                timeout=300.0 if args.timeout is None else args.timeout,
+                timeout=args.timeout,
                 repeat=args.repeat,
+                checkpoint=args.checkpoint,
+                progress=args.progress,
             )
         )
     return asyncio.run(_run(args))
@@ -667,7 +684,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     for every configuration problem. Exit codes: ``0`` success, ``1`` stale
     ``explain --check`` output or gold mismatch, ``2`` invalid arguments, input
     or configuration, ``3`` missing optional dependency, ``4`` runtime failure,
-    ``130`` interruption.
+    ``5`` temporary (retryable) runtime failure, ``130`` interruption.
     """
     try:
         args = _parser().parse_args(argv)

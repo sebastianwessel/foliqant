@@ -5,13 +5,29 @@
         "invalid_configuration",
         "invalid_input",
         "invalid_output",
+        "invalid_tool_call",
+        "output_limit_reached",
+        "output_refused",
+        "context_limit_exceeded",
+        "request_rejected",
+        "model_not_found",
         "unauthenticated",
         "forbidden",
         "not_found",
         "missing_binding",
-        "timeout",
-        "budget_exhausted",
+        "request_timeout",
+        "run_timeout",
+        "step_limit_reached",
+        "model_request_limit_reached",
+        "iteration_limit_reached",
+        "tool_call_limit_reached",
+        "rate_limited",
+        "dependency_overloaded",
         "dependency_failure",
+        "tool_error",
+        "tool_output_limit_exceeded",
+        "tool_catalog_mismatch",
+        "handler_failed",
         "conflict",
         "uncertain_effect",
         "cancelled",
@@ -96,6 +112,17 @@
       ],
       "title": "ExecutionInfo",
       "type": "object"
+    },
+    "FailureReason": {
+      "enum": [
+        "json_parse_error",
+        "schema_violation",
+        "decision_contract",
+        "missing_output",
+        "reasoning_consumed_budget",
+        "answer_exceeded_budget"
+      ],
+      "type": "string"
     },
     "FlowAttempt": {
       "additionalProperties": false,
@@ -845,14 +872,18 @@
     },
     "SafeError": {
       "additionalProperties": false,
+      "description": "A canonical failure with an optional content-free explanation.\n\n``reason`` says why an ``invalid_output`` or ``output_limit_reached`` failure\nhappened; ``location`` is a JSON pointer in schema vocabulary (or\n``question:<id>``) and ``constraint`` the violated keyword or problem kind.",
       "properties": {
         "code": {
           "$ref": "#/$defs/ErrorCode"
         },
+        "constraint": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Constraint",
+          "type": "string"
+        },
         "location": {
-          "maxLength": 512,
-          "minLength": 1,
-          "pattern": ".*\\S.*",
+          "pattern": "^[A-Za-z0-9_.:*/-]{1,256}$",
           "title": "Location",
           "type": "string"
         },
@@ -862,6 +893,10 @@
           "pattern": ".*\\S.*",
           "title": "Message",
           "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/FailureReason",
+          "title": "Reason"
         },
         "retryable": {
           "title": "Retryable",
@@ -1285,7 +1320,7 @@
     },
     "Usage": {
       "additionalProperties": false,
-      "description": "Measured totals; ``by_model`` splits model requests by provider model ID.\n\n``by_model`` is omitted when no model request was made; when present it\naccounts for every model request. Cost fields sum the priced models and are\nomitted when no model is priced.",
+      "description": "Measured totals; ``by_model`` splits model requests by provider model ID.\n\n``by_model`` is omitted when no model request was made; when present it\naccounts for every model request. Cost fields sum the priced models and are\nomitted when no model is priced. ``output_retries`` counts the model requests\n(included in ``model_requests``) that asked for a corrected invalid output.",
       "properties": {
         "by_model": {
           "additionalProperties": {
@@ -1361,6 +1396,11 @@
           "title": "Model Requests",
           "type": "integer"
         },
+        "output_retries": {
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
         "output_tokens": {
           "anyOf": [
             {
@@ -1401,6 +1441,7 @@
       "required": [
         "model_requests",
         "tool_calls",
+        "output_retries",
         "input_tokens",
         "output_tokens",
         "cache_read_input_tokens",

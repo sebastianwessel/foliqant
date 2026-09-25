@@ -657,7 +657,7 @@ async def test_attempts_and_retries_share_the_step_budget(tmp_path):
     # lookup (1), retry (2), then the second attempt exceeds the shared budget.
     result, public = await _run(plan, executor, {"identifier": "LU1"}, max_steps=2)
     assert result.status == "failed" and result.error is not None
-    assert result.error.code == ErrorCode.BUDGET_EXHAUSTED
+    assert result.error.code == ErrorCode.STEP_LIMIT_REACHED
     lookup = public["flows"]["lookup_fund"]
     assert lookup["status"] == "failed" and lookup["attempt_count"] == 2
     assert lookup["attempts"][1]["status"] == "failed"

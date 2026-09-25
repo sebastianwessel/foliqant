@@ -69,6 +69,7 @@ Flow and step usage carry the same split for their own work.
 {
   "model_requests": 1,
   "tool_calls": 2,
+  "output_retries": 0,
   "input_tokens": 1850,
   "output_tokens": 210,
   "cache_read_input_tokens": 1024,

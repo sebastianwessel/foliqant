@@ -135,12 +135,23 @@ class ModelPricing(BoundaryModel):
         return cast(dict[str, JsonValue], self.model_dump(mode="json", exclude_none=True))
 
 
+#: Additional model requests that return an invalid structured output's validation
+#: problems to the model for correction; each counts against the step's request limit.
+DEFAULT_OUTPUT_RETRIES = 1
+OutputRetries = Annotated[int, Field(strict=True, ge=0, le=8)]
+
+#: Output budget of one request, reasoning tokens included. A safety net against a
+#: runaway generation, sized for reasoning models (which may reason for tens of
+#: thousands of tokens before answering), not for the typical response length.
+DEFAULT_MAX_TOKENS = 32_768
+
+
 class GenerationOptions(BoundaryModel):
     """Common sampling options; absence means use the configured provider default."""
 
     model_config = ConfigDict(frozen=True)
 
-    max_tokens: Annotated[int, Field(strict=True, ge=1, le=1_048_576)] = 4096
+    max_tokens: Annotated[int, Field(strict=True, ge=1, le=1_048_576)] = DEFAULT_MAX_TOKENS
     temperature: Annotated[float, Field(ge=0, le=2)] | None = None
     top_p: Annotated[float, Field(gt=0, le=1)] | None = None
 
@@ -181,8 +192,11 @@ class _ModelConfig(BoundaryModel):
     supports_tools: bool = True
     concurrency: Annotated[int, Field(strict=True, ge=1, le=1024)] = 4
     queue_limit: Annotated[int, Field(strict=True, ge=0, le=10_000)] = 16
-    request_timeout: Duration = 60.0
+    # One attempt, sized to generate the default output budget with a hosted model.
+    request_timeout: Duration = 300.0
     retry: RetryConfig = Field(default_factory=RetryConfig)
+    # Requests that return an invalid output's validation problems for correction.
+    output_retries: OutputRetries = DEFAULT_OUTPUT_RETRIES
     pricing: ModelPricing | None = None
 
     @model_validator(mode="after")
@@ -334,6 +348,7 @@ class ModelProfileOverride(BoundaryModel):
         default=None, json_schema_extra=ENVIRONMENT_FIELD
     )
     options: ModelOptionOverrides = Field(default_factory=ModelOptionOverrides)
+    output_retries: OutputRetries | None = None
     pricing: ModelPricing | None = None
 
     @model_validator(mode="after")
@@ -342,6 +357,8 @@ class ModelProfileOverride(BoundaryModel):
             raise ValueError("model override must be a nonblank model ID")
         if "max_tokens" in self.options.model_fields_set and self.options.max_tokens is None:
             raise ValueError("maximum output tokens cannot be cleared")
+        if "output_retries" in self.model_fields_set and self.output_retries is None:
+            raise ValueError("output retries cannot be cleared; use 0 to disable them")
         return self
 
 

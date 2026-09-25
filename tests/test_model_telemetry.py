@@ -10,7 +10,7 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from opentelemetry.trace import SpanKind
+from opentelemetry.trace import SpanKind, StatusCode
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.usage import RequestUsage
@@ -446,3 +446,77 @@ async def test_environment_model_references_resolve_to_telemetry_labels(
     assert "$MODEL_ID" not in "".join(span.to_json() for span in spans)
     dropped = [record for record in caplog.records if record.msg == "telemetry_labels_dropped"]
     assert bool(dropped) is not labelled
+
+
+@pytest.mark.parametrize(
+    ("usage", "consumed"),
+    [
+        (RequestUsage(input_tokens=5, output_tokens=4096, output_reasoning_tokens=4096), True),
+        (RequestUsage(input_tokens=5, output_tokens=4096, output_reasoning_tokens=100), False),
+        (RequestUsage(input_tokens=5, output_tokens=4096), None),
+    ],
+)
+async def test_length_stop_is_recorded_with_its_failure_code_and_reasoning_share(
+    usage: RequestUsage, consumed: bool | None
+) -> None:
+    # Regression: the stop reason used to be checked after the request was
+    # recorded, so the metric showed a successful request for a failed step.
+    telemetry, _tracer_provider, spans, reader = _telemetry()
+    step = _step()
+
+    async def model(_messages: Any, info: Any) -> ModelResponse:
+        return ModelResponse(
+            parts=[ToolCallPart(info.output_tools[0].name, {"value": {"answer": 42}})],
+            usage=usage,
+            finish_reason="length",
+        )
+
+    with pytest.raises(ServiceError) as error:
+        await ModelExecutor(
+            {"configured-alias": _binding(model)},
+            WorkflowSchemas(_plan(step)),
+            telemetry=telemetry,
+        ).execute(step, _frozen({}), _context(step))
+    assert error.value.code == ErrorCode.OUTPUT_LIMIT_REACHED
+
+    observed = _metrics(reader)
+    duration = observed["gen_ai.client.operation.duration"].data.data_points
+    assert [point.attributes["error.type"] for point in duration] == ["output_limit_reached"]
+    tokens = {
+        point.attributes["gen_ai.token.type"]: point.sum
+        for point in observed["gen_ai.client.token.usage"].data.data_points
+    }
+    assert tokens == {"input": 5, "output": 4096}
+
+    (client,) = [span for span in spans.get_finished_spans() if span.kind is SpanKind.CLIENT]
+    attributes = client.attributes or {}
+    assert attributes["gen_ai.response.finish_reasons"] == ("length",)
+    assert attributes["error.type"] == "output_limit_reached"
+    assert client.status.status_code is StatusCode.ERROR
+    assert attributes.get("foliqant.response.reasoning_consumed_budget") == consumed
+    assert all(not span.events for span in spans.get_finished_spans())
+
+
+async def test_completed_response_exports_finish_reason_without_error() -> None:
+    telemetry, _tracer_provider, spans, reader = _telemetry()
+    step = _step()
+
+    async def model(_messages: Any, info: Any) -> ModelResponse:
+        return ModelResponse(
+            parts=[ToolCallPart(info.output_tools[0].name, {"value": {"answer": 42}})],
+            usage=RequestUsage(input_tokens=1, output_tokens=1),
+            finish_reason="tool_call",
+        )
+
+    await ModelExecutor(
+        {"configured-alias": _binding(model)},
+        WorkflowSchemas(_plan(step)),
+        telemetry=telemetry,
+    ).execute(step, _frozen({}), _context(step))
+    (client,) = [span for span in spans.get_finished_spans() if span.kind is SpanKind.CLIENT]
+    attributes = client.attributes or {}
+    assert attributes["gen_ai.response.finish_reasons"] == ("tool_call",)
+    assert "error.type" not in attributes
+    assert "foliqant.response.reasoning_consumed_budget" not in attributes
+    duration = _metrics(reader)["gen_ai.client.operation.duration"].data.data_points
+    assert all("error.type" not in point.attributes for point in duration)

@@ -5,7 +5,7 @@ from decimal import ROUND_HALF_EVEN, Decimal
 from types import MappingProxyType
 from typing import Literal, cast
 
-from .errors import ErrorCode, ServiceError
+from .errors import ErrorCode, FailureReason, ServiceError, safe_constraint, safe_location
 from .identity import Identity
 from .json import FrozenJson, FrozenObject, freeze_json
 from .plan import CategoryPlan, DecisionIssue
@@ -130,12 +130,17 @@ def _merge_models(
 
 @dataclass(frozen=True, slots=True)
 class Usage:
-    """Measured totals; ``by_model`` splits model requests by provider model ID."""
+    """Measured totals; ``by_model`` splits model requests by provider model ID.
+
+    ``output_retries`` counts model requests that asked the model to correct an
+    invalid output; they are included in ``model_requests``.
+    """
 
     model_requests: int = 0
     tool_calls: int = 0
     tokens: TokenUsage = TokenUsage(0, 0, 0, 0, 0)
     by_model: tuple[tuple[str, ModelUsage], ...] = ()
+    output_retries: int = 0
 
     def plus(self, other: "Usage") -> "Usage":
         return Usage(
@@ -143,6 +148,7 @@ class Usage:
             self.tool_calls + other.tool_calls,
             self.tokens.plus(other.tokens),
             _merge_models(self.by_model, other.by_model),
+            self.output_retries + other.output_retries,
         )
 
     @property
@@ -158,13 +164,42 @@ class Usage:
 
 @dataclass(frozen=True, slots=True)
 class Failure:
+    """A canonical failure; ``reason``, ``location`` and ``constraint`` explain it safely."""
+
     code: ErrorCode
     retryable: bool = False
+    reason: FailureReason | None = None
+    location: str | None = None
+    constraint: str | None = None
+
+    def __post_init__(self) -> None:
+        if safe_location(self.location) != self.location:
+            object.__setattr__(self, "location", None)
+        if safe_constraint(self.constraint) != self.constraint:
+            object.__setattr__(self, "constraint", None)
+
+    @classmethod
+    def of(cls, error: ServiceError) -> "Failure":
+        """Copy a raised failure, including its safe explanation."""
+        return cls(error.code, error.retryable, error.reason, error.location, error.constraint)
 
     @property
     def message(self) -> str:
         """Return only the canonical safe text, never an adapter exception."""
         return str(ServiceError(self.code))
+
+    def as_json(self) -> dict[str, FrozenJson]:
+        """The public ``SafeError`` projection; absent explanations are omitted."""
+        value: dict[str, FrozenJson] = {
+            "code": self.code.value,
+            "message": self.message,
+            "retryable": self.retryable,
+        }
+        for key in ("reason", "location", "constraint"):
+            item = getattr(self, key)
+            if item is not None:
+                value[key] = item
+        return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -350,6 +385,7 @@ def usage_value(value: Usage) -> FrozenObject:
     projected: dict[str, FrozenJson] = {
         "model_requests": value.model_requests,
         "tool_calls": value.tool_calls,
+        "output_retries": value.output_retries,
         **{field.name: getattr(value.tokens, field.name) for field in fields(value.tokens)},
     }
     cost = value.cost
@@ -418,11 +454,5 @@ def _record_value(record: StepRecord | FlowRecord) -> dict[str, FrozenJson]:
     if record.error is not None:
         if not isinstance(record.error.code, ErrorCode) or type(record.error.retryable) is not bool:
             raise ServiceError(ErrorCode.INVALID_OUTPUT)
-        value["error"] = MappingProxyType(
-            {
-                "code": record.error.code.value,
-                "message": record.error.message,
-                "retryable": record.error.retryable,
-            }
-        )
+        value["error"] = MappingProxyType(record.error.as_json())
     return value

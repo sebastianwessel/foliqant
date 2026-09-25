@@ -43,7 +43,7 @@ instructions: Assess each question independently using only the supplied message
 
 ## Read the assessment
 
-Every result includes `questionId`, `type`, `answerability`, `answer`, `reason`, and `evidence_strength`. `reason` is nonblank and at most 400 characters. `evidence_strength` is `strong`, `limited`, or JSON `null`: support for the whole assessment, including abstention. It is not confidence, probability, urgency, or a routing threshold. Strong support can justify an unknown answer.
+Every result includes `questionId`, `type`, `answerability`, `answer`, `reason`, and `evidence_strength`. `reason` is nonblank; the runtime instructions ask for a concise reason of at most 400 characters, and the result accepts up to 2000. `evidence_strength` is `strong`, `limited`, or JSON `null`: support for the whole assessment, including abstention. It is not confidence, probability, urgency, or a routing threshold. Strong support can justify an unknown answer.
 
 | `answerability.status` | Meaning | Step status |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ Every result includes `questionId`, `type`, `answerability`, `answer`, `reason`,
 
 Any non-answerable status needs at least one `answerability.issues` code: `no_supported_answer` (including missing details or outside-catalog requests), `conflicting_information`, or `multiple_valid_options`. Explain the particular obstacle in `reason`; these are the only machine-readable issue codes. An unanswered choice, ranking, labeling, or request extraction has `answer: null`. A predicate always has an answer object and uses `"unknown"` for uncertainty. An answerable collection may be empty when the source explicitly supports none.
 
-An unresolved decision stops this flow and uses `on_unresolved` if configured. Malformed results, unknown categories, inconsistent answerability, timeouts, and provider errors are technical failures. Validation checks shape and membership, not business truth; use [reviewed evaluation cases](../evaluation/task-types.md). See [flow routing](../configuration/flows.md) for issue-specific unresolved routes.
+An unresolved decision stops this flow and uses `on_unresolved` if configured. Malformed results, unknown categories and inconsistent answerability are returned to the model for correction up to `output_retries` (default `1`) and then fail with `invalid_output` (`reason: decision_contract`, with `location` `question:<id>` and a `constraint` such as `unknown_option`; see [output retries](../integration/errors.md#output-retries)). Output cut off at `max_tokens` (`output_limit_reached`; a reasoning model's reasoning counts toward it, see [output budget](llm.md#set-the-output-budget-and-reasoning-effort)), timeouts, limits and provider errors fail with their own [codes](../integration/errors.md#canonical-error-codes). A technical failure never takes `on_unresolved`, a `fallback` category or another review route: the run fails. Validation checks shape and membership, not business truth; use [reviewed evaluation cases](../evaluation/task-types.md). See [flow routing](../configuration/flows.md) for issue-specific unresolved routes.
 
 ## Advanced options
 

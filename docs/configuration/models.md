@@ -72,7 +72,8 @@ model:
 
 An override can also set `model` to a different served model ID. Unspecified
 options retain the profile value; explicit `null` clears an optional option.
-`max_tokens` cannot be cleared. Overrides retain the profile's provider,
+`max_tokens` cannot be cleared. An override can also set `output_retries`
+(`0`–`8`) for that step. Overrides retain the profile's provider,
 credentials, capabilities, timeout, and shared admission limit. An override may
 also set [`pricing`](#estimate-cost-with-pricing), which replaces the profile's
 block; `pricing: null` removes it. An override that selects a different `model`
@@ -133,7 +134,7 @@ configure the step's explicit allowlist as shown in [bounded agent loops](../ste
 
 | Option | Supported profiles | Behavior |
 | --- | --- | --- |
-| `max_tokens` | All | Output budget; defaults to `4096`, allowed range 1–1,048,576 |
+| `max_tokens` | All | Output budget, including a reasoning model's reasoning tokens; defaults to `32768` (sized for reasoning models), allowed range 1–1,048,576. A response stopped at it fails with `output_limit_reached` ([sizing it](../steps/llm.md#set-the-output-budget-and-reasoning-effort)). A model whose maximum output is smaller rejects the request (`request_rejected`); an OpenAI-compatible server counts it against the context window (`context_limit_exceeded`) |
 | `temperature` | All | Optional sampling setting, 0–2 |
 | `top_p` | All | Optional sampling setting, greater than 0 and at most 1 |
 | `seed` | OpenAI family | Optional integer; provider support determines reproducibility |
@@ -234,13 +235,18 @@ tokens in committed files, prompts, evaluation gold, or logs.
 ## Bound capacity and retries
 
 Each profile defaults to `concurrency: 4`, `queue_limit: 16`, and
-`request_timeout: 60`. These are in-process admission limits, not a persistent
+`request_timeout: 300`. These are in-process admission limits, not a persistent
 queue. Start with one concurrent request for a local model and measure before
 increasing it.
 
-Retries default to one attempt. An explicit profile `retry` can retry a limited
-set of completed transient HTTP responses; ambiguous timeouts are not retried.
-See the exact [retry policy](../reference/runtime-configuration.md#provider-retries).
+`retry` defaults to `max_attempts: 4`: the first request plus up to three
+retries of a limited set of completed transient HTTP responses (408, 429, 500,
+502, 503, 504, 529) and of a connection failure without a response; client-side
+timeouts are not retried. `output_retries` (`0`–`8`, default `1`) bounds how
+often the model gets its invalid structured output's validation problems back to
+return a corrected answer. See the exact
+[retry policy](../reference/runtime-configuration.md#provider-retries) and
+[output retries](../integration/errors.md#output-retries).
 
 The defaults cap short request processing; a local model or a longer agent loop
 may need explicit overrides. [Limits](limits.md) explains how the deadlines,

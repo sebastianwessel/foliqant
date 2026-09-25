@@ -17,21 +17,34 @@ from foliqant.core.plan import FlowCollectionStepPlan, FlowPlan
 from foliqant.settings import PreparedApplication
 
 from .contracts import EvaluationCase, EvaluationSuite, Expectation
-from .metrics import MetricSpec
+from .metrics import MetricSpec, field_path, validate_metrics
 
 MAX_DATASET_BYTES = 64 * 1024 * 1024
 
 
 class GoldExpectation(BoundaryModel):
-    """An explicit assertion over an ExecutionResult JSON pointer."""
+    """An explicit assertion over an ExecutionResult JSON pointer.
+
+    ``each`` projects every item of an array result through a relative pointer;
+    ``absent_as_null`` treats an absent value inside an executed owner as null.
+    """
 
     name: NonBlank
     path: str
     expected: JsonValue
-    comparison: Literal["exact", "set", "source_span"] = "exact"
+    comparison: Literal["exact", "set", "one_of", "text", "contains", "source_span"] = "exact"
+    each: str | None = None
+    absent_as_null: bool = False
 
     def expectation(self) -> Expectation:
-        return Expectation(self.name, self.path, freeze_json(self.expected), self.comparison)
+        return Expectation(
+            self.name,
+            self.path,
+            freeze_json(self.expected),
+            self.comparison,
+            each=self.each,
+            absent_as_null=self.absent_as_null,
+        )
 
     @model_validator(mode="after")
     def validate_expectation(self) -> Self:
@@ -58,16 +71,23 @@ class GoldCase(BoundaryModel):
 
 
 class MetricConfig(BoundaryModel):
-    """Optional metric over a declared, ordered category catalog."""
+    """Optional metric over a declared, ordered category or field catalog."""
 
     name: NonBlank
     path: str
-    kind: Literal["classification", "multilabel"]
+    kind: Literal["classification", "multilabel", "fields"]
     labels: Annotated[list[NonBlank | None], Field(min_length=1, max_length=1024)]
+    each: str | None = None
+    expectation: NonBlank | None = None
+
+    def spec(self) -> MetricSpec:
+        return MetricSpec(
+            self.name, self.path, self.kind, tuple(self.labels), self.each, self.expectation
+        )
 
     @model_validator(mode="after")
     def validate_metric(self) -> Self:
-        MetricSpec(self.name, self.path, self.kind, tuple(self.labels))
+        self.spec()
         return self
 
 
@@ -103,15 +123,40 @@ class SuiteSpec(BoundaryModel):
             raise ValueError("metric names must be unique")
         for metric in self.metrics:
             matched = 0
+            if metric.kind == "fields":
+                suite = EvaluationSuite(
+                    self.name, "validation", tuple(case.case() for case in self.cases)
+                )
+                validate_metrics(suite, (metric.spec(),))
+                paths = {field_path(metric.path, str(label)) for label in metric.labels}
+                if not any(
+                    item.path in paths for case in self.gold_cases for item in case.expectations
+                ):
+                    raise ValueError("metric requires matching gold")
+                continue
             for case in self.gold_cases:
-                gold = [item for item in case.expectations if item.path == metric.path]
+                gold = [
+                    item
+                    for item in case.expectations
+                    if item.path == metric.path
+                    and item.each == metric.each
+                    and (metric.expectation is None or item.name == metric.expectation)
+                ]
                 if len(gold) > 1:
                     raise ValueError("metric path must have at most one gold expectation per case")
                 if not gold:
                     continue
                 matched += 1
                 value = gold[0].expected
-                if metric.kind == "classification":
+                if metric.kind == "classification" and gold[0].comparison == "one_of":
+                    if not isinstance(value, list) or any(
+                        (item is not None and type(item) is not str) or item not in metric.labels
+                        for item in value
+                    ):
+                        raise ValueError("classification gold must be a declared label")
+                elif gold[0].comparison == "one_of":
+                    raise ValueError("one_of gold is measured by classification metrics only")
+                elif metric.kind == "classification":
                     if (value is not None and type(value) is not str) or value not in metric.labels:
                         raise ValueError("classification gold must be a declared label")
                 elif (
@@ -151,9 +196,7 @@ class EvaluationDataset(BoundaryModel):
 
 def metric_specs(spec: SuiteSpec) -> tuple[MetricSpec, ...]:
     """Convert explicit metric declarations without guessing label semantics."""
-    return tuple(
-        MetricSpec(item.name, item.path, item.kind, tuple(item.labels)) for item in spec.metrics
-    )
+    return tuple(item.spec() for item in spec.metrics)
 
 
 def read_json(path: Path, *, max_bytes: int = MAX_DATASET_BYTES) -> object:

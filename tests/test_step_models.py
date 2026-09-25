@@ -175,11 +175,21 @@ async def test_overrides_execute_with_resolved_model_and_only_explicit_option_ch
                 {
                     "profile": "local",
                     "model": "$STEP_MODEL",
-                    "options": {"max_tokens": 80, "temperature": None},
+                    "options": {"max_tokens": 80, "temperature": None, "reasoning_effort": "none"},
                 }
             )
         },
-        models={"local": profile(api_key="$PRIVATE_KEY")},
+        models={
+            "local": profile(
+                api_key="$PRIVATE_KEY",
+                options={
+                    "max_tokens": 900,
+                    "temperature": 0.4,
+                    "seed": 13,
+                    "reasoning_effort": "high",
+                },
+            )
+        },
     )
     opened = []
     requests = []
@@ -224,6 +234,7 @@ async def test_overrides_execute_with_resolved_model_and_only_explicit_option_ch
     assert "credential-sentinel" not in opened[0].model_dump_json()
     assert requests[0][1]["max_tokens"] == 80
     assert requests[0][1]["seed"] == 13
+    assert requests[0][1]["openai_reasoning_effort"] == "none"
     assert "temperature" not in requests[0][1]
     assert "$PROMPT" in repr(requests[0][0]) and "$INPUT" in repr(requests[0][0])
     assert "credential-sentinel" not in result.model_dump_json()

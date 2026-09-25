@@ -17,7 +17,13 @@ from pydantic.config import JsonDict
 from pydantic.json_schema import SkipJsonSchema
 
 from foliqant.contracts.decisions import ChoiceResult
-from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.core.errors import (
+    CONSTRAINT_PATTERN,
+    LOCATION_PATTERN,
+    ErrorCode,
+    FailureReason,
+    ServiceError,
+)
 from foliqant.core.execution import (
     Failure,
     FlowRecord,
@@ -67,27 +73,47 @@ class _ExecutionBoundary(BoundaryModel):
     model_config = ConfigDict(frozen=True, revalidate_instances="always")
 
 
+_EXPLANATION_FIELDS = ("reason", "location", "constraint")
+
+
 class SafeError(_ExecutionBoundary):
+    """A canonical failure with an optional content-free explanation.
+
+    ``reason`` says why an ``invalid_output`` or ``output_limit_reached`` failure
+    happened; ``location`` is a JSON pointer in schema vocabulary (or
+    ``question:<id>``) and ``constraint`` the violated keyword or problem kind.
+    """
+
     code: _ErrorCode
     message: _NonBlank
     retryable: bool
-    location: _NonBlank | SkipJsonSchema[None] = Field(
+    reason: FailureReason | SkipJsonSchema[None] = Field(
         default=None, json_schema_extra=_omit_default
     )
+    location: (
+        Annotated[str, StringConstraints(strict=True, pattern=f"^{LOCATION_PATTERN}$")]
+        | SkipJsonSchema[None]
+    ) = Field(default=None, json_schema_extra=_omit_default)
+    constraint: (
+        Annotated[str, StringConstraints(strict=True, pattern=f"^{CONSTRAINT_PATTERN}$")]
+        | SkipJsonSchema[None]
+    ) = Field(default=None, json_schema_extra=_omit_default)
 
     @model_validator(mode="after")
-    def canonical_message_and_optional_location(self) -> Self:
+    def canonical_message_and_optional_explanation(self) -> Self:
         if self.message != str(ServiceError(self.code)):
             raise ValueError("error message must be canonical")
-        if "location" in self.model_fields_set and self.location is None:
-            raise ValueError("location must be omitted rather than null")
+        for key in _EXPLANATION_FIELDS:
+            if key in self.model_fields_set and getattr(self, key) is None:
+                raise ValueError(f"{key} must be omitted rather than null")
         return self
 
     @model_serializer(mode="wrap")
     def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
         values = cast(dict[str, JsonValue], handler(self))
-        if "location" not in self.model_fields_set:
-            values.pop("location", None)
+        for key in _EXPLANATION_FIELDS:
+            if key not in self.model_fields_set:
+                values.pop(key, None)
         return values
 
 
@@ -169,11 +195,13 @@ class Usage(_PricedUsage):
 
     ``by_model`` is omitted when no model request was made; when present it
     accounts for every model request. Cost fields sum the priced models and are
-    omitted when no model is priced.
+    omitted when no model is priced. ``output_retries`` counts the model requests
+    (included in ``model_requests``) that asked for a corrected invalid output.
     """
 
     model_requests: _Count
     tool_calls: _Count
+    output_retries: _Count
     input_tokens: _Count | None
     output_tokens: _Count | None
     cache_read_input_tokens: _Count | None
@@ -199,6 +227,8 @@ class Usage(_PricedUsage):
             )
         except ServiceError:
             raise ValueError("invalid token usage") from None
+        if self.output_retries > self.model_requests:
+            raise ValueError("output retries are model requests")
         if "by_model" in self.model_fields_set and self.by_model is None:
             raise ValueError("by_model must be omitted rather than null")
         if self.by_model is not None and self.model_requests != sum(
@@ -740,11 +770,7 @@ class ExecutionResult(_ExecutionBoundary):
 def _safe_error(failure: Failure) -> dict[str, JsonValue]:
     if not isinstance(failure.code, ErrorCode) or type(failure.retryable) is not bool:
         raise ServiceError(ErrorCode.INVALID_OUTPUT)
-    return {
-        "code": failure.code.value,
-        "message": failure.message,
-        "retryable": failure.retryable,
-    }
+    return cast(dict[str, JsonValue], failure.as_json())
 
 
 def _step_result(record: StepRecord) -> dict[str, JsonValue]:
