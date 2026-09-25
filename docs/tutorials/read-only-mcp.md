@@ -65,14 +65,14 @@ input:
 
 Declare the handler's contract in `my_support/config/settings.yaml`, copying
 the two schema files from the example's
-[`contracts/`](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/contracts/require_reference.input.json)
+[`shared/handler_contracts/`](https://github.com/sebastianwessel/foliqant/blob/main/examples/support_email_tutorial/config/shared/handler_contracts/require_reference.input.json)
 directory:
 
 ```yaml
 handlers:
   require_reference:
-    input_schema: contracts/require_reference.input.json
-    output_schema: contracts/require_reference.output.json
+    input_schema: shared/handler_contracts/require_reference.input.json
+    output_schema: shared/handler_contracts/require_reference.output.json
     effect: read
 ```
 

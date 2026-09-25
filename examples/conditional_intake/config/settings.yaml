@@ -67,10 +67,10 @@ execution:
   max_steps: 24
 handlers:
   check_reference:
-    input_schema: contracts/check_reference.input.json
-    output_schema: contracts/check_reference.output.json
+    input_schema: shared/handler_contracts/check_reference.input.json
+    output_schema: shared/handler_contracts/check_reference.output.json
     effect: read
   open_review:
-    input_schema: contracts/open_review.input.json
-    output_schema: contracts/open_review.output.json
+    input_schema: shared/handler_contracts/open_review.input.json
+    output_schema: shared/handler_contracts/open_review.output.json
     effect: read

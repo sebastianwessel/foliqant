@@ -21,13 +21,14 @@ catalogs:
 # config/settings.yaml
 handlers:
   prepare_billing:
-    input_schema: contracts/handoff.input.json
-    output_schema: contracts/handoff.output.json
+    input_schema: shared/handler_contracts/handoff.input.json
+    output_schema: shared/handler_contracts/handoff.output.json
     effect: read
 ```
 
 Schemas are inline JSON Schema objects or JSON/YAML files relative to the
-settings file; paths must stay inside its directory and schemas must be
+settings file (conventionally in
+[`shared/handler_contracts/`](../configuration/index.md#organise-shared-definitions)); paths must stay inside its directory and schemas must be
 self-contained (only internal `$ref`). `effect: write` is declared honestly but
 rejected by the read-only pipeline.
 

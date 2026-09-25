@@ -481,8 +481,8 @@ to its directory:
 ```yaml
 handlers:
   normalize:
-    input_schema: contracts/normalize.input.json
-    output_schema: contracts/normalize.output.json
+    input_schema: shared/handler_contracts/normalize.input.json
+    output_schema: shared/handler_contracts/normalize.output.json
     effect: read
 ```
 

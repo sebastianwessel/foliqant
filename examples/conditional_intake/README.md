@@ -8,7 +8,8 @@ accounts and messages are synthetic.
 ```text
 config/
   settings.yaml                 # model, MCP catalog and declared handler contracts
-  contracts/                    # handler input/output schemas
+  shared/
+    handler_contracts/          # handler input/output schemas
   account_intake/
     workflow.yaml               # routed start, cases, route, repeat, review default
     classify/                   # decision: billing or cancellation

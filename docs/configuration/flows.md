@@ -93,12 +93,13 @@ steps:
 ```
 
 An explicit path is relative to `flow.yaml` and may point anywhere inside the
-configuration root, so several flows can share one step file:
+configuration root, so several flows can share one step file. Keep such files in
+[`shared/steps/`](index.md#organise-shared-definitions):
 
 ```yaml
 steps:
   - id: correct
-    definition: ../shared/correct.step.md
+    definition: ../../shared/steps/correct.step.md
 ```
 
 A shared step keeps its own resources: its schema paths are relative to the
@@ -212,19 +213,21 @@ steps:
 
 A flow definition is separate from its workflow instance identity. Multiple
 routed instances can name the same definition explicitly when they need the
-same ordered operation with different boundary inputs or routes:
+same ordered operation with different boundary inputs or routes. A definition
+several workflows use lives in [`shared/flows/`](index.md#organise-shared-definitions);
+the path is relative to `workflow.yaml`:
 
 ```yaml
 flows:
   summarize_customer:
-    definition: shared/summarize/flow.yaml
+    definition: ../shared/flows/summarize/flow.yaml
     input:
       message:
         pointer: /payload/customer_message
     transition:
       flow: summarize_agent
   summarize_agent:
-    definition: shared/summarize/flow.yaml
+    definition: ../shared/flows/summarize/flow.yaml
     input:
       message:
         pointer: /payload/agent_message

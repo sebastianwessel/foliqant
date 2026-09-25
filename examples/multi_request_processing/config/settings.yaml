@@ -83,14 +83,14 @@ execution:
   tool_timeout: 3
 handlers:
   plan_requests:
-    input_schema: contracts/plan_requests.input.json
-    output_schema: contracts/plan_requests.output.json
+    input_schema: shared/handler_contracts/plan_requests.input.json
+    output_schema: shared/handler_contracts/plan_requests.output.json
     effect: read
   decide_disposition:
-    input_schema: contracts/decide_disposition.input.json
-    output_schema: contracts/decide_disposition.output.json
+    input_schema: shared/handler_contracts/decide_disposition.input.json
+    output_schema: shared/handler_contracts/decide_disposition.output.json
     effect: read
   prepare_guidance:
-    input_schema: contracts/prepare_guidance.input.json
-    output_schema: contracts/prepare_guidance.output.json
+    input_schema: shared/handler_contracts/prepare_guidance.input.json
+    output_schema: shared/handler_contracts/prepare_guidance.output.json
     effect: read

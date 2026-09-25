@@ -45,7 +45,7 @@ uv run --no-sync python -m examples.multi_request_processing.evaluate
 ```
 
 The handler contracts are declared in `config/settings.yaml` with schemas in
-`config/contracts/`, generated from the Pydantic models in `policy.py`. The
+`config/shared/handler_contracts/`, generated from the Pydantic models in `policy.py`. The
 registrations pass the same model-derived schemas, so preparation fails with
 `handler_contract_mismatch` if the code and the reviewed declaration drift.
 

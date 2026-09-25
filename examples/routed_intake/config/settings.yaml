@@ -19,10 +19,10 @@ execution:
   run_timeout: 610
 handlers:
   prepare_billing:
-    input_schema: contracts/handoff.input.json
-    output_schema: contracts/handoff.output.json
+    input_schema: shared/handler_contracts/handoff.input.json
+    output_schema: shared/handler_contracts/handoff.output.json
     effect: read
   prepare_cancellation:
-    input_schema: contracts/handoff.input.json
-    output_schema: contracts/handoff.output.json
+    input_schema: shared/handler_contracts/handoff.input.json
+    output_schema: shared/handler_contracts/handoff.output.json
     effect: read

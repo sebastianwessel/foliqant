@@ -177,7 +177,7 @@ settings file and stays out of Git. `foliqant init` also supplies an
 There is no automatically discovered `steps/` container. To use one, provide
 explicit step `definition` paths. Resolve each path from its declaring file; an
 explicit step path may point anywhere inside the configuration root (share one
-step file across flows with `definition: ../shared/correct.step.md`), while a
+step file across flows with `definition: ../../shared/steps/correct.step.md`), while a
 step's own schemas resolve from the step file and stay inside its directory.
 Unlisted step files are not loaded or executed. Markdown step bodies supply
 instructions; YAML steps use an explicit `instructions` field.
