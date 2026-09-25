@@ -151,12 +151,15 @@ Replace `request_intake` with the actual workflow ID. The evaluation check
 requires the reviewed dataset; it does not run inference. Keep live evaluation
 and deployment as separate, deliberate steps.
 
-If your application registers Python handlers, use its own preparation and
-evaluation entry points: generic CLI commands cannot register host functions.
-The agent should call `prepare_application(config_path, handlers=handlers)`,
-inspect the compiled plans, and use `load_dataset(prepared)` from
-`foliqant.evaluation.dataset` for offline gold validation. The skill includes
-this path so custom business functions remain part of the checks.
+If your application uses Python handlers, declare their contracts under
+`handlers` in `settings.yaml`: then `foliqant validate --strict`, `explain` and
+`evaluate --check` work without host code. Executing runs and evaluations uses
+the application's own entry point, which calls
+`prepare_application(config_path, handlers=handlers)` and
+`load_dataset(prepared)` from `foliqant.evaluation.dataset`. The skill also
+teaches the agent to fix compiler diagnostics and to express routes, skipped
+steps, bounded retries and result projection in configuration instead of
+helper handlers.
 
 ## What the skill enforces
 

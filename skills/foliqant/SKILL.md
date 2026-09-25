@@ -17,10 +17,10 @@ skill directory; no source checkout or internal specifications are required.
 
 | Task | Read |
 | --- | --- |
-| Map business rules; choose file layout and IDs; author workflows, flows, steps, bindings, routes, and omitted-field defaults | [Workflow design](references/workflow-design.md) |
-| Install adapters; configure models, MCP, handlers, limits, secrets, telemetry, default values, and override precedence | [Runtime configuration](references/runtime-configuration.md) |
+| Map business rules; choose file layout and IDs; author workflows, flows, steps, bindings, `first_of`/`fields`, routes, conditions, `when`, and omitted-field defaults | [Workflow design](references/workflow-design.md) |
+| Install adapters; configure models, MCP, declared handlers, limits, secrets, telemetry, default values, and override precedence | [Runtime configuration](references/runtime-configuration.md) |
 | Create gold, measure a scope, replay results, or compare runs | [Evaluation](references/evaluation.md) |
-| Combine flows after triage; process multiple requests; implement planning and final disposition | [Process composition](references/process-composition.md) |
+| Combine flows after triage; decide with conditions instead of helper handlers; retry with `repeat`; process multiple requests; implement planning and final disposition | [Process composition](references/process-composition.md) |
 | Scaffold a project; implement a Python/HTTP host; handle failures; package and deploy | [Deployment and HTTP](references/deployment-http.md) |
 
 For a new application, start with workflow design and runtime configuration.
@@ -47,7 +47,13 @@ resources are available through `importlib.resources.files("foliqant").joinpath(
 3. Implement the requested slice with selected context bindings, schemas, and
    explicit routes. Operations are `decision`, `llm`, `mcp`, trusted `handler`,
    and bounded `flow_collection`. Keep exact business policy in configuration or
-   trusted handlers. Write YAML in block style; reserve `{}` and `[]` for empty
+   trusted handlers. Express routing and projection in configuration: `cases`
+   or `route` conditions instead of routing-key handlers, step `when` instead of
+   skip flows, `repeat` instead of unrolled retry flows, `first_of` and
+   `output.fields` instead of join or projection handlers, and one
+   `defaults.on_unresolved`. A binding is optional exactly when it has a
+   `default`. Declare every handler contract under `handlers` in
+   `settings.yaml`. Write YAML in block style; reserve `{}` and `[]` for empty
    values and quote the `"on"` key for YAML 1.1 parsers.
 4. Validate with the installed commands below, fix relevant failures, and rerun
    the affected checks. Report unavailable dependencies or unsupported behavior
@@ -75,6 +81,14 @@ resources are available through `importlib.resources.files("foliqant").joinpath(
   `multiple_valid_options`. Evidence strength measures support for the whole
   conclusion, including unresolved conclusions. It is not confidence or a
   routing threshold. Fallback routing is explicit caller policy.
+- A technical failure is never a business outcome. A failed model request, tool
+  call or handler fails its step, flow and run with one precise code (for
+  example `invalid_output`, `request_timeout`, `iteration_limit_reached`,
+  `rate_limited`, `tool_error`); no `on_unresolved`, `fallback`, binding
+  `default`, `first_of`, repeat condition or retry flow acts on it. Only native
+  abstention and an MCP server's input request are review outcomes. Invalid
+  structured output is corrected by the model up to `output_retries` (default
+  `1`) before it fails.
 - MCP catalogs and allowlists are declared, with validated arguments/results
   and read-only effects. Hosts may apply a `ToolAuthorizer`; tenant/principal
   context is not authentication. Configuration cannot import arbitrary code.
@@ -88,19 +102,23 @@ resources are available through `importlib.resources.files("foliqant").joinpath(
 From the application directory, use the selected config path if nonconventional:
 
 ```sh
-foliqant validate
+foliqant validate --strict
 foliqant doctor
-foliqant explain
+foliqant explain --format mermaid --all --output docs/workflows.md
 ```
 
-These generic CLI commands do not register host Python handlers. For a host
-with custom handlers, use its registered `prepare_application(...)` path to
-compile and inspect `prepared.plans`; see deployment and HTTP for the lifecycle.
+Fix every error and warning in the reported `diagnostics`, or document why an
+`info` (such as `review_ends_run` for the output flow) is intended. Commit the
+generated `docs/workflows.md` and check it in CI with `--check`. Review the Mermaid graph for
+missing routes, review edges and retry calls. Declared handlers need no Python
+registration for these checks; running them needs the host's registered
+`prepare_application(...)`, see deployment and HTTP for the lifecycle.
 
 When gold exists, also run `foliqant evaluate --check`. Run focused application
 tests for changed behavior and the checks required by its project instructions.
-For handler-based configurations, load gold against the registered prepared
-application and use the host's evaluation entry point as described in evaluation.
+For executing handler-based configurations, load gold against the registered
+prepared application and use the host's evaluation entry point as described in
+evaluation.
 These commands are offline. Live inference, report publication, and deployment
 must fit the user's authorized task; reuse authorization already given for the
 specific action instead of asking again.

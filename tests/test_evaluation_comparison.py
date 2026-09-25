@@ -116,7 +116,10 @@ async def test_compare_reports_derives_mixed_changes_metrics_and_usage(tmp_path:
     assert tokens["baseline"]["total"] == 20
     assert tokens["candidate"]["total"] == 14
     assert tokens["total_delta"] == -6
-    assert comparison["interpretation"] == "descriptive_only_no_statistical_significance"
+    assert (
+        comparison["interpretation"]
+        == "descriptive_paired_bootstrap_intervals_no_release_threshold"
+    )
 
 
 async def test_compare_ignores_tampered_aggregates_but_rejects_changed_semantics(
@@ -283,7 +286,7 @@ async def test_compare_exposes_operational_regression_even_when_checks_stay_unav
     changed = json.loads(candidate.read_text())
     case = changed["reports"][0]["cases"][0]
     case["status"] = "error"
-    case["error_code"] = "timeout"
+    case["error_code"] = "run_timeout"
     case["workflow"] = None
     case["workflow_revision"] = None
     case["usage"] = None
@@ -296,6 +299,8 @@ async def test_compare_exposes_operational_regression_even_when_checks_stay_unav
     assert suite["cases"][0]["baseline_status"] == "completed"
     assert suite["cases"][0]["candidate_status"] == "error"
     assert suite["execution"]["failure_rate_delta"] == 1
+    assert suite["execution"]["baseline_failures_by_code"] == {}
+    assert suite["execution"]["candidate_failures_by_code"] == {"run_timeout": 1}
 
 
 async def test_compare_source_span_reports_use_shared_recorded_scoring(tmp_path: Path) -> None:
@@ -439,3 +444,62 @@ async def test_compare_cli_never_loads_configuration_and_writes_private_output(
         )
         == 2
     )
+
+
+async def _field_artifact(path: Path, outputs: list[dict[str, object]], name: str) -> None:
+    labels = ["a", "b"] * (len(outputs) // 2)
+    suite = EvaluationSuite(
+        "fields",
+        "gold-1",
+        tuple(
+            EvaluationCase(
+                str(index),
+                Envelope(payload={"index": index}),
+                (
+                    Expectation("label", "/payload/label", labels[index]),
+                    Expectation("client", "/payload/fields/client", "Acme", "text"),
+                    Expectation("isin", "/payload/fields/isin", None, absent_as_null=True),
+                ),
+            )
+            for index in range(len(outputs))
+        ),
+    )
+
+    async def invoke(envelope: Envelope) -> ExecutionResult:
+        return _result(outputs[envelope.payload["index"]], input_tokens=1)
+
+    report = await evaluate(
+        suite,
+        EvaluationVariant(name, name, invoke, name, workflow="demo"),
+        include_details=True,
+        metrics=(
+            MetricSpec("label", "/payload/label", "classification", ("a", "b")),
+            MetricSpec("fields", "/payload/fields", "fields", ("client", "isin")),
+        ),
+    )
+    write_report(path, (report,), mode="execution", dataset_name="gold", dataset_revision="1")
+
+
+async def test_compare_reports_paired_intervals_fields_deltas_and_cost(tmp_path: Path) -> None:
+    baseline, candidate = tmp_path / "baseline.json", tmp_path / "candidate.json"
+    wrong = {"label": "x", "fields": {"client": "Other", "isin": "DE0001"}}
+    right_a = {"label": "a", "fields": {"client": " ACME "}}
+    right_b = {"label": "b", "fields": {"client": "acme"}}
+    await _field_artifact(baseline, [wrong] * 20, "baseline")
+    await _field_artifact(candidate, [right_a, right_b] * 10, "candidate")
+    suite = compare_reports(candidate, baseline, resamples=500).to_dict()["suites"][0]
+    case_pass = suite["case_pass"]
+    assert (case_pass["baseline_rate"], case_pass["candidate_rate"]) == (0, 1)
+    interval = case_pass["rate_delta_interval"]
+    assert interval["low"] == interval["high"] == 1 and interval["excludes_zero"] is True
+    assert interval["resamples"] == 500 and interval["method"] == "percentile_bootstrap"
+    fields = next(item for item in suite["metrics"] if item["name"] == "fields")
+    assert fields["field_accuracy_delta"] == 1
+    assert fields["field_accuracy_delta_interval"]["excludes_zero"] is True
+    assert suite["checks"]["pass_rate_delta_interval"]["low"] == 1
+    # Unpriced usage stays unknown instead of becoming a zero cost.
+    assert suite["usage"]["cost"]["baseline"]["unknown"] == 20
+    assert suite["usage"]["cost"]["total_delta"] is None
+    # The same artifact against itself has a zero-width interval at zero.
+    same = compare_reports(baseline, baseline, resamples=100).to_dict()["suites"][0]
+    assert same["case_pass"]["rate_delta_interval"]["excludes_zero"] is False

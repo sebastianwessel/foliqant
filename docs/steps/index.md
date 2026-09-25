@@ -16,6 +16,15 @@ A flow runs its listed steps in order. Start with the output your support-email 
 | Trusted application code | [Handler](handler.md) | Schema-validated result |
 | An explicit list of requests | [Flow collection](flow-collection.md) | Ordered child-flow ledger |
 
+Some needs are configuration, not a step:
+
+| What you need | Use |
+| --- | --- |
+| Run a step only in some cases | A step [`when` condition](../configuration/flows.md#skip-a-step-with-when) |
+| Choose the next flow from data | A [`route` or `cases` transition](../configuration/workflows.md#define-transitions) |
+| Retry a lookup with a corrected input | [`repeat` with a retry flow](../configuration/repeat.md) |
+| Pick the branch result that exists, or assemble an object | [`first_of` and `fields`](../configuration/context.md#combine-candidates-and-build-objects) |
+
 Typed decisions share [answerability, reason, evidence strength, and question configuration](decision.md). They return an assessment, not just a category. Choose a decision when the business answer fits one of its fixed shapes; use an LLM step for an application-specific JSON schema or prose.
 
 ## Put the definition beside its flow
@@ -49,8 +58,8 @@ reference:
   pointer: /steps/extract/result/reference
 ```
 
-`/payload` is this flow's bound input; `/steps/<id>` is an earlier local step record. A missing required pointer fails with `missing_binding`; JSON `null` counts as present. An optional pointer needs an explicit `default`. See [context and bindings](../configuration/context.md).
+`/payload` is this flow's bound input; `/steps/<id>` is an earlier local step record. A missing required pointer fails with `missing_binding`; JSON `null` counts as present. A pointer with a `default` is optional. See [context and bindings](../configuration/context.md).
 
-The public result keeps each step at `/flows/<flow-id>/steps/<step-id>`. A completed step has `result`; a decision with unresolved business evidence has `needs_review`; a technical error has `failed` and a safe `error`. Later unrun steps are `skipped`. The containing flow owns transitions and `on_unresolved`; see [flows](../configuration/flows.md).
+The public result keeps each step at `/flows/<flow-id>/steps/<step-id>`. A completed step has `result`; a decision with unresolved business evidence has `needs_review`; a technical error has `failed` and a safe `error`. Later unrun steps, and steps whose `when` is false, are `skipped`. The containing flow owns transitions and `on_unresolved`; see [flows](../configuration/flows.md).
 
-Validate a complete configuration offline with `foliqant validate --config config/settings.yaml`. This checks structure and references, not provider behavior. A custom handler must be registered through `prepare_application(..., handlers=HANDLERS)` for validation. Test business behavior with [evaluations](../evaluation/index.md).
+Validate a complete configuration offline with `foliqant validate --config config/settings.yaml`. This checks structure, references and diagnostics, not provider behavior. A custom handler is declared under `handlers` in `settings.yaml`, so validation needs no Python registration; running it needs `prepare_application(..., handlers=HANDLERS)`. Test business behavior with [evaluations](../evaluation/index.md).

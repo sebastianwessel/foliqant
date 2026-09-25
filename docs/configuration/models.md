@@ -72,9 +72,14 @@ model:
 
 An override can also set `model` to a different served model ID. Unspecified
 options retain the profile value; explicit `null` clears an optional option.
-`max_tokens` cannot be cleared. Overrides retain the profile's provider,
-credentials, capabilities, timeout, and shared admission limit. A complete inline
-provider profile is also accepted, but named profiles are easier to reuse and audit.
+`max_tokens` cannot be cleared. An override can also set `output_retries`
+(`0`–`8`) for that step. Overrides retain the profile's provider,
+credentials, capabilities, timeout, and shared admission limit. An override may
+also set [`pricing`](#estimate-cost-with-pricing), which replaces the profile's
+block; `pricing: null` removes it. An override that selects a different `model`
+does not inherit the profile's pricing, because those prices describe the
+profile's own model. A complete inline provider profile is also accepted, but
+named profiles are easier to reuse and audit.
 
 ## Choose a provider
 
@@ -129,7 +134,7 @@ configure the step's explicit allowlist as shown in [bounded agent loops](../ste
 
 | Option | Supported profiles | Behavior |
 | --- | --- | --- |
-| `max_tokens` | All | Output budget; defaults to `4096`, allowed range 1–1,048,576 |
+| `max_tokens` | All | Output budget, including a reasoning model's reasoning tokens; defaults to `32768` (sized for reasoning models), allowed range 1–1,048,576. A response stopped at it fails with `output_limit_reached` ([sizing it](../steps/llm.md#set-the-output-budget-and-reasoning-effort)). A model whose maximum output is smaller rejects the request (`request_rejected`); an OpenAI-compatible server counts it against the context window (`context_limit_exceeded`) |
 | `temperature` | All | Optional sampling setting, 0–2 |
 | `top_p` | All | Optional sampling setting, greater than 0 and at most 1 |
 | `seed` | OpenAI family | Optional integer; provider support determines reproducibility |
@@ -142,6 +147,72 @@ Except for `max_tokens`, omitted generation settings defer to the provider.
 Acceptance by the configuration validator does not prove that a particular
 model supports the combination. Change one setting at a time and compare on
 the same [reviewed evaluation cases](../evaluation/running.md).
+
+## Estimate cost with pricing
+
+Add an optional `pricing` block to a profile to have results and model spans
+report an estimated cost. This profile uses the GPT-5.6 Terra list prices as an
+example:
+
+```yaml
+models:
+  terra:
+    provider: azure_openai
+    api: responses
+    api_flavor: v1
+    endpoint: $AZURE_OPENAI_ENDPOINT
+    model: gpt-5.6-terra
+    output_mode: native
+    pricing:
+      currency: USD
+      input_per_million: 2.00
+      cached_input_per_million: 0.20
+      output_per_million: 12.00
+      long_context:
+        threshold_input_tokens: 272000
+        input_per_million: 4.00
+        cached_input_per_million: 0.40
+        output_per_million: 18.00
+```
+
+Prices change, and they are configuration: copy the current prices of your
+provider and contract into `pricing`, and review them like any other setting.
+Foliqant ships no price list and never looks prices up.
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `currency` | Yes | `USD` |
+| `input_per_million` | Yes | Price of one million uncached input tokens |
+| `cached_input_per_million` | No | Price of one million cached input tokens; omitted, cached input is billed at the input price |
+| `output_per_million` | Yes | Price of one million output tokens |
+| `reasoning_billed_as` | No | `output` (default) or `input`: which price applies to reasoning tokens |
+| `long_context` | No | `threshold_input_tokens` and the tier's `input_per_million`, optional `cached_input_per_million`, and `output_per_million` |
+| `reference_model` | No | The model whose prices you used, when you estimate one model with another's prices, for example `gpt-5.6-terra` for a local model |
+
+Each request is estimated on its own, with exact decimal arithmetic:
+
+- uncached input (input minus cached tokens) × input price,
+- plus cached input × cached price (the input price when none is set),
+- plus output tokens × output price. Providers report reasoning tokens inside
+  the output tokens; with `reasoning_billed_as: input` those tokens use the
+  input price instead.
+
+When a request's input tokens exceed `threshold_input_tokens`, every token of
+that request uses the `long_context` prices; at or below the threshold the base
+prices apply. Cache writes are billed as input. Request costs are summed per
+model and across steps, flows, attempts and collection items, and rounded to six
+decimals in the result.
+
+The estimate is never guessed. When a count it needs was not reported (input or
+output tokens, cached tokens when a cached price is set, or reasoning tokens
+with `reasoning_billed_as: input`), that request's cost is unknown and the
+result shows `cost: null` with `cost_complete: false`. Validation is strict:
+prices are nonnegative numbers of at most 1,000,000, and unknown fields,
+strings and other currencies are rejected offline. `foliqant explain` shows
+each step's effective pricing under `model_selection.pricing`, and `foliqant
+doctor` lists every profile's pricing under `models`. See
+[usage by model and cost](../integration/results.md#read-usage-by-model-and-cost)
+for the result fields.
 
 ## Keep credentials separate from business data
 
@@ -164,13 +235,18 @@ tokens in committed files, prompts, evaluation gold, or logs.
 ## Bound capacity and retries
 
 Each profile defaults to `concurrency: 4`, `queue_limit: 16`, and
-`request_timeout: 60`. These are in-process admission limits, not a persistent
+`request_timeout: 300`. These are in-process admission limits, not a persistent
 queue. Start with one concurrent request for a local model and measure before
 increasing it.
 
-Retries default to one attempt. An explicit profile `retry` can retry a limited
-set of completed transient HTTP responses; ambiguous timeouts are not retried.
-See the exact [retry policy](../reference/runtime-configuration.md#provider-retries).
+`retry` defaults to `max_attempts: 4`: the first request plus up to three
+retries of a limited set of completed transient HTTP responses (408, 429, 500,
+502, 503, 504, 529) and of a connection failure without a response; client-side
+timeouts are not retried. `output_retries` (`0`–`8`, default `1`) bounds how
+often the model gets its invalid structured output's validation problems back to
+return a corrected answer. See the exact
+[retry policy](../reference/runtime-configuration.md#provider-retries) and
+[output retries](../integration/errors.md#output-retries).
 
 The defaults cap short request processing; a local model or a longer agent loop
 may need explicit overrides. [Limits](limits.md) explains how the deadlines,

@@ -128,6 +128,7 @@ def _executor(
         settings=ModelSettings(),
         admission=CapacityLimiter(concurrency=1, queue_limit=0),
         output_mode=mode,
+        output_retries=0,
     )
     return ModelExecutor({"model": binding}, WorkflowSchemas(_plan(step)))
 
@@ -235,7 +236,7 @@ async def test_contract_guidance_does_not_weaken_output_rejection(
     invalid = _valid_multiple_result()
     first = cast(dict[str, Any], invalid["results"][0])
     if invalid_case == "oversized_summary":
-        first["reason"] = "x" * 401
+        first["reason"] = "x" * 2001
     else:
         first["answerability"] = {
             "status": "partially_answerable",

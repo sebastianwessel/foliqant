@@ -21,7 +21,11 @@ Use all three scopes while developing a workflow:
 
 A step target always names its containing flow. Flow and step evaluation do not
 run upstream dependencies or routes. Their case payloads must already have the
-shape that the selected boundary expects.
+shape that the selected boundary expects. To derive a flow case from a workflow
+case, `foliqant.evaluation.flow_input(prepared, workflow, flow, envelope,
+flow_results={...})` resolves the flow's compiled input bindings against the
+workflow envelope and authored results of upstream flows, without executing
+anything.
 
 ```mermaid
 flowchart LR

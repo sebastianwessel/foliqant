@@ -77,7 +77,10 @@ nav:
           - Configuration and folder layout: configuration/index.md
           - Define a workflow: configuration/workflows.md
           - Define sequential flows: configuration/flows.md
+          - Decide with conditions: configuration/conditions.md
+          - Retry a flow with repeat: configuration/repeat.md
           - Pass data and write prompts: configuration/context.md
+          - What the compiler guarantees: configuration/validation.md
       - Choose a capability:
           - Find the right capability: steps/index.md
           - Answer yes or no: steps/yes-no.md
@@ -119,6 +122,7 @@ nav:
           - 3. Route between flows: tutorials/multiflow-routing.md
       - Tools and composition:
           - 4. Call a read-only MCP tool: tutorials/read-only-mcp.md
+          - Retry a lookup: tutorials/retry-lookup.md
           - 5. Let a model use a tool: tutorials/model-tool-loop.md
           - 6. Process several requests: tutorials/multi-request-processing.md
       - Evaluate the assistant: tutorials/evaluate.md

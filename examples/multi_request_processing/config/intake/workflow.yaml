@@ -4,7 +4,6 @@ start: assess
 input_schema: input.schema.json
 output:
   pointer: /flows/finalize/result
-  optional: true
   default:
     disposition: review
 flows:
@@ -24,6 +23,8 @@ flows:
         pointer: /payload/language
     transition:
       flow: process
+    on_unresolved:
+      outcome: needs_review
   process:
     input:
       items:

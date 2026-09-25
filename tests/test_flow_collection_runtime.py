@@ -97,7 +97,7 @@ async def test_sequential_items_share_root_identity_deadline_and_exact_usage():
 
     async def execute(step, inputs, context):
         calls.append((inputs["message"], context))
-        ticket = await context.budget.start_model_request()
+        ticket = await context.budget.start_model_request("test-model")
         await context.budget.finish_model_request(ticket, TokenUsage(2, 3, 0, 0, 0))
         return StepOutcome(freeze_json({"value": inputs["message"]}))
 
@@ -326,7 +326,7 @@ async def test_failure_retains_completed_failed_and_unstarted_items_without_doub
 
     async def execute(step, inputs, context):
         calls.append(inputs["message"])
-        await context.budget.start_model_request()
+        await context.budget.start_model_request("test-model")
         if inputs["message"] == "fail":
             if mode == "timeout":
                 try:
@@ -358,7 +358,7 @@ async def test_failure_retains_completed_failed_and_unstarted_items_without_doub
     assert len(calls) == (1 if mode == "budget" else 2)
     if mode == "timeout":
         assert cleaned == ["joined"]
-        assert public.execution.error.code is ErrorCode.TIMEOUT
+        assert public.execution.error.code is ErrorCode.RUN_TIMEOUT
 
 
 async def test_cancellation_joins_active_child_and_never_starts_next():
@@ -417,11 +417,16 @@ async def test_child_flow_trace_is_nested_under_collection_step():
         children = [
             span
             for span in spans
-            if span.name == "foliqant.flow"
+            if span.instrumentation_scope.name == "foliqant.flow"
             and span.attributes.get("foliqant.flow.name") == "worker"
         ]
         assert len(children) == 2
         assert all(span.parent.span_id == parent.context.span_id for span in children)
+        assert parent.name == "step dispatch (flow_collection)"
+        assert sorted(span.name for span in children) == [
+            "flow worker [item 0]",
+            "flow worker [item 1]",
+        ]
     finally:
         provider.shutdown()
 
@@ -482,7 +487,7 @@ async def test_nested_collections_share_root_budget_and_propagate_failure_ledger
     ]
     result = await runner(value, execute, max_steps=3).run(envelope(items), identity=Identity())
     public = to_execution_result(result)
-    assert result.status == "failed" and result.error.code is ErrorCode.BUDGET_EXHAUSTED
+    assert result.status == "failed" and result.error.code is ErrorCode.STEP_LIMIT_REACHED
     outer = public.flows["main"].steps["dispatch"].partial_result.items[0]
     inner = outer.steps["nested"].partial_result
     assert [row.status for row in inner.items] == ["completed", "failed"]
@@ -509,7 +514,11 @@ def test_collection_marker_revalidates_ledgers_without_guessing_business_shape()
     for status in ("completed", "needs_review", "skipped", "cancelled"):
         with pytest.raises(ValidationError):
             StepResult.model_validate({**good, "status": status, "partial_result": {"items": []}})
-    error = {"code": "timeout", "message": str(ServiceError(ErrorCode.TIMEOUT)), "retryable": False}
+    error = {
+        "code": "run_timeout",
+        "message": str(ServiceError(ErrorCode.RUN_TIMEOUT)),
+        "retryable": False,
+    }
     failed = {"status": "failed", "error": error, "partial_result": {"items": []}}
     with pytest.raises(ValidationError):
         StepResult.model_validate(failed)

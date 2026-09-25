@@ -54,7 +54,7 @@ def make_plan(
     flow = {
         "input": flow_input
         if flow_input is not None
-        else {"message": {"pointer": "/payload/message", "optional": True, "default": None}},
+        else {"message": {"pointer": "/payload/message", "default": None}},
         "definition": {
             "steps": [
                 {"id": name, "definition": load_yaml(body, relative_path="workflow.yaml")}
@@ -183,9 +183,10 @@ async def test_uncertainty_stops_local_sequence_before_successful_dispatch(tmp_p
 async def test_routes_only_to_configured_flow_target(
     tmp_path: Path, route: str, selected: str
 ) -> None:
+    # A handler without a declared output schema: the route value is runtime-checked.
     plan = make_plan(
         tmp_path,
-        {"first": _DECISION},
+        {"first": _HANDLER},
         output={"pointer": "/steps/first/result"},
         transition={
             "binding": {"pointer": "/flows/main/result"},
@@ -197,7 +198,7 @@ async def test_routes_only_to_configured_flow_target(
 
     async def handle(step, inputs, context):
         if context.flow_id == "main":
-            ticket = await context.budget.start_model_request()
+            ticket = await context.budget.start_model_request("test-model")
             await context.budget.finish_model_request(ticket, TokenUsage(10, 5))
             return StepOutcome(route)
         assert context.flow_id == selected
@@ -217,7 +218,7 @@ async def test_execution_error_is_safe_and_failed_attempts_remain_counted(tmp_pa
     async def handle(
         step: OperationStep, inputs: FrozenObject, context: StepContext
     ) -> StepOutcome:
-        await context.budget.start_model_request()
+        await context.budget.start_model_request("test-model")
         raise RuntimeError("PRIVATE-USER-CONTENT")
 
     result = await runner(plan, Scripted(handle)).run(accepted(), identity=Identity())
@@ -294,7 +295,7 @@ async def test_deadline_stops_work_and_returns_typed_failure(tmp_path: Path) -> 
     )
     assert stopped.is_set()
     assert result.status == "failed" and result.error is not None
-    assert result.error.code == ErrorCode.TIMEOUT
+    assert result.error.code == ErrorCode.RUN_TIMEOUT
     assert dict(dict(result.flows)["main"].steps)["first"].status == "failed"
 
 
@@ -403,7 +404,7 @@ async def test_unmatched_routes_review_and_invalid_types_fail_safely(
 ) -> None:
     plan = make_plan(
         tmp_path,
-        {"first": _DECISION},
+        {"first": _HANDLER},
         output={"pointer": "/steps/first/result"},
         transition={
             "binding": {"pointer": "/flows/main/result"},

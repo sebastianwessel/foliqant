@@ -19,6 +19,11 @@ input:
     pointer: /payload/message
 ```
 
+The handler's contract is declared under `handlers` in `config/settings.yaml`
+with the same schemas as `INPUT_SCHEMA` and `OUTPUT_SCHEMA` below. Passing the
+schemas in the test registration makes preparation verify that they still match
+the declaration.
+
 The test uses no model or MCP client:
 
 ```python
@@ -81,8 +86,8 @@ Adjust the asserted flow and step IDs to the compiled workflow. This pattern
 tests real input schemas, bindings, handler schemas, projections, transitions,
 and the public `ExecutionResult`. Return an invalid value from a second fake to
 assert the expected safe `invalid_output` failure. Raise a `ServiceError` to
-exercise an intentional operational code; unexpected fake exceptions are
-sanitized as dependency failures.
+exercise an intentional operational code; an unexpected exception from a fake
+handler fails the step with `handler_failed`, without its text.
 
 ## Test evaluation code with a result fake
 
@@ -102,6 +107,7 @@ from foliqant.evaluation import (
 USAGE = {
     "model_requests": 0,
     "tool_calls": 0,
+    "output_retries": 0,
     "input_tokens": 0,
     "output_tokens": 0,
     "cache_read_input_tokens": 0,
@@ -164,7 +170,13 @@ exercise the workflow graph.
   `RuntimePlugins(model_factory=...)`, then call `run_step`. Assert the validated
   result, usage accounting, and safe invalid-output behavior.
 - For a handler, register `HandlerRegistration` as above. Assert both input and
-  output schema rejection.
+  output schema rejection, and the `unresolved_issues` or `selection` it returns
+  for review.
+- For routes and conditions, run the workflow with inputs on both sides of each
+  `when` and assert `transitions[i].route` and skipped step records. For a
+  `repeat`, assert `attempt_count`, `attempts` and `repeat.stopped_by`.
+- Use `prepare_application(path, handlers=..., strict=True)` in a test to fail
+  on compiler warnings.
 - For MCP logic, unit-test the declared catalog and authorizer with a local fake
   session. Do not make a network request in a unit test.
 - For a flow collection, pass an already-resolved `items` array to `run_step`.

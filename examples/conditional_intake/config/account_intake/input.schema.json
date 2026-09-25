@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "form": {
+      "type": "object",
+      "properties": {
+        "request_type": {
+          "type": "string",
+          "enum": [
+            "billing",
+            "cancellation"
+          ]
+        },
+        "account_reference": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "message"
+  ],
+  "additionalProperties": false
+}

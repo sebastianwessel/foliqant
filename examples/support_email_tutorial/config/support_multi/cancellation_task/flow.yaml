@@ -4,5 +4,4 @@ steps:
   - prepare
 output:
   pointer: /steps/prepare/result
-  optional: true
   default: null

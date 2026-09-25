@@ -1,6 +1,7 @@
 """Golden-case evaluation of in-memory pipelines and isolated steps."""
 
 from .analysis import ReportComparison, compare_reports
+from .checkpoint import CheckpointMismatchError, EvaluationCheckpoint, EvaluationProgress
 from .contracts import (
     CaseDetails,
     CaseReport,
@@ -19,9 +20,11 @@ from .contracts import (
     StepSummary,
 )
 from .groups import EvaluationGroupReport, group_report
-from .metrics import LabelCounts, MetricReport, MetricSpec, RateSummary
+from .intervals import Interval, paired_difference_interval, ratio_interval
+from .metrics import FieldCounts, LabelCounts, MetricReport, MetricSpec, RateSummary
 from .runner import compare_variants, evaluate
-from .summaries import LatencySummary, UsageCountSummary, UsageSummary
+from .scoped import flow_input
+from .summaries import CostSummary, LatencySummary, UsageCountSummary, UsageSummary
 
 __all__ = [
     "CaseDetails",
@@ -29,14 +32,20 @@ __all__ = [
     "CheckDetails",
     "CheckReport",
     "CheckSummary",
+    "CheckpointMismatchError",
+    "CostSummary",
     "EvaluationCase",
-    "EvaluationReport",
+    "EvaluationCheckpoint",
     "EvaluationGroupReport",
+    "EvaluationProgress",
+    "EvaluationReport",
     "EvaluationSuite",
     "EvaluationVariant",
     "Expectation",
+    "FieldCounts",
     "FlowReport",
     "FlowSummary",
+    "Interval",
     "LabelCounts",
     "LatencySummary",
     "MetricReport",
@@ -51,5 +60,8 @@ __all__ = [
     "compare_reports",
     "compare_variants",
     "evaluate",
+    "flow_input",
     "group_report",
+    "paired_difference_interval",
+    "ratio_interval",
 ]

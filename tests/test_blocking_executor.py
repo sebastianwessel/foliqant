@@ -58,7 +58,7 @@ async def test_timeout_keeps_real_capacity_until_sdk_finishes() -> None:
     try:
         with pytest.raises(ServiceError) as error:
             await executor.run(operation, deadline=asyncio.get_running_loop().time() + 0.05)
-        assert error.value.code == ErrorCode.TIMEOUT
+        assert error.value.code == ErrorCode.REQUEST_TIMEOUT
         assert entered.is_set()
         assert executor.active == 1
     finally:
@@ -182,7 +182,7 @@ async def test_expired_call_does_not_start() -> None:
     try:
         with pytest.raises(ServiceError) as error:
             await executor.run(entered.set, deadline=asyncio.get_running_loop().time() - 1)
-        assert error.value.code == ErrorCode.TIMEOUT
+        assert error.value.code == ErrorCode.REQUEST_TIMEOUT
         assert not entered.is_set()
     finally:
         assert await executor.aclose(timeout=2)

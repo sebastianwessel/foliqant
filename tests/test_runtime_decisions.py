@@ -200,7 +200,7 @@ def test_partial_collections_can_have_strong_support_without_claiming_completene
     ]
 
 
-@pytest.mark.parametrize("reason", ["", "   ", "\n\t", "x" * 401])
+@pytest.mark.parametrize("reason", ["", "   ", "\n\t", "x" * 2001])
 def test_reason_must_be_nonblank_and_bounded(reason):
     raw = _output()
     raw["results"][0]["reason"] = reason

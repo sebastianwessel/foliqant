@@ -83,10 +83,16 @@ async def test_local_otlp_filters_content_and_does_not_follow_redirects(
         assert len(spans) == 4
         by_name = {span.name: span for span in spans}
         assert all(span.trace_id.hex() == "a" * 32 for span in spans)
-        assert by_name["foliqant.workflow"].parent_span_id.hex() == "b" * 16
-        assert by_name["foliqant.flow"].parent_span_id == by_name["foliqant.workflow"].span_id
-        assert by_name["foliqant.step"].parent_span_id == by_name["foliqant.flow"].span_id
-        assert by_name["external.operation"].parent_span_id == by_name["foliqant.step"].span_id
+        assert set(by_name) == {
+            "workflow inbox",
+            "flow triage",
+            "step classify",
+            "external.operation",
+        }
+        assert by_name["workflow inbox"].parent_span_id.hex() == "b" * 16
+        assert by_name["flow triage"].parent_span_id == by_name["workflow inbox"].span_id
+        assert by_name["step classify"].parent_span_id == by_name["flow triage"].span_id
+        assert by_name["external.operation"].parent_span_id == by_name["step classify"].span_id
     finally:
         assert await runtime.aclose(timeout=1)
         await asyncio.to_thread(server.shutdown)

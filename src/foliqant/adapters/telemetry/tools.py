@@ -33,7 +33,8 @@ class ToolTelemetry:
         if type(attempt) is int and 1 <= attempt <= 65536:
             attributes["foliqant.request.attempt"] = attempt
         try:
-            span = self._tracer.start_span("tool", kind=SpanKind.CLIENT, attributes=attributes)
+            name = f"execute_tool {tool}" if "gen_ai.tool.name" in attributes else "execute_tool"
+            span = self._tracer.start_span(name, kind=SpanKind.CLIENT, attributes=attributes)
             token = context_api.attach(trace_api.set_span_in_context(span))
         except Exception:
             pass
@@ -45,7 +46,7 @@ class ToolTelemetry:
                 if isinstance(error, ServiceError)
                 else ErrorCode.CANCELLED
                 if isinstance(error, asyncio.CancelledError)
-                else ErrorCode.TIMEOUT
+                else ErrorCode.REQUEST_TIMEOUT
                 if isinstance(error, TimeoutError)
                 else ErrorCode.DEPENDENCY_FAILURE
             )

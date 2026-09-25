@@ -1,0 +1,8 @@
+type: handler
+handler: check_reference
+input:
+  reference:
+    first_of:
+      - pointer: /payload/form_reference
+      - pointer: /steps/extract/result/account_reference
+    default: null

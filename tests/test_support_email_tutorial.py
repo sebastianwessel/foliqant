@@ -46,8 +46,9 @@ async def test_completed_support_email_keeps_the_full_execution_record() -> None
         )
     ).model_dump(mode="json")
 
-    assert result["payload"] == result["flows"]["finalize"]["result"]
-    assert set(result["flows"]) == {"classify", "billing", "cancellation", "finalize"}
+    # `first_of` projects the branch that ran; no join flow or handler exists.
+    assert result["payload"] == result["flows"]["billing"]["result"]
+    assert set(result["flows"]) == {"classify", "billing", "cancellation"}
     assert result["flows"]["classify"]["steps"]["classify"]["result"]["answer"] == {
         "optionId": "billing"
     }
@@ -85,7 +86,9 @@ async def test_missing_account_reference_stops_before_lookup() -> None:
         mode="json"
     )
     assert result["execution"]["status"] == "needs_review"
-    assert result["payload"] == {"disposition": "needs_review"}
+    # The reviewed branch projects its object output with the declared defaults.
+    assert result["payload"] == {"queue": "billing", "account_reference": None, "reply": None}
+    assert result["transitions"][-1]["route"] == {"kind": "review"}
     assert result["flows"]["billing"]["steps"]["extract"]["result"]["account_reference"] is None
     assert result["flows"]["billing"]["steps"]["require_reference"]["status"] == "needs_review"
     assert result["flows"]["billing"]["steps"]["lookup"]["status"] == "skipped"

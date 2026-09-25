@@ -171,7 +171,8 @@ A partial collection can have strong support when both its supported subset and
 its remaining obstacle are clear. Whether a particular assessment deserves a
 rating is evaluated against reviewed gold; JSON validation alone cannot decide it.
 
-Each result also requires a nonblank `reason` of at most 400 characters. Aim for
+Each result also requires a nonblank `reason`. The runtime instructions ask for
+at most 400 characters, and the result accepts up to 2000. Aim for
 one concise sentence explaining the applied criterion, relevant facts, and any
 decisive limitation. For example:
 

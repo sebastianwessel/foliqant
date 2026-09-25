@@ -90,7 +90,7 @@ def _core(flows=(), transitions=()):
     ],
 )
 def test_flow_presence_matches_step_rules_without_selection(status, fields, valid):
-    raw = {"status": status, "steps": {}, **fields}
+    raw = {"status": status, "steps": {}, "attempt_count": int(status != "skipped"), **fields}
     if valid:
         parsed = FlowResult.model_validate(raw, strict=True)
         assert ("result" in parsed.model_dump(mode="json")) == ("result" in fields)
@@ -106,7 +106,9 @@ def test_flow_presence_matches_step_rules_without_selection(status, fields, vali
 )
 def test_transition_requires_one_present_nonnull_target(fields):
     with pytest.raises(ValidationError):
-        TransitionResult.model_validate({"source": "first", "reason": "completed", **fields})
+        TransitionResult.model_validate(
+            {"source": "first", "reason": "completed", "route": {"kind": "direct"}, **fields}
+        )
 
 
 def test_public_mapping_preserves_nested_records_without_flattened_alias():
@@ -131,9 +133,15 @@ def test_public_mapping_preserves_nested_records_without_flattened_alias():
     assert result["flows"]["second"]["result"] == "Grüße"
     assert result["flows"]["first"]["steps"]["shared"] == {"status": "completed", "result": None}
     assert result["transitions"] == [
-        {"source": "first", "reason": "completed", "flow": "second"},
-        {"source": "second", "reason": "completed", "outcome": "completed"},
+        {"source": "first", "reason": "completed", "flow": "second", "route": {"kind": "direct"}},
+        {
+            "source": "second",
+            "reason": "completed",
+            "outcome": "completed",
+            "route": {"kind": "direct"},
+        },
     ]
+    assert result["flows"]["first"]["attempt_count"] == 1
 
 
 @pytest.mark.parametrize("duplicate", ["flow", "step"])
@@ -269,7 +277,7 @@ def _deployment(tmp_path, *, second_handler="echo"):
             {
                 "name": "workflow",
                 "start": "first",
-                "output": {"pointer": "/flows/second/result", "optional": True, "default": None},
+                "output": {"pointer": "/flows/second/result", "default": None},
                 "flows": {
                     "first": {
                         "definition": "../shared/flow.yaml",
@@ -305,7 +313,11 @@ async def test_prepared_application_runs_shared_definition_and_isolated_flow_sco
     registration = HandlerRegistration(
         echo, _frozen({"type": "object"}), _frozen({"type": "string"})
     )
-    prepared = prepare_application(_deployment(tmp_path), handlers={"echo": registration})
+    from handler_contracts import declare
+
+    prepared = prepare_application(
+        declare(_deployment(tmp_path), {"echo": registration}), handlers={"echo": registration}
+    )
     assert calls == []
     async with open_application(prepared, environment={}) as app:
         envelope = Envelope(payload={"message": "Grüße"})
@@ -338,8 +350,12 @@ def test_preparation_checks_handler_effects_in_every_flow(tmp_path):
         "echo": HandlerRegistration(operation, _frozen({}), _frozen({})),
         "write": HandlerRegistration(operation, _frozen({}), _frozen({}), effect="write"),
     }
+    from handler_contracts import declare
+
     with pytest.raises(CompilationError):
-        prepare_application(_deployment(tmp_path, second_handler="write"), handlers=handlers)
+        prepare_application(
+            declare(_deployment(tmp_path, second_handler="write"), handlers), handlers=handlers
+        )
 
 
 def test_invalid_deployment_reports_the_actual_configuration_filename(tmp_path):

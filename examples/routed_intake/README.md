@@ -23,7 +23,9 @@ config/routed_intake/
 `workflow.yaml` matches `/flows/classify/result` exactly. `billing` and
 `cancellation` are the only cases, and an unmatched result ends in
 `needs_review`. Each branch receives only the original message and calls a
-read-only handler registered in `handlers.py`.
+read-only handler. The handlers' contracts are declared under `handlers` in
+`config/settings.yaml` (schemas in `config/shared/handler_contracts/`); `handlers.py` only
+registers the callables, so `foliqant validate` works without Python.
 
 Run the complete route with local scripted model output:
 

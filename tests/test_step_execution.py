@@ -88,7 +88,7 @@ async def test_step_isolation_uses_explicit_inputs_and_returns_measurements(tmp_
     async def execute(step, inputs, context):
         calls.append((context.flow_id, step.name))
         assert inputs["message"] == "resolved golden input"
-        ticket = await context.budget.start_model_request()
+        ticket = await context.budget.start_model_request("test-model")
         await context.budget.finish_model_request(ticket, TokenUsage(12, 3))
         return StepOutcome(freeze_json({"label": "request_information"}))
 
@@ -137,7 +137,7 @@ async def test_failed_step_keeps_measured_attempts_and_skipped_steps_unknown(tmp
     )
 
     async def execute(step, inputs, context):
-        await context.budget.start_model_request()
+        await context.budget.start_model_request("test-model")
         raise ServiceError(ErrorCode.INVALID_OUTPUT)
 
     app = WorkflowApplication({"inbox": _runner(plan, execute)})
@@ -192,5 +192,5 @@ async def test_isolated_step_deadline_is_enforced(tmp_path: Path):
     result = await configured.run_step(
         "main", "first", accept_envelope(Envelope(payload={}), Identity()), identity=Identity()
     )
-    assert result.status == "failed" and result.error.code == ErrorCode.TIMEOUT
+    assert result.status == "failed" and result.error.code == ErrorCode.RUN_TIMEOUT
     assert dict(dict(result.flows)["main"].steps)["first"].elapsed_seconds >= 0.01

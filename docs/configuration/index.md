@@ -49,6 +49,15 @@ config/
       <step>/
         step.md
         output.schema.json
+  shared/
+    flows/
+      <flow>/
+        flow.yaml
+    steps/
+      <step>.step.md
+    handler_contracts/
+      <handler>.input.json
+      <handler>.output.json
 ```
 
 A step can instead use `<step>.step.md` or `<step>.step.yaml` directly beside
@@ -63,6 +72,21 @@ Paths are resolved from the file that declares them. In this tree,
 `input.schema.json` is relative to `workflow.yaml`, `<flow>/flow.yaml` is
 relative to `workflow.yaml`, and `output.schema.json` is relative to the step
 definition.
+
+## Organise shared definitions
+
+Keep everything that is not a workflow in one `shared/` directory beside the workflows.
+Discovery never treats it as a workflow, because it has no `workflow.yaml` of its own.
+
+| Directory | Holds | Referenced from |
+| --- | --- | --- |
+| `shared/flows/<flow>/` | Flow definitions used by several workflows | `definition:` of a workflow's flow entry, relative to `workflow.yaml` (`../shared/flows/<flow>/flow.yaml`) |
+| `shared/steps/` | Step definitions used by several flows | `definition:` of a step entry, relative to `flow.yaml` (`../../shared/steps/<step>.step.md`) |
+| `shared/handler_contracts/` | Input and output schemas of [handler steps](../steps/handler.md) | `handlers.<name>.input_schema` / `output_schema` in `settings.yaml`, relative to the settings file |
+
+Create only the directories you need.
+A definition used by a single workflow stays inside that workflow's own tree.
+A top-level directory other than `shared/` that has no `workflow.yaml` is a sign that something belongs under `shared/` instead.
 
 ## Understand discovery, names, and paths
 
@@ -248,6 +272,9 @@ print(plan.name, plan.start, plan.revision)
 Preparation checks contracts, local paths and schemas, routes, binding scopes,
 step order, and declared adapter capabilities. It does not read `.env`, test
 credentials, contact endpoints, or establish model quality and prompt safety.
+Pass `strict=True` at application startup so warnings fail too; see [what the
+compiler guarantees](validation.md) for every check and how problems are
+reported.
 Compilation errors identify a safe file location, field, reason, and corrective
 hint without echoing authored values.
 

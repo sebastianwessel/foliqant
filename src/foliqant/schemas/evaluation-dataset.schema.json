@@ -49,17 +49,37 @@
     },
     "GoldExpectation": {
       "additionalProperties": false,
-      "description": "An explicit assertion over an ExecutionResult JSON pointer.",
+      "description": "An explicit assertion over an ExecutionResult JSON pointer.\n\n``each`` projects every item of an array result through a relative pointer;\n``absent_as_null`` treats an absent value inside an executed owner as null.",
       "properties": {
+        "absent_as_null": {
+          "default": false,
+          "title": "Absent As Null",
+          "type": "boolean"
+        },
         "comparison": {
           "default": "exact",
           "enum": [
             "exact",
             "set",
+            "one_of",
+            "text",
+            "contains",
             "source_span"
           ],
           "title": "Comparison",
           "type": "string"
+        },
+        "each": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Each"
         },
         "expected": {
           "$ref": "#/$defs/JsonValue"
@@ -144,12 +164,39 @@
     },
     "MetricConfig": {
       "additionalProperties": false,
-      "description": "Optional metric over a declared, ordered category catalog.",
+      "description": "Optional metric over a declared, ordered category or field catalog.",
       "properties": {
+        "each": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Each"
+        },
+        "expectation": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expectation"
+        },
         "kind": {
           "enum": [
             "classification",
-            "multilabel"
+            "multilabel",
+            "fields"
           ],
           "title": "Kind",
           "type": "string"

@@ -85,7 +85,7 @@ def test_internal_event_only_emits_typed_allowed_fields() -> None:
         step="SECRET_STEP",
         duration_seconds=1.25,
         count=3,
-        error_code=ErrorCode.TIMEOUT,
+        error_code=ErrorCode.REQUEST_TIMEOUT,
         trace_id="a" * 32,
         span_id="b" * 16,
     )
@@ -95,7 +95,7 @@ def test_internal_event_only_emits_typed_allowed_fields() -> None:
         "service": "service",
         "duration_seconds": 1.25,
         "count": 3,
-        "error_code": "timeout",
+        "error_code": "request_timeout",
         "trace_id": "a" * 32,
         "span_id": "b" * 16,
     }
@@ -117,7 +117,7 @@ def test_unknown_fields_and_non_enum_error_codes_never_escape() -> None:
     record = logging.LogRecord("test", logging.WARNING, "", 0, LogEvent.RUN_FAILED, (), None)
     record._foliqant_fields = {
         "payload": {"nested": Hostile()},
-        "error_code": "timeout",
+        "error_code": "request_timeout",
         "trace_id": "0" * 32,
         "span_id": "B" * 16,
         "service": Hostile(),

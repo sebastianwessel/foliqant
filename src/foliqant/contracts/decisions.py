@@ -34,7 +34,11 @@ from foliqant.decisions.contracts import (
 type EvidenceStrength = Literal["limited", "strong"]
 """Supplied support for the whole assessment, including a justified abstention."""
 
-Reason = Annotated[str, StringConstraints(strict=True, min_length=1, max_length=400, pattern=r"\S")]
+#: The runtime instructions ask for a concise reason of at most 400 characters; the
+#: contract accepts up to 2000 so that a slightly longer rationale is not a failure.
+Reason = Annotated[
+    str, StringConstraints(strict=True, min_length=1, max_length=2000, pattern=r"\S")
+]
 
 
 class RequestUnit(ContractModel):

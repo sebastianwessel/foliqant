@@ -11,6 +11,24 @@ from urllib.parse import unquote, urlsplit
 
 from foliqant.cli import _CliFailure
 from foliqant.cli import _parser as runtime_parser
+from foliqant.compiler import CompilationError
+from foliqant.compiler._loader import load_yaml
+
+# Constructs that no longer exist; documentation must show the current contract.
+_REMOVED_KEYS = frozenset({"optional", "route_key"})
+
+
+def _removed_keys(value: object) -> set[str]:
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in _REMOVED_KEYS:
+                found.add(str(key))
+            found |= _removed_keys(item)
+    elif isinstance(value, list):
+        for item in value:
+            found |= _removed_keys(item)
+    return found
 
 
 def main() -> int:
@@ -80,6 +98,15 @@ def main() -> int:
                         failures.append(
                             f"{path.relative_to(root)}: example arguments do not match CLI"
                         )
+        for block in re.findall(r"```yaml\n(.*?)```", text, flags=re.DOTALL):
+            # Every YAML snippet parses with the strict compiler loader.
+            try:
+                document = load_yaml(block, relative_path=path.name)
+            except CompilationError:
+                failures.append(f"{path.relative_to(root)}: YAML example does not parse")
+                continue
+            for key in sorted(_removed_keys(document)):
+                failures.append(f"{path.relative_to(root)}: YAML example uses removed `{key}`")
         if re.search(r"/Users/[^/]+/", text):
             failures.append(f"{path.relative_to(root)}: author-specific filesystem path")
     for missing in sorted(package_commands - documented_package):

@@ -1,0 +1,48 @@
+{
+  "$defs": {
+    "AccountRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "account_reference": {
+          "title": "Account Reference",
+          "type": "string"
+        },
+        "plan": {
+          "title": "Plan",
+          "type": "string"
+        },
+        "renewal_date": {
+          "title": "Renewal Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account_reference",
+        "plan",
+        "renewal_date"
+      ],
+      "title": "AccountRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "queue": {
+      "enum": [
+        "billing",
+        "cancellation"
+      ],
+      "title": "Queue",
+      "type": "string"
+    },
+    "account": {
+      "$ref": "#/$defs/AccountRecord"
+    }
+  },
+  "required": [
+    "queue",
+    "account"
+  ],
+  "title": "PreparationInput",
+  "type": "object"
+}

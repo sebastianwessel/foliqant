@@ -22,18 +22,27 @@ from foliqant.contracts.execution import ExecutionResult, to_execution_result
 from foliqant.contracts.identifiers import Id
 from foliqant.contracts.models import ModelConfig, ModelProfiles
 from foliqant.core.admission import CapacityLimiter
+from foliqant.core.conditions import describe_condition
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.execution import StepOutcome
 from foliqant.core.identity import Identity
 from foliqant.core.json import FrozenObject
-from foliqant.core.plan import HandlerStepPlan, McpStepPlan
+from foliqant.core.plan import HandlerStepPlan, MatchRoutingPlan, McpStepPlan
 from foliqant.core.runner import WorkflowRunner
 from foliqant.environment import EnvironmentResolver
 from foliqant.ports.execution import OperationStep, StepContext, StepExecutor
 from foliqant.ports.observation import ExecutionObserver, TraceContext
-from foliqant.settings import PreparedApplication, load_environment, prepare_application
+from foliqant.settings import (
+    PreparedApplication,
+    load_environment,
+    prepare_application,
+    require_handler_registrations,
+    require_no_warnings,
+)
 
 if TYPE_CHECKING:
+    from opentelemetry.trace import TracerProvider
+
     from foliqant.adapters.mcp.auth import McpCredentialProvider
     from foliqant.adapters.mcp.runtime import ToolAuthorizer
     from foliqant.adapters.telemetry.models import ModelTelemetry
@@ -55,11 +64,18 @@ class ModelFactory(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class RuntimePlugins:
-    """Trusted Python extension points; configuration never imports executable code."""
+    """Trusted Python extension points; configuration never imports executable code.
+
+    ``tracer_provider`` is a host-owned OpenTelemetry tracer provider. With it,
+    runtime spans join the host's provider: the runtime creates no provider or
+    exporter of its own, never installs globals and never shuts the host
+    provider down.
+    """
 
     model_factory: ModelFactory = open_model_bindings
     mcp_credentials: Mapping[str, McpCredentialProvider] = field(default_factory=dict)
     tool_authorizer: ToolAuthorizer | None = None
+    tracer_provider: TracerProvider | None = None
 
 
 class _RoutedExecutor:
@@ -317,6 +333,9 @@ async def open_application(
     from foliqant.lifecycle import drain_before_close
 
     selected = plugins or RuntimePlugins()
+    # A strict preparation stays strict: warnings added later still refuse activation.
+    require_no_warnings(prepared)
+    require_handler_registrations(prepared)
     credentials = load_environment(prepared.source, environment)
     resolver = EnvironmentResolver(credentials)
     config = resolver.resolve(prepared.config)
@@ -328,50 +347,97 @@ async def open_application(
     observer: ExecutionObserver | None = None
     model_observation: ModelTelemetry | None = None
     telemetry = None
+    tracer_provider: TracerProvider | None = None
+    tool_labels = None
     application: WorkflowApplication | None = None
+    host_provider = selected.tracer_provider
+    if host_provider is not None and install_global_telemetry:
+        # A host that owns its provider also owns the process-global installation.
+        raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
     try:
         async with AsyncExitStack() as stack:
-            if config.telemetry is not None:
+            if config.telemetry is not None or host_provider is not None:
+                from opentelemetry.metrics import MeterProvider, NoOpMeterProvider
+
                 from foliqant.adapters.telemetry.models import ModelTelemetry
                 from foliqant.adapters.telemetry.observation import WorkflowTelemetry
                 from foliqant.adapters.telemetry.privacy import TelemetryLabels
                 from foliqant.adapters.telemetry.runtime import TelemetryRuntime
 
-                labels = TelemetryLabels(
-                    services=frozenset({config.telemetry.service_name}),
-                    workflows=frozenset(prepared.plans),
-                    flows=frozenset(
-                        flow.name for plan in prepared.plans.values() for flow in plan.flows
+                routes = [
+                    route
+                    for plan in prepared.plans.values()
+                    for flow in plan.flows
+                    for route in (flow.transition, flow.on_unresolved)
+                ]
+                # Labels come from resolved configuration: an environment reference
+                # such as `$MODEL_ID` is never a label; its resolved value is.
+                labels, dropped = TelemetryLabels.accepted(
+                    services=(
+                        {config.telemetry.service_name} if config.telemetry is not None else set()
                     ),
-                    steps=frozenset(
+                    workflows=prepared.plans,
+                    flows=(flow.name for plan in prepared.plans.values() for flow in plan.flows),
+                    steps=(
                         step.name
                         for plan in prepared.plans.values()
                         for flow in plan.flows
                         for step in flow.steps
                     ),
-                    models=frozenset(profile.model for profile in prepared._models.values()),
-                    providers=frozenset(
-                        {"openai", "anthropic", "azure", "google", "bedrock", "function"}
+                    models=(
+                        profile.model
+                        for profile in (
+                            effective_models.models.values() if effective_models else ()
+                        )
                     ),
-                    tools=frozenset(
-                        tool for server in config.mcp.values() for tool in server.catalog.tools
+                    providers={"openai", "anthropic", "azure", "google", "bedrock", "function"},
+                    tools=(tool for server in config.mcp.values() for tool in server.catalog.tools),
+                    cases=(
+                        key
+                        for route in routes
+                        if isinstance(route, MatchRoutingPlan)
+                        for key, _ in route.cases
+                    ),
+                    conditions=(
+                        describe_condition(step.when)
+                        for plan in prepared.plans.values()
+                        for flow in plan.flows
+                        for step in flow.steps
+                        if step.when is not None
                     ),
                 )
-                telemetry = TelemetryRuntime.build(
-                    config.telemetry, labels=labels, environment=credentials
-                )
-                if install_global_telemetry:
-                    telemetry.install_global()
-                if telemetry.startup_failures:
-                    _report_incomplete()
+                if dropped:
+                    emit_event(
+                        _LOGGER,
+                        LogEvent.TELEMETRY_LABELS_DROPPED,
+                        level=logging.WARNING,
+                        count=dropped,
+                    )
+                meter_provider: MeterProvider = NoOpMeterProvider()
+                if host_provider is not None:
+                    # Spans join the host provider; its processors and exporters apply.
+                    tracer_provider = host_provider
+                else:
+                    assert config.telemetry is not None
+                    telemetry = TelemetryRuntime.build(
+                        config.telemetry, labels=labels, environment=credentials
+                    )
+                    if install_global_telemetry:
+                        telemetry.install_global()
+                    if telemetry.startup_failures:
+                        _report_incomplete()
+                    tracer_provider = telemetry.tracer_provider
+                    meter_provider = telemetry.meter_provider
+                tool_labels = labels
                 observer = WorkflowTelemetry(
-                    telemetry.tracer_provider,
+                    tracer_provider,
                     labels=labels,
-                    meter_provider=telemetry.meter_provider,
+                    meter_provider=meter_provider,
+                    conditions=config.telemetry.conditions
+                    if config.telemetry is not None
+                    else False,
                 )
-                model_observation = ModelTelemetry(
-                    telemetry.tracer_provider, telemetry.meter_provider, labels
-                )
+                model_observation = ModelTelemetry(tracer_provider, meter_provider, labels)
             models: Mapping[str, ModelBinding] = {}
             if effective_models is not None:
                 models = await stack.enter_async_context(
@@ -379,13 +445,24 @@ async def open_application(
                 )
                 if set(models) != set(effective_models.models):
                     raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+                model_profiles = effective_models.models
+                # Pricing and output retries are configuration, applied the same way
+                # to any model factory.
                 models = {
                     alias: replace(
                         binding,
-                        admission=models[prepared._model_admission_groups[alias]].admission,
+                        admission=(
+                            models[prepared._model_admission_groups[alias]].admission
+                            if alias in prepared._model_admission_groups
+                            else binding.admission
+                        ),
+                        pricing=(
+                            pricing.plan()
+                            if (pricing := model_profiles[alias].pricing) is not None
+                            else None
+                        ),
+                        output_retries=model_profiles[alias].output_retries,
                     )
-                    if alias in prepared._model_admission_groups
-                    else binding
                     for alias, binding in models.items()
                 }
             mcp_runtime = None
@@ -400,7 +477,7 @@ async def open_application(
                     profiles, credential_providers=dict(selected.mcp_credentials)
                 )
                 authorizer = selected.tool_authorizer or _DeclaredReadAuthorizer(prepared)
-                if telemetry is not None:
+                if tracer_provider is not None and tool_labels is not None:
                     from foliqant.adapters.telemetry.observation import trace_carrier
                     from foliqant.adapters.telemetry.tools import ToolTelemetry
 
@@ -409,7 +486,7 @@ async def open_application(
                         factory,
                         authorizer,
                         trace_carrier=trace_carrier,
-                        telemetry=ToolTelemetry(telemetry.tracer_provider, labels=labels),
+                        telemetry=ToolTelemetry(tracer_provider, labels=tool_labels),
                     )
                 else:
                     mcp_runtime = McpRuntime(profiles, factory, authorizer)

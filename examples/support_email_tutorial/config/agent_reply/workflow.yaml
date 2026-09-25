@@ -14,5 +14,4 @@ flows:
       outcome: needs_review
 output:
   pointer: /flows/answer/result
-  optional: true
   default: null

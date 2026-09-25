@@ -30,8 +30,50 @@ Each check outcome has a specific meaning:
 | `skipped` | The flow or step owning the path did not execute |
 | `error` | Execution, result validation, or custom scoring prevented comparison |
 
-Inspect the case's safe `error_code`, workflow status, transitions, then its flow
-and step records. Reports never retain raw exception text.
+A case whose run failed is an execution error: its checks have the outcome
+`error`, it counts in the failure rate, and it is never a gold mismatch, even
+when gold expected the failure. Inspect the case's safe `error_code` and
+`error_reason`, workflow status, transitions, then its flow and step records
+(each step record also has `error_code` and `error_reason`). Reports never
+retain raw exception text.
+
+## Break failures down by code
+
+`failures_by_code` counts the failed, cancelled and error attempts behind the
+failure rate by their safe error code, most frequent first, and
+`failures_by_reason` counts those with a content-free
+[failure reason](../integration/errors.md#failure-reasons):
+
+```json
+{
+  "failure_rate": 0.72,
+  "failures_by_code": {"output_limit_reached": 68, "invalid_output": 10, "request_timeout": 5},
+  "failures_by_reason": {"reasoning_consumed_budget": 68, "schema_violation": 10}
+}
+```
+
+`failures_by_code` also appears on every flow and step summary (counting failed
+and cancelled records, with each record's `error_code`), on each
+[group](#group-attempts), in the content-free summary that `foliqant evaluate`
+prints, and as `baseline_failures_by_code` and `candidate_failures_by_code` in
+a comparison's `execution` block. `failures_by_reason` appears on the report,
+on every step summary and in the CLI summary. The code names the fix:
+`output_limit_reached` means the model used its whole output budget, and its
+reason says whether reasoning consumed it (`reasoning_consumed_budget`: raise
+`max_tokens` or lower the reasoning effort) or the answer itself was too long
+(`answer_exceeded_budget`)
+([output budget](../steps/llm.md#set-the-output-budget-and-reasoning-effort));
+`request_timeout` and `run_timeout` point at deadlines; the limit codes
+(`step_limit_reached`, `model_request_limit_reached`, `iteration_limit_reached`,
+`tool_call_limit_reached`) at execution limits; `invalid_output` at
+instructions, schemas or the model's structured-output support. See
+[error codes](../integration/errors.md#canonical-error-codes).
+
+Step summaries also report `output_retries`, the model requests that asked for
+a corrected invalid output, and `output_retry_recoveries`, the invocations that
+succeeded after at least one such correction. Many recoveries mean the model
+often needs a second answer: clarify instructions or simplify the schema before
+relying on [output retries](../integration/errors.md#output-retries).
 
 ## Follow the requested and observed scope
 
@@ -87,6 +129,36 @@ For imbalanced data, inspect per-label recall and source support before relying
 on one aggregate. Macro treats every declared label equally; micro weights every
 observed label decision.
 
+## Read field reports
+
+A `fields` metric reports, per field and pooled over fields, the counts of
+`correct_value`, `correct_null`, `hallucinated`, `missed`, `wrong_value` and
+`unavailable`, with `value_support` (value gold) and `null_support` (null gold):
+
+| Measure | Formula |
+| --- | --- |
+| Field accuracy | (correct values + correct nulls) / support |
+| Hallucination rate | hallucinated / null support |
+| Miss rate | missed / value support |
+| `field_accuracy` | pooled field accuracy over every scored field |
+| `macro_field_accuracy` | mean accuracy of the fields with support |
+| `accuracy` | attempts with every gold field correct / supporting attempts |
+
+A correct null is a valid result: the text did not state the value and the
+workflow returned none. Unavailable fields (skipped or failed owners, failed
+runs) remain in support and are never correct.
+
+## Group attempts
+
+`group_report(report, input_pointer=...)` summarizes a detailed report by an
+authored input value, for example `/metadata/split` or `/metadata/language`.
+Scalar values partition the attempts; a missing pointer and a present null are
+separate groups. An array value such as `/metadata/tags` puts each attempt into
+the group of every distinct element (`member: true`), so member groups overlap
+and an empty array joins no group. Each group has the same check, metric,
+latency and usage summaries as the report, plus its case pass and failure rates
+and `failures_by_code`.
+
 ## Keep native and fallback measurements separate
 
 For a decision fallback, score at least these distinct claims:
@@ -110,7 +182,10 @@ includes scheduling and scoring and is not provider latency.
 
 Usage summaries preserve known and unknown observations separately. A complete
 total is `null` when any contributing value is unknown; a known subtotal remains
-available for diagnosis. Unknown is never rewritten as zero. Cache-token counts
+available for diagnosis. Unknown is never rewritten as zero. The `cost` summary
+sums the configured cost estimates the same way: an attempt without a model
+request costs zero, while an unpriced profile, an incomplete estimate or an
+execution error leaves the attempt's cost unknown. Cache-token counts
 are provider-reported accounting and do not by themselves prove lower cost or
 latency.
 
@@ -123,11 +198,22 @@ Offline comparison reports per-attempt improvements, regressions, mixed changes,
 and unchanged results, plus aggregate deltas. It verifies compatible inputs,
 gold, targets, scorers, metrics, and attempts before comparing. A successful
 comparison command means the comparison was produced, not that a candidate met
-a release threshold or statistical test.
+a release threshold.
+
+Every rate delta (`case_pass.rate_delta`, `checks.pass_rate_delta`, each
+metric's `accuracy_delta` and, for field metrics, `field_accuracy_delta`)
+carries a 95% paired percentile bootstrap interval (`..._interval`: `low`,
+`high`, `level`, `resamples`, `excludes_zero`). It resamples the authored source
+cases with replacement (repeats stay with their source) for both reports at
+once, with a fixed seed. An interval that includes zero means the authored cases
+do not distinguish the variants; one that excludes zero still says nothing about
+cases the dataset does not cover or about label errors. Usage deltas include
+the cost summary.
 
 Use this diagnosis order:
 
-1. Separate operational errors from valid reviews and gold disagreement.
+1. Separate operational errors from valid reviews and gold disagreement, and
+   read `failures_by_code` and `failures_by_reason` before changing prompts.
 2. Compare workflow results with matching flow and step suites.
 3. If isolation passes but the workflow fails, inspect input bindings,
    projections, and routes.

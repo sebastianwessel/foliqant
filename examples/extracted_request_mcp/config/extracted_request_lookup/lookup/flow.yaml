@@ -1,6 +1,5 @@
 output:
   pointer: /steps/lookup/result
-  optional: true
   default: null
 steps:
 - lookup

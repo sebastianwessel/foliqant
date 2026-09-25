@@ -15,10 +15,28 @@ from examples.support_triage.run import open_configured
 from foliqant import Envelope
 from foliqant.contracts.decoding import MAX_ENVELOPE_BYTES, decode_envelope
 from foliqant.contracts.execution import ExecutionResult
-from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.core.errors import TIMEOUT_CODES, ErrorCode, ServiceError
 
 type SupportRun = Callable[[Envelope], Awaitable[ExecutionResult]]
 type RunContext = Callable[[], AbstractAsyncContextManager[SupportRun]]
+
+
+def failure_status(code: ErrorCode, *, retryable: bool) -> int:
+    """This example's HTTP status of a failure; a failed run is never a 2xx response.
+
+    Invalid or unauthorized requests are client errors. A failure the boundary
+    marked retryable (capacity, rate limit, overload) is 503, a timeout 504;
+    every other failure of the run, including model and tool failures, is 500.
+    """
+    if code is ErrorCode.INVALID_INPUT:
+        return 400
+    if code is ErrorCode.FORBIDDEN:
+        return 403
+    if code in TIMEOUT_CODES:
+        return 504
+    if retryable or code is ErrorCode.CAPACITY_EXCEEDED:
+        return 503
+    return 500
 
 
 def create_app(run_context: RunContext = open_configured) -> Starlette:
@@ -50,9 +68,16 @@ def create_app(run_context: RunContext = open_configured) -> Starlette:
                 raise ServiceError(ErrorCode.INVALID_INPUT)
             run_support = cast(SupportRun, request.app.state.run_support)
             result = await run_support(envelope)
+            failure = result.execution.error
+            if result.execution.status in {"failed", "cancelled"} and failure is not None:
+                # A technical failure is a server error, not a business result.
+                status = failure_status(failure.code, retryable=failure.retryable)
+                return JSONResponse(result.model_dump(mode="json"), status_code=status)
             return JSONResponse(result.model_dump(mode="json"))
         except ServiceError as error:
-            status = 400 if error.code in {ErrorCode.INVALID_INPUT, ErrorCode.FORBIDDEN} else 503
+            status = failure_status(error.code, retryable=error.retryable)
+            if error.code is ErrorCode.FORBIDDEN:
+                status = 400  # Identity claims in the body are malformed input here.
             return JSONResponse(
                 {"error": {"code": error.code.value, "message": str(error)}}, status_code=status
             )

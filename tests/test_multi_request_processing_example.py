@@ -158,18 +158,18 @@ def test_explain_distinguishes_callable_flows_without_disclosing_items() -> None
     from examples.multi_request_processing.policy import HANDLERS
     from examples.multi_request_processing.run import CONFIG_PATH
 
-    from foliqant import prepare_application
-    from foliqant.cli import _plan_report
+    from foliqant import explain, prepare_application
 
     prepared = prepare_application(CONFIG_PATH, handlers=HANDLERS)
-    report = _plan_report(prepared.plans["intake"], prepared)
-    flows = {flow["name"]: flow for flow in report["flows"]}  # type: ignore[union-attr]
+    report = explain(prepared, "intake").to_json()
+    flows = {flow["id"]: flow for flow in report["flows"]}  # type: ignore[index, union-attr]
     assert flows["lookup_status"]["callable"] is True
     assert "transition" not in flows["lookup_status"]
     assert flows["process"]["steps"] == [
         {
-            "name": "requests",
+            "id": "requests",
             "type": "flow_collection",
+            "items": {"pointer": "/payload/items"},
             "flows": ["lookup_status", "prepare_guidance"],
             "max_items": 8,
         }

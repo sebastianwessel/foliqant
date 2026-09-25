@@ -34,6 +34,24 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "anthropic",
           "title": "Provider",
@@ -47,7 +65,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -103,7 +121,7 @@
           "title": "Effort"
         },
         "max_tokens": {
-          "default": 4096,
+          "default": 32768,
           "maximum": 1048576,
           "minimum": 1,
           "title": "Max Tokens",
@@ -240,6 +258,24 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "azure_openai",
           "title": "Provider",
@@ -253,7 +289,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -317,6 +353,24 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "bedrock",
           "title": "Provider",
@@ -336,7 +390,7 @@
           "type": "string"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -578,6 +632,24 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "openai_compatible",
           "title": "Provider",
@@ -591,7 +663,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -841,6 +913,9 @@
                 },
                 {
                   "$ref": "#/$defs/SourceLiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/SourceFirstOfBinding"
                 }
               ]
             }
@@ -893,6 +968,37 @@
       "title": "FallbackCategory",
       "type": "object"
     },
+    "FirstOfBinding": {
+      "additionalProperties": false,
+      "description": "The first member that resolves to a non-null value, otherwise ``default``.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "first_of": {
+          "items": {
+            "$ref": "#/$defs/PointerMember"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "First Of",
+          "type": "array"
+        }
+      },
+      "required": [
+        "first_of"
+      ],
+      "title": "FirstOfBinding",
+      "type": "object"
+    },
     "FlowCollectionStepAuthoring": {
       "additionalProperties": false,
       "description": "Invoke allowlisted callable flows sequentially from explicit item inputs.",
@@ -913,6 +1019,9 @@
             },
             {
               "$ref": "#/$defs/LiteralBinding"
+            },
+            {
+              "$ref": "#/$defs/FirstOfBinding"
             }
           ],
           "title": "Items"
@@ -943,7 +1052,7 @@
       "description": "Common sampling options; absence means use the configured provider default.",
       "properties": {
         "max_tokens": {
-          "default": 4096,
+          "default": 32768,
           "maximum": 1048576,
           "minimum": 1,
           "title": "Max Tokens",
@@ -1016,6 +1125,24 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "google",
           "title": "Provider",
@@ -1029,7 +1156,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -1079,6 +1206,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1156,6 +1286,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1170,7 +1303,7 @@
           "type": "string"
         },
         "max_iterations": {
-          "default": 4,
+          "default": 8,
           "maximum": 1024,
           "minimum": 1,
           "title": "Max Iterations",
@@ -1277,6 +1410,51 @@
       "title": "LlmStepAuthoring",
       "type": "object"
     },
+    "LongContextPricing": {
+      "additionalProperties": false,
+      "description": "Prices for every token of a request whose input exceeds the threshold.",
+      "properties": {
+        "cached_input_per_million": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Per Million"
+        },
+        "input_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Input Per Million",
+          "type": "number"
+        },
+        "output_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Output Per Million",
+          "type": "number"
+        },
+        "threshold_input_tokens": {
+          "maximum": 100000000,
+          "minimum": 1,
+          "title": "Threshold Input Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "threshold_input_tokens",
+        "input_per_million",
+        "output_per_million"
+      ],
+      "title": "LongContextPricing",
+      "type": "object"
+    },
     "McpStepAuthoring": {
       "additionalProperties": false,
       "properties": {
@@ -1289,6 +1467,9 @@
                 },
                 {
                   "$ref": "#/$defs/LiteralBinding"
+                },
+                {
+                  "$ref": "#/$defs/FirstOfBinding"
                 }
               ]
             }
@@ -1452,9 +1633,88 @@
       "title": "ModelOptionOverrides",
       "type": "object"
     },
+    "ModelPricing": {
+      "additionalProperties": false,
+      "description": "Configured prices used to estimate cost; an estimate, not a provider invoice.\n\nExample (GPT-5.6 Terra list prices at the time of writing; prices change)::\n\n    pricing:\n      currency: USD\n      input_per_million: 2.00\n      cached_input_per_million: 0.20\n      output_per_million: 12.00\n      long_context:\n        threshold_input_tokens: 272000\n        input_per_million: 4.00\n        cached_input_per_million: 0.40\n        output_per_million: 18.00",
+      "properties": {
+        "cached_input_per_million": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Per Million"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "input_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Input Per Million",
+          "type": "number"
+        },
+        "long_context": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LongContextPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output_per_million": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Output Per Million",
+          "type": "number"
+        },
+        "reasoning_billed_as": {
+          "default": "output",
+          "enum": [
+            "output",
+            "input"
+          ],
+          "title": "Reasoning Billed As",
+          "type": "string"
+        },
+        "reference_model": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Model"
+        }
+      },
+      "required": [
+        "currency",
+        "input_per_million",
+        "output_per_million"
+      ],
+      "title": "ModelPricing",
+      "type": "object"
+    },
     "ModelProfileOverride": {
       "additionalProperties": false,
-      "description": "Reuse a deployment profile and replace its model ID or generation options.\n\nExample: ``{profile: local, options: {max_tokens: 800}}`` retains the\nprofile's provider, credentials, capabilities, timeout, and shared admission.",
+      "description": "Reuse a deployment profile and replace its model ID, options or pricing.\n\nExample: ``{profile: local, options: {max_tokens: 800}}`` retains the\nprofile's provider, credentials, capabilities, timeout, and shared admission.\n``pricing`` replaces the profile's pricing and ``null`` removes it. The\nprofile's pricing describes its own model: an override that sets another\n``model`` does not inherit it.",
       "properties": {
         "model": {
           "anyOf": [
@@ -1472,6 +1732,31 @@
         },
         "options": {
           "$ref": "#/$defs/ModelOptionOverrides"
+        },
+        "output_retries": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Retries"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "profile": {
           "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
@@ -1665,6 +1950,24 @@
           "title": "Output Mode",
           "type": "string"
         },
+        "output_retries": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Output Retries",
+          "type": "integer"
+        },
+        "pricing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "provider": {
           "const": "openai",
           "title": "Provider",
@@ -1678,7 +1981,7 @@
           "type": "integer"
         },
         "request_timeout": {
-          "default": 60.0,
+          "default": 300.0,
           "exclusiveMinimum": 0,
           "maximum": 3600,
           "title": "Request Timeout",
@@ -1716,7 +2019,7 @@
       "additionalProperties": false,
       "properties": {
         "max_tokens": {
-          "default": 4096,
+          "default": 32768,
           "maximum": 1048576,
           "minimum": 1,
           "title": "Max Tokens",
@@ -1888,6 +2191,7 @@
     },
     "PointerBinding": {
       "additionalProperties": false,
+      "description": "An RFC 6901 pointer; a declared ``default`` makes the binding optional.",
       "properties": {
         "default": {
           "anyOf": [
@@ -1900,11 +2204,6 @@
           ],
           "default": null
         },
-        "optional": {
-          "default": false,
-          "title": "Optional",
-          "type": "boolean"
-        },
         "pointer": {
           "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
           "title": "Pointer",
@@ -1915,6 +2214,22 @@
         "pointer"
       ],
       "title": "PointerBinding",
+      "type": "object"
+    },
+    "PointerMember": {
+      "additionalProperties": false,
+      "description": "One `first_of` candidate; defaults belong to the enclosing binding.",
+      "properties": {
+        "pointer": {
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*$",
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "PointerMember",
       "type": "object"
     },
     "PredicateQuestion": {
@@ -2102,24 +2417,24 @@
     },
     "RetryConfig": {
       "additionalProperties": false,
-      "description": "Retries are disabled by default; max_attempts includes the first request.",
+      "description": "Repeat transient provider failures; ``max_attempts`` includes the first request.\n\nThe default of four attempts is the first request plus up to three retries,\nwith capped exponential full-jitter backoff that honours a valid Retry-After\nup to ``max_delay_seconds`` and never outlasts the request's deadline.",
       "properties": {
         "initial_delay_seconds": {
-          "default": 0.25,
+          "default": 1.0,
           "maximum": 60,
           "minimum": 0,
           "title": "Initial Delay Seconds",
           "type": "number"
         },
         "max_attempts": {
-          "default": 1,
+          "default": 4,
           "maximum": 8,
           "minimum": 1,
           "title": "Max Attempts",
           "type": "integer"
         },
         "max_delay_seconds": {
-          "default": 5.0,
+          "default": 30.0,
           "maximum": 300,
           "minimum": 0,
           "title": "Max Delay Seconds",
@@ -2153,6 +2468,46 @@
         "schema"
       ],
       "title": "SchemaOutput",
+      "type": "object"
+    },
+    "SourceFirstOfBinding": {
+      "additionalProperties": false,
+      "description": "The first present decision source candidate with explicit rendering.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "first_of": {
+          "items": {
+            "$ref": "#/$defs/PointerMember"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "First Of",
+          "type": "array"
+        },
+        "format": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "required": [
+        "first_of"
+      ],
+      "title": "SourceFirstOfBinding",
       "type": "object"
     },
     "SourceLiteralBinding": {
@@ -2201,11 +2556,6 @@
           ],
           "title": "Format",
           "type": "string"
-        },
-        "optional": {
-          "default": false,
-          "title": "Optional",
-          "type": "boolean"
         },
         "pointer": {
           "pattern": "^(?:/(?:[^~/]|~[01])*)*$",

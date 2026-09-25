@@ -12,13 +12,14 @@ from foliqant.core.execution import TokenUsage
 async def test_reserves_failed_attempt_and_does_not_invent_usage() -> None:
     budget = StepBudget(model_requests=1, tool_calls=1)
     assert budget.snapshot().tokens == TokenUsage.zero()
-    await budget.start_model_request()
+    await budget.start_model_request("test-model")
     await budget.start_tool_call()
     with pytest.raises(ServiceError) as error:
-        await budget.start_model_request()
-    assert error.value.code == ErrorCode.BUDGET_EXHAUSTED
-    with pytest.raises(ServiceError):
+        await budget.start_model_request("test-model")
+    assert error.value.code == ErrorCode.MODEL_REQUEST_LIMIT_REACHED
+    with pytest.raises(ServiceError) as error:
         await budget.start_tool_call()
+    assert error.value.code == ErrorCode.TOOL_CALL_LIMIT_REACHED
     snapshot = budget.snapshot()
     assert snapshot.model_requests == snapshot.tool_calls == 1
     assert snapshot.tokens == TokenUsage()
@@ -26,22 +27,22 @@ async def test_reserves_failed_attempt_and_does_not_invent_usage() -> None:
 
 async def test_partial_measurements_aggregate_independently_without_double_counting() -> None:
     budget = StepBudget(model_requests=3, tool_calls=0)
-    first = await budget.start_model_request()
-    second = await budget.start_model_request()
+    first = await budget.start_model_request("test-model")
+    second = await budget.start_model_request("test-model")
     await budget.finish_model_request(first, TokenUsage(20, 10, 5, None, 4))
     await budget.finish_model_request(second, TokenUsage(30, 15, 7, 0, None))
     assert budget.snapshot().tokens == TokenUsage(50, 25, 12, None, None)
     with pytest.raises(ServiceError) as error:
         await budget.finish_model_request(first, TokenUsage.zero())
     assert error.value.code == ErrorCode.CONFLICT
-    await budget.start_model_request()
+    await budget.start_model_request("test-model")
     assert budget.snapshot().tokens == TokenUsage()
 
 
 async def test_concurrent_reservations_never_exceed_budget() -> None:
     budget = StepBudget(model_requests=2, tool_calls=0)
     results = await asyncio.gather(
-        *(budget.start_model_request() for _ in range(20)), return_exceptions=True
+        *(budget.start_model_request("test-model") for _ in range(20)), return_exceptions=True
     )
     assert sorted(value for value in results if isinstance(value, int)) == [1, 2]
     assert sum(isinstance(value, ServiceError) for value in results) == 18
@@ -51,7 +52,7 @@ async def test_concurrent_reservations_never_exceed_budget() -> None:
 @pytest.mark.parametrize("ticket", [0, 2, True])
 async def test_unreserved_usage_is_rejected(ticket: int) -> None:
     budget = StepBudget(model_requests=1, tool_calls=0)
-    await budget.start_model_request()
+    await budget.start_model_request("test-model")
     with pytest.raises(ServiceError):
         await budget.finish_model_request(ticket, TokenUsage.zero())
 
@@ -64,7 +65,7 @@ def test_invalid_token_measurement_is_rejected(value: int) -> None:
 
 async def test_invalid_report_keeps_reserved_attempt_and_unknown_usage() -> None:
     budget = StepBudget(model_requests=1, tool_calls=0)
-    ticket = await budget.start_model_request()
+    ticket = await budget.start_model_request("test-model")
     with pytest.raises(ServiceError) as error:
         await budget.finish_model_request(ticket, object())  # type: ignore[arg-type]
     assert error.value.code == ErrorCode.INVALID_OUTPUT

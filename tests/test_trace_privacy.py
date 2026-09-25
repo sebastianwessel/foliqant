@@ -48,6 +48,7 @@ def _labels() -> TelemetryLabels:
         tools=frozenset({"lookup_invoice"}),
         workflows=frozenset({"invoice_review"}),
         steps=frozenset({"classify"}),
+        flows=frozenset({"triage"}),
     )
 
 
@@ -81,7 +82,7 @@ def test_actual_readable_span_is_cloned_and_sanitized_before_delegate() -> None:
             "foliqant.workflow.name": "invoice_review",
             "foliqant.step.name": "classify",
             "foliqant.outcome": "completed",
-            "error.type": ErrorCode.TIMEOUT.value,
+            "error.type": ErrorCode.RUN_TIMEOUT.value,
             "tenant_id": "tenant-private-123",
             "principal_id": "private.person@example.invalid",
             "http.url": f"https://example.invalid/?token={_SECRET}",
@@ -121,7 +122,7 @@ def test_actual_readable_span_is_cloned_and_sanitized_before_delegate() -> None:
         "foliqant.workflow.name": "invoice_review",
         "foliqant.step.name": "classify",
         "foliqant.outcome": "completed",
-        "error.type": ErrorCode.TIMEOUT.value,
+        "error.type": ErrorCode.RUN_TIMEOUT.value,
     }
     assert dict(safe.resource.attributes) == {"service.name": "foliqant"}
     assert safe.resource.schema_url == ""
@@ -168,14 +169,50 @@ def test_actual_readable_span_is_cloned_and_sanitized_before_delegate() -> None:
             "tools/call lookup_invoice",
         ),
         ("mcp-python-sdk", {"mcp.method.name": _SECRET}, "mcp.operation"),
-        ("foliqant.workflow", {"foliqant.workflow.name": "invoice_review"}, "foliqant.workflow"),
-        ("foliqant.step", {"foliqant.step.name": "classify"}, "foliqant.step"),
+        (
+            "foliqant.workflow",
+            {"foliqant.workflow.name": "invoice_review"},
+            "workflow invoice_review",
+        ),
+        ("foliqant.workflow", {"foliqant.workflow.name": _SECRET}, "workflow"),
+        ("foliqant.step", {"foliqant.step.name": "classify"}, "step classify"),
+        (
+            "foliqant.step",
+            {"foliqant.step.name": "classify", "foliqant.step.kind": "decision"},
+            "step classify (decision)",
+        ),
+        ("foliqant.step", {"foliqant.step.name": _SECRET, "foliqant.step.kind": _SECRET}, "step"),
+        ("foliqant.flow", {"foliqant.flow.name": "triage"}, "flow triage"),
+        (
+            "foliqant.flow",
+            {"foliqant.flow.name": "triage", "foliqant.flow.attempt": 1},
+            "flow triage",
+        ),
+        (
+            "foliqant.flow",
+            {"foliqant.flow.name": "triage", "foliqant.flow.attempt": 3},
+            "flow triage #3",
+        ),
+        (
+            "foliqant.flow",
+            {
+                "foliqant.flow.name": "triage",
+                "foliqant.collection.index": 4,
+                "foliqant.flow.attempt": 2,
+            },
+            "flow triage [item 4] #2",
+        ),
+        (
+            "foliqant.flow",
+            {"foliqant.flow.name": "triage", "foliqant.flow.attempt": 999},
+            "flow triage",
+        ),
         (_SECRET, {"private": _SECRET}, "external.operation"),
     ],
 )
 def test_span_names_are_fixed_by_reviewed_scope_and_operation(
     scope: str,
-    attributes: dict[str, str],
+    attributes: dict[str, str | int],
     expected_name: str,
 ) -> None:
     delegate = RecordingProcessor()
@@ -257,3 +294,39 @@ def test_on_start_never_exposes_mutable_raw_span() -> None:
 def test_invalid_startup_labels_are_rejected(label: str) -> None:
     with pytest.raises(ValueError, match="invalid telemetry label"):
         TelemetryLabels(models=frozenset({label}))
+
+
+@pytest.mark.parametrize(
+    ("finish_reasons", "consumed", "expected"),
+    [
+        (("length",), True, {"gen_ai.response.finish_reasons": ("length",), "consumed": True}),
+        (("stop",), False, {"gen_ai.response.finish_reasons": ("stop",), "consumed": False}),
+        ((_SECRET,), 1, {}),
+        (("length", _SECRET), "true", {}),
+        ((), None, {}),
+    ],
+)
+def test_finish_reasons_and_reasoning_budget_flag_are_allowlisted(
+    finish_reasons: tuple[str, ...], consumed: object, expected: dict[str, object]
+) -> None:
+    raw = ReadableSpan(
+        name="chat",
+        context=_context(1, 2),
+        attributes={
+            "gen_ai.operation.name": "chat",
+            "gen_ai.response.finish_reasons": finish_reasons,
+            **(
+                {"foliqant.response.reasoning_consumed_budget": consumed}
+                if consumed is not None
+                else {}
+            ),
+        },
+        kind=SpanKind.CLIENT,
+    )
+    delegate = RecordingProcessor()
+    SafeSpanProcessor(delegate, _labels()).on_end(raw)
+    attributes = dict(delegate.ended[0].attributes or {})
+    assert attributes.get("gen_ai.response.finish_reasons") == expected.get(
+        "gen_ai.response.finish_reasons"
+    )
+    assert attributes.get("foliqant.response.reasoning_consumed_budget") == expected.get("consumed")

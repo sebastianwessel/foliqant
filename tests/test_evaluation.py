@@ -147,7 +147,7 @@ async def test_errors_are_safe_and_timeout_unknown_usage_is_not_zero() -> None:
     report = await evaluate(
         suite(Expectation("payload", "/payload", None)), variant(slow), timeout=0.001
     )
-    assert report.cases[0].error_code == "timeout"
+    assert report.cases[0].error_code == "run_timeout"
 
 
 async def test_custom_scorers_are_versioned_and_fail_honestly() -> None:
@@ -226,13 +226,18 @@ async def test_review_and_failure_metrics_independent_of_expected_status() -> No
                         "main",
                         FlowRecord(
                             "failed",
-                            (("classify", StepRecord("failed", error=Failure(ErrorCode.TIMEOUT))),),
-                            error=Failure(ErrorCode.TIMEOUT),
+                            (
+                                (
+                                    "classify",
+                                    StepRecord("failed", error=Failure(ErrorCode.RUN_TIMEOUT)),
+                                ),
+                            ),
+                            error=Failure(ErrorCode.RUN_TIMEOUT),
                         ),
                     ),
                 ),
                 Usage(),
-                Failure(ErrorCode.TIMEOUT),
+                Failure(ErrorCode.RUN_TIMEOUT),
             )
         )
 
@@ -432,3 +437,63 @@ def test_fingerprint_accepts_valid_deep_gold_and_unicode_before_execution() -> N
     gold = suite(Expectation("deep", "/payload", deep))  # type: ignore[arg-type]
     assert len(gold.fingerprint) == 64
     assert gold.fingerprint == gold.fingerprint
+
+
+async def test_failed_attempts_are_broken_down_by_safe_error_code() -> None:
+    from foliqant.core.errors import ErrorCode, ServiceError
+    from foliqant.core.execution import Failure
+    from foliqant.evaluation import group_report
+
+    calls = 0
+
+    def truncated() -> ExecutionResult:
+        failure = Failure(ErrorCode.OUTPUT_LIMIT_REACHED)
+        return to_execution_result(
+            RunResult(
+                "failure",
+                "inbox",
+                "r1",
+                "failed",
+                None,
+                {},
+                (
+                    (
+                        "main",
+                        FlowRecord(
+                            "failed",
+                            (("classify", StepRecord("failed", error=failure)),),
+                            error=failure,
+                        ),
+                    ),
+                ),
+                Usage(),
+                failure,
+            )
+        )
+
+    async def run(envelope: Envelope) -> ExecutionResult:
+        nonlocal calls
+        calls += 1
+        if calls == 4:
+            raise ServiceError(ErrorCode.RUN_TIMEOUT)
+        return result({"label": "a"}) if calls == 1 else truncated()
+
+    report = await evaluate(
+        suite(Expectation("status", "/execution/status", "completed"), count=4),
+        variant(run),
+        include_details=True,
+    )
+    assert report.failure_rate == 3 / 4
+    assert dict(report.failures_by_code) == {"output_limit_reached": 2, "run_timeout": 1}
+    assert list(report.failures_by_code) == ["output_limit_reached", "run_timeout"]
+    (step,) = [item for item in report.steps if item.name == "classify"]
+    assert dict(step.failures_by_code) == {"output_limit_reached": 2}
+    assert report.cases[1].steps[0].error_code == "output_limit_reached"
+    (flow,) = report.flows
+    assert dict(flow.failures_by_code) == {"output_limit_reached": 2}
+    document = report.to_dict()
+    assert document["failures_by_code"] == {"output_limit_reached": 2, "run_timeout": 1}
+    (group,) = group_report(report, input_pointer="/metadata/missing")
+    assert group.to_dict()["failures_by_code"] == {"output_limit_reached": 2, "run_timeout": 1}
+    with pytest.raises(TypeError):
+        report.failures_by_code["run_timeout"] = 0  # type: ignore[index]

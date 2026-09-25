@@ -9,6 +9,11 @@
       "title": "Allow Insecure Http",
       "type": "boolean"
     },
+    "conditions": {
+      "default": false,
+      "title": "Conditions",
+      "type": "boolean"
+    },
     "export_timeout": {
       "default": 10.0,
       "exclusiveMinimum": 0,

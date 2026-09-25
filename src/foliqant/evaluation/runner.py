@@ -2,17 +2,25 @@
 
 import asyncio
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from time import perf_counter
-from typing import cast
 
 from foliqant.contracts.execution import ExecutionResult
 from foliqant.core.bindings import resolve_binding
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.json import MAX_JSON_DEPTH, FrozenJson, freeze_json
 from foliqant.core.plan import BindingPlan
+from foliqant.core.runner import ExecutionLimits
 
+from .checkpoint import (
+    EvaluationCheckpoint,
+    EvaluationProgress,
+    ProgressCallback,
+    SavedAttempt,
+    checkpoint_identity,
+)
+from .comparisons import EXECUTED_STATUSES, ProjectionError, canonical, matches, project
 from .contracts import (
     CaseDetails,
     CaseReport,
@@ -30,7 +38,6 @@ from .contracts import (
     RegisteredScorer,
     StepReport,
     StepSummary,
-    canonical,
 )
 from .metrics import (
     MetricObservation,
@@ -40,8 +47,7 @@ from .metrics import (
     validate_metrics,
 )
 from .records import FlowObservation, StepObservation, path_observation, snapshot_execution
-from .spans import matches_source_span
-from .summaries import summarize_latency, summarize_usage
+from .summaries import count_failures, summarize_latency, summarize_usage
 
 
 def _scope(path: str) -> tuple[str | None, str | None]:
@@ -78,6 +84,7 @@ async def _check(
         flow, step = owner.name, None
     invocation_path = owner.path if owner is not None else None
     outcome: CheckOutcome
+    present = True
     try:
         actual = resolve_binding(BindingPlan(kind="pointer", pointer=expected.path), document)
     except ServiceError:
@@ -101,17 +108,28 @@ async def _check(
             if status in {"failed", "cancelled"}
             else "missing"
         )
-        return CheckReport(
-            expected.name,
-            expected.path,
-            outcome,
-            flow,
-            step,
-            outcome,
-            CheckDetails(False, None, expected.expected) if include_details else None,
-            invocation_path,
+        # An absent value counts as null only inside an executed owner: a missing
+        # flow or step record never becomes an observed null.
+        executed = (
+            status in EXECUTED_STATUSES
+            if flow is not None
+            else result.execution.status in EXECUTED_STATUSES
         )
+        if not (outcome == "missing" and expected.absent_as_null and executed):
+            return CheckReport(
+                expected.name,
+                expected.path,
+                outcome,
+                flow,
+                step,
+                outcome,
+                CheckDetails(False, None, expected.expected) if include_details else None,
+                invocation_path,
+            )
+        actual, present = None, False
     try:
+        if expected.each is not None:
+            actual = project(actual, expected.each)
         if expected.comparison == "custom":
             assert expected.scorer is not None
             if asyncio.get_running_loop().time() >= deadline:
@@ -120,15 +138,11 @@ async def _check(
                 passed = await scorers[expected.scorer].score(actual, expected.expected)
             if type(passed) is not bool:
                 raise ValueError("scorer must return bool")
-        elif expected.comparison == "source_span":
-            passed = matches_source_span(actual, expected.expected, case_input)
-        elif expected.comparison == "set":
-            passed = isinstance(actual, tuple) and {canonical(item) for item in actual} == {
-                canonical(item) for item in cast(tuple[FrozenJson, ...], expected.expected)
-            }
         else:
-            passed = canonical(actual) == canonical(expected.expected)
+            passed = matches(expected, actual, case_input)
         outcome = "passed" if passed else "failed"
+    except ProjectionError:
+        outcome = "failed"
     except Exception:
         # Never retain customer/provider/scorer exception messages.
         outcome = "error"
@@ -139,9 +153,17 @@ async def _check(
         flow,
         step,
         "match" if outcome == "passed" else "mismatch" if outcome == "failed" else "scorer_error",
-        CheckDetails(True, actual, expected.expected) if include_details else None,
+        CheckDetails(present, actual, expected.expected) if include_details else None,
         invocation_path,
     )
+
+
+type _Journal = Callable[[str, float, ExecutionResult], None]
+
+#: Time for async custom scoring after a case's run.
+SCORING_GRACE_SECONDS = 60.0
+#: Default per-case deadline: the default ``execution.run_timeout`` plus scoring.
+DEFAULT_CASE_TIMEOUT = ExecutionLimits().run_timeout + SCORING_GRACE_SECONDS
 
 
 async def _case(
@@ -151,16 +173,22 @@ async def _case(
     timeout: float,
     metrics: tuple[MetricSpec, ...],
     include_details: bool,
+    saved: SavedAttempt | None = None,
+    journal: _Journal | None = None,
 ) -> tuple[CaseReport, tuple[MetricObservation, ...]]:
     started = perf_counter()
     deadline = asyncio.get_running_loop().time() + timeout
     case_input = freeze_json(case.envelope().model_dump(mode="json"), max_depth=MAX_JSON_DEPTH + 1)
     private_input = case_input if include_details else None
     try:
-        async with asyncio.timeout_at(deadline):
-            returned = await variant.run(case.envelope())
-        if asyncio.get_running_loop().time() >= deadline:
-            raise TimeoutError
+        if saved is not None:
+            # A checkpointed attempt: its recorded result, scored against current gold.
+            returned = ExecutionResult.model_validate(saved.result, strict=True)
+        else:
+            async with asyncio.timeout_at(deadline):
+                returned = await variant.run(case.envelope())
+            if asyncio.get_running_loop().time() >= deadline:
+                raise TimeoutError
         if not isinstance(returned, ExecutionResult):
             raise ServiceError(ErrorCode.INVALID_OUTPUT)
         # Revalidate and detach any nested mutable dictionaries before scoring.
@@ -168,7 +196,8 @@ async def _case(
         document, flow_records, step_records = snapshot_execution(result)
     except Exception as error:
         code = (
-            "timeout"
+            # The case timeout bounds the whole run.
+            ErrorCode.RUN_TIMEOUT.value
             if isinstance(error, TimeoutError)
             else error.code.value
             if isinstance(error, ServiceError)
@@ -199,7 +228,9 @@ async def _case(
             CaseDetails(private_input, case.expectations, None) if include_details else None,
         )
         return report, observe_metrics(metrics, case, None, "error")
-    elapsed = perf_counter() - started
+    elapsed = saved.elapsed_seconds if saved is not None else perf_counter() - started
+    if saved is None and journal is not None and result.execution.status in EXECUTED_STATUSES:
+        journal(case.id, elapsed, result)
     checks = tuple(
         [
             await _check(
@@ -220,7 +251,12 @@ async def _case(
     )
     flows = tuple(
         FlowReport(
-            item.name, item.record.status, item.record.elapsed_seconds, item.record.usage, item.path
+            item.name,
+            item.record.status,
+            item.record.elapsed_seconds,
+            item.record.usage,
+            item.path,
+            item.record.error.code.value if item.record.error is not None else None,
         )
         for item in flow_records
     )
@@ -233,6 +269,8 @@ async def _case(
             item.record.usage,
             item.record.selection.origin if item.record.selection is not None else None,
             item.path,
+            item.record.error.code.value if item.record.error is not None else None,
+            item.record.error.reason if item.record.error is not None else None,
         )
         for item in step_records
     )
@@ -248,6 +286,8 @@ async def _case(
         result.execution.revision,
         result.execution.error.code.value if result.execution.error is not None else None,
         CaseDetails(private_input, case.expectations, document) if include_details else None,
+        resumed=saved is not None,
+        error_reason=result.execution.error.reason if result.execution.error is not None else None,
     )
     return report, observe_metrics(metrics, case, document, result.execution.status)
 
@@ -329,6 +369,19 @@ def _step_summaries(cases: tuple[CaseReport, ...]) -> tuple[StepSummary, ...]:
                     if records
                     else None
                 ),
+                failures_by_code=count_failures((step.status, step.error_code) for step in records),
+                failures_by_reason=count_failures(
+                    (step.status, step.error_reason) for step in records
+                ),
+                output_retries=sum(
+                    step.usage.output_retries for step in records if step.usage is not None
+                ),
+                output_retry_recoveries=sum(
+                    step.status in {"completed", "needs_review"}
+                    and step.usage is not None
+                    and step.usage.output_retries > 0
+                    for step in records
+                ),
             )
         )
     return tuple(summaries)
@@ -355,6 +408,7 @@ def _flow_summaries(cases: tuple[CaseReport, ...]) -> tuple[FlowSummary, ...]:
                 for case in cases
                 for value in ([flow.usage for flow in case.flows if flow.name == name] or [None])
             ),
+            count_failures((flow.status, flow.error_code) for flow in records),
         )
         for name in names
     )
@@ -392,15 +446,18 @@ async def evaluate(
     variant: EvaluationVariant,
     *,
     max_concurrency: int = 1,
-    timeout: float = 300.0,
+    timeout: float = DEFAULT_CASE_TIMEOUT,
     scorers: tuple[RegisteredScorer, ...] = (),
     metrics: tuple[MetricSpec, ...] = (),
     include_details: bool = False,
     repeat: int = 1,
+    checkpoint: EvaluationCheckpoint | None = None,
+    progress: ProgressCallback | None = None,
 ) -> EvaluationReport:
     """Run each case ``repeat`` times and score each attempt against unchanged gold.
 
-    The timeout bounds each case's invocation plus async custom scoring. Cancellation
+    The timeout bounds each case's invocation plus async custom scoring; the default
+    covers the default ``run_timeout`` plus ``SCORING_GRACE_SECONDS``. Cancellation
     propagates and owned workers are joined. At most max_concurrency workers exist;
     results retain case order, then one-based repetition order. Every source case
     has the same number of attempts; failures remain in summary denominators.
@@ -409,12 +466,23 @@ async def evaluate(
     No content is logged, no report is saved, and no provider endpoint is discovered.
     ``include_details=True`` retains private immutable input, gold and complete
     results for explicit caller-owned serialization. Defaults remain content-free.
+
+    ``checkpoint`` records every completed or reviewed attempt as it finishes and
+    reuses recorded attempts of the same identity and input instead of calling the
+    pipeline (resume; see ``EvaluationCheckpoint``). ``progress`` receives a
+    content-free ``EvaluationProgress`` after every finished attempt.
     """
     registry = _options(suite, max_concurrency, timeout, scorers, repeat)
     if type(include_details) is not bool:
         raise ValueError("include_details must be a boolean")
+    if checkpoint is not None and not isinstance(checkpoint, EvaluationCheckpoint):
+        raise ValueError("checkpoint must be an EvaluationCheckpoint")
+    if progress is not None and not callable(progress):
+        raise ValueError("progress must be callable")
     metrics = tuple(metrics)
     validate_metrics(suite, metrics)
+    identity = checkpoint_identity(suite.name, variant)
+    recorded = await asyncio.to_thread(checkpoint.load, identity) if checkpoint is not None else {}
     fingerprint = suite.fingerprint
     started = perf_counter()
     attempt_count = len(suite.cases) * repeat
@@ -425,15 +493,61 @@ async def evaluate(
     )
     completed: dict[int, tuple[CaseReport, tuple[MetricObservation, ...]]] = {}
     workers: list[asyncio.Task[None]] = []
+    counts = {"resumed": 0, "failed": 0}
+
+    def saved_attempt(case: EvaluationCase, repetition: int) -> SavedAttempt | None:
+        saved = recorded.get((case.id, repetition))
+        if saved is None or canonical(freeze_json(saved.input)) != canonical(
+            freeze_json(case.envelope().model_dump(mode="json"))
+        ):
+            return None  # never recorded, or recorded for another input
+        return saved
+
+    def journal_for(case: EvaluationCase, repetition: int) -> _Journal | None:
+        if checkpoint is None:
+            return None
+
+        def journal(case_id: str, elapsed: float, result: ExecutionResult) -> None:
+            checkpoint.record(
+                identity,
+                case_id,
+                repetition,
+                case.envelope().model_dump(mode="json"),
+                elapsed,
+                result.model_dump(mode="json"),
+            )
+
+        return journal
 
     async def worker() -> None:
         try:
             for index, case, repetition in iterator:
                 await asyncio.sleep(0)
+                saved = saved_attempt(case, repetition)
                 report, observations = await _case(
-                    case, variant, registry, timeout, metrics, include_details
+                    case,
+                    variant,
+                    registry,
+                    timeout,
+                    metrics,
+                    include_details,
+                    saved,
+                    journal_for(case, repetition),
                 )
                 completed[index] = replace(report, repetition=repetition), observations
+                counts["resumed"] += saved is not None
+                counts["failed"] += report.status in {"failed", "cancelled", "error"}
+                if progress is not None:
+                    progress(
+                        EvaluationProgress(
+                            suite.name,
+                            len(completed),
+                            attempt_count,
+                            counts["resumed"],
+                            counts["failed"],
+                            perf_counter() - started,
+                        )
+                    )
         except asyncio.CancelledError:
             # TaskGroup treats a self-cancelled child as successful termination.
             # Cancel siblings and propagate it explicitly after they are joined.
@@ -476,6 +590,9 @@ async def evaluate(
         len(suite.cases),
         summarize_latency(case.elapsed_seconds for case in cases),
         summarize_usage(case.usage for case in cases),
+        counts["resumed"],
+        count_failures((case.status, case.error_code) for case in cases),
+        count_failures((case.status, case.error_reason) for case in cases),
     )
 
 
@@ -484,7 +601,7 @@ async def compare_variants(
     variants: tuple[EvaluationVariant, ...],
     *,
     max_concurrency: int = 1,
-    timeout: float = 300.0,
+    timeout: float = DEFAULT_CASE_TIMEOUT,
     scorers: tuple[RegisteredScorer, ...] = (),
     metrics: tuple[MetricSpec, ...] = (),
     include_details: bool = False,

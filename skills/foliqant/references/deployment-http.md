@@ -50,21 +50,53 @@ path.
 default to `config/settings.yaml`; `--config PATH` selects an exact
 alternative without parent-directory search.
 
-`validate`, `explain`, `doctor`, and `evaluate --check` are offline.
-`run` reads one bounded envelope and returns one foreground result.
+`validate`, `explain`, `doctor`, and `evaluate --check` are offline and list
+compiler `diagnostics`. `validate --strict` fails on any warning; use it in CI.
+`explain --format mermaid|dot --workflow ID` prints the graph as text for
+reviews: one box per flow with its steps shaped by type (conditional steps
+dashed, their `when` on the incoming edge), routes with their conditions and
+operands, dashed review edges, dotted collection/retry calls into the grouped
+callable flows, and repeats in the flow title such as `repeat ≤ 2 until status
+equals found`; `--legend` adds a key of step shapes. Generate docs with
+`foliqant explain --format mermaid --all --output docs/workflows.md`: one
+legend, then one Markdown section per workflow with its start, output, diagram
+and diagnostics.
+Commit the file and keep it current in CI with the same command plus
+`--check` (exit `1` when stale). `run` reads one bounded envelope and returns
+one foreground result.
+
+Output streams: standard output carries exactly one JSON object (the result or
+the failure status with `error`, `problems` and `diagnostics`) or the graph
+text; standard error carries readable lines, one per configuration problem:
+`<file>:<line>:<column>: <code> at <field>: <message> (hint: ...)`. Exit codes:
+`0` success (also `needs_review`), `1` gold mismatch or stale `--check`
+output, `2` invalid arguments, input or configuration (warnings too under
+`--strict`, and run failures with `invalid_configuration`, `invalid_input`,
+`unauthenticated`, `forbidden`, `not_found`, `conflict`, `model_not_found`,
+`request_rejected` or `context_limit_exceeded`), `3` missing optional
+dependency, `4` runtime failure, `5` temporary runtime failure the failing
+boundary marked `retryable`, `130` interruption.
 `evaluate --replay` and `--compare` operate on saved artifacts without
 opening providers. Normal evaluation runs its configured pipeline, flow, or
 operation targets.
 
-Caught errors use fixed safe messages and optional sanitized locations. Never
-expose authored values, credentials, prompts, or raw exceptions.
+Caught errors use fixed safe messages and optional content-free `reason`,
+`location` and `constraint`. Never expose authored values, credentials,
+prompts, or raw exceptions.
 
-The generic CLI prepares without host Python registrations. For a configuration
-using trusted handlers, validate offline with your host's
-`prepare_application(path, handlers=handlers)` and inspect `prepared.plans`.
-Use the host's evaluation entry point with those same registrations. A generic
-CLI `unknown_handler` error is not a reason to remove the handler or permit
-configuration-driven imports.
+Host startup pattern: call `prepare_application(path, handlers=..., strict=True)`
+once at startup, before accepting work. On `CompilationError`, log every entry
+of `error.problems` field by field (`code`, `level`, `location.path`,
+`location.line`, `location.column`, `field`, `message`, `hint`; `str(error)`
+renders one line each) and exit non-zero. `open_application` refuses a strict
+preparation that carries warnings, so a later code path cannot bypass it.
+
+Handlers are declared under `handlers` in `settings.yaml`, so the generic CLI
+compiles, explains and checks workflows with handlers without host Python.
+`run` and ordinary `evaluate` execute handlers and therefore fail with
+`missing_handler_registration`; use the host's entry point, which passes the
+registrations to `prepare_application(path, handlers=handlers)`. Never permit
+configuration-driven imports to work around it.
 
 ## Integrate the Python lifecycle
 
@@ -100,10 +132,36 @@ blocking SDK/CPU work off the event loop.
 
 ## Register business functions
 
-Configuration selects registered functions by name. The host registers a typed
-async handler, its boundary schemas, and its read effect before preparation.
-For example, this deterministic handler builds a business result and marks
-review explicitly:
+Configuration selects declared functions by name. Declare the contract in
+`settings.yaml`:
+
+```yaml
+handlers:
+  finalize:
+    input_schema:
+      type: object
+      properties:
+        review_required:
+          type: boolean
+      required:
+        - review_required
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        disposition:
+          enum:
+            - ready
+            - review
+      required:
+        - disposition
+      additionalProperties: false
+    effect: read
+```
+
+The host registers the typed async callable before activation. This
+deterministic handler builds a business result and marks review explicitly,
+with the reason that selects an issue-specific review route:
 
 ```python
 from pathlib import Path
@@ -118,31 +176,18 @@ from foliqant.ports.execution import StepContext
 async def finalize(inputs: FrozenObject, context: StepContext) -> StepOutcome:
     review = inputs["review_required"] is True
     payload = {"disposition": "review" if review else "ready"}
-    return StepOutcome(freeze_json(payload), needs_review=review)
+    issues = ("no_supported_answer",) if review else ()
+    return StepOutcome(freeze_json(payload), needs_review=review, unresolved_issues=issues)
 
 
-handlers = {
-    "finalize": HandlerRegistration(
-        handler=finalize,
-        input_schema={
-            "type": "object",
-            "properties": {"review_required": {"type": "boolean"}},
-            "required": ["review_required"],
-            "additionalProperties": False,
-        },
-        output_schema={
-            "type": "object",
-            "properties": {"disposition": {"enum": ["ready", "review"]}},
-            "required": ["disposition"],
-            "additionalProperties": False,
-        },
-        effect="read",
-    )
-}
+handlers = {"finalize": HandlerRegistration(finalize)}
 prepared = prepare_application(Path("config/settings.yaml"), handlers=handlers)
 ```
 
-Its step binds a boolean selected by your business policy:
+Registration schemas are optional; when a host generates them from its models,
+passing them makes preparation verify that code and declaration agree
+(`handler_contract_mismatch` otherwise). Its step binds a boolean selected by
+your business policy:
 
 ```yaml
 type: handler
@@ -157,7 +202,9 @@ Project `/steps/finalize/result` as the flow output when this step is named
 projections, input remains the default output. For a multi-request process,
 replace this simple boolean policy with an explicit check of the complete plan
 and collection ledger. Handler return schemas and `needs_review` are independent:
-a payload saying `review` alone does not set the execution status.
+a payload saying `review` alone does not set the execution status. Do not write
+handlers that only compute a routing key or pick a branch result: use `route`,
+`cases`, `when` and `first_of` in configuration.
 
 ## Interpret results and failures
 
@@ -167,7 +214,7 @@ a payload saying `review` alone does not set the execution status.
 | Invalid admission input, unavailable capacity, or another pre-run failure | `ServiceError` can be raised before a result exists | Map its canonical code and safe message into the host protocol. |
 | Successful work | `ExecutionResult`, `execution.status == "completed"` | Consume `payload`; retain `flows` when the use case needs evidence or intermediate results. |
 | Business review | Result with `needs_review` status | Apply the explicit review policy; this is not a provider outage or retry request. |
-| Admitted technical failure | Result with `failed` status and `execution.error` | Preserve the full result, including any partial collection ledger. Do not report a benign default payload as success. |
+| Admitted technical failure | Result with `failed` status and `execution.error` | Preserve the full result, including any partial collection ledger. Return a server error (5xx), never a success. Do not report a benign default payload as success. |
 | Caller cancellation | Cancellation propagates; a result is not guaranteed | Preserve cancellation and let host policy decide reconciliation. |
 
 Inspect `execution.status` before business payload. Serialize a complete result
@@ -179,7 +226,27 @@ Catch `ServiceError` at the host boundary; use `error.code.value`, its safe
 `str(error)`, and `error.retryable`. For returned failures, use
 `result.execution.error`. Do not infer retry permission from error text or
 automatically rerun a workflow: timeout/cancellation does not prove remote work
-stopped. Configured provider retry policy is narrower than whole-run retry.
+stopped. Configured provider retry policy (`retry.max_attempts` default `4`:
+HTTP 408, 429, 500, 502, 503, 504, 529, and for models a connection failure
+without a response) is narrower than whole-run retry; `retryable: true` on a
+returned failure means a transient condition a later host-level attempt may
+overcome. A technical failure is never a business outcome: no review route,
+`fallback`, binding `default`, `first_of`, repeat condition or retry flow acts
+on it. Model stop reasons have their own non-retryable codes:
+`output_limit_reached` (output token limit, fixed by configuration, not by
+resending), `output_refused` (refusal or content filter) and
+`dependency_failure` for a provider-side generation error. `invalid_output`
+means a complete response failed its contract after the configured
+`output_retries`; its `reason`, `location` and `constraint` say what was wrong.
+Other codes: `invalid_configuration`, `invalid_input`, `invalid_tool_call`,
+`context_limit_exceeded`, `request_rejected`, `model_not_found`,
+`unauthenticated`, `forbidden`, `not_found`, `missing_binding`,
+`request_timeout`, `run_timeout`, `step_limit_reached`,
+`model_request_limit_reached`, `iteration_limit_reached`,
+`tool_call_limit_reached`, `rate_limited`, `dependency_overloaded`,
+`tool_error`, `tool_output_limit_exceeded`, `tool_catalog_mismatch`,
+`handler_failed`, `conflict`, `uncertain_effect`, `cancelled` and
+`capacity_exceeded`.
 
 ## Identity and tool permission
 
@@ -217,7 +284,10 @@ dependency), wire these concrete boundaries:
 4. Apply the host's chosen identity policy. An unauthenticated demo should reject
    supplied tenant/principal metadata rather than treating it as verified.
 5. Await `app.run` and serialize its complete result. Choose and document HTTP
-   status mappings for both raised errors and returned failed results. A valid
+   status mappings for both raised errors and returned failed results; a failed
+   run is a 5xx with the result body (the repository example uses 503 for
+   `retryable` and `capacity_exceeded`, 504 for `request_timeout` and
+   `run_timeout`, 500 otherwise, and 400 for invalid input). A valid
    `needs_review` result can remain a successful HTTP response.
 6. Leave the lifespan on shutdown. Define disconnect handling at the host boundary;
    it does not imply the model or tool has stopped remotely.
@@ -245,13 +315,24 @@ dependency), wire these concrete boundaries:
 - Use optional telemetry with safe labels and known/unknown usage preserved.
   Full results contain business data; retain them only under the application's
   policy. A projected payload is insufficient to diagnose partial child failures.
+- Telemetry checklist: when the host already runs OpenTelemetry, pass its
+  provider with `RuntimePlugins(tracer_provider=...)` (never together with
+  `install_global_telemetry=True`) so runtime spans join host traces without a
+  second exporter; otherwise pass the inbound W3C carrier as `transport_trace`; log
+  `result.execution.id` and `result.execution.trace` with host records; forward
+  `StepContext.trace` on handler outbound calls; configure
+  `configure_logging` for JSON logs with `trace_id`/`span_id`; alert on
+  `run_failed`, unexpected `repeat_stopped` (`exhausted`) rates and
+  `condition_type_mismatch`; enable `telemetry.conditions` only while
+  debugging routes.
 
 ## Deliverables and checks
 
 For a host integration, deliver its request-to-envelope mapping, one awaited
 application call, result serialization, and any identity policy required by the
-use case. Validate with registered `prepare_application`, or CLI validation and
-explanation when no host registrations are needed. Test the host with scripted
+use case. Validate with `foliqant validate --strict` and review
+`foliqant explain --format mermaid`; open the application with registered
+`prepare_application` in tests. Test the host with scripted
 adapters or handler-only workflows for success, review, raised errors, returned
 failures, and shutdown. Provide the config/environment locations, dependency and
 start commands, and actual test outcomes. State which operational controls the

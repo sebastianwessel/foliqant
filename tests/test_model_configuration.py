@@ -151,7 +151,7 @@ def test_native_google_and_bedrock_profiles_are_explicit_and_closed() -> None:
         }
     ).models["deciding"]
     assert google.api_key.get_secret_value() == "$GOOGLE_API_KEY"
-    assert google.options.max_tokens == 4096
+    assert google.options.max_tokens == 32768
 
     bedrock = validate(
         {

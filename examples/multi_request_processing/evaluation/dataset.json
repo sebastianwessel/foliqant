@@ -870,7 +870,8 @@
                     "result": {
                       "language": "en",
                       "next_step": "Authored guidance."
-                    }
+                    },
+                    "attempt_count": 1
                   }
                 ]
               }
@@ -956,7 +957,8 @@
                     "result": {
                       "language": "de",
                       "next_step": "Authored guidance."
-                    }
+                    },
+                    "attempt_count": 1
                   }
                 ]
               }
@@ -1050,7 +1052,8 @@
                     "result": {
                       "language": "en",
                       "next_step": "Authored guidance."
-                    }
+                    },
+                    "attempt_count": 1
                   }
                 ]
               }
@@ -1136,7 +1139,8 @@
                     "result": {
                       "language": "de",
                       "next_step": "Authored guidance."
-                    }
+                    },
+                    "attempt_count": 1
                   }
                 ]
               }

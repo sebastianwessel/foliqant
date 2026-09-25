@@ -3,14 +3,25 @@
 from __future__ import annotations
 
 import time
+from decimal import ROUND_HALF_EVEN, Decimal
 from typing import TYPE_CHECKING
 
+from opentelemetry import trace as trace_api
 from opentelemetry.metrics import NoOpMeterProvider
-from pydantic_ai.models import Model
+from opentelemetry.trace import Status, StatusCode
+from opentelemetry.util.types import AttributeValue
+from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.models.instrumented import InstrumentationSettings, InstrumentedModel
+from pydantic_ai.models.wrapper import WrapperModel
+from pydantic_ai.settings import ModelSettings
 
+from foliqant.adapters.models.accounting import request_token_usage
+from foliqant.adapters.models.attempts import CURRENT_ATTEMPT
+from foliqant.adapters.models.stops import reasoning_consumed_budget, stop_error
 from foliqant.core.errors import ErrorCode
 from foliqant.core.execution import TokenUsage
+from foliqant.core.pricing import PricingPlan
 
 if TYPE_CHECKING:
     from opentelemetry.metrics import MeterProvider
@@ -21,6 +32,7 @@ if TYPE_CHECKING:
 _SCOPE = "foliqant.metrics"
 _DURATION = "gen_ai.client.operation.duration"
 _TOKEN_USAGE = "gen_ai.client.token.usage"
+_REASONING_CONSUMED_BUDGET = "foliqant.response.reasoning_consumed_budget"
 _MAX_DURATION_SECONDS = 365 * 24 * 60 * 60
 _MAX_COUNT = 2**53 - 1
 _TOKEN_HISTOGRAM_BOUNDARIES = (
@@ -39,6 +51,86 @@ _TOKEN_HISTOGRAM_BOUNDARIES = (
     16777216,
     67108864,
 )
+
+
+_COST_QUANTUM = Decimal("0.000001")
+
+
+def usage_span_attributes(
+    tokens: TokenUsage, pricing: PricingPlan | None
+) -> dict[str, AttributeValue]:
+    """OTel GenAI token counts that were reported, and the configured cost estimate."""
+    attributes: dict[str, AttributeValue] = {}
+    for key, value in (
+        ("gen_ai.usage.input_tokens", tokens.input_tokens),
+        ("gen_ai.usage.output_tokens", tokens.output_tokens),
+        ("gen_ai.usage.cache_read.input_tokens", tokens.cache_read_input_tokens),
+        ("gen_ai.usage.cache_creation.input_tokens", tokens.cache_write_input_tokens),
+        ("gen_ai.usage.reasoning.output_tokens", tokens.reasoning_output_tokens),
+    ):
+        if value is not None and value <= _MAX_COUNT:
+            attributes[key] = value
+    if pricing is not None:
+        cost = pricing.request_cost(tokens)
+        if cost.amount is not None:
+            attributes["foliqant.usage.cost"] = float(
+                cost.amount.quantize(_COST_QUANTUM, rounding=ROUND_HALF_EVEN)
+            )
+    return attributes
+
+
+class _UsageAnnotation(WrapperModel):
+    """Annotate the active ``chat`` span with reported usage before the span closes."""
+
+    def __init__(self, wrapped: Model, pricing: PricingPlan | None) -> None:
+        super().__init__(wrapped)
+        self._pricing = pricing
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        attempt = CURRENT_ATTEMPT.get()
+        span = trace_api.get_current_span()
+        try:
+            if attempt is not None and span.is_recording():
+                span.set_attribute("foliqant.request.attempt", attempt.number)
+                if attempt.output_retry:
+                    span.set_attribute("foliqant.request.output_retry", True)
+        except Exception:
+            pass
+        try:
+            response = await self.wrapped.request(
+                messages, model_settings, model_request_parameters
+            )
+        except BaseException as error:
+            # The failed attempt's span carries the code the step reports, never
+            # the SDK exception type or text.
+            try:
+                if attempt is not None and span.is_recording():
+                    span.set_attribute("error.type", attempt.failure_code(error).value)
+                    span.set_status(Status(StatusCode.ERROR))
+            except Exception:
+                pass
+            raise
+        try:
+            if span.is_recording():
+                usage = request_token_usage(response.usage)
+                span.set_attributes(usage_span_attributes(usage, self._pricing))
+                consumed = reasoning_consumed_budget(response, usage)
+                if consumed is not None:
+                    span.set_attribute(_REASONING_CONSUMED_BUDGET, consumed)
+                stopped = stop_error(response)
+                if stopped is not None:
+                    # The step fails with this code; the client span says so too.
+                    span.set_attribute("error.type", stopped.value)
+                    span.set_status(Status(StatusCode.ERROR))
+        except Exception:
+            # Telemetry never changes the model response or its accounting.
+            pass
+        return response
 
 
 class ModelTelemetry:
@@ -79,10 +171,16 @@ class ModelTelemetry:
             explicit_bucket_boundaries_advisory=_TOKEN_HISTOGRAM_BOUNDARIES,
         )
 
-    def instrument(self, model: Model) -> InstrumentedModel:
-        """Return the public PydanticAI model wrapper for one client span per request."""
+    def instrument(self, model: Model, pricing: PricingPlan | None = None) -> InstrumentedModel:
+        """Return the public PydanticAI model wrapper for one client span per request.
 
-        return InstrumentedModel(model, self._settings)
+        The ``chat <model>`` span also carries the reported cached and reasoning
+        token counts and, with ``pricing``, the request's ``foliqant.usage.cost``.
+        A response stopped before completion adds its canonical ``error.type``;
+        a length stop adds ``foliqant.response.reasoning_consumed_budget``.
+        """
+
+        return InstrumentedModel(_UsageAnnotation(model, pricing), self._settings)
 
     @staticmethod
     def start_request() -> float:

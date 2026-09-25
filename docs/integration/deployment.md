@@ -24,10 +24,18 @@ the supported fields and resolution rules.
 
 ## Open once and shut down cleanly
 
-At startup, call `prepare_application(config_path, handlers=...)`, then enter
+At startup, call `prepare_application(config_path, handlers=..., strict=True)`;
+on `CompilationError`, log each entry of `error.problems` (code, location,
+field, message, hint) and exit non-zero. Then enter
 `open_application(prepared, environment=os.environ, plugins=...)` once per
-process. Register trusted handler implementations and tool authorizers in
-application code; configuration cannot import Python functions. Hold the async
+process. Handler **contracts** are declared in `settings.yaml` and reviewed with
+the configuration; handler **implementations** and tool authorizers are
+registered in application code, because configuration cannot import Python
+functions. `open_application` fails with `missing_handler_registration` when a
+declared handler has no registration, so a deployment cannot start half-wired.
+Run `foliqant validate --strict` in CI to fail the build on warnings, and
+`foliqant explain --format mermaid --all --output docs/workflows.md --check` to
+keep the generated graph documentation current. Hold the async
 context while requests are accepted and leave it during service shutdown.
 The context drains owned work before closing clients. A forced process kill
 loses unfinished in-memory executions, so the host needs durable coordination
@@ -36,7 +44,11 @@ if recovery after a crash matters.
 Configured admission capacity, deadlines, step visits, model/tool attempts, and
 collection item caps bound work *within one process*. They are not global rate
 limits or service-level guarantees. Scale-out hosts need their own shared
-admission policy if that matters. See [Configure limits](../configuration/limits.md).
+admission policy if that matters. A run that reaches a bound fails with that
+bound's own code ([error codes](errors.md#canonical-error-codes)); Foliqant never
+repeats a whole run, so a host with durable delivery decides whether to resubmit
+a run whose `execution.error.retryable` is `true`. See
+[Configure limits](../configuration/limits.md).
 
 ## Observe safely
 

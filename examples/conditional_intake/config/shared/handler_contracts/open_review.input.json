@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "reference_status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "plan": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "reference_status",
+    "plan"
+  ],
+  "additionalProperties": false
+}

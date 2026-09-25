@@ -1,9 +1,10 @@
 """Closed deployment settings composed from the existing adapter contracts."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field
 
+from foliqant.core.json import JsonValue
 from foliqant.core.runner import ExecutionLimits
 
 from .base import BoundaryModel
@@ -18,12 +19,12 @@ class ExecutionConfig(BoundaryModel):
 
     concurrency: Annotated[int, Field(ge=1, le=1024)] = 4
     queue_limit: Annotated[int, Field(ge=0, le=65536)] = 16
-    run_timeout: Duration = 300.0
-    model_timeout: Duration = 60.0
+    run_timeout: Duration = 900.0
+    model_timeout: Duration = 300.0
     tool_timeout: Duration = 30.0
-    max_steps: Annotated[int, Field(ge=1, le=1024)] = 32
-    model_requests_per_step: Annotated[int, Field(ge=1, le=1024)] = 4
-    tool_calls_per_step: Annotated[int, Field(ge=1, le=1024)] = 3
+    max_steps: Annotated[int, Field(ge=1, le=1024)] = 128
+    model_requests_per_step: Annotated[int, Field(ge=1, le=1024)] = 16
+    tool_calls_per_step: Annotated[int, Field(ge=1, le=1024)] = 16
 
     def limits(self) -> ExecutionLimits:
         """Map validated settings to the standard-library runtime value."""
@@ -47,12 +48,28 @@ class EvaluationConfig(BoundaryModel):
     dataset: NonBlank
 
 
+class HandlerDeclaration(BoundaryModel):
+    """The reviewed contract of one trusted handler; the host registers the callable.
+
+    Schemas are inline objects or JSON/YAML files relative to the settings file,
+    confined to its directory. Declarations let offline commands validate
+    workflows without importing host code.
+    """
+
+    input_schema: NonBlank | dict[str, JsonValue]
+    output_schema: NonBlank | dict[str, JsonValue]
+    effect: Literal["read", "write"]
+
+
 class DeploymentConfig(BoundaryModel):
     """Configuration contains references and policy, never resolved credentials."""
 
     workflows: Annotated[dict[Id, NonBlank], Field(min_length=1, max_length=64)] | None = None
     models: Annotated[dict[Id, ModelConfig], Field(max_length=128)] = Field(default_factory=dict)
     mcp: Annotated[dict[Id, McpServerProfile], Field(max_length=128)] = Field(default_factory=dict)
+    handlers: Annotated[dict[Id, HandlerDeclaration], Field(max_length=256)] = Field(
+        default_factory=dict
+    )
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     telemetry: TelemetryConfig | None = None
     evaluation: EvaluationConfig | None = None

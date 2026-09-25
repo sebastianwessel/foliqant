@@ -137,7 +137,7 @@ async def test_root_step_budget_does_not_reset_at_flow_boundary() -> None:
         plan(flow("triage", next_flow="specialist"), flow("specialist")), executor, max_steps=1
     ).run(envelope(), identity=Identity())
     assert result.status == "failed"
-    assert result.error is not None and result.error.code == ErrorCode.BUDGET_EXHAUSTED
+    assert result.error is not None and result.error.code == ErrorCode.STEP_LIMIT_REACHED
     assert len(executor.calls) == 1
 
 
@@ -226,7 +226,6 @@ async def test_early_review_can_project_explicit_missing_default() -> None:
         output=BindingPlan(
             kind="pointer",
             pointer="/steps/step_1/result",
-            optional=True,
             has_default=True,
             default=None,
         ),
@@ -244,7 +243,7 @@ async def test_deadline_stops_before_later_flow() -> None:
         plan(flow("triage", next_flow="specialist"), flow("specialist")), executor
     ).run(envelope(), identity=Identity(), deadline=asyncio.get_running_loop().time() + 0.005)
     assert result.status == "failed"
-    assert result.error is not None and result.error.code == ErrorCode.TIMEOUT
+    assert result.error is not None and result.error.code == ErrorCode.RUN_TIMEOUT
     assert len(executor.calls) == 1
     assert dict(result.flows)["triage"].status == "failed"
     assert dict(dict(result.flows)["triage"].steps)["step_0"].status == "failed"
@@ -257,7 +256,7 @@ async def test_usage_counted_once_across_flow_subtotals() -> None:
         async def execute(
             self, step: OperationStep, inputs: FrozenObject, context: StepContext
         ) -> StepOutcome:
-            ticket = await context.budget.start_model_request()
+            ticket = await context.budget.start_model_request("test-model")
             await context.budget.finish_model_request(ticket, TokenUsage(100, 20, 80, None, 10))
             return await super().execute(step, inputs, context)
 
@@ -408,10 +407,10 @@ async def test_each_step_has_own_attempt_limit_but_failure_usage_is_not_lost() -
 
     class BudgetedExecutor(Executor):
         async def execute(self, step, inputs, context):
-            ticket = await context.budget.start_model_request()
+            ticket = await context.budget.start_model_request("test-model")
             await context.budget.finish_model_request(ticket, TokenUsage(10, 2, 0, 0, 0))
             if context.flow_id == "specialist":
-                await context.budget.start_model_request()
+                await context.budget.start_model_request("test-model")
                 pytest.fail("exhausted per-step budget must reject the next attempt")
             return await super().execute(step, inputs, context)
 
@@ -424,7 +423,7 @@ async def test_each_step_has_own_attempt_limit_but_failure_usage_is_not_lost() -
     )
     result = await engine.run(envelope(), identity=Identity())
     assert result.status == "failed"
-    assert result.error is not None and result.error.code == ErrorCode.BUDGET_EXHAUSTED
+    assert result.error is not None and result.error.code == ErrorCode.MODEL_REQUEST_LIMIT_REACHED
     assert result.usage.model_requests == 2
     assert result.usage.tokens.input_tokens == 20
     assert [record.usage.model_requests for _, record in result.flows] == [1, 1]
@@ -436,7 +435,7 @@ async def test_unknown_token_usage_in_later_failure_keeps_root_total_unknown() -
 
     class PartiallyMeasuredExecutor(Executor):
         async def execute(self, step, inputs, context):
-            ticket = await context.budget.start_model_request()
+            ticket = await context.budget.start_model_request("test-model")
             if context.flow_id == "specialist":
                 raise RuntimeError("private failure")
             await context.budget.finish_model_request(ticket, TokenUsage(10, 2, 0, 0, 0))
@@ -464,7 +463,7 @@ async def test_malformed_executor_outcomes_stop_before_another_flow(mode: str) -
     class InvalidExecutor(Executor):
         async def execute(self, step, inputs, context):
             self.calls.append((context.execution_id, context.flow_id, context.step_id))
-            await context.budget.start_model_request()
+            await context.budget.start_model_request("test-model")
             if mode == "foreign_object":
                 return object()
             if mode == "nonboolean_review":

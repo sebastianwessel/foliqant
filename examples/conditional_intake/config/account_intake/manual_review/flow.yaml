@@ -1,0 +1,4 @@
+steps:
+  - open_review
+output:
+  pointer: /steps/open_review/result

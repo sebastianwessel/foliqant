@@ -14,7 +14,6 @@ from foliqant.adapters.decisions import build_decision_input, validate_decision_
 from foliqant.adapters.models import ModelExecutor
 from foliqant.adapters.validation import WorkflowSchemas
 from foliqant.bootstrap import WorkflowApplication
-from foliqant.cli import _plan_report
 from foliqant.compiler import CompilationError
 from foliqant.compiler._loader import load_yaml
 from foliqant.contracts.envelope import Envelope
@@ -28,6 +27,7 @@ from foliqant.core.plan import (
     TransitionTargetPlan,
     UnresolvedRoutingPlan,
 )
+from foliqant.graph import workflow_graph
 
 _CHOICE = """type: decision
 instructions: Select the supported queue.
@@ -175,12 +175,41 @@ async def test_invalid_native_results_never_receive_fallback(tmp_path, kind):
     await app.aclose()
 
 
+@pytest.mark.parametrize(
+    "status,code",
+    [(503, "dependency_overloaded"), (400, "context_limit_exceeded"), (401, "unauthenticated")],
+)
+async def test_provider_errors_never_receive_fallback_or_review(tmp_path, status, code):
+    from pydantic_ai.exceptions import ModelHTTPError
+
+    plan = _compiled(tmp_path)
+
+    def respond(messages, info):
+        raise ModelHTTPError(status, "test", {"code": "context_length_exceeded"})
+
+    executor = ModelExecutor({"local": _binding(respond)}, WorkflowSchemas(plan))
+
+    async def execute(step, inputs, context):
+        if context.flow_id != "main":
+            return StepOutcome(None)
+        return await executor.execute(step, inputs, context)
+
+    app = WorkflowApplication({plan.name: runner(plan, Scripted(execute))})
+    result = await app.run("inbox", Envelope(payload={"ticket": "Billing failed"}))
+    assert result.execution.status == "failed"
+    assert result.execution.error is not None and result.execution.error.code.value == code
+    record = result.flows["main"].steps["first"]
+    assert record.status == "failed" and record.selection is None
+    assert result.flows["other"].status == result.flows["review"].status == "skipped"
+    assert result.transitions == []
+    await app.aclose()
+
+
 async def test_selection_projection_and_cli_policy_description(tmp_path):
     plan = _compiled(
         tmp_path,
         flow_output={
             "pointer": "/steps/first/selection/category/id",
-            "optional": True,
             "default": None,
         },
     )
@@ -191,11 +220,11 @@ async def test_selection_projection_and_cli_policy_description(tmp_path):
         "category": {"id": "misc_queue", "description": "Unresolved category.\nRequires triage.\n"},
         "origin": "fallback",
     }
-    report = _plan_report(plan)
+    report = workflow_graph(plan).to_json()
     first = next(
         step
         for step in json.loads(json.dumps(report))["flows"][0]["steps"]
-        if step["name"] == "first"
+        if step["id"] == "first"
     )
     assert first["fallback"]["category"]["id"] == "misc_queue"
     assert report["flows"][0]["on_unresolved"]["no_supported_answer"] == {"flow": "other"}
@@ -279,7 +308,15 @@ def test_issue_routing_defaults_without_facts_and_when_targets_disagree():
     assert routing.target(("conflicting_information",)) == review
 
 
-async def test_nondecision_review_uses_default_issue_route(tmp_path):
+@pytest.mark.parametrize(
+    "issues,selected,skipped",
+    [(("no_supported_answer",), "other", "review"), ((), "review", "other")],
+)
+async def test_handler_review_issues_select_issue_specific_route(
+    tmp_path, issues, selected, skipped
+):
+    # Regression: the handler adapter used to drop `unresolved_issues`, so a
+    # handler review always followed the default review route.
     policy = load_yaml(_ROUTES, relative_path="workflow.yaml")
     plan = make_plan(
         tmp_path,
@@ -293,13 +330,15 @@ async def test_nondecision_review_uses_default_issue_route(tmp_path):
 
     async def execute(step, inputs, context):
         if context.flow_id == "main":
-            return StepOutcome(None, needs_review=True, unresolved_issues=("no_supported_answer",))
+            return StepOutcome(None, needs_review=True, unresolved_issues=issues)
         return StepOutcome(None)
 
     app = WorkflowApplication({"inbox": runner(plan, Scripted(execute))})
     result = await app.run("inbox", Envelope(payload={}))
-    assert result.flows["review"].status == "completed"
-    assert result.flows["other"].status == "skipped"
+    assert result.flows[selected].status == "completed"
+    assert result.flows[skipped].status == "skipped"
+    assert result.transitions[0].route.kind == "review"
+    assert result.transitions[0].route.case == (issues[0] if issues else None)
     assert result.execution.status == "needs_review"
     await app.aclose()
 
@@ -328,7 +367,7 @@ async def test_fallback_never_uses_successful_category_routes(tmp_path):
     policy = load_yaml(_ROUTES, relative_path="workflow.yaml")
     policy["transition"] = {
         "binding": {"literal": "billing"},
-        "cases": {"billing": {"outcome": "completed"}, "technical": {"outcome": "completed"}},
+        "cases": {"billing": {"outcome": "completed"}},
         "default": {"outcome": "needs_review"},
     }
     app = _app(_compiled(tmp_path, routes=json.dumps(policy)), _raw())

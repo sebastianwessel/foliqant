@@ -29,7 +29,17 @@ validated before any child operation. Empty collections complete successfully.
 Callable workflow entries declare `callable: true` and an optional definition;
 conventional resolution remains `<id>/flow.yaml`. They have sequential steps,
 input schema and output binding, but no routing, unresolved target or root input
-bindings. Routed transitions cannot target callable flows; collections cannot call
+bindings. Besides collections, one routed flow's `repeat` may run a callable
+flow as its retry flow; retry calls add no collection nesting depth and the
+retry flow's records appear under `/flows/<id>`. A callable flow may itself
+declare `repeat` (same fields; its retry flow is another callable flow without
+`repeat`); every collection item invocation then repeats in the item scope
+(`/payload` = item input, `/metadata`, `/flows/<self>/result|attempts`,
+`/flows/<retry>/result|attempts`). The item ledger entry carries
+`attempt_count`, `attempts`, `repeat.stopped_by` and `retry` (the item's retry
+runs); a retry or next-input failure fails the collection. Item retry records
+never appear under root `/flows`. `collection_budget` counts each item's
+worst case `max_attempts × steps + (max_attempts − 1) × steps(retry)`. Routed transitions cannot target callable flows; collections cannot call
 routed flows. Static reachability and cycle checks include collection edges.
 Callable invocations may nest at most sixteen collection levels; compilation
 rejects deeper call chains, and runtime applies the same defensive bound. Routed
@@ -49,17 +59,22 @@ is exactly the planned input. No hidden prior history is forwarded.
 Collection step records carry `kind: flow_collection`; ordinary business results
 are never inferred to be execution ledgers merely from their shape. A completed
 collection has `result.items`: ordered child records with `id`, `flow`,
-status, steps, projected result when present, error, usage and elapsed time. Child
+status, steps, projected result when present, error, usage, elapsed time and
+`attempt_count`. Child handlers receive the item ID as
+`StepContext.collection_item` and `flow_role: callable`. Child
 `needs_review` does not prevent later independent items; the collection becomes
 `needs_review` and uses the enclosing routed flow's explicit unresolved policy.
 First technical failure stops execution: failed collection `partial_result.items`
 retains completed/review/failed children and later `skipped` children. It has no
-success `result`. No failure is silently converted into a business disposition.
+success `result`, and the enclosing flow and run fail with the child's code; no
+later item, review route or `fallback` acts on it. No failure is silently
+converted into a business disposition.
 Caller cancellation propagates and joins owned work without launching later items.
 
 Root usage counts child attempts once through the collection subtotal. Durations
 are nested measurements, not additive totals. Telemetry uses only configured flow
-and step names, never business item IDs. Private execution/evaluation results may
+and step names and the item index (`foliqant.collection.index`), never business
+item IDs. Private execution/evaluation results may
 contain item IDs and original assessments. Evaluations retain every invocation,
 including repeats of one callable flow, failures and unstarted steps.
 

@@ -9,6 +9,8 @@ application policy to consume.
 
 - [Choose the composition](#choose-the-composition)
 - [Route after single-choice triage](#route-after-single-choice-triage)
+- [Decide with conditions instead of handlers](#decide-with-conditions-instead-of-handlers)
+- [Bounded retry](#bounded-retry)
 - [Process independent requests](#process-independent-requests)
 - [Implement planning and disposition](#implement-planning-and-disposition)
 - [Check the complete process](#check-the-complete-process)
@@ -17,7 +19,10 @@ application policy to consume.
 
 | Business requirement | Runtime pattern |
 | --- | --- |
-| Exactly one queue owns a request | `choice`, project its answer, then an exact-match flow transition. Ambiguity takes an explicit review route. |
+| Exactly one queue owns a request | `choice`, project its selection, then an exact-match `cases` transition with coverage checks. Ambiguity takes an explicit review route. |
+| A step is needed only in some cases | Step `when` in the same flow; later bindings to it declare a default. |
+| The next flow depends on several facts | An ordered `route` with conditions. |
+| A lookup may need a corrected input | `repeat` with `until`, a callable retry flow and `retry_input`. |
 | Several labels describe one request | `multiselect`; a trusted rule can select one coordinated process from the label set. Labels do not create jobs automatically. |
 | One request needs several ordered activities | Several ordered steps or sequential routed flows; use explicit bindings for previous results. |
 | Multiple independent actions, possibly sharing a category | `request_units` → trusted planner → `flow_collection` → trusted disposition. |
@@ -25,7 +30,8 @@ application policy to consume.
 | One action depends on another or changes a later action | Author that dependency as a coordinated sequence or hold it for review. A collection is not a dependency scheduler. |
 
 One workflow is the externally invoked capability. Routed flows form its finite
-graph; callable flows belong to that same workflow and are invoked by a collection.
+graph; callable flows belong to that same workflow and are invoked by a
+collection or as a repeat retry flow.
 There is no transition that invokes a different workflow. Reuse an explicit flow
 definition file when several workflows need the same sequence. The host can call
 different workflows as separate runs, but then owns their coordination and result
@@ -41,7 +47,6 @@ steps:
   - classify
 output:
   pointer: /steps/classify/result/answer/optionId
-  optional: true
   default: null
 ```
 
@@ -66,17 +71,141 @@ triage:
     outcome: needs_review
 ```
 
-This is a `flows` map entry, not a complete workflow. Declare both target flows.
-Give each branch explicit input bindings; one branch can reach a finalizer while
-the other remains skipped. Finalizer bindings to alternative branch outputs need
-`optional: true` with explicit defaults. Its handler must handle the absent
-branch rather than concatenate two presumed successes.
+This is a `flows` map entry, not a complete workflow. Declare both target flows,
+and put the shared review route in the workflow `defaults.on_unresolved` instead
+of repeating it on every flow. Give each branch explicit input bindings; only
+one branch runs and the other remains skipped. Select whichever branch ran with
+`first_of`, without a join flow or handler:
 
-An optional binding handles a missing path, not a present `null`. The terminal
+```yaml
+output:
+  first_of:
+    - pointer: /flows/billing/result
+    - pointer: /flows/cancellation/result
+  default:
+    disposition: needs_review
+```
+
+A default handles a missing path, not a present `null`. The terminal
 `needs_review` above is authored business policy. An output default alone neither
 routes the process nor recovers a failed step. Never route on free-text reasons
-or evidence strength. Exact-match transitions take string keys; use a handler to
-map a label array or category combination to one explicit string route.
+or evidence strength. `cases` take string keys; route on a label array or a
+category combination with `route` conditions (`in`, `length`, `all`/`any`) or,
+when the mapping is real business policy, with a trusted handler that returns a
+typed field.
+
+## Decide with conditions instead of handlers
+
+A handler whose only output is a routing key, and a flow that exists only to
+host it, are configuration. Express the decision on the data the workflow
+already binds:
+
+```yaml
+transition:
+  route:
+    - when:
+        binding:
+          pointer: /flows/extract_fields/result/status
+        equals: invalid
+      flow: repair_extraction
+    - when:
+        all:
+          - binding:
+              pointer: /payload/form/report_type
+            present: true
+          - binding:
+              pointer: /payload/form/report_type
+            not_equals: custom_report
+      flow: extract_fields
+    - flow: classify_report_type
+```
+
+Fold "check, repair if invalid, recheck" into one flow with step conditions:
+
+```yaml
+steps:
+  - check
+  - id: repair
+    when:
+      binding:
+        pointer: /steps/check/result/status
+      equals: invalid
+  - id: recheck
+    when:
+      binding:
+        pointer: /steps/repair/result
+      present: true
+output:
+  fields:
+    status:
+      first_of:
+        - pointer: /steps/recheck/result/status
+        - pointer: /steps/check/result/status
+      default: invalid
+    repaired:
+      pointer: /steps/repair/result
+      default: null
+```
+
+Choose the starting flow from the envelope with `start.route` (conditions read
+`/payload` and `/metadata` only). The set of targets stays authored; the model
+influences a route only through a validated result.
+
+## Bounded retry
+
+Do not unroll a retry into copies (`lookup_fund`, `correct_identifier`,
+`lookup_corrected_fund`). Repeat one flow instance:
+
+```yaml
+lookup_fund:
+  input:
+    identifier:
+      pointer: /payload/identifier
+  repeat:
+    max_attempts: 2
+    until:
+      binding:
+        pointer: /flows/lookup_fund/result/status
+      equals: found
+    retry:
+      flow: correct_identifier
+      input:
+        lookup:
+          pointer: /flows/lookup_fund/result
+        message:
+          pointer: /payload/message
+      continue_when:
+        binding:
+          pointer: /flows/correct_identifier/result/status
+        equals: accepted
+    retry_input:
+      identifier:
+        pointer: /flows/correct_identifier/result/identifier
+  transition:
+    route:
+      - when:
+          binding:
+            pointer: /flows/lookup_fund/result/status
+          equals: found
+        flow: enrich
+      - flow: request_details
+```
+
+`correct_identifier` is a callable flow. The flow's result is its last attempt;
+exhaustion is not a review, so route on the result. `/flows/lookup_fund/attempts`
+lists every attempt, and later flows read `/flows/correct_identifier/result`
+only with a default. Every attempt and retry run consumes `execution.max_steps`;
+validation fails with `repeat_budget` when the worst case exceeds it. Repeating
+a model step without a retry flow is flagged `repeat_without_retry`. `repeat`
+is not a retry policy for technical failures: those fail the run so the host
+can redeliver.
+
+To retry per collection item, declare the same `repeat` on the callable flow
+(`flows.<id>: {callable: true, repeat: ...}`) with another callable flow as
+`retry.flow`. Its pointers read the item scope (`/payload` is the item input,
+`/flows/<self>/result`, `/flows/<retry>/result`); each ledger entry then shows
+`attempts`, `repeat.stopped_by` and `retry`. Do not hand-unroll item retries in
+a planner handler.
 
 ## Process independent requests
 
@@ -95,7 +224,6 @@ defaults:
 start: assess
 output:
   pointer: /flows/finalize/result
-  optional: true
   default:
     disposition: review
 flows:
@@ -207,8 +335,11 @@ work. Preserve root `execution.status` even if a payload has a benign default.
 
 ## Check the complete process
 
-Compile and explain the graph with the host's handler registrations. Test at
-least the actual branches, ambiguous triage, two independent requests, two
+Compile with `foliqant validate --strict` (declared handlers need no
+registration) and review `foliqant explain --format mermaid`. Test at
+least the actual branches, ambiguous triage, every `route` entry, skipped
+conditional steps, each repeat stop reason (`until`, `exhausted`,
+`continue_when`, review), two independent requests, two
 requests in one category, related/conditional/withdrawn/quoted units, held work,
 an empty collection, a child review, and a child technical failure. Verify the
 selected branch and skipped branches, final disposition, and complete ledger.

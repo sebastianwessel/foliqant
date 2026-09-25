@@ -26,10 +26,12 @@ curl --fail-with-body http://127.0.0.1:8765/run \
   -d '{"payload":{"requestId":"http-001","message":"Cancel renewal for account C-1049 by 30 September 2026."},"metadata":{}}'
 ```
 
-The example returns the serialized `ExecutionResult`. Inspect
-`execution.status` as well as the HTTP status: the demonstration route returns
-HTTP 200 after a successful runtime call even if the result records a workflow
-failure. It has no authentication and is intended for loopback use.
+The example returns the serialized `ExecutionResult`. A completed or
+`needs_review` result is HTTP 200. A failed run is a server error with the
+result as its body: `503` for a failure the boundary marked `retryable` or
+`capacity_exceeded`, `504` for `request_timeout` and `run_timeout`, and `500`
+for every other failure, including model and tool failures. Invalid input is
+`400`. It has no authentication and is intended for loopback use.
 
 ## Adapt the boundary
 
@@ -60,8 +62,16 @@ route, **after reading and validating the request**, the integration is just:
 
 ```python
 result = await request.app.state.run_support(envelope)
+failure = result.execution.error
+if result.execution.status in {"failed", "cancelled"} and failure is not None:
+    status = failure_status(failure.code, retryable=failure.retryable)
+    return JSONResponse(result.model_dump(mode="json"), status_code=status)
 return JSONResponse(result.model_dump(mode="json"))
 ```
+
+`failure_status` is the example's mapping from a failure's code and
+`retryable` flag to the HTTP status described above; a failed run is never a
+2xx response.
 
 These are fragments of the linked runnable server, not a second server you
 need to create. Register its route with `Route("/run", run, methods=["POST"])`

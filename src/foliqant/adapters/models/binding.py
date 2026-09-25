@@ -6,13 +6,19 @@ from typing import Literal
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
+from foliqant.contracts.models import DEFAULT_OUTPUT_RETRIES
 from foliqant.core.admission import CapacityLimiter
+from foliqant.core.pricing import PricingPlan
 from foliqant.core.retry import RetryPolicy
 
 
 @dataclass(frozen=True, slots=True)
 class ModelBinding:
-    """A prevalidated model and its local execution policy."""
+    """A prevalidated model and its local execution policy.
+
+    Usage is accounted under ``model.model_name``, the provider model ID;
+    ``pricing`` comes from the model profile and estimates each request's cost.
+    """
 
     model: Model
     settings: ModelSettings
@@ -24,3 +30,6 @@ class ModelBinding:
     # Populated by the provider factory without importing optional SDKs here.
     timeout_errors: tuple[type[Exception], ...] = ()
     retry: RetryPolicy = field(default_factory=RetryPolicy)
+    pricing: PricingPlan | None = None
+    # Corrective requests after an invalid structured output (``output_retries``).
+    output_retries: int = DEFAULT_OUTPUT_RETRIES

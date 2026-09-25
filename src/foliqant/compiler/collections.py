@@ -1,6 +1,6 @@
 """Offline validation of authored collection literals against confined flow schemas."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import cast
 from urllib.parse import quote
 
@@ -12,7 +12,7 @@ from referencing.jsonschema import DRAFT202012, Schema, SchemaRegistry
 
 from foliqant.contracts.execution import FlowCollectionItem
 from foliqant.core.json import FrozenJson, thaw_json
-from foliqant.core.plan import FlowCollectionStepPlan, FlowPlan
+from foliqant.core.plan import FlowCollectionStepPlan, FlowPlan, SourceLocation
 
 from .errors import CompilationError
 
@@ -21,9 +21,14 @@ _BASE = "https://foliqant.invalid/compiled/"
 
 
 def validate_collection_literals(
-    flows: Mapping[str, FlowPlan], schemas: Mapping[str, dict[str, object]]
+    flows: Mapping[str, FlowPlan],
+    schemas: Mapping[str, dict[str, object]],
+    locate: Callable[[str, str], tuple[SourceLocation, str | None]] | None = None,
 ) -> None:
-    """Literal/default batches are known exactly; dynamic batches validate at runtime."""
+    """Literal/default batches are known exactly; dynamic batches validate at runtime.
+
+    ``locate(flow, step)`` returns the authored location and field of the items.
+    """
     registry: SchemaRegistry = Registry()
     for path, schema in schemas.items():
         registry = registry.with_resource(
@@ -34,6 +39,9 @@ def validate_collection_literals(
         for step in flow.steps:
             if not isinstance(step, FlowCollectionStepPlan):
                 continue
+            location, field = (
+                locate(flow.name, step.name) if locate is not None else (step.location, "items")
+            )
             values: list[FrozenJson] = []
             if step.items.kind == "literal":
                 values.append(step.items.literal)
@@ -44,14 +52,14 @@ def validate_collection_literals(
                     items = _ITEMS.validate_python(thaw_json(value), strict=True)
                 except ValidationError:
                     raise CompilationError(
-                        "invalid_collection_items", step.location, field="items"
+                        "invalid_collection_items", location, field=field
                     ) from None
                 if (
                     len(items) > step.max_items
                     or len({item.id for item in items}) != len(items)
                     or any(item.flow not in step.flows for item in items)
                 ):
-                    raise CompilationError("invalid_collection_items", step.location, field="items")
+                    raise CompilationError("invalid_collection_items", location, field=field)
                 for item in items:
                     target = flows[item.flow]
                     if target.input_schema_path is None:
@@ -66,5 +74,5 @@ def validate_collection_literals(
                         valid = False
                     if not valid:
                         raise CompilationError(
-                            "invalid_collection_input", step.location, field="items"
+                            "invalid_collection_input", location, field=field
                         ) from None

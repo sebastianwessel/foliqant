@@ -1,7 +1,17 @@
 """Per-step attempt accounting for in-memory workflow execution."""
 
+from dataclasses import dataclass
+
 from .errors import ErrorCode, ServiceError
-from .execution import TokenUsage, Usage
+from .execution import ModelUsage, TokenUsage, Usage
+from .pricing import PricingPlan
+
+
+@dataclass(slots=True)
+class _ModelAttempt:
+    model: str
+    pricing: PricingPlan | None
+    usage: TokenUsage | None = None
 
 
 class StepBudget:
@@ -15,15 +25,23 @@ class StepBudget:
             raise ValueError("attempt limits must be nonnegative integers")
         self._model_limit = model_requests
         self._tool_limit = tool_calls
-        self._models: dict[int, TokenUsage | None] = {}
+        self._models: dict[int, _ModelAttempt] = {}
         self._tools = 0
+        self._output_retries = 0
 
-    async def start_model_request(self) -> int:
-        """Reserve one model attempt and return its local accounting ticket."""
+    async def start_model_request(self, model: str, pricing: PricingPlan | None = None) -> int:
+        """Reserve one attempt for a provider model ID and return its accounting ticket.
+
+        ``pricing`` estimates the request's cost once its usage is reported.
+        """
+        if type(model) is not str or not 1 <= len(model) <= 512 or not model.strip():
+            raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
+        if pricing is not None and type(pricing) is not PricingPlan:
+            raise ServiceError(ErrorCode.INVALID_CONFIGURATION)
         if len(self._models) >= self._model_limit:
-            raise ServiceError(ErrorCode.BUDGET_EXHAUSTED)
+            raise ServiceError(ErrorCode.MODEL_REQUEST_LIMIT_REACHED)
         ticket = len(self._models) + 1
-        self._models[ticket] = None
+        self._models[ticket] = _ModelAttempt(model, pricing)
         return ticket
 
     async def finish_model_request(self, ticket: int, usage: TokenUsage) -> None:
@@ -31,12 +49,12 @@ class StepBudget:
         if (
             type(ticket) is not int
             or ticket not in self._models
-            or self._models[ticket] is not None
+            or self._models[ticket].usage is not None
         ):
             raise ServiceError(ErrorCode.CONFLICT)
         if type(usage) is not TokenUsage:
             raise ServiceError(ErrorCode.INVALID_OUTPUT)
-        self._models[ticket] = TokenUsage(
+        self._models[ticket].usage = TokenUsage(
             usage.input_tokens,
             usage.output_tokens,
             usage.cache_read_input_tokens,
@@ -47,13 +65,19 @@ class StepBudget:
     async def start_tool_call(self) -> int:
         """Reserve an external tool invocation, including an eventual failure."""
         if self._tools >= self._tool_limit:
-            raise ServiceError(ErrorCode.BUDGET_EXHAUSTED)
+            raise ServiceError(ErrorCode.TOOL_CALL_LIMIT_REACHED)
         self._tools += 1
         return self._tools
 
+    def record_output_retry(self) -> None:
+        """Count one admitted model request that asks for a corrected invalid output."""
+        self._output_retries += 1
+
     def snapshot(self) -> Usage:
-        """Return measured totals; unreported attempts make tokens unavailable."""
-        tokens = TokenUsage.zero()
-        for report in self._models.values():
-            tokens = tokens.plus(report if report is not None else TokenUsage())
-        return Usage(len(self._models), self._tools, tokens)
+        """Return measured totals; unreported attempts make tokens and cost unavailable."""
+        usage = Usage(0, self._tools, output_retries=self._output_retries)
+        for attempt in self._models.values():
+            tokens = attempt.usage if attempt.usage is not None else TokenUsage()
+            cost = attempt.pricing.request_cost(attempt.usage) if attempt.pricing else None
+            usage = usage.plus(Usage(1, 0, tokens, ((attempt.model, ModelUsage(1, tokens, cost)),)))
+        return usage

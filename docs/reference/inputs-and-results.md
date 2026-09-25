@@ -48,8 +48,8 @@ therefore in the records that result contains.
 
 | Call | Use it when | What Foliqant executes | `ExecutionResult.payload` | `flows` and `transitions` |
 | --- | --- | --- | --- | --- |
-| `await app.run(workflow, envelope)` | Normal application request | The workflow start, routed flows, and configured output projection | The workflow output projection, or accepted input when no output is configured; a failed run preserves accepted input | Records every non-callable workflow flow; unvisited flows are `skipped`. Records the selected routing boundaries. |
-| `await app.run_flow(workflow, flow_id, envelope)` | Focused flow test or evaluation | One named flow, with the already resolved flow input | That flow's projected result, or accepted input if it fails | Contains only the named flow. Does not follow its transition, so `transitions` is empty. |
+| `await app.run(workflow, envelope)` | Normal application request | The workflow start, routed flows, repeat attempts and retry flows, and configured output projection | The workflow output projection, or accepted input when no output is configured; a failed run preserves accepted input | Records every non-callable workflow flow and every retry flow; unvisited flows are `skipped`. Records the selected routing boundaries. |
+| `await app.run_flow(workflow, flow_id, envelope)` | Focused flow test or evaluation | One named flow (one attempt of a repeated flow), with the already resolved flow input | That flow's projected result, or accepted input if it fails | Contains only the named flow. Does not follow its transition, so `transitions` is empty. |
 | `await app.run_step(workflow, flow_id, step_id, envelope)` | Focused step test or evaluation | One named step, with exactly its resolved input names | That step's validated result, or accepted input if it fails | Contains only the named flow and step. It does not run preceding steps or routes, so `transitions` is empty. |
 
 `run_flow` and `run_step` still enforce the selected flow or step's input
@@ -124,7 +124,7 @@ Every result requires:
 | `questionId`, `type` | Matching input question and type. |
 | `answerability` | A `status` and an `issues` array. |
 | `answer` | Type-specific shape above, including `null` where permitted. |
-| `reason` | Nonblank human explanation, at most 400 characters; never truncated. |
+| `reason` | Nonblank human explanation; the runtime instructions ask for at most 400 characters and the result accepts up to 2000; never truncated. |
 | `evidence_strength` | `"strong"`, `"limited"`, or `null`; always present. |
 
 ### Reason and evidence strength
@@ -179,6 +179,7 @@ ExecutionResult                    ← app.run(), app.run_flow(), app.run_step()
 ├── payload                         ← public workflow / focused-boundary output
 ├── metadata                        ← accepted caller metadata
 ├── execution                       ← run-wide status, usage, and safe failure
+├── start                           ← only full workflow runs: first flow and its selection
 ├── transitions[]                   ← only full workflow routing
 └── flows[flow_id] : FlowResult      ← executed or skipped workflow flow
     ├── result                       ← flow output projection
@@ -194,7 +195,7 @@ ExecutionResult                    ← app.run(), app.run_flow(), app.run_step()
 | Public type | Produced by | Where you receive it | When it exists |
 | --- | --- | --- | --- |
 | `ExecutionResult` | `WorkflowApplication.run`, `run_flow`, or `run_step` | The awaited return value | A call was admitted and reached execution. Invalid admission can instead raise `ServiceError`; caller cancellation propagates. |
-| `FlowResult` | The runtime after a configured flow runs, fails, reviews, or is skipped | `result.flows[flow_id]` | Every non-callable flow in a whole workflow run, or the selected flow for `run_flow` / `run_step`. |
+| `FlowResult` | The runtime after a configured flow runs, fails, reviews, or is skipped | `result.flows[flow_id]` | Every non-callable flow and every repeat retry flow in a whole workflow run, or the selected flow for `run_flow` / `run_step`. |
 | `StepResult` | The runtime after a configured step runs, fails, reviews, or is skipped | `result.flows[flow_id].steps[step_id]` | Every step belonging to a flow record. `run_step` executes only the selected step. |
 | `FlowCollectionItemResult` | A `flow_collection` step after each callable child flow | `step.result.items[index]` or `step.partial_result.items[index]` | Only a flow-collection step. It is a flow record plus the planned child `id` and `flow`. |
 | `SafeError` | The failing runtime boundary | `execution.error`, `flow.error`, or `step.error` | A returned technical failure. It is absent for `needs_review`. |
@@ -207,6 +208,11 @@ returns. Your application normally reads them rather than constructing them.
 The exception is a local fake for an evaluation or integration test; see
 [unit testing](../evaluation/unit-testing.md).
 
+`ExecutionResult`, `ExecutionInfo`, `Usage`, and `ModelUsage` are importable
+directly from the top-level package (`from foliqant import ExecutionInfo,
+ExecutionResult, ModelUsage, Usage`) for annotating a handler's return type or
+building a local fake without reaching into `foliqant.contracts.execution`.
+
 ### Top-level fields
 
 | Field | Type | Created from | How an application should use it |
@@ -214,8 +220,9 @@ The exception is a local fake for an evaluation or integration test; see
 | `payload` | Any JSON value | Workflow output binding for `run`; selected flow or step result for scoped calls | Your primary business result after checking `execution.status`. It defaults to accepted input for a whole run without an output binding. |
 | `metadata` | `Metadata` | Accepted envelope metadata, including trusted identity consistency checks | Correlate a result with non-secret caller context. Do not treat it as authentication proof. |
 | `flows` | Map of `FlowResult` | Configured flow execution records | Inspect detailed outcomes, decision evidence, tool results, and skipped branches. |
-| `transitions` | List of `TransitionResult` | Authored route selected after each full-flow boundary | Explain why `run` visited a flow or finished. Scoped calls do not route, so this is empty. |
-| `execution` | `ExecutionInfo` | The complete invocation | Read this first for the overall status, ID, revision, measured usage, and safe technical error. |
+| `start` | `StartResult`, omitted for scoped calls | The first flow of `run`: `flow` and `route` (`kind` of `direct` or `route`, optional `index` of the routed `start` entry) | See which start candidate a routed `start` selected. It agrees with the workflow span's `route.selected` event. |
+| `transitions` | List of `TransitionResult` | Authored route selected after each full-flow boundary: `source`, `reason`, one of `flow`/`outcome`, and `route` (`kind` of `direct`, `cases`, `route` or `review`, optional `index` and `case`) | Explain why `run` visited a flow or finished. Scoped calls do not route, so this is empty. |
+| `execution` | `ExecutionInfo` | The complete invocation | Read this first for the overall status, ID, revision, measured usage, and safe technical error. With telemetry, `trace` holds the run span's `trace_id` and `span_id`. |
 
 ### Flow fields: `result.flows[flow_id]`
 
@@ -224,8 +231,12 @@ The exception is a local fake for an evaluation or integration test; see
 | `status` | Always | `completed`, `needs_review`, `failed`, `cancelled`, or `skipped`. |
 | `steps` | Always | Map of the flow's configured steps to `StepResult` records. |
 | `result` | Completed; may be present for review | The flow's configured output projection. Without one, it is the resolved flow input. It may be explicit JSON `null`. |
-| `usage`, `elapsed_seconds` | When measured | Local measurements. Root usage already includes this work; do not add both levels. |
+| `usage`, `elapsed_seconds` | When measured | Local measurements of the (last) run. Root usage already includes this work; do not add both levels. |
 | `error` | Failed or cancelled | A safe technical failure. It is never present for a review outcome. |
+| `attempt_count` | Always | Number of executions: `0` when skipped, otherwise `1`, or the number of attempts or retry runs. |
+| `attempts` | A repeated flow or a retry flow ran | One `FlowAttempt` per run with `attempt` (1-based), `status`, `steps`, optional `result`, `usage`, `elapsed_seconds`, `error`. The top-level fields repeat the last run. |
+| `attempts_usage`, `attempts_elapsed_seconds` | With `attempts` | Sums over every run. |
+| `repeat` | A repeated flow ran | `stopped_by`: `until`, `exhausted`, `continue_when`, `review` or `failure`. |
 
 ### Step fields: `result.flows[flow_id].steps[step_id]`
 
@@ -246,7 +257,7 @@ The exception is a local fake for an evaluation or integration test; see
 | `needs_review` | Optional | Absent | A valid business outcome needs a person or an authored follow-up policy. |
 | `failed` | Absent | Required | A technical failure stopped this boundary. Completed upstream records remain available. |
 | `cancelled` | Absent | May be present in a serialized record | No successful result is claimed. A caller cancellation normally propagates instead of returning an `ExecutionResult`. |
-| `skipped` | Absent | Absent | The whole workflow took another route. Skipped records have no timing or usage. |
+| `skipped` | Absent | Absent | The workflow took another route, the flow stopped before the step, or the step's `when` condition was false. Skipped records have no timing or usage. |
 
 Root `execution.status` is `completed`, `needs_review`, `failed`, or
 `cancelled`; it is never `skipped`. A technical failure does not create a route
@@ -266,10 +277,28 @@ private step records.
 | `flow_collection` | `{"items": [FlowCollectionItemResult, ...]}` | On technical failure the same ledger is instead `partial_result`. |
 
 Every included `Usage` object has `model_requests`, `tool_calls`,
-`input_tokens`, `output_tokens`, `cache_read_input_tokens`,
+`output_retries`, `input_tokens`, `output_tokens`, `cache_read_input_tokens`,
 `cache_write_input_tokens`, and `reasoning_output_tokens`. Counts are
 nonnegative; token values may be `null` when a provider did not report them.
+`output_retries` counts the model requests that asked for a corrected invalid
+output; they are included in `model_requests`.
 Parent usage already aggregates child work, so do not add levels together.
+
+| `Usage` field | Presence | Meaning |
+| --- | --- | --- |
+| `by_model` | A model request was made | `ModelUsage` by provider model ID; its `requests` sum to `model_requests` |
+| `cost` | Some request used a priced profile | Estimate across models, rounded to six decimals; `null` when incomplete |
+| `cost_complete` | With `cost` | `false` when a needed count was unreported or some requests were unpriced |
+| `currency` | With `cost` | `USD` |
+| `reference_model` | With `cost`, when all priced requests share one | The model whose prices were used as a reference estimate |
+
+A `ModelUsage` has `requests` (at least 1), `input_tokens`,
+`cached_input_tokens`, `output_tokens` and `reasoning_tokens` (each `null` when
+unreported), and the same optional `cost`, `cost_complete`, `currency` and
+`reference_model` for that model's requests. Cached tokens are a subset of
+input tokens and reasoning tokens a subset of output tokens. How the estimate
+is computed is described under
+[model pricing](../configuration/models.md#estimate-cost-with-pricing).
 
 See [collection configuration](../steps/flow-collection.md) for its child-ledger
 semantics and [read a workflow result](../integration/results.md) for the
@@ -281,18 +310,29 @@ Review is valid output and has no `execution.error`. A technical failure may
 return a result with completed work preserved, while invalid admission can raise
 `ServiceError` before a result is available. Caller cancellation propagates.
 `SafeError` contains a canonical `code`, fixed safe `message`, required
-`retryable`, and optional nonblank `location`; see the [complete code
-table](../integration/errors.md#canonical-error-codes). Codes do not impose HTTP
-statuses. `foliqant run` prints completed and review results on stdout with exit
-code `0`; failed and cancelled results use its safe CLI error on stderr. CLI exit
-codes are `1` for evaluation mismatch, `2` for invalid argument/input/config,
-`3` for missing optional dependency, `4` for runtime failure, and `130` for
-interruption.
+`retryable`, and optional content-free `reason` (`json_parse_error`,
+`schema_violation`, `decision_contract`, `missing_output`,
+`reasoning_consumed_budget`, `answer_exceeded_budget`), `location` (a JSON
+pointer in schema vocabulary such as `/units/0/intent`, or `question:<id>`) and
+`constraint` (the violated validator keyword or problem kind, such as `enum` or
+`unknown_option`); absent optional fields are omitted. See the [complete code
+table](../integration/errors.md#canonical-error-codes) and
+[failure reasons](../integration/errors.md#failure-reasons). Codes do not impose
+HTTP statuses. `foliqant run` prints completed and review results on stdout with
+exit code `0`; failed and cancelled results use its safe CLI error. CLI exit
+codes are `1` for evaluation mismatch, `2` for invalid argument/input/config
+(including run failures with an input or configuration code such as
+`request_rejected` or `context_limit_exceeded`), `3` for missing optional
+dependency, `4` for runtime failure, `5` for a temporary runtime failure marked
+`retryable`, and `130` for interruption; see
+[exit codes](runtime-configuration.md#exit-codes).
 
 Unknown fields are rejected except application-defined envelope metadata.
 Protected metadata, errors, selections, category descriptions, collection
 `kind`, and `partial_result` are omitted when absent, not serialized as null.
-Native nullable answers and unknown token measurements use explicit null.
+Native nullable answers, unknown token measurements and an incomplete cost
+estimate use explicit null; `by_model` and cost fields are omitted when they do
+not apply.
 Record-level unavailable timing or usage is omitted in canonical serialization.
 
 Packaged schemas are `envelope.schema.json`, `decision-input.schema.json`,

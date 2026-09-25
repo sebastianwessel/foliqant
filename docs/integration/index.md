@@ -42,6 +42,18 @@ call `app.run(...)` for each request. Each call has its own execution state; the
 compiled plans and clients can be shared. Do not prepare and open again for every
 HTTP request.
 
+When the workflows use trusted [handler steps](../steps/handler.md), pass the
+host's registrations: `prepare_application(path, handlers=HANDLERS)`. The
+handlers' contracts are **declared** in `settings.yaml`; each registration only
+supplies the callable (and, optionally, schemas that must match the
+declaration). `prepared.diagnostics` lists the compiler warnings and infos.
+In production, prepare with `strict=True` so warnings fail startup too: an
+invalid configuration raises one `CompilationError` whose `problems` list every
+problem with file, line, column, field, message and hint. Log them and exit
+non-zero; an application prepared strictly is also refused by
+`open_application` if it carries a warning. See [what the compiler
+guarantees](../configuration/validation.md#how-problems-are-reported).
+
 The `Envelope.payload` is your business input. `Envelope.metadata` is optional
 context. The workflow's input schema validates the payload at admission. To
 decode untrusted HTTP bytes, use `decode_envelope`, which bounds and validates

@@ -21,7 +21,7 @@ from foliqant.ports.observation import TraceContext
     "error",
     [
         None,
-        ServiceError(ErrorCode.TIMEOUT),
+        ServiceError(ErrorCode.REQUEST_TIMEOUT),
         asyncio.CancelledError(),
         RuntimeError("PRIVATE_ERROR"),
     ],

@@ -109,7 +109,7 @@ async def http_runtime(actions, *, attempts=3, delay=0, authorizer=None) -> Asyn
     assert active == 0
 
 
-@pytest.mark.parametrize("status", [429, 500, 502, 503, 529])
+@pytest.mark.parametrize("status", [408, 429, 500, 502, 503, 504, 529])
 async def test_real_sdk_transient_status_retries_with_new_ids_and_reauthorization(status):
     async with http_runtime([status, 200]) as (runtime, calls, executed, authorizer):
         ctx = context(Identity("tenant", "user"))
@@ -128,12 +128,14 @@ async def test_real_sdk_transient_status_retries_with_new_ids_and_reauthorizatio
 @pytest.mark.parametrize(
     "action,code",
     [
-        (400, ErrorCode.DEPENDENCY_FAILURE),
+        (400, ErrorCode.REQUEST_REJECTED),
         (401, ErrorCode.UNAUTHENTICATED),
         (403, ErrorCode.FORBIDDEN),
-        (408, ErrorCode.TIMEOUT),
-        (504, ErrorCode.TIMEOUT),
-        ((503, -32602), ErrorCode.DEPENDENCY_FAILURE),  # Invalid params overrides HTTPtransient.
+        # A JSON-RPC error never grants the HTTP status's retry permission.
+        ((503, -32602), ErrorCode.DEPENDENCY_OVERLOADED),
+        # A server that rejects a validated call, or fails it internally.
+        ((200, -32602), ErrorCode.REQUEST_REJECTED),
+        ((200, -32603), ErrorCode.DEPENDENCY_FAILURE),
     ],
 )
 async def test_terminal_http_or_protocol_errors_never_repeat(action, code):
@@ -148,13 +150,32 @@ async def test_terminal_http_or_protocol_errors_never_repeat(action, code):
         assert "PRIVATE" not in str(raised.value)
 
 
+@pytest.mark.parametrize(
+    "status,code",
+    [
+        (429, ErrorCode.RATE_LIMITED),
+        (503, ErrorCode.DEPENDENCY_OVERLOADED),
+        (500, ErrorCode.DEPENDENCY_FAILURE),
+    ],
+)
+async def test_exhausted_transient_statuses_keep_their_code_and_retry_permission(status, code):
+    async with http_runtime([status, status], attempts=2) as (runtime, calls, executed, _):
+        ctx = context()
+        async with runtime.open("records", ("lookup",), ctx) as tools:
+            with pytest.raises(ServiceError) as raised:
+                await tools.call("lookup", {"key": "ok"})
+        assert raised.value.code is code and raised.value.retryable
+        assert len(calls) == 2 and executed == []
+
+
 async def test_budget_exhaustion_prevents_retry_wire_call():
     async with http_runtime([503]) as (runtime, calls, _, authorizer):
         ctx = replace(context(), budget=StepBudget(model_requests=0, tool_calls=1))
         async with runtime.open("records", ("lookup",), ctx) as tools:
             with pytest.raises(ServiceError) as raised:
                 await tools.call("lookup", {"key": "ok"})
-        assert raised.value.code == ErrorCode.BUDGET_EXHAUSTED
+        # The limit refused the retry: the failure reports the overload it would have retried.
+        assert raised.value.code == ErrorCode.DEPENDENCY_OVERLOADED and raised.value.retryable
         assert len(calls) == ctx.budget.snapshot().tool_calls == 1
         assert len(authorizer.identities) == 2  # Every retry reauthorizes before reserving.
 
@@ -182,7 +203,7 @@ async def test_timeout_never_retries_or_overlaps_pending_remote_work(actions, ex
         async with runtime.open("records", ("lookup",), ctx) as tools:
             with pytest.raises(ServiceError) as raised:
                 await tools.call("lookup", {"key": "ok"})
-            assert raised.value.code == ErrorCode.TIMEOUT
+            assert raised.value.code == ErrorCode.REQUEST_TIMEOUT
             assert len(calls) == expected
         assert ctx.budget.snapshot().tool_calls == expected
 
@@ -256,7 +277,9 @@ async def test_response_observations_are_isolated_across_concurrent_callers():
 
     first, second = await asyncio.gather(one(503), one(401))
     assert first is not second
-    assert first.transient is not None and second.transient is None
+    assert first.failure is not None and first.failure.retryable
+    assert second.failure is not None and second.failure.code is ErrorCode.UNAUTHENTICATED
+    assert not second.failure.retryable
     assert not first.active and not second.active
 
 
@@ -277,5 +300,5 @@ async def test_mcp_late_response_after_ignored_cancellation_is_terminal(monkeypa
         monkeypatch.setattr(ClientSession, "send_request", late)
         with pytest.raises(ServiceError) as raised:
             await tools.call("lookup", {"key": "ok"})
-    assert raised.value.code == ErrorCode.TIMEOUT
+    assert raised.value.code == ErrorCode.REQUEST_TIMEOUT
     assert ctx.budget.snapshot().tool_calls == 1

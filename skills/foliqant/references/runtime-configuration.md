@@ -72,20 +72,22 @@ YAML files.
 
 | Setting | Default when omitted |
 | --- | --- |
-| `models`, `mcp` | Empty registries; declare only dependencies the workflow uses. |
+| `models`, `mcp`, `handlers` | Empty registries; declare only dependencies the workflow uses. |
 | `execution` or individual execution fields | The execution values listed below. |
-| `telemetry` | Disabled. |
+| `telemetry` | Disabled; `conditions` (debug condition events) defaults to `false`. |
 | `evaluation` | No startup access to gold; explicit evaluation discovers `evaluation/dataset.json` beside `config/`. |
 | Model `provider`, `model`, `output_mode` | Required; no default provider, model ID, or output mode. |
 | OpenAI `api`; Azure `api` and `api_flavor` | Required; choose explicitly. Compatible `api` defaults to `chat`. |
-| Model `options.max_tokens` | `4096`. |
+| Model `options.max_tokens` | `32768` output tokens, reasoning included (sized for reasoning models). |
 | `temperature`, `top_p`, `seed`, reasoning/thinking options | Unset; the provider/model decides when no value is configured. |
 | Model capabilities | `supports_text`, `supports_json_schema`, and `supports_tools` are all `true`; configure the selected model's actual capabilities. |
-| Model admission and timeout | `concurrency: 4`, `queue_limit: 16`, `request_timeout: 60` seconds. |
+| Model admission and timeout | `concurrency: 4`, `queue_limit: 16`, `request_timeout: 300` seconds. |
+| Model `retry`, `output_retries` | `max_attempts: 4` (first request plus up to three retries), `initial_delay_seconds: 1`, `max_delay_seconds: 30`; `output_retries: 1`. |
 | Compatible `api_key` | Absent; OpenAI, Azure, Anthropic, and Google use their documented credential environment references. Bedrock uses the host credential chain. |
 | Compatible `allow_insecure_http`, `max_tokens_field` | `false`, `max_tokens`. |
 
-Model selection is explicit step `model` first, then workflow `defaults.model`.
+Model selection is explicit step `model` first, then the flow definition's
+`defaults.model`, then workflow `defaults.model`.
 A sole model profile is not selected automatically. A profile override retains
 the profile's provider, credentials, capabilities, timeout, retries, and admission
 group. It replaces only an explicitly supplied model ID and individual supplied
@@ -95,7 +97,9 @@ is independent and does not inherit the workflow profile's settings.
 For nullable generation options, an explicit `null` in an override clears the
 inherited value, leaving provider behavior in effect; it differs from omission.
 `model` and `max_tokens` cannot be cleared. The merged options must still satisfy
-the chosen provider's constraints.
+the chosen provider's constraints. An override's `pricing` replaces the
+profile's pricing and `pricing: null` removes it; an override with a different
+`model` does not inherit the profile's pricing.
 
 ## Common model fields
 
@@ -104,8 +108,11 @@ Every model profile has:
 - `provider`, `model`, and `output_mode: native|tool`;
 - `supports_text` (default true), `supports_json_schema` (true), and
   `supports_tools` (true);
-- `concurrency` (4), `queue_limit` (16), and `request_timeout` (60);
-- `retry` (one attempt by default);
+- `concurrency` (4), `queue_limit` (16), and `request_timeout` (300);
+- `retry` (`max_attempts: 4` by default);
+- `output_retries` (`0`–`8`, default `1`): corrections of an invalid structured
+  output;
+- optional `pricing` (see [Pricing](#pricing));
 - provider-specific `options`.
 
 `output_mode: tool` requires tool support. At least text or JSON Schema output
@@ -113,10 +120,68 @@ must be supported. `model` is nonblank. `concurrency` is 1–1024,
 `queue_limit` is 0–10,000, and `request_timeout` is positive and at most
 3600 seconds.
 
-Common generation options are `max_tokens` (default 4096, 1–1,048,576),
+Common generation options are `max_tokens` (default 32768, 1–1,048,576),
 optional `temperature` (0–2), and optional `top_p` (greater than 0 and at
 most 1). OpenAI-family profiles also accept an optional strict-integer `seed`
 and `reasoning_effort: none|minimal|low|medium|high|xhigh`.
+
+`max_tokens` includes a reasoning model's reasoning tokens. A response stopped
+at the limit fails with `output_limit_reached` (not retryable; resending the
+same request hits the same limit), typically with `reasoning_output_tokens`
+equal to `output_tokens` in the step usage. Size `max_tokens` and
+`reasoning_effort` per profile, and per step where one step needs a different
+budget:
+
+```yaml
+model:
+  profile: local
+  options:
+    max_tokens: 2048
+    reasoning_effort: none
+```
+
+Measure the effect on evaluation cases; the report's `failures_by_code` shows
+how many attempts hit the limit, and `failures_by_reason` whether reasoning
+consumed the budget (`reasoning_consumed_budget`) or the answer was too long
+(`answer_exceeded_budget`). A model whose maximum output is below `max_tokens`
+rejects the request (`request_rejected`); an OpenAI-compatible server such as
+vLLM counts `max_tokens` against the context window
+(`context_limit_exceeded` when input plus `max_tokens` exceed it). Lower
+`max_tokens` for such a model.
+
+### Pricing
+
+`pricing` estimates cost from reported usage; it is configuration, not a price
+list, and must be updated when prices change. Example with GPT-5.6 Terra list
+prices:
+
+```yaml
+pricing:
+  currency: USD                    # required, only USD
+  input_per_million: 2.00          # required
+  cached_input_per_million: 0.20   # optional; defaults to the input price
+  output_per_million: 12.00        # required
+  reasoning_billed_as: output      # output (default) | input
+  long_context:                    # optional tier for large requests
+    threshold_input_tokens: 272000 # applies when input tokens exceed it
+    input_per_million: 4.00
+    cached_input_per_million: 0.40
+    output_per_million: 18.00
+  reference_model: gpt-5.6-terra   # optional: whose prices are borrowed
+```
+
+Per request: (input − cached) × input price + cached × cached price + output ×
+output price; reasoning tokens are part of output and use the input price with
+`reasoning_billed_as: input`. The long-context tier replaces all prices of a
+request above the threshold. Arithmetic is exact decimal; results round to six
+decimals. A needed count that was not reported gives `cost: null` with
+`cost_complete: false`. Prices are numbers from 0 to 1,000,000; strings,
+other currencies and unknown fields are rejected. Usage objects then carry
+`cost`, `cost_complete`, `currency`, optional `reference_model`, and
+`by_model` (keyed by provider model ID: `requests`, `input_tokens`,
+`cached_input_tokens`, `output_tokens`, `reasoning_tokens`, and the cost
+fields). `foliqant explain` shows `model_selection.pricing`; `foliqant doctor`
+lists `models.<profile>.pricing`.
 
 ### OpenAI
 
@@ -127,7 +192,7 @@ model: $MODEL_ID
 api_key: $OPENAI_API_KEY     # default reference
 output_mode: native
 options:
-  max_tokens: 4096
+  max_tokens: 32768
   temperature: 0.1           # optional 0..2
   top_p: 0.9                 # optional (0,1]
   seed: 7                    # optional
@@ -146,7 +211,7 @@ allow_insecure_http: false
 max_tokens_field: max_tokens # or max_completion_tokens
 output_mode: native
 options:
-  max_tokens: 4096
+  max_tokens: 32768
 ```
 
 Plain HTTP requires explicit `allow_insecure_http: true`; prefer HTTPS outside
@@ -176,7 +241,7 @@ model: $MODEL_ID
 api_key: $ANTHROPIC_API_KEY
 output_mode: native
 options:
-  max_tokens: 4096
+  max_tokens: 32768
   thinking: adaptive         # disabled|adaptive, optional
   effort: high               # low|medium|high|xhigh|max; adaptive only
 ```
@@ -192,7 +257,7 @@ model: $GOOGLE_MODEL_ID
 api_key: $GOOGLE_API_KEY
 output_mode: native
 options:
-  max_tokens: 4096
+  max_tokens: 32768
 ```
 
 `api_key` defaults to `$GOOGLE_API_KEY`. This uses Google's native Gemini
@@ -210,7 +275,7 @@ region: $AWS_REGION
 model: $BEDROCK_MODEL_ID
 output_mode: tool
 options:
-  max_tokens: 4096
+  max_tokens: 32768
 ```
 
 `region` is required and may be a literal or an environment reference. The
@@ -240,7 +305,7 @@ model:
     max_tokens: 800
 ```
 
-The `model` and `options` overrides are optional. Option overrides are
+The `model`, `options` and `output_retries` overrides are optional. Option overrides are
 `max_tokens`, `temperature`, `top_p`, `seed`, `reasoning_effort`,
 `thinking`, `effort`, and `thinking_budget`; the compiler rejects options
 unsupported by the selected provider.
@@ -254,12 +319,12 @@ field keeps the remaining defaults.
 execution:
   concurrency: 4
   queue_limit: 16
-  run_timeout: 300
-  model_timeout: 60
+  run_timeout: 900
+  model_timeout: 300
   tool_timeout: 30
-  max_steps: 32
-  model_requests_per_step: 4
-  tool_calls_per_step: 3
+  max_steps: 128
+  model_requests_per_step: 16
+  tool_calls_per_step: 16
 ```
 
 `concurrency` is 1–1024 and `queue_limit` is 0–65,536. Durations are
@@ -271,8 +336,13 @@ Limits compose: the remaining run deadline still bounds each model/tool call.
 `model_timeout` bounds a logical model request while the profile's
 `request_timeout` configures its SDK/network timeout. For MCP, the effective
 tool timeout also respects the server's `request_timeout`. Raising a provider
-timeout alone does not raise the run deadline. LLM `max_iterations` limits logical
-turns independently of `model_requests_per_step`, which counts retry attempts.
+timeout alone does not raise the run deadline. LLM `max_iterations` (default 8)
+limits logical turns independently of `model_requests_per_step`, which counts
+retry attempts and output corrections. Each bound fails with its own code:
+`run_timeout` (run or caller deadline, including admission waits),
+`request_timeout` (a request's own timeout), `step_limit_reached`,
+`model_request_limit_reached`, `iteration_limit_reached`,
+`tool_call_limit_reached`.
 
 ## Provider retry policy
 
@@ -280,25 +350,41 @@ Model and MCP profiles accept:
 
 ```yaml
 retry:
-  max_attempts: 1
-  initial_delay_seconds: 0.25
-  max_delay_seconds: 5
+  max_attempts: 4
+  initial_delay_seconds: 1
+  max_delay_seconds: 30
 ```
 
-`max_attempts` is a strict integer from 1 through 8 and includes the initial
-request. Both delays are finite; the initial delay is 0–60 seconds, the maximum
-is 0–300 seconds, and the maximum cannot be lower than the initial value.
-Defaults therefore make exactly one request.
+These are the defaults. `max_attempts` is a strict integer from 1 through 8
+and includes the initial request (`1` disables retries). Both delays are finite;
+the initial delay is 0–60 seconds, the maximum is 0–300 seconds, and the
+maximum cannot be lower than the initial value.
 
-When more attempts are enabled, the runtime retries only safely observed
-completed HTTP responses with status 429, 500, 502, 503, or 529. Backoff is
-capped exponential full jitter. A valid `Retry-After` delta or date is a
-minimum delay bounded by the configured maximum and remaining absolute deadline.
-If it cannot fit, return the final transient failure.
+The runtime retries only completed HTTP responses: 408/504
+(`request_timeout`), 429 (`rate_limited`), 500/502 (`dependency_failure`) and
+503/529 (`dependency_overloaded`), and for models also a connection failure
+without a response. Backoff is capped exponential full jitter. A valid
+`Retry-After` delta or date is a minimum delay bounded by the configured
+maximum and remaining absolute deadline. If it cannot fit, return the final
+transient failure (`retryable: true`).
 
-Never retry a connection or stream interruption, timeout including 408/504,
-cancellation, authentication failure, schema/output failure, or whole
-step/flow/workflow. Provider SDK retries remain zero. Every request reserves and
+Never retry a client-side timeout, HTTP 400/422, a context window overflow,
+401/403/404, `output_limit_reached`, `output_refused`, a step limit, a tool
+error, an invalid tool call, a handler failure, cancellation, or a whole
+step/flow/workflow. Provider SDK retries remain zero. When the step's request or
+tool call limit refuses a retry, the failure reports the transient condition it
+would have retried (still `retryable`); a refused output correction reports the
+`invalid_output`.
+
+Invalid structured output (a schema step's JSON Schema violation, a decision
+contract violation, or unparseable JSON) is instead corrected up to the model
+profile's `output_retries` (`0`–`8`, default `1`; per step through a profile
+override with `profile` and `output_retries`): the model receives the
+validation problems of its own output and returns a corrected answer. Each
+correction is a model request against `model_requests_per_step` and
+`usage.output_retries`, not a `max_iterations` turn. Exhausted corrections fail
+with `invalid_output` and a content-free `reason`, `location` and `constraint`.
+A length stop, refusal or provider error is never corrected. Every request reserves and
 accounts against `model_requests_per_step` or `tool_calls_per_step`; failed
 attempt token usage remains unknown. Release and reacquire model request
 admission during backoff. Keep an MCP server's admitted authenticated session
@@ -325,7 +411,7 @@ application opens, not per request, and resolved values are not expanded again.
 Each profile contains `transport`, optional `auth`, optional
 `identity_meta_key`, a nonempty `catalog.tools`, `concurrency` (4),
 `queue_limit` (16), `request_timeout` (30), and
-`retry` (one attempt), and `output_limit_bytes` (1 MiB).
+`retry` (`max_attempts: 4`), and `output_limit_bytes` (1 MiB).
 `concurrency` is 1–1024, `queue_limit` is 0–10,000,
 `request_timeout` is positive and at most 3600 seconds, and
 `output_limit_bytes` is 1 byte–64 MiB.
@@ -356,6 +442,15 @@ Stdio cannot use an HTTP auth hook. Each tool declaration has
 `input_schema`, optional `output_schema`, and `effect: read|write`; current
 runtime execution admits only read effects.
 
+MCP failures have their own codes: `tool_catalog_mismatch` (discovered schemas
+differ from the declared catalog), `tool_error` (a result with `isError`),
+`tool_output_limit_exceeded` (larger than `output_limit_bytes`),
+`invalid_output` (a result that violates `output_schema` or has the wrong
+form), `forbidden`, `request_timeout` and `dependency_failure`. A model's call
+to an unknown tool or with invalid arguments is `invalid_tool_call`. Only an
+MCP input request (elicitation) ends the step `needs_review`; every failure
+fails the run.
+
 `auth` is a provider name. For example, `auth: oauth` requires the host to
 pass `RuntimePlugins(mcp_credentials={"oauth": provider})`. The mapping key
 must match exactly; it is checked before a session opens. For every HTTP session,
@@ -379,25 +474,48 @@ authenticate a caller.
 
 ## Trusted handlers
 
-Register trusted Python before preparation:
+Declare every handler's contract in `settings.yaml`; schemas are inline objects
+or JSON/YAML files relative to the settings file, self-contained and confined
+to its directory:
+
+```yaml
+handlers:
+  normalize:
+    input_schema: shared/handler_contracts/normalize.input.json
+    output_schema: shared/handler_contracts/normalize.output.json
+    effect: read
+```
+
+Register the trusted callable when preparing the application:
 
 ```python
-from foliqant.adapters.handlers import HandlerRegistration
 from foliqant import prepare_application
+from foliqant.adapters.handlers import HandlerRegistration
 
 handlers = {
-    "normalize": HandlerRegistration(
-        handler=normalize,  # async (FrozenObject, StepContext) -> StepOutcome
-        input_schema={"type": "object"},
-        output_schema={"type": "object"},
-        effect="read",
-    )
+    # async (FrozenObject, StepContext) -> StepOutcome
+    "normalize": HandlerRegistration(normalize),
 }
 prepared = prepare_application(config_path, handlers=handlers)
 ```
 
-Configuration cannot import code. Handler schemas participate in compilation and
-runtime validation. Exceptions become safe service errors.
+`HandlerRegistration(handler, input_schema=None, output_schema=None,
+effect="read")`: optional schemas (for example generated from Pydantic models)
+must equal the declaration after canonicalisation, else
+`handler_contract_mismatch` names the handler and the first differing path.
+A registration for an undeclared handler is `unknown_handler`; a declared
+handler without registration compiles (offline commands work) and fails at
+`open_application` with `missing_handler_registration`. Configuration cannot
+import code. Declared schemas drive compile-time binding and route-coverage
+checks and runtime validation. A raised `ServiceError` keeps its code and
+`retryable`; any other exception fails the step with `handler_failed`, without
+its text.
+
+A handler returns `StepOutcome(result, needs_review=False, selection=None,
+unresolved_issues=())`. Issues require `needs_review` and select issue-specific
+review routes; a selection's origin is `fallback` exactly when the step needs
+review. `StepContext` adds `trace` (W3C carrier of the step span), `attempt`,
+`collection_item` and `flow_role` (`routed`, `callable`, `retry`).
 
 ## Telemetry
 
@@ -410,12 +528,25 @@ runtime validation. Exceptions become safe service errors.
 - `span_queue_capacity` (2048), `span_batch_size` (512),
   `span_schedule_delay` (5);
 - `metric_export_interval` (60), `metric_export_batch_size` (512);
-- `export_timeout` (10), `shutdown_timeout` (10).
+- `export_timeout` (10), `shutdown_timeout` (10);
+- `conditions` (false): add debug `condition.evaluated` span events.
+
+Spans are named from configuration IDs: `workflow <id>`, `flow <id>` (with
+` [item <index>]` inside a collection and ` #<attempt>` from the second attempt),
+`step <id> (<type>)`, `chat <model>` and `execute_tool <tool>`. Attributes keep
+`foliqant.workflow.name`, `foliqant.flow.name`, `foliqant.step.name`,
+`foliqant.step.kind`, `foliqant.execution.id`, `foliqant.flow.attempt` and
+`foliqant.flow.role`; model spans add OTel GenAI `gen_ai.*` usage attributes
+and `foliqant.usage.cost` when pricing is configured.
 
 An empty endpoint disables that signal. Telemetry exports allowlisted configured
-component labels, trace identifiers, statuses, timings, attempt numbers, and
+component labels (resolved values, never `$NAME` references), trace identifiers,
+statuses, timings, attempt numbers, routes, repeat stops, skipped steps and
 usage, never tenant/principal identity, payloads, prompts, model output,
-credentials, or raw exceptions. `open_application(...,
+condition operands, credentials, or raw exceptions. Labels that cannot be
+exported safely are dropped with one `telemetry_labels_dropped` log event.
+`ExecutionResult.execution.trace` holds the run span's `trace_id`/`span_id`;
+streamable-HTTP MCP calls carry `traceparent`/`tracestate` headers. `open_application(...,
 install_global_telemetry=True)` is an explicit host choice.
 Foliqant does not replace host logging; configure a reviewed safe sink and
 filters for SDK and third-party logs.
@@ -458,13 +589,14 @@ worker.
 
 ## Validate the configuration
 
-From the application root, run `foliqant validate`,
-`foliqant explain --workflow WORKFLOW_ID`, and `foliqant doctor`. These check
-the compiled configuration offline when no host handlers are required. With
-custom handlers, use `prepare_application(config_path, handlers=handlers)` and
-inspect `prepared.plans`; generic CLI commands do not load host registrations.
-Use `--config PATH` when settings are not
-at `config/settings.yaml`. Open the application only after its required marked
-environment values and selected adapter dependencies are available. See
-the evaluation reference for gold and the deployment reference for CLI and
-host behavior.
+From the application root, run `foliqant validate --strict`,
+`foliqant explain --format mermaid --all --output docs/workflows.md`, and
+`foliqant doctor`. Handlers are declared in settings, so these commands compile
+workflows with handlers offline; `prepare_application(config_path,
+handlers=handlers, strict=True)` does the same in Python and raises one
+`CompilationError` listing every warning in `error.problems`. `PreparedApplication.diagnostics` and `foliqant.explain(prepared,
+workflow)` expose the diagnostics and graph model. Use `--config PATH` when
+settings are not at `config/settings.yaml`. Open the application only after its
+required marked environment values, adapter dependencies and handler
+registrations are available. See the evaluation reference for gold and the
+deployment reference for CLI and host behavior.

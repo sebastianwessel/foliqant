@@ -17,7 +17,13 @@ from pydantic.config import JsonDict
 from pydantic.json_schema import SkipJsonSchema
 
 from foliqant.contracts.decisions import ChoiceResult
-from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.core.errors import (
+    CONSTRAINT_PATTERN,
+    LOCATION_PATTERN,
+    ErrorCode,
+    FailureReason,
+    ServiceError,
+)
 from foliqant.core.execution import (
     Failure,
     FlowRecord,
@@ -28,9 +34,7 @@ from foliqant.core.execution import (
     TokenUsage,
     flow_record_value,
     step_record_value,
-)
-from foliqant.core.execution import (
-    Usage as CoreUsage,
+    usage_value,
 )
 from foliqant.core.json import JsonValue, thaw_json
 
@@ -69,38 +73,147 @@ class _ExecutionBoundary(BoundaryModel):
     model_config = ConfigDict(frozen=True, revalidate_instances="always")
 
 
+_EXPLANATION_FIELDS = ("reason", "location", "constraint")
+
+
 class SafeError(_ExecutionBoundary):
+    """A canonical failure with an optional content-free explanation.
+
+    ``reason`` says why an ``invalid_output`` or ``output_limit_reached`` failure
+    happened; ``location`` is a JSON pointer in schema vocabulary (or
+    ``question:<id>``) and ``constraint`` the violated keyword or problem kind.
+    """
+
     code: _ErrorCode
     message: _NonBlank
     retryable: bool
-    location: _NonBlank | SkipJsonSchema[None] = Field(
+    reason: FailureReason | SkipJsonSchema[None] = Field(
         default=None, json_schema_extra=_omit_default
     )
+    location: (
+        Annotated[str, StringConstraints(strict=True, pattern=f"^{LOCATION_PATTERN}$")]
+        | SkipJsonSchema[None]
+    ) = Field(default=None, json_schema_extra=_omit_default)
+    constraint: (
+        Annotated[str, StringConstraints(strict=True, pattern=f"^{CONSTRAINT_PATTERN}$")]
+        | SkipJsonSchema[None]
+    ) = Field(default=None, json_schema_extra=_omit_default)
 
     @model_validator(mode="after")
-    def canonical_message_and_optional_location(self) -> Self:
+    def canonical_message_and_optional_explanation(self) -> Self:
         if self.message != str(ServiceError(self.code)):
             raise ValueError("error message must be canonical")
-        if "location" in self.model_fields_set and self.location is None:
-            raise ValueError("location must be omitted rather than null")
+        for key in _EXPLANATION_FIELDS:
+            if key in self.model_fields_set and getattr(self, key) is None:
+                raise ValueError(f"{key} must be omitted rather than null")
         return self
 
     @model_serializer(mode="wrap")
     def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
         values = cast(dict[str, JsonValue], handler(self))
-        if "location" not in self.model_fields_set:
-            values.pop("location", None)
+        for key in _EXPLANATION_FIELDS:
+            if key not in self.model_fields_set:
+                values.pop(key, None)
         return values
 
 
-class Usage(_ExecutionBoundary):
+_Cost = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+_COST_FIELDS = ("cost", "cost_complete", "currency", "reference_model")
+
+
+class _PricedUsage(_ExecutionBoundary):
+    """Cost fields, present exactly when configured pricing applied to a request.
+
+    ``cost`` is rounded to six decimals, or ``null`` with ``cost_complete: false``
+    when a count the estimate needs was not reported or a request was unpriced.
+    """
+
+    cost: _Cost | None | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+    cost_complete: bool | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+    currency: Literal["USD"] | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+    reference_model: _NonBlank | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+
+    @model_validator(mode="after")
+    def cost_fields_together(self) -> Self:
+        present = self.model_fields_set
+        priced = {"cost", "cost_complete", "currency"}
+        if priced & present and not priced <= present:
+            raise ValueError("cost, cost_complete and currency occur together")
+        if "reference_model" in present and ("currency" not in present or not self.reference_model):
+            raise ValueError("reference_model requires a priced estimate")
+        if "currency" in present:
+            if self.currency is None or self.cost_complete is None:
+                raise ValueError("currency and cost_complete cannot be null")
+            if self.cost_complete != (self.cost is not None):
+                raise ValueError("cost_complete must describe cost presence")
+        return self
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        # Counts first, then the estimate, then the per-model split.
+        trailing = (*_COST_FIELDS, "by_model")
+        ordered = {name: value for name, value in values.items() if name not in trailing}
+        for name in trailing:
+            if name in self.model_fields_set and name in values:
+                ordered[name] = values[name]
+        return ordered
+
+
+class ModelUsage(_PricedUsage):
+    """Usage of one provider model ID; ``null`` counts were not reported."""
+
+    requests: Annotated[int, Field(strict=True, ge=1)]
+    input_tokens: _Count | None
+    cached_input_tokens: _Count | None
+    output_tokens: _Count | None
+    reasoning_tokens: _Count | None
+
+    @model_validator(mode="after")
+    def valid_token_subsets(self) -> Self:
+        try:
+            TokenUsage(
+                self.input_tokens,
+                self.output_tokens,
+                self.cached_input_tokens,
+                None,
+                self.reasoning_tokens,
+            )
+        except ServiceError:
+            raise ValueError("invalid token usage") from None
+        return self
+
+
+class Usage(_PricedUsage):
+    """Measured totals; ``by_model`` splits model requests by provider model ID.
+
+    ``by_model`` is omitted when no model request was made; when present it
+    accounts for every model request. Cost fields sum the priced models and are
+    omitted when no model is priced. ``output_retries`` counts the model requests
+    (included in ``model_requests``) that asked for a corrected invalid output.
+    """
+
     model_requests: _Count
     tool_calls: _Count
+    output_retries: _Count
     input_tokens: _Count | None
     output_tokens: _Count | None
     cache_read_input_tokens: _Count | None
     cache_write_input_tokens: _Count | None
     reasoning_output_tokens: _Count | None
+    by_model: (
+        Annotated[
+            dict[Annotated[str, StringConstraints(min_length=1, max_length=512)], ModelUsage],
+            Field(min_length=1),
+        ]
+        | SkipJsonSchema[None]
+    ) = Field(default=None, json_schema_extra=_omit_default)
 
     @model_validator(mode="after")
     def valid_token_subsets(self) -> Self:
@@ -114,7 +227,26 @@ class Usage(_ExecutionBoundary):
             )
         except ServiceError:
             raise ValueError("invalid token usage") from None
+        if self.output_retries > self.model_requests:
+            raise ValueError("output retries are model requests")
+        if "by_model" in self.model_fields_set and self.by_model is None:
+            raise ValueError("by_model must be omitted rather than null")
+        if self.by_model is not None and self.model_requests != sum(
+            item.requests for item in self.by_model.values()
+        ):
+            raise ValueError("by_model must account for every model request")
+        if "currency" in self.model_fields_set and not any(
+            item.currency is not None for item in (self.by_model or {}).values()
+        ):
+            raise ValueError("a total cost requires a priced model")
         return self
+
+
+class TraceIds(_ExecutionBoundary):
+    """OpenTelemetry identifiers of the run span, for host log correlation."""
+
+    trace_id: Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{32}$")]
+    span_id: Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{16}$")]
 
 
 class ExecutionInfo(_ExecutionBoundary):
@@ -139,12 +271,15 @@ class ExecutionInfo(_ExecutionBoundary):
     status: RunStatus
     usage: Usage
     error: SafeError | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+    trace: TraceIds | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
 
     @model_validator(mode="after")
     def status_matches_error_presence(self) -> Self:
         has_error = "error" in self.model_fields_set
         if has_error and self.error is None:
             raise ValueError("error must be omitted rather than null")
+        if "trace" in self.model_fields_set and self.trace is None:
+            raise ValueError("trace must be omitted rather than null")
         if self.status in {"failed", "cancelled"}:
             if not has_error:
                 raise ValueError("terminal failure status requires an error")
@@ -155,8 +290,9 @@ class ExecutionInfo(_ExecutionBoundary):
     @model_serializer(mode="wrap")
     def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
         values = cast(dict[str, JsonValue], handler(self))
-        if "error" not in self.model_fields_set:
-            values.pop("error", None)
+        for name in ("error", "trace"):
+            if name not in self.model_fields_set:
+                values.pop(name, None)
         return values
 
 
@@ -287,8 +423,14 @@ class StepResult(_ExecutionBoundary):
             expected_status = "completed" if self.selection.origin == "model" else "needs_review"
             if self.status != expected_status:
                 raise ValueError("selection origin must match step status")
-            if not isinstance(self.result, dict) or self.result.get("type") != "choice":
-                raise ValueError("selection requires a native choice result")
+        # A native choice result (decision steps) must agree with its selection;
+        # a trusted handler may attach a selection to its own result shape.
+        if (
+            "selection" in self.model_fields_set
+            and self.selection is not None
+            and isinstance(self.result, dict)
+            and self.result.get("type") == "choice"
+        ):
             ChoiceResult.model_validate(self.result, strict=True)
             answerability = self.result.get("answerability")
             if not isinstance(answerability, dict):
@@ -350,37 +492,38 @@ class StepResult(_ExecutionBoundary):
         return values
 
 
-class FlowResult(_ExecutionBoundary):
-    """A flow's scoped step records and explicitly present projected result."""
+_FLOW_STATUS_RULES: JsonDict = {
+    "oneOf": [
+        {
+            "properties": {"status": {"const": "completed"}},
+            "required": ["result"],
+            "not": {"required": ["error"]},
+        },
+        {
+            "properties": {"status": {"const": "needs_review"}},
+            "not": {"required": ["error"]},
+        },
+        {
+            "properties": {"status": {"const": "failed"}},
+            "required": ["error"],
+            "not": {"required": ["result"]},
+        },
+        {
+            "properties": {"status": {"const": "cancelled"}},
+            "not": {"required": ["result"]},
+        },
+        {
+            "properties": {"status": {"const": "skipped"}},
+            "not": {"anyOf": [{"required": ["result"]}, {"required": ["error"]}]},
+        },
+    ]
+}
 
-    model_config = ConfigDict(
-        json_schema_extra={
-            "oneOf": [
-                {
-                    "properties": {"status": {"const": "completed"}},
-                    "required": ["result"],
-                    "not": {"required": ["error"]},
-                },
-                {
-                    "properties": {"status": {"const": "needs_review"}},
-                    "not": {"required": ["error"]},
-                },
-                {
-                    "properties": {"status": {"const": "failed"}},
-                    "required": ["error"],
-                    "not": {"required": ["result"]},
-                },
-                {
-                    "properties": {"status": {"const": "cancelled"}},
-                    "not": {"required": ["result"]},
-                },
-                {
-                    "properties": {"status": {"const": "skipped"}},
-                    "not": {"anyOf": [{"required": ["result"]}, {"required": ["error"]}]},
-                },
-            ]
-        }
-    )
+
+class _FlowRun(_ExecutionBoundary):
+    """One execution of a flow: scoped step records and a projected result."""
+
+    model_config = ConfigDict(json_schema_extra=_FLOW_STATUS_RULES)
 
     status: StepStatus
     steps: dict[Id, StepResult]
@@ -405,13 +548,56 @@ class FlowResult(_ExecutionBoundary):
     @model_serializer(mode="wrap")
     def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
         values = cast(dict[str, JsonValue], handler(self))
-        for name in ("result", "error"):
+        for name in ("result", "error", "attempts", "repeat", "retry"):
             if name not in self.model_fields_set:
                 values.pop(name, None)
-        for name in ("usage", "elapsed_seconds"):
-            if getattr(self, name) is None:
+        for name in ("usage", "elapsed_seconds", "attempts_usage", "attempts_elapsed_seconds"):
+            if getattr(self, name, None) is None:
                 values.pop(name, None)
         return values
+
+
+class FlowAttempt(_FlowRun):
+    """One attempt of a repeated flow, or one run of a retry flow."""
+
+    attempt: Annotated[int, Field(strict=True, ge=1, le=64)]
+
+
+class RepeatInfo(_ExecutionBoundary):
+    """Why a repeated flow stopped; exhaustion is not a review."""
+
+    stopped_by: Literal["until", "exhausted", "continue_when", "review", "failure"]
+
+
+class FlowResult(_FlowRun):
+    """A flow's scoped step records and explicitly present projected result.
+
+    ``attempt_count`` counts executions (zero when skipped). Repeated and retry
+    flows list every run in ``attempts``; the top-level fields describe the last
+    run and ``attempts_usage`` / ``attempts_elapsed_seconds`` sum all runs.
+    """
+
+    attempt_count: Annotated[int, Field(strict=True, ge=0, le=64)]
+    attempts: (
+        Annotated[list[FlowAttempt], Field(min_length=1, max_length=64)] | SkipJsonSchema[None]
+    ) = Field(default=None, json_schema_extra=_omit_default)
+    attempts_usage: Usage | None = None
+    attempts_elapsed_seconds: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    repeat: RepeatInfo | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+
+    @model_validator(mode="after")
+    def attempts_match_count(self) -> Self:
+        for name in ("attempts", "repeat"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError("absent attempt facts are omitted rather than null")
+        if self.attempts is not None:
+            if len(self.attempts) != self.attempt_count or [
+                item.attempt for item in self.attempts
+            ] != list(range(1, len(self.attempts) + 1)):
+                raise ValueError("attempts must be numbered from one and match the count")
+        elif self.attempt_count != (0 if self.status == "skipped" else 1):
+            raise ValueError("a flow without attempts ran once or was skipped")
+        return self
 
 
 class FlowCollectionItem(_ExecutionBoundary):
@@ -423,10 +609,21 @@ class FlowCollectionItem(_ExecutionBoundary):
 
 
 class FlowCollectionItemResult(FlowResult):
-    """One collection item's complete flow record, including skipped local steps."""
+    """One collection item's complete flow record, including skipped local steps.
+
+    A callable flow with ``repeat`` carries its attempts like a routed flow;
+    ``retry`` records the item's retry flow runs (last run plus ``attempts``).
+    """
 
     id: Id
     flow: Id
+    retry: FlowResult | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+
+    @model_validator(mode="after")
+    def retry_is_omitted_rather_than_null(self) -> Self:
+        if "retry" in self.model_fields_set and self.retry is None:
+            raise ValueError("retry must be omitted rather than null")
+        return self
 
 
 class FlowCollectionResult(_ExecutionBoundary):
@@ -442,8 +639,32 @@ class FlowCollectionResult(_ExecutionBoundary):
 
 
 StepResult.model_rebuild()
+FlowAttempt.model_rebuild()
 FlowResult.model_rebuild()
 FlowCollectionItemResult.model_rebuild()
+
+
+class RouteSelection(_ExecutionBoundary):
+    """Which configuration form selected a target.
+
+    ``index`` is the selected ``route`` entry; ``case`` is the matched case key
+    (``cases``) or the review issue that selected an issue-specific target.
+    Both are omitted when they do not apply, for example for ``default``.
+    """
+
+    kind: Literal["direct", "cases", "route", "review"]
+    index: Annotated[int, Field(strict=True, ge=0, le=31)] | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+    case: _NonBlank | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        for name in ("index", "case"):
+            if name not in self.model_fields_set:
+                values.pop(name, None)
+        return values
 
 
 class TransitionResult(_ExecutionBoundary):
@@ -464,6 +685,7 @@ class TransitionResult(_ExecutionBoundary):
     outcome: Literal["completed", "needs_review"] | SkipJsonSchema[None] = Field(
         default=None, json_schema_extra=_omit_default
     )
+    route: RouteSelection
 
     @model_validator(mode="after")
     def exactly_one_target(self) -> Self:
@@ -484,12 +706,55 @@ class TransitionResult(_ExecutionBoundary):
         return values
 
 
+class StartRoute(_ExecutionBoundary):
+    """Which ``start`` form selected the first flow; ``index`` for a routed start."""
+
+    kind: Literal["direct", "route"]
+    index: Annotated[int, Field(strict=True, ge=0, le=31)] | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_default
+    )
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        if "index" not in self.model_fields_set:
+            values.pop("index", None)
+        return values
+
+
+class StartResult(_ExecutionBoundary):
+    """The first flow of a workflow run and how it was selected."""
+
+    flow: Id
+    route: StartRoute
+
+
 class ExecutionResult(_ExecutionBoundary):
+    """One run: projected payload, flow records, transitions and terminal facts.
+
+    ``start`` is present for workflow runs and omitted for isolated flow or step
+    runs, which have no start selection.
+    """
+
     payload: JsonValue
     metadata: Metadata
     flows: dict[Id, FlowResult]
+    start: StartResult | SkipJsonSchema[None] = Field(default=None, json_schema_extra=_omit_default)
     transitions: list[TransitionResult]
     execution: ExecutionInfo
+
+    @model_validator(mode="after")
+    def start_is_omitted_rather_than_null(self) -> Self:
+        if "start" in self.model_fields_set and self.start is None:
+            raise ValueError("start must be omitted rather than null")
+        return self
+
+    @model_serializer(mode="wrap")
+    def omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, JsonValue]:
+        values = cast(dict[str, JsonValue], handler(self))
+        if "start" not in self.model_fields_set:
+            values.pop("start", None)
+        return values
 
     @field_validator("metadata", mode="before")
     @classmethod
@@ -505,23 +770,7 @@ class ExecutionResult(_ExecutionBoundary):
 def _safe_error(failure: Failure) -> dict[str, JsonValue]:
     if not isinstance(failure.code, ErrorCode) or type(failure.retryable) is not bool:
         raise ServiceError(ErrorCode.INVALID_OUTPUT)
-    return {
-        "code": failure.code.value,
-        "message": failure.message,
-        "retryable": failure.retryable,
-    }
-
-
-def _usage(value: CoreUsage) -> dict[str, JsonValue]:
-    return {
-        "model_requests": value.model_requests,
-        "tool_calls": value.tool_calls,
-        "input_tokens": value.tokens.input_tokens,
-        "output_tokens": value.tokens.output_tokens,
-        "cache_read_input_tokens": value.tokens.cache_read_input_tokens,
-        "cache_write_input_tokens": value.tokens.cache_write_input_tokens,
-        "reasoning_output_tokens": value.tokens.reasoning_output_tokens,
-    }
+    return cast(dict[str, JsonValue], failure.as_json())
 
 
 def _step_result(record: StepRecord) -> dict[str, JsonValue]:
@@ -548,25 +797,36 @@ def to_execution_result(value: RunResult) -> ExecutionResult:
                 item["flow"] = transition.flow
             if transition.outcome is not None:
                 item["outcome"] = transition.outcome
+            route: dict[str, JsonValue] = {"kind": transition.route_kind}
+            if transition.route_index is not None:
+                route["index"] = transition.route_index
+            if transition.route_case is not None:
+                route["case"] = transition.route_case
+            item["route"] = route
             transitions.append(item)
         execution: dict[str, JsonValue] = {
             "id": value.execution_id,
             "workflow": value.workflow,
             "revision": value.revision,
             "status": value.status,
-            "usage": _usage(value.usage),
+            "usage": cast(dict[str, JsonValue], thaw_json(usage_value(value.usage))),
         }
         if value.error is not None:
             execution["error"] = _safe_error(value.error)
-        return ExecutionResult.model_validate(
-            {
-                "payload": thaw_json(value.payload),
-                "metadata": thaw_json(value.metadata),
-                "flows": flows,
-                "transitions": transitions,
-                "execution": execution,
-            },
-            strict=True,
-        )
+        if value.trace is not None:
+            execution["trace"] = {"trace_id": value.trace[0], "span_id": value.trace[1]}
+        document: dict[str, JsonValue] = {
+            "payload": thaw_json(value.payload),
+            "metadata": thaw_json(value.metadata),
+            "flows": flows,
+            "transitions": transitions,
+            "execution": execution,
+        }
+        if value.start is not None:
+            start_route: dict[str, JsonValue] = {"kind": value.start.route_kind}
+            if value.start.route_index is not None:
+                start_route["index"] = value.start.route_index
+            document["start"] = {"flow": value.start.flow, "route": start_route}
+        return ExecutionResult.model_validate(document, strict=True)
     except (ServiceError, TypeError, ValueError, ValidationError):
         raise ServiceError(ErrorCode.INVALID_OUTPUT) from None

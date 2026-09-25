@@ -12,7 +12,9 @@ retain their accepted resolved-input payload. Both retain the original plan
 revision. Unknown step names and missing/extra inputs fail before model I/O.
 
 `run_flow(workflow, flow_id, envelope)` executes one flow with its already-resolved
-input and validates the flow input schema. It applies that flow's output projection,
+input and validates the flow input schema. `evaluation.flow_input` resolves that
+input from a workflow envelope and authored upstream flow results (recorded as
+completed flows) with the compiled boundary bindings; it executes nothing. It applies that flow's output projection,
 but no upstream input bindings, workflow projections or boundary transitions.
 Both isolation APIs retain original workflow identity and revision, caller/tool
 policy and finite limits; they never silently run dependencies. Callable flows
@@ -48,9 +50,26 @@ within allowed. No normalization, semantic judge or prediction-derived gold is
 implied. Invalid ranges and nonstring/missing source pointers fail offline.
 
 Set comparison ignores top-level array ordering and duplicates while retaining
-JSON type distinctions. Custom scorers are registered async functions with an
-explicit revision. `evaluate` defaults to one worker and a 300-second per-case
-timeout including scoring; results retain suite order. `compare_variants` runs
+JSON type distinctions. `one_of` gold is a nonempty array of distinct acceptable
+values whose first element is the primary gold; the result must equal one of
+them exactly. A classification metric over `one_of` gold requires every
+alternative in its catalog, counts a predicted alternative as that label
+(diagonal) and any other prediction against the primary label; multilabel
+metrics reject it. `text` and `contains` take string gold and compare
+strings after Unicode case folding and collapsing every whitespace run to one
+space (no other normalization): `text` requires equality, `contains` that the
+nonblank normalized gold occurs in the normalized result; a non-string result
+fails. An expectation's optional `each` relative pointer projects every item of
+an array result before comparison (`exact`, `set`, `one_of`, `custom` only); a non-array
+result or an item without the member fails the check. `absent_as_null` treats an
+absent value as JSON null only when its owning flow/step record exists and
+executed (`completed`/`needs_review`), or, for paths outside flow records, when
+the run executed; skipped, failed and nonexistent owners keep their outcomes and
+details keep `actual_present: false`. Both options enter the suite fingerprint
+only when used. Custom scorers are registered async functions with an
+explicit revision. `evaluate` defaults to one worker and a 960-second per-case
+timeout including scoring (the default `execution.run_timeout` of 900 plus a
+60-second scoring grace); results retain suite order. `compare_variants` runs
 variants sequentially. Hosts own ground truth and holdout selection. The library
 neither certifies holdout separation nor optimizes prompts.
 
@@ -88,7 +107,9 @@ payload-field existence or the business correctness of ground truth.
 
 `foliqant evaluate --check` loads and validates only. Ordinary `evaluate` opens
 the configured application and runs suites sequentially with default one worker
-and a 300-second case deadline, still subject to normal runtime limits.
+and a case deadline of the configured `execution.run_timeout` plus 60 seconds
+of scoring grace, still subject to normal runtime limits. A case that exceeds
+its deadline is an execution error with `run_timeout`.
 `--max-concurrency` and `--timeout` change evaluator bounds only. Explicit
 `--replay REPORT` scores saved complete results without constructing clients,
 resolving credentials or calling models/tools. Replay requires matching dataset
@@ -125,16 +146,47 @@ aggregates from validated observations. Retain mixed per-case changes and
 operational failures. Completion and intended review have equal operational
 rank; authored assertions determine correctness. Replay reports cannot establish
 latency improvements. Comparison output is descriptive, not significance or
-automatic acceptance policy.
+automatic acceptance policy. Case pass rate, check pass rate, metric accuracy
+and field accuracy deltas carry a seeded (default seed 0, 2000 resamples, 95%)
+paired percentile bootstrap interval over source cases, repeats pooled per
+source; fewer than two cases give no interval. Usage comparison includes the
+cost summary.
+
+`evaluate(checkpoint=EvaluationCheckpoint(path))` and CLI `--checkpoint`
+append every attempt whose result is `completed` or `needs_review` to a private
+owner-readable JSONL journal (fsync per record, no symlink following, 1 GiB
+bound) and reuse a recorded attempt instead of invoking the pipeline when suite
+name, variant name/revision, configuration revision and target match and the
+case ID, repetition and canonical input are equal; it is then scored against
+current gold. A record of the same suite with another identity fails
+(`CheckpointMismatchError`); other suites in the file are independent. Failed,
+cancelled, timed-out and errored attempts are never recorded. A torn final line
+is ignored and never extended. Reused attempts keep recorded latency and usage,
+are marked `resumed`, and are counted in `resumed_attempts`. `progress=` receives
+a content-free `EvaluationProgress` after every finished attempt; CLI
+`--progress` writes counts and timing only to stderr. A checkpoint applies to
+execution, not `--check`, `--replay` or `--compare`.
 
 `group_report` accepts a detailed Python report and an explicit input pointer.
 Groups use scalar, type-sensitive keys, separating missing from null; retain
-first-observed order and complete source repetitions. Reuse existing metrics
+first-observed order and complete source repetitions. An array of scalars puts
+the attempt into one overlapping `member` group per distinct element; an empty
+array joins none; nested objects or arrays are rejected. Reuse existing metrics
 and measured latency/usage; never infer groups, rerun scorers or call endpoints.
 Saved artifact loading is not part of this grouping API.
 
 Metrics use explicit label catalogs and gold expectations at their declared
-result pointer. Classification catalogs contain strings and may explicitly
+result pointer (and `each` projection; an optional `expectation` name selects
+one of several assertions at that pointer). A `fields` metric's catalog lists
+field names of the object at its pointer; its gold is the one built-in,
+unprojected assertion at `pointer/<escaped field>` per labelled field, and an
+absent field is null. Each gold field of each attempt is `correct_value`,
+`correct_null`, `hallucinated` (value for null gold), `missed` (null for value
+gold), `wrong_value` or `unavailable` (skipped/failed owner or failed run).
+Reports give per-field and pooled counts with value/null support, accuracy,
+hallucination and miss rates, pooled `field_accuracy`, `macro_field_accuracy`
+over fields with support, and attempt-level `correct`/`accuracy` (every gold
+field correct). Classification catalogs contain strings and may explicitly
 include JSON null. If null is declared, null gold is valid and an actual null is
 an observed classification outcome in matrix/per-label counts; otherwise actual
 null is an abstention and null gold is invalid. Missing/skipped/error observations
@@ -191,6 +243,18 @@ Offline target checking follows declared collection allowlists and rejects
 impossible item indices or child step names; dynamic business fields and which
 allowlisted flow an item will actually select remain runtime observations.
 
+Reports, groups, flow and step summaries carry `failures_by_code`: failed,
+cancelled and error attempts (failed and cancelled records for flows and steps)
+counted by safe error code, ordered by descending count then code; flow and
+step reports record each invocation's `error_code`. The CLI summary and report
+comparisons repeat the attempt-level breakdown; codes are content-free. The
+report, step summaries and the CLI summary also carry `failures_by_reason`,
+counted by the content-free `error_reason` that case and step records carry.
+Step summaries add `output_retries` (the summed correction requests) and
+`output_retry_recoveries` (invocations that succeeded after at least one output
+retry). A failed case is an execution error: its checks have outcome `error`, it
+counts in `failure_rate`, and it is never a gold mismatch; the CLI exits `4`.
+
 Step summaries also count `model_selected_invocations` and `fallback_selected_invocations`.
 `fallback_rate` is fallback selections divided by all observed step records,
 including skipped/error records, or null with no records. Repeated attempts
@@ -205,6 +269,9 @@ errors; replay wall time remains replay measurement, not source model latency.
 Usage summaries preserve observed/unknown counts and known totals separately:
 the complete total is null when any observation is unknown, and even known-total
 is null when there were no known observations. No unknown count becomes zero.
+The `cost` summary counts an attempt with a priced estimate or without model
+requests as known (the latter zero) and every other attempt as unknown; totals
+are rounded to six decimals.
 
 Every runnable example includes executable evaluation with explicit ground
 truth. Model examples default to clearly labeled scripted wiring checks and

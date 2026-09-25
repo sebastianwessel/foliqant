@@ -128,7 +128,7 @@ def test_verify_fails_closed_without_exposing_discovery_details(mutation: str) -
     else:
         tools.append(_tools()[0])
 
-    _assert_code(ErrorCode.DEPENDENCY_FAILURE, lambda: catalog.verify(tools))
+    _assert_code(ErrorCode.TOOL_CATALOG_MISMATCH, lambda: catalog.verify(tools))
 
 
 def test_validate_input_uses_the_declared_schema_and_safe_errors() -> None:
@@ -166,7 +166,7 @@ def test_structured_result_wins_is_validated_frozen_and_bounded() -> None:
         ),
     )
     _assert_code(
-        ErrorCode.INVALID_OUTPUT,
+        ErrorCode.TOOL_OUTPUT_LIMIT_EXCEEDED,
         lambda: catalog.validate_result(
             "lookup",
             CallToolResult(structuredContent={"count": 10**70}, content=[]),
@@ -195,7 +195,7 @@ def test_unstructured_text_is_deterministic_and_non_text_is_rejected() -> None:
     )
     assert catalog.validate_result("write_note", CallToolResult(content=[])) == ""
     _assert_code(
-        ErrorCode.INVALID_OUTPUT,
+        ErrorCode.TOOL_OUTPUT_LIMIT_EXCEEDED,
         lambda: catalog.validate_result(
             "write_note", CallToolResult(content=[TextContent(text="thirteen bytes")])
         ),
@@ -209,10 +209,10 @@ def test_unstructured_text_is_deterministic_and_non_text_is_rejected() -> None:
     )
 
 
-def test_tool_error_is_a_safe_dependency_failure() -> None:
+def test_tool_error_is_a_safe_tool_error_never_a_result() -> None:
     catalog = ToolCatalog(_declared())
     _assert_code(
-        ErrorCode.DEPENDENCY_FAILURE,
+        ErrorCode.TOOL_ERROR,
         lambda: catalog.validate_result(
             "write_note",
             CallToolResult(content=[TextContent(text="raw server diagnostic")], isError=True),

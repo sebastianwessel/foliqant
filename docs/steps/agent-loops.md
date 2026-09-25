@@ -62,21 +62,21 @@ A completed `result` here is a string, for example `"Invoice INV-42 is paid; the
 
 ## Set the limits where they apply
 
-`max_iterations` belongs on the LLM step. It counts logical model turns, including the final answer, and defaults to **4** (allowed range 1–1024). The runtime stops before a fifth turn at the default; a final answer on turn four succeeds. Provider retries of one turn do not consume another iteration. This limit also applies to LLM steps with no tools.
+`max_iterations` belongs on the LLM step. It counts logical model turns, including the final answer, and defaults to **8** (allowed range 1–1024). The runtime stops before a ninth turn at the default; a final answer on turn eight succeeds. Provider retries and output corrections of one turn do not consume another iteration. This limit also applies to LLM steps with no tools.
 
 `execution` in `config/settings.yaml` supplies separate local limits:
 
 ```yaml
 execution:
-  model_requests_per_step: 4
-  tool_calls_per_step: 3
-  run_timeout: 300
-  model_timeout: 60
+  model_requests_per_step: 16
+  tool_calls_per_step: 16
+  run_timeout: 900
+  model_timeout: 300
   tool_timeout: 30
 ```
 
-These are the defaults. `model_requests_per_step` counts actual provider attempts, including retries; `tool_calls_per_step` counts tool attempts. Attempts are reserved before I/O and failures still consume them. The root `run_timeout` is an absolute invocation deadline. `model_timeout` bounds a logical model request after its first admission, shared by that request's retries; `tool_timeout` bounds tool work. A model profile also has its own `request_timeout`, admission and retry policy, and an MCP profile has call/admission/output limits. The earliest applicable deadline wins. See [execution limits](../configuration/limits.md), [models](../configuration/models.md), and [MCP setup](../configuration/mcp.md).
+These are the defaults. `model_requests_per_step` counts actual provider attempts, including retries and output corrections; `tool_calls_per_step` counts tool attempts. Attempts are reserved before I/O and failures still consume them. The root `run_timeout` is an absolute invocation deadline. `model_timeout` bounds a logical model request after its first admission, shared by that request's retries; `tool_timeout` bounds tool work. A model profile also has its own `request_timeout`, admission and retry policy, and an MCP profile has call/admission/output limits. The earliest applicable deadline wins. See [execution limits](../configuration/limits.md), [models](../configuration/models.md), and [MCP setup](../configuration/mcp.md).
 
-The iteration and attempt limits are independent. For example, `max_iterations: 3` permits three model turns, but the default four provider attempts may be exhausted sooner if a request retries. Conversely, raising the provider-attempt budget does not let a loop exceed three turns. A tool call consumes no extra model iteration by itself; the model turn after the tool result does.
+The iteration and attempt limits are independent. For example, `max_iterations: 3` permits three model turns, but a lower `model_requests_per_step` may be exhausted sooner if requests retry. Conversely, raising the provider-attempt budget does not let a loop exceed three turns. A tool call consumes no extra model iteration by itself; the model turn after the tool result does.
 
-If the MCP server requests caller input, the step returns `needs_review` with `result: null`. If a required or named call never succeeds, final validation fails with `invalid_output`. Exceeding an iteration or attempt limit fails with `budget_exhausted`; invalid arguments, authorization denial, catalog drift, and timeouts are technical failures. Each invocation starts with fresh model/tool state. Evaluate tool selection and final answers with [reviewed cases](../evaluation/task-types.md); the [model tool-loop tutorial](../tutorials/model-tool-loop.md) has an offline scripted example.
+If the MCP server requests caller input, the step returns `needs_review` with `result: null`; that is the only review outcome of a tool. If a required or named call never succeeds, final validation fails with `invalid_output`. Each limit fails with its own code: `iteration_limit_reached`, `model_request_limit_reached` or `tool_call_limit_reached`. A call to an unknown tool or with arguments that violate its schema fails with `invalid_tool_call`; a tool's `isError` result with `tool_error`; authorization denial, catalog drift (`tool_catalog_mismatch`) and timeouts are technical failures too ([error codes](../integration/errors.md#canonical-error-codes)). None of them is returned to the model or turned into a review outcome: the run fails. Each invocation starts with fresh model/tool state. Evaluate tool selection and final answers with [reviewed cases](../evaluation/task-types.md); the [model tool-loop tutorial](../tutorials/model-tool-loop.md) has an offline scripted example.

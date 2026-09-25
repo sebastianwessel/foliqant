@@ -1,0 +1,15 @@
+input_schema:
+  type: object
+  properties:
+    message:
+      type: string
+    rejected_reference:
+      type: string
+  required:
+    - message
+    - rejected_reference
+  additionalProperties: false
+steps:
+  - correct
+output:
+  pointer: /steps/correct/result

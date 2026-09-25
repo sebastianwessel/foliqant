@@ -1,9 +1,24 @@
 """Explicit deployment model profiles with protected credential values."""
 
-from typing import Annotated, Literal, Self
+import math
+from decimal import Decimal, InvalidOperation
+from typing import Annotated, Literal, Self, cast
 from urllib.parse import urlsplit
 
-from pydantic import AfterValidator, ConfigDict, Field, SecretStr, ValidationInfo, model_validator
+from pydantic import (
+    AfterValidator,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    SecretStr,
+    ValidationInfo,
+    WithJsonSchema,
+    model_validator,
+)
+
+from foliqant.core.json import JsonValue
+from foliqant.core.pricing import PriceTier, PricingPlan
 
 from .base import BoundaryModel
 from .endpoints import validate_http_endpoint
@@ -17,6 +32,118 @@ from .identifiers import Id
 from .retry import RetryConfig
 
 Duration = Annotated[float, Field(gt=0, le=3600)]
+_MAX_PRICE = Decimal(1_000_000)
+
+
+def _price(value: object) -> Decimal:
+    """Read a YAML/JSON number exactly as written (``0.2`` is ``Decimal("0.2")``)."""
+    if isinstance(value, Decimal):
+        price = value
+    elif type(value) is int:
+        price = Decimal(value)
+    elif type(value) is float and math.isfinite(value):
+        price = Decimal(repr(value))
+    else:
+        raise ValueError("price must be a number")
+    try:
+        if not price.is_finite() or not 0 <= price <= _MAX_PRICE:
+            raise ValueError("price must be between 0 and 1,000,000")
+    except InvalidOperation:
+        raise ValueError("price must be a number") from None
+    return price
+
+
+Price = Annotated[
+    Decimal,
+    BeforeValidator(_price),
+    PlainSerializer(float, return_type=float, when_used="json"),
+    WithJsonSchema({"type": "number", "minimum": 0, "maximum": 1_000_000}),
+]
+"""A price per one million tokens in the pricing currency."""
+
+
+class LongContextPricing(BoundaryModel):
+    """Prices for every token of a request whose input exceeds the threshold."""
+
+    model_config = ConfigDict(frozen=True)
+
+    threshold_input_tokens: Annotated[int, Field(strict=True, ge=1, le=100_000_000)]
+    input_per_million: Price
+    cached_input_per_million: Price | None = None
+    output_per_million: Price
+
+
+class ModelPricing(BoundaryModel):
+    """Configured prices used to estimate cost; an estimate, not a provider invoice.
+
+    Example (GPT-5.6 Terra list prices at the time of writing; prices change)::
+
+        pricing:
+          currency: USD
+          input_per_million: 2.00
+          cached_input_per_million: 0.20
+          output_per_million: 12.00
+          long_context:
+            threshold_input_tokens: 272000
+            input_per_million: 4.00
+            cached_input_per_million: 0.40
+            output_per_million: 18.00
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    currency: Literal["USD"]
+    input_per_million: Price
+    cached_input_per_million: Price | None = None
+    output_per_million: Price
+    reasoning_billed_as: Literal["output", "input"] = "output"
+    long_context: LongContextPricing | None = None
+    reference_model: (
+        Annotated[
+            str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]*$")
+        ]
+        | None
+    ) = None
+    """Another model whose prices are used as a reference estimate for this one."""
+
+    def plan(self) -> PricingPlan:
+        """The engine's immutable pricing value."""
+        long_context = self.long_context
+        return PricingPlan(
+            currency=self.currency,
+            base=PriceTier(
+                self.input_per_million, self.output_per_million, self.cached_input_per_million
+            ),
+            reasoning_billed_as=self.reasoning_billed_as,
+            long_context_threshold=(
+                long_context.threshold_input_tokens if long_context is not None else None
+            ),
+            long_context=(
+                PriceTier(
+                    long_context.input_per_million,
+                    long_context.output_per_million,
+                    long_context.cached_input_per_million,
+                )
+                if long_context is not None
+                else None
+            ),
+            reference_model=self.reference_model,
+        )
+
+    def summary(self) -> dict[str, JsonValue]:
+        """A JSON-ready view with prices as numbers, for offline explanation."""
+        return cast(dict[str, JsonValue], self.model_dump(mode="json", exclude_none=True))
+
+
+#: Additional model requests that return an invalid structured output's validation
+#: problems to the model for correction; each counts against the step's request limit.
+DEFAULT_OUTPUT_RETRIES = 1
+OutputRetries = Annotated[int, Field(strict=True, ge=0, le=8)]
+
+#: Output budget of one request, reasoning tokens included. A safety net against a
+#: runaway generation, sized for reasoning models (which may reason for tens of
+#: thousands of tokens before answering), not for the typical response length.
+DEFAULT_MAX_TOKENS = 32_768
 
 
 class GenerationOptions(BoundaryModel):
@@ -24,7 +151,7 @@ class GenerationOptions(BoundaryModel):
 
     model_config = ConfigDict(frozen=True)
 
-    max_tokens: Annotated[int, Field(strict=True, ge=1, le=1_048_576)] = 4096
+    max_tokens: Annotated[int, Field(strict=True, ge=1, le=1_048_576)] = DEFAULT_MAX_TOKENS
     temperature: Annotated[float, Field(ge=0, le=2)] | None = None
     top_p: Annotated[float, Field(gt=0, le=1)] | None = None
 
@@ -65,8 +192,12 @@ class _ModelConfig(BoundaryModel):
     supports_tools: bool = True
     concurrency: Annotated[int, Field(strict=True, ge=1, le=1024)] = 4
     queue_limit: Annotated[int, Field(strict=True, ge=0, le=10_000)] = 16
-    request_timeout: Duration = 60.0
+    # One attempt, sized to generate the default output budget with a hosted model.
+    request_timeout: Duration = 300.0
     retry: RetryConfig = Field(default_factory=RetryConfig)
+    # Requests that return an invalid output's validation problems for correction.
+    output_retries: OutputRetries = DEFAULT_OUTPUT_RETRIES
+    pricing: ModelPricing | None = None
 
     @model_validator(mode="after")
     def at_least_one_output(self) -> Self:
@@ -203,10 +334,13 @@ class ModelOptionOverrides(BoundaryModel):
 
 
 class ModelProfileOverride(BoundaryModel):
-    """Reuse a deployment profile and replace its model ID or generation options.
+    """Reuse a deployment profile and replace its model ID, options or pricing.
 
     Example: ``{profile: local, options: {max_tokens: 800}}`` retains the
     profile's provider, credentials, capabilities, timeout, and shared admission.
+    ``pricing`` replaces the profile's pricing and ``null`` removes it. The
+    profile's pricing describes its own model: an override that sets another
+    ``model`` does not inherit it.
     """
 
     profile: Id
@@ -214,6 +348,8 @@ class ModelProfileOverride(BoundaryModel):
         default=None, json_schema_extra=ENVIRONMENT_FIELD
     )
     options: ModelOptionOverrides = Field(default_factory=ModelOptionOverrides)
+    output_retries: OutputRetries | None = None
+    pricing: ModelPricing | None = None
 
     @model_validator(mode="after")
     def explicit_values_are_valid(self) -> Self:
@@ -221,6 +357,8 @@ class ModelProfileOverride(BoundaryModel):
             raise ValueError("model override must be a nonblank model ID")
         if "max_tokens" in self.options.model_fields_set and self.options.max_tokens is None:
             raise ValueError("maximum output tokens cannot be cleared")
+        if "output_retries" in self.model_fields_set and self.output_retries is None:
+            raise ValueError("output retries cannot be cleared; use 0 to disable them")
         return self
 
 

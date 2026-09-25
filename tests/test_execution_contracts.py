@@ -41,6 +41,7 @@ def _usage() -> dict[str, object]:
     return {
         "model_requests": 1,
         "tool_calls": 2,
+        "output_retries": 0,
         "input_tokens": 10,
         "output_tokens": None,
         "cache_read_input_tokens": 3,
@@ -272,6 +273,16 @@ def test_execution_info_schema_requires_only_failure_errors() -> None:
     assert validator.is_valid(_info(status="failed", error=_error()))
     assert not validator.is_valid(_info(status="failed"))
     assert not validator.is_valid(_info(error=_error()))
+
+
+def test_execution_info_and_usage_types_are_exported_from_the_top_level_package() -> None:
+    import foliqant
+
+    assert foliqant.ExecutionInfo is ExecutionInfo
+    assert foliqant.Usage is PublicUsage
+    from foliqant.contracts.execution import ModelUsage
+
+    assert foliqant.ModelUsage is ModelUsage
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "reference": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "reference"
+  ],
+  "additionalProperties": false
+}

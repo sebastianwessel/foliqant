@@ -69,8 +69,9 @@ For a reviewed list of independent items, a `flow_collection` step can invoke
 allowlisted callable flows sequentially. A trusted planner must produce each
 item's ID, callable flow, and complete child input. Callable flows have no graph
 transition and cannot become the workflow start or route targets. The collection
-returns an ordered child ledger so final policy can consider completed, review,
-failed, and skipped work together.
+returns an ordered child ledger so final policy can consider completed and
+review items together. A technical child failure fails the collection and the
+run; the ledger, including skipped later items, is kept for diagnosis.
 
 ## Compile, open, and run
 

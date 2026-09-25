@@ -1,0 +1,45 @@
+input_schema:
+  type: object
+  properties:
+    message:
+      type: string
+    form_reference:
+      type:
+        - string
+        - "null"
+  required:
+    - message
+    - form_reference
+  additionalProperties: false
+steps:
+  - id: extract
+    when:
+      binding:
+        pointer: /payload/form_reference
+      present: false
+  - check
+  - id: repair
+    when:
+      binding:
+        pointer: /steps/check/result/status
+      equals: invalid
+  - id: recheck
+    when:
+      binding:
+        pointer: /steps/repair/result
+      present: true
+output:
+  fields:
+    status:
+      first_of:
+        - pointer: /steps/recheck/result/status
+        - pointer: /steps/check/result/status
+      default: missing
+    account_reference:
+      first_of:
+        - pointer: /steps/recheck/result/account_reference
+        - pointer: /steps/check/result/account_reference
+      default: null
+    repaired:
+      pointer: /steps/repair/result/account_reference
+      default: null

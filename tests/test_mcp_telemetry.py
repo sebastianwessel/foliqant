@@ -349,9 +349,10 @@ async def _child(*, embedded: bool = False) -> None:
     assert len(spans) >= 8
     trace_ids = {span.context.trace_id for span in spans}
     assert trace_ids == {int(parent.split("-")[1], 16) for parent in parents}
-    assert sum(span.name == "foliqant.workflow" for span in spans) == 2
-    assert sum(span.name == "foliqant.step" for span in spans) == 2
-    assert sum(span.name == "foliqant.flow" for span in spans) == 2
+    assert sum(span.instrumentation_scope.name == "foliqant.workflow" for span in spans) == 2
+    assert sum(span.instrumentation_scope.name == "foliqant.step" for span in spans) == 2
+    assert sum(span.instrumentation_scope.name == "foliqant.flow" for span in spans) == 2
+    assert sum(span.name == "step call (mcp)" for span in spans) == 2
 
     captured_by_trace: dict[int, dict[str, object]] = {}
     for request in captured_calls:
@@ -387,7 +388,7 @@ async def _child(*, embedded: bool = False) -> None:
             span
             for span in spans
             if span.context.trace_id == trace_id
-            and span.name == "foliqant.step"
+            and span.name == "step call (mcp)"
             and span.attributes.get("foliqant.step.name") == "call"
         )
         client = next(
@@ -433,7 +434,8 @@ async def _child(*, embedded: bool = False) -> None:
         "private-server-name",
     ):
         assert private not in serialized
-    assert all(not span.events for span in spans)
+    # Only fixed runtime events survive; SDK exception events never do.
+    assert {event.name for span in spans for event in span.events} <= {"route.selected"}
     assert all(span.status.description is None for span in spans)
     provider.shutdown()
     assert await asyncio.to_thread(logging_runtime.close, timeout=1)
@@ -474,9 +476,14 @@ def test_real_mcp_trace_continuity_and_privacy_in_isolated_process(embedded: boo
         "step_failed",
         "flow_failed",
         "run_failed",
+        "route_selected",
     }
-    scope_rows = [row for row in log_rows if row["event"] != "external_event"]
+    scope_rows = [
+        row for row in log_rows if row["event"] not in {"external_event", "route_selected"}
+    ]
     assert len(scope_rows) == 12
+    # Each start reports its route; only the completed run selects a transition.
+    assert sum(row["event"] == "route_selected" for row in log_rows) == 3
     assert all("trace_id" in row and "span_id" in row for row in scope_rows)
     report = json.loads(completed.stdout)
     assert report["traces"] == 2

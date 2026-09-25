@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "invalid",
+        "missing"
+      ]
+    },
+    "account_reference": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "status",
+    "account_reference"
+  ],
+  "additionalProperties": false
+}

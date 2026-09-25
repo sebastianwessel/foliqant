@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
@@ -32,6 +33,47 @@ from .auth import McpCredentialProvider, McpCredentialScope, McpHttpAuthorizatio
 from .retry import record_http_response
 
 _SESSION_CLEANUP_TIMEOUT_SECONDS = 10.0
+_TRACE_HEADERS = ("traceparent", "tracestate")
+_MAX_TRACE_BODY_BYTES = 4 * 1024 * 1024
+
+
+def _request_carrier(request: httpx2.Request) -> dict[str, str]:
+    """Read the W3C carrier from this JSON-RPC request's own ``params._meta``.
+
+    The carrier is captured when the tool call is made and travels inside the
+    request it belongs to, so concurrent calls on one session never share it.
+    Requests without ``_meta`` (initialization, discovery) carry no headers.
+    """
+    try:
+        body = request.content
+    except httpx2.RequestNotRead:
+        return {}
+    if not body or len(body) > _MAX_TRACE_BODY_BYTES:
+        return {}
+    try:
+        message = json.loads(body)
+    except (ValueError, RecursionError):
+        return {}
+    params = message.get("params") if isinstance(message, dict) else None
+    meta = params.get("_meta") if isinstance(params, dict) else None
+    if not isinstance(meta, dict):
+        return {}
+    carrier: dict[str, str] = {}
+    for name in _TRACE_HEADERS:
+        value = meta.get(name)
+        if isinstance(value, str) and 0 < len(value) <= 512 and value.isprintable():
+            carrier[name] = value
+    return carrier
+
+
+async def _inject_trace(request: httpx2.Request) -> None:
+    # Only the protected W3C fields; never baggage or business metadata.
+    carrier = _request_carrier(request)
+    for name in _TRACE_HEADERS:
+        if name in carrier:
+            request.headers[name] = carrier[name]
+        elif name in request.headers:
+            del request.headers[name]
 
 
 class McpSessionFactory(Protocol):
@@ -161,7 +203,7 @@ class McpClientSessionFactory:
                 except asyncio.CancelledError:
                     raise
                 except TimeoutError:
-                    raise ServiceError(ErrorCode.TIMEOUT) from None
+                    raise ServiceError(ErrorCode.REQUEST_TIMEOUT) from None
                 except ServiceError:
                     raise
                 except Exception as error:
@@ -214,10 +256,14 @@ class McpClientSessionFactory:
                 if _origin(request.url) not in allowed_origins:
                     raise _OriginDenied()
 
+            hooks: list[Callable[[httpx2.Request], Awaitable[None]]] = [
+                enforce_origin,
+                _inject_trace,
+            ]
             http_client = self._http_client_factory(
                 auth=auth,
                 timeout=httpx2.Timeout(request_timeout),
-                request_hooks=[enforce_origin],
+                request_hooks=hooks,
             )
             http_client.event_hooks.setdefault("response", []).append(record_http_response)
             await stack.enter_async_context(http_client)

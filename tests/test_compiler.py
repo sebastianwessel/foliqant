@@ -14,7 +14,7 @@ from pydantic import TypeAdapter, ValidationError
 from foliqant.compiler import CompilationError, compile_workflow
 from foliqant.compiler.models import ModelRegistry
 from foliqant.contracts.models import OpenAIModelConfig
-from foliqant.contracts.workflow import Binding, FlowDefinition, WorkflowAuthoring
+from foliqant.contracts.workflow import Binding, FlowDefinition
 from foliqant.core.json import freeze_json
 from foliqant.core.plan import DecisionStepPlan, LlmStepPlan, MatchRoutingPlan
 from foliqant.core.prompt import render_prompt
@@ -40,7 +40,7 @@ def test_llm_iteration_limit_compiles_and_changes_revision(tmp_path: Path) -> No
     default_plan = _compile(tmp_path)
     default_step = default_plan.flow("first").steps[0]
     assert isinstance(default_step, LlmStepPlan)
-    assert default_step.max_iterations == 4
+    assert default_step.max_iterations == 8
 
     _workflow(tmp_path, {"first": _flow(_llm(max_iterations=2))})
     limited_plan = _compile(tmp_path)
@@ -110,7 +110,12 @@ def _fails(root: Path, reason: str | None = None, **extra: Any) -> CompilationEr
         _compile(root, **extra)
     if reason is not None:
         assert caught.value.reason == reason
-    assert str(caught.value) == "The workflow configuration is invalid."
+    location = caught.value.location
+    rendered = str(caught.value)
+    assert rendered.startswith(
+        f"{location.path}:{location.line}:{location.column}: {caught.value.reason}"
+    )
+    assert rendered.endswith(f"(hint: {caught.value.hint})")
     return caught.value
 
 
@@ -171,14 +176,12 @@ def test_inline_and_file_definitions_share_one_contract(tmp_path: Path) -> None:
 
 def test_binding_discriminator_requires_explicit_default_and_preserves_null() -> None:
     adapter = TypeAdapter(Binding)
-    value = adapter.validate_python(
-        {"pointer": "/payload/missing", "optional": True, "default": None}
-    )
-    assert value.model_fields_set == {"pointer", "optional", "default"}
+    value = adapter.validate_python({"pointer": "/payload/missing", "default": None})
+    assert value.model_fields_set == {"pointer", "default"}
     adapter.validate_python({"literal": {"pointer": "literal data"}})
     for invalid in (
         {"pointer": "/x", "optional": True},
-        {"pointer": "/x", "default": None},
+        {"pointer": "/x", "optional": True, "default": None},
         {"pointer": "bad"},
         {"pointer": "/bad~2name"},
         {"pointer": "/x", "literal": 1},
@@ -191,13 +194,13 @@ def test_binding_discriminator_requires_explicit_default_and_preserves_null() ->
 @pytest.mark.parametrize("field", ["version", "unknown_setting"])
 def test_workflow_rejects_unknown_fields(tmp_path: Path, field: str) -> None:
     _workflow(tmp_path, **{field: 1})
-    _fails(tmp_path, "invalid_contract")
+    _fails(tmp_path, "unknown_field")
 
 
 @pytest.mark.parametrize("field", ["next", "on_answer", "on_unresolved", "name"])
 def test_step_routes_and_implicit_names_are_rejected(tmp_path: Path, field: str) -> None:
     _workflow(tmp_path, {"first": _flow(_handler(**{field: "other"}))})
-    _fails(tmp_path, "invalid_contract")
+    _fails(tmp_path, "unknown_field")
 
 
 @pytest.mark.parametrize("kind", ["finish", "dispatch", "workflow"])
@@ -229,7 +232,7 @@ def test_yaml_rejects_duplicates_tags_and_aliases_safely(tmp_path: Path, source:
 
 def test_contract_diagnostics_do_not_echo_unknown_fields_or_values(tmp_path: Path) -> None:
     _workflow(tmp_path, secret_sentinel="secret_value")
-    error = _fails(tmp_path, "invalid_contract")
+    error = _fails(tmp_path, "unknown_field")
     assert error.field == "*"
     assert "secret" not in str(vars(error))
 
@@ -273,9 +276,9 @@ def test_unresolved_routes_participate_in_graph_and_cannot_directly_complete(
             "multiple_valid_options": {"outcome": "completed"},
         },
     ):
-        document = _workflow(tmp_path, {"first": _flow(on_unresolved=route)})
-        with pytest.raises(ValidationError):
-            WorkflowAuthoring.model_validate(document)
+        _workflow(tmp_path, {"first": _flow(on_unresolved=route)})
+        error = _fails(tmp_path, "review_completes_run")
+        assert error.field is not None and error.field.startswith("flows.first.on_unresolved")
 
 
 def test_exact_routes_require_a_default_and_do_not_reserve_terminal_ids(tmp_path: Path) -> None:
@@ -323,17 +326,15 @@ def test_step_scope_rejects_cross_flow_or_unavailable_local_results(
 
 def test_optional_future_local_record_and_early_review_output_are_explicit(tmp_path: Path) -> None:
     flow = _flow(
-        _handler(
-            input={"later": {"pointer": "/steps/step1/result", "optional": True, "default": None}}
-        ),
+        _handler(input={"later": {"pointer": "/steps/step1/result", "default": None}}),
         _handler(),
     )
     flow["definition"]["output"] = {"pointer": "/steps/step1/result"}
     _workflow(tmp_path, {"first": flow})
     _fails(tmp_path, "incompatible_output_binding")
-    flow["definition"]["output"].update(optional=True, default=None)
+    flow["definition"]["output"].update(default=None)
     _workflow(tmp_path, {"first": flow})
-    assert _compile(tmp_path).flow("first").output.optional
+    assert _compile(tmp_path).flow("first").output.has_default
 
 
 @pytest.mark.parametrize(
@@ -366,12 +367,10 @@ def test_branch_specific_input_and_workflow_output_require_explicit_defaults(
     }
     _workflow(tmp_path, flows)
     _fails(tmp_path, "unavailable_flow_reference")
-    flows["join"]["input"]["prior"].update(optional=True, default=None)
+    flows["join"]["input"]["prior"].update(default=None)
     _workflow(tmp_path, flows, output={"pointer": "/flows/join/result"})
     _fails(tmp_path, "unavailable_flow_reference")
-    _workflow(
-        tmp_path, flows, output={"pointer": "/flows/join/result", "optional": True, "default": None}
-    )
+    _workflow(tmp_path, flows, output={"pointer": "/flows/join/result", "default": None})
     _compile(tmp_path)
 
 
@@ -410,10 +409,69 @@ def test_shared_flow_definitions_use_config_scope_but_steps_use_flow_scope(tmp_p
     assert [flow.name for flow in plan.flows] == ["first", "second"]
     assert plan.flow("first").step("run").name == plan.flow("second").step("run").name
     _fails(bundle, "invalid_flow_path")
+    # An explicit step definition may resolve anywhere inside the configuration root.
     (tmp_path / "shared/step.yaml").unlink()
-    _write(tmp_path, "outside.yaml", _handler())
-    (tmp_path / "shared/step.yaml").symlink_to(tmp_path / "outside.yaml")
-    _fails(bundle, "invalid_step_path", configuration_root=tmp_path)
+    _write(tmp_path, "elsewhere.yaml", _handler())
+    (tmp_path / "shared/step.yaml").symlink_to(tmp_path / "elsewhere.yaml")
+    _compile(bundle, configuration_root=tmp_path)
+    # ...but never outside it.
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.yaml"
+    outside.write_text(json.dumps(_handler()))
+    try:
+        (tmp_path / "shared/step.yaml").unlink()
+        (tmp_path / "shared/step.yaml").symlink_to(outside)
+        _fails(bundle, "invalid_step_path", configuration_root=tmp_path)
+    finally:
+        outside.unlink()
+
+
+def test_explicit_step_definitions_are_shared_across_flow_folders(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "shared/correct.step.md",
+        "---\ntype: llm\ninput: {}\noutput:\n  schema: correct.schema.json\n---\nCorrect it.\n",
+    )
+    _write(
+        tmp_path,
+        "shared/correct.schema.json",
+        '{"type":"object","properties":{"value":{"$ref":"common.json#/$defs/value"}}}',
+    )
+    _write(tmp_path, "shared/common.json", '{"$defs":{"value":{"type":"string"}}}')
+    for folder in ("lookup", "answer"):
+        _write(
+            tmp_path,
+            f"workflow/{folder}/flow.yaml",
+            {"steps": [{"id": "correct", "definition": "../../shared/correct.step.md"}]},
+        )
+    bundle = tmp_path / "workflow"
+    _workflow(
+        bundle,
+        {
+            "lookup": _flow(definition="lookup/flow.yaml", transition={"flow": "answer"}),
+            "answer": _flow(definition="answer/flow.yaml"),
+        },
+        start="lookup",
+    )
+    plan = _compile(bundle, configuration_root=tmp_path)
+    paths = {plan.flow(name).step("correct").output_schema_path for name in ("lookup", "answer")}
+    assert paths == {"shared/correct.schema.json"}
+    assert {item.path for item in plan.schema_resources} == {
+        "shared/correct.schema.json",
+        "shared/common.json",
+    }
+    assert plan.flow("lookup").step("correct").location.path == "shared/correct.step.md"
+    # The shared step's own resources stay confined to the step's directory.
+    _write(
+        tmp_path,
+        "shared/correct.schema.json",
+        '{"type":"object","properties":{"value":{"$ref":"../workflow/x.json"}}}',
+    )
+    _write(tmp_path, "workflow/x.json", '{"type":"string"}')
+    with pytest.raises(CompilationError):
+        _compile(bundle, configuration_root=tmp_path)
+    # Conventional discovery still looks only beside flow.yaml.
+    _write(tmp_path, "workflow/lookup/flow.yaml", {"steps": ["correct"]})
+    _fails(bundle, "missing_step_file", configuration_root=tmp_path)
 
 
 def test_colocated_schema_bases_transitive_resources_and_exact_bytes(tmp_path: Path) -> None:
@@ -846,11 +904,7 @@ def test_uncertain_applicator_and_numeric_object_paths_remain_runtime_checked(
 
 def test_optional_proven_absent_path_checks_its_default(tmp_path: Path) -> None:
     flow = _flow(
-        _decision(
-            sources={
-                "message": {"pointer": "/payload/missing", "optional": True, "default": "fallback"}
-            }
-        )
+        _decision(sources={"message": {"pointer": "/payload/missing", "default": "fallback"}})
     )
     flow["definition"]["input_schema"] = {"type": "object", "additionalProperties": False}
     _workflow(tmp_path, {"first": flow})

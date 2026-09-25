@@ -9,10 +9,11 @@ them with the runnable [final example](https://github.com/sebastianwessel/foliqa
 3. [Extract the requested action](structured-extraction.md).
 4. [Route to a branch](multiflow-routing.md).
 5. [Look up an account](read-only-mcp.md).
-6. [Try a bounded model tool loop](model-tool-loop.md).
-7. [Handle several requests](multi-request-processing.md).
-8. [Evaluate the workflow](evaluate.md).
-9. [Connect it to your application](integrate.md).
+6. [Retry a lookup with a corrected reference](retry-lookup.md).
+7. [Try a bounded model tool loop](model-tool-loop.md).
+8. [Handle several requests](multi-request-processing.md).
+9. [Evaluate the workflow](evaluate.md).
+10. [Connect it to your application](integrate.md).
 
 The setting stays the same: a fictional subscription support team receives
 `Please review the duplicate charge on invoice INV-7 for account A-100.`

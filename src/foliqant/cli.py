@@ -17,47 +17,27 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Never, TextIO, cast
 
 from foliqant.compiler import CompilationError
+from foliqant.compiler.errors import render_problems
 from foliqant.contracts.decoding import MAX_ENVELOPE_BYTES, decode_envelope
 from foliqant.core.errors import ErrorCode, ServiceError
 from foliqant.core.identity import Identity
-from foliqant.core.plan import (
-    DecisionStepPlan,
-    FlowCollectionStepPlan,
-    HandlerStepPlan,
-    LlmStepPlan,
-    MatchRoutingPlan,
-    McpStepPlan,
-    SourceLocation,
-    TransitionTargetPlan,
-    UnresolvedRoutingPlan,
-    WorkflowPlan,
-)
+from foliqant.core.plan import Diagnostic, SourceLocation
 
 if TYPE_CHECKING:
     from foliqant.adapters.telemetry.logging import LoggingRuntime, LogLabels
     from foliqant.bootstrap import PreparedApplication
 
+_EXIT_STALE = 1
 _EXIT_INPUT = 2
 _EXIT_DEPENDENCY = 3
 _EXIT_RUNTIME = 4
+_EXIT_TEMPORARY = 5
 _EXIT_CANCELLED = 130
 
 _MESSAGES: dict[str, str] = {
     "invalid_arguments": "Invalid arguments; use --help for supported options.",
-    ErrorCode.INVALID_CONFIGURATION.value: "The workflow configuration is invalid.",
-    ErrorCode.INVALID_INPUT.value: "The input does not satisfy the required contract.",
-    ErrorCode.INVALID_OUTPUT.value: "An operation returned an invalid result.",
-    ErrorCode.UNAUTHENTICATED.value: "Authentication is required.",
-    ErrorCode.FORBIDDEN.value: "The operation is not authorized.",
-    ErrorCode.NOT_FOUND.value: "The requested resource was not found.",
-    ErrorCode.MISSING_BINDING.value: "A required input binding is unavailable.",
-    ErrorCode.TIMEOUT.value: "The operation exceeded its deadline.",
-    ErrorCode.BUDGET_EXHAUSTED.value: "The execution budget is exhausted.",
-    ErrorCode.DEPENDENCY_FAILURE.value: "A required dependency is unavailable.",
-    ErrorCode.CONFLICT.value: "The request conflicts with an existing operation.",
-    ErrorCode.UNCERTAIN_EFFECT.value: "An external operation requires reconciliation.",
-    ErrorCode.CANCELLED.value: "The execution was cancelled.",
-    ErrorCode.CAPACITY_EXCEEDED.value: "The service has reached its admission limit.",
+    **{code.value: str(ServiceError(code)) for code in ErrorCode},
+    "stale_output": "The generated file differs from the current configuration.",
 }
 
 _SCAFFOLD: Mapping[str, str] = {
@@ -82,6 +62,8 @@ execution:
 """,
     "config/demo/workflow.yaml": """defaults:
   model: local
+  on_unresolved:
+    outcome: needs_review
 output:
   pointer: /flows/summarize/result
 flows:
@@ -121,10 +103,11 @@ MODEL_BASE_URL=http://127.0.0.1:8000/v1
 Install `foliqant[openai]`. Copy `config/.env.example` to `config/.env`
 and set the endpoint and model ID served by your local backend.
 
-Validate without contacting the model, then run:
+Validate without contacting the model, look at the graph, then run:
 
 ```sh
-foliqant validate
+foliqant validate --strict
+foliqant explain --format mermaid
 foliqant run --workflow demo --input envelope.json
 ```
 
@@ -149,6 +132,8 @@ class _CliFailure(Exception):
     field: str | None = None
     hint: str | None = None
     retryable: bool = False
+    diagnostics: tuple[Diagnostic, ...] = ()
+    problems: tuple[Diagnostic, ...] = ()
 
 
 class _Parser(argparse.ArgumentParser):
@@ -165,7 +150,7 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("destination", type=Path, metavar="DEST")
 
     for name, help_text in (
-        ("validate", "Compile all configured workflows offline"),
+        ("validate", "Compile all configured workflows offline and report diagnostics"),
         ("doctor", "Check configuration and installed optional dependencies offline"),
     ):
         command = commands.add_parser(name, help=help_text)
@@ -175,8 +160,12 @@ def _parser() -> argparse.ArgumentParser:
             default=Path("config/settings.yaml"),
             help="configuration file (default: ./config/settings.yaml)",
         )
+        if name == "validate":
+            command.add_argument(
+                "--strict", action="store_true", help="fail when any warning is reported"
+            )
 
-    explain = commands.add_parser("explain", help="Describe compiled workflow plans offline")
+    explain = commands.add_parser("explain", help="Describe compiled workflow graphs offline")
     explain.add_argument(
         "--config",
         type=Path,
@@ -184,6 +173,28 @@ def _parser() -> argparse.ArgumentParser:
         help="configuration file (default: ./config/settings.yaml)",
     )
     explain.add_argument("--workflow")
+    explain.add_argument(
+        "--format",
+        choices=("json", "mermaid", "dot"),
+        default="json",
+        help="json (default) or a Mermaid/Graphviz graph",
+    )
+    explain.add_argument(
+        "--all",
+        action="store_true",
+        help="every workflow; with mermaid/dot one Markdown document with a section each",
+    )
+    explain.add_argument(
+        "--legend",
+        action="store_true",
+        help="append a legend of step shapes to a mermaid/dot graph (--all always has one)",
+    )
+    explain.add_argument("--output", type=Path, help="write the rendering to this file")
+    explain.add_argument(
+        "--check",
+        action="store_true",
+        help="compare --output with the current rendering; exit 1 when it is stale",
+    )
 
     run = commands.add_parser("run", help="Run one workflow with an envelope")
     run.add_argument(
@@ -220,9 +231,20 @@ def _parser() -> argparse.ArgumentParser:
     )
     evaluation.add_argument("--max-concurrency", type=int)
     evaluation.add_argument(
-        "--timeout", type=float, help="per-case deadline in seconds (default: 300)"
+        "--timeout",
+        type=float,
+        help="per-case deadline in seconds (default: execution.run_timeout + 60)",
     )
     evaluation.add_argument("--repeat", type=int, help="attempts per source case (default: 1)")
+    evaluation.add_argument(
+        "--checkpoint",
+        type=Path,
+        metavar="PATH",
+        help="private journal of finished attempts; rerun with it to resume",
+    )
+    evaluation.add_argument(
+        "--progress", action="store_true", help="content-free progress lines on stderr"
+    )
 
     return parser
 
@@ -266,38 +288,88 @@ def _failure_payload(failure: _CliFailure) -> dict[str, object]:
     location = _safe_location(failure.location)
     if location is not None:
         error["location"] = location
-    return {"error": error}
+    payload: dict[str, object] = {"error": error}
+    if failure.problems:
+        payload["problems"] = _diagnostics(failure.problems)
+    if failure.diagnostics:
+        payload["diagnostics"] = _diagnostics(failure.diagnostics)
+    return payload
 
 
-def _exit_for_service_error(error: ServiceError) -> int:
-    if error.code in {
+def _failure_text(failure: _CliFailure) -> str:
+    """Human-readable failure for standard error: one line per problem, then a summary."""
+    message = _MESSAGES.get(failure.code, _MESSAGES[ErrorCode.DEPENDENCY_FAILURE.value])
+    if failure.problems:
+        count = len(failure.problems)
+        summary = f"foliqant: {failure.code}: {count} problem{'s' if count != 1 else ''}."
+        return render_problems(failure.problems) + "\n" + summary + "\n"
+    hint = f" (hint: {failure.hint})" if failure.hint else ""
+    return f"foliqant: {failure.code}: {message}{hint}\n"
+
+
+def _diagnostics(items: Sequence[Diagnostic]) -> list[dict[str, object]]:
+    """Content-free compiler findings with safe source coordinates."""
+    result: list[dict[str, object]] = []
+    for item in items:
+        value: dict[str, object] = {"code": item.code, "level": item.level, "message": item.message}
+        location = _safe_location(item.location)
+        if location is not None:
+            value["location"] = location
+        if item.field is not None:
+            value["field"] = item.field
+        if item.hint is not None:
+            value["hint"] = item.hint
+        result.append(value)
+    return result
+
+
+#: Failures fixed by changing the arguments, input, configuration or credentials.
+_INPUT_CODES = frozenset(
+    {
         ErrorCode.INVALID_CONFIGURATION,
         ErrorCode.INVALID_INPUT,
         ErrorCode.UNAUTHENTICATED,
         ErrorCode.FORBIDDEN,
         ErrorCode.NOT_FOUND,
         ErrorCode.CONFLICT,
-    }:
+        ErrorCode.MODEL_NOT_FOUND,
+        ErrorCode.REQUEST_REJECTED,
+        ErrorCode.CONTEXT_LIMIT_EXCEEDED,
+    }
+)
+
+
+def _exit_for_service_error(error: ServiceError) -> int:
+    if error.code in _INPUT_CODES:
         return _EXIT_INPUT
     if error.code is ErrorCode.CANCELLED:
         return _EXIT_CANCELLED
+    if error.retryable:
+        # The failing boundary proved a transient condition; a later attempt may succeed.
+        return _EXIT_TEMPORARY
     return _EXIT_RUNTIME
 
 
-def _prepare(config_path: Path) -> PreparedApplication:
+def _compilation_failure(error: CompilationError) -> _CliFailure:
+    return _CliFailure(
+        ErrorCode.INVALID_CONFIGURATION.value,
+        _EXIT_INPUT,
+        location=error.location,
+        reason=error.reason,
+        field=error.field,
+        hint=error.hint,
+        diagnostics=error.diagnostics,
+        problems=error.problems,
+    )
+
+
+def _prepare(config_path: Path, *, strict: bool = False) -> PreparedApplication:
     from foliqant.bootstrap import prepare_application
 
     try:
-        return prepare_application(config_path)
+        return prepare_application(config_path, strict=strict)
     except CompilationError as error:
-        raise _CliFailure(
-            ErrorCode.INVALID_CONFIGURATION.value,
-            _EXIT_INPUT,
-            location=error.location,
-            reason=error.reason,
-            field=error.field,
-            hint=error.hint,
-        ) from None
+        raise _compilation_failure(error) from None
     except ServiceError:
         raise
     except (OSError, TypeError, ValueError):
@@ -330,100 +402,96 @@ def _init(destination: Path) -> dict[str, object]:
     return {"command": "init", "status": "created"}
 
 
-def _target_report(target: TransitionTargetPlan) -> dict[str, object]:
-    return {"flow": target.flow} if target.flow is not None else {"outcome": target.outcome}
-
-
-def _plan_report(
-    plan: WorkflowPlan, prepared: PreparedApplication | None = None
-) -> dict[str, object]:
-    flows: list[dict[str, object]] = []
-    for flow in plan.flows:
-        steps: list[dict[str, object]] = []
-        for step in flow.steps:
-            item: dict[str, object] = {"name": step.name, "type": step.type}
-            if isinstance(step, (DecisionStepPlan, LlmStepPlan)):
-                item["model"] = step.model
-                if prepared is not None:
-                    profile = prepared._models[step.model]
-                    selection: dict[str, object] = {
-                        "provider": profile.provider,
-                        "model": profile.model,
-                    }
-                    source = prepared._model_admission_groups.get(step.model)
-                    if source is not None:
-                        selection["profile"] = source
-                    elif step.model in prepared.config.models:
-                        selection["profile"] = step.model
-                    item["model_selection"] = selection
-            if isinstance(step, DecisionStepPlan) and step.fallback is not None:
-                category = {"id": step.fallback.category.id}
-                if step.fallback.category.description is not None:
-                    category["description"] = step.fallback.category.description
-                item["fallback"] = {"category": category, "on": list(step.fallback.on)}
-            elif isinstance(step, LlmStepPlan) and step.tools is not None:
-                item["tools"] = {"server": step.tools.server, "allow": list(step.tools.allow)}
-            elif isinstance(step, McpStepPlan):
-                item["server"], item["tool"] = step.server, step.tool
-            elif isinstance(step, HandlerStepPlan):
-                item["handler"] = step.handler
-            elif isinstance(step, FlowCollectionStepPlan):
-                item["flows"] = list(step.flows)
-                item["max_items"] = step.max_items
-            steps.append(item)
-        transition = flow.transition
-        if isinstance(transition, MatchRoutingPlan):
-            # Report routing topology, never literal bindings or prompt content.
-            route: dict[str, object] = {
-                "cases": {key: _target_report(target) for key, target in transition.cases},
-                "default": _target_report(transition.default),
-            }
-        elif transition is not None:
-            route = _target_report(transition)
-        else:
-            route = {}
-        entry: dict[str, object] = {"name": flow.name, "steps": steps}
-        if flow.callable:
-            entry["callable"] = True
-        else:
-            entry["transition"] = route
-        if isinstance(flow.on_unresolved, UnresolvedRoutingPlan):
-            unresolved: dict[str, object] = {
-                "default": _target_report(flow.on_unresolved.default),
-            }
-            for issue, target in flow.on_unresolved.issues:
-                unresolved[issue] = _target_report(target)
-            entry["on_unresolved"] = unresolved
-        elif flow.on_unresolved is not None:
-            entry["on_unresolved"] = _target_report(flow.on_unresolved)
-        flows.append(entry)
-    return {"name": plan.name, "revision": plan.revision, "start": plan.start, "flows": flows}
-
-
-def _validate(config_path: Path) -> dict[str, object]:
-    prepared = _prepare(config_path)
+def _validate(config_path: Path, *, strict: bool = False) -> dict[str, object]:
+    # A strict preparation fails with every warning, not only the first.
+    prepared = _prepare(config_path, strict=strict)
     return {
         "command": "validate",
         "status": "valid",
         "configuration_digest": prepared.configuration_digest,
         "workflows": sorted(prepared.plans),
+        "diagnostics": _diagnostics(prepared.diagnostics),
     }
 
 
-def _explain(config_path: Path, workflow: str | None) -> dict[str, object]:
-    prepared = _prepare(config_path)
-    if workflow is not None:
-        plan = prepared.plans.get(workflow)
+def _explain(args: argparse.Namespace) -> tuple[dict[str, object] | str, int]:
+    from foliqant.graph import render_document, render_dot, render_mermaid, workflow_graph
+
+    output_format: str = args.format
+    if (
+        (args.check and args.output is None)
+        or (args.all and args.workflow is not None)
+        or (args.legend and output_format == "json")
+    ):
+        raise _CliFailure(
+            "invalid_arguments",
+            _EXIT_INPUT,
+            hint=(
+                "--check needs --output; --all and --workflow exclude each other; "
+                "--legend needs --format mermaid or dot."
+            ),
+        )
+    prepared = _prepare(args.config)
+    if args.workflow is not None:
+        plan = prepared.plans.get(args.workflow)
         if plan is None:
             raise _CliFailure(ErrorCode.NOT_FOUND.value, _EXIT_INPUT)
         plans = [plan]
     else:
         plans = [prepared.plans[name] for name in sorted(prepared.plans)]
-    return {
-        "command": "explain",
-        "configuration_digest": prepared.configuration_digest,
-        "workflows": [_plan_report(plan, prepared) for plan in plans],
-    }
+    rendering: dict[str, object] | str
+    if output_format == "json":
+        rendering = {
+            "command": "explain",
+            "configuration_digest": prepared.configuration_digest,
+            "workflows": [workflow_graph(plan, prepared).to_json() for plan in plans],
+        }
+    elif args.all:
+        rendering = render_document(prepared, "mermaid" if output_format == "mermaid" else "dot")
+    elif len(plans) != 1:
+        # One diagram per output; select the workflow or render the document.
+        raise _CliFailure(
+            "invalid_arguments",
+            _EXIT_INPUT,
+            hint="Select one workflow with --workflow NAME, or render all with --all.",
+        )
+    else:
+        graph = workflow_graph(plans[0], prepared)
+        render = render_mermaid if output_format == "mermaid" else render_dot
+        rendering = render(graph, legend=args.legend)
+    if args.output is None:
+        return rendering, 0
+    text = (
+        rendering
+        if isinstance(rendering, str)
+        else json.dumps(rendering, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
+    )
+    return _write_rendering(args.output, text, check=args.check), 0
+
+
+def _write_rendering(path: Path, text: str, *, check: bool) -> dict[str, object]:
+    """Write generated documentation atomically, or compare it for drift with ``check``."""
+    if check:
+        try:
+            current = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            current = None
+        if current != text:
+            raise _CliFailure(
+                "stale_output",
+                _EXIT_STALE,
+                hint="Run the same command without --check to regenerate the file.",
+            )
+        return {"command": "explain", "status": "current", "output": str(path)}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix=".foliqant-", dir=path.parent)
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(text)
+        os.replace(temporary, path)
+    except OSError:
+        raise _CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME) from None
+    return {"command": "explain", "status": "written", "output": str(path)}
 
 
 def _doctor(config_path: Path) -> dict[str, object]:
@@ -437,6 +505,16 @@ def _doctor(config_path: Path) -> dict[str, object]:
         "status": "ok",
         "configuration_digest": prepared.configuration_digest,
         "workflows": sorted(prepared.plans),
+        "handlers": sorted(prepared.handler_contracts),
+        "models": {
+            name: {
+                "provider": profile.provider,
+                "model": profile.model,
+                **({"pricing": profile.pricing.summary()} if profile.pricing is not None else {}),
+            }
+            for name, profile in sorted(prepared.config.models.items())
+        },
+        "diagnostics": _diagnostics(prepared.diagnostics),
         "optional_dependencies": optional,
     }
 
@@ -532,6 +610,9 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, object], int]:
             prepared, environment=os.environ, install_global_telemetry=True
         ) as application:
             result = await application.run(args.workflow, envelope, identity=identity)
+    except CompilationError as failure:
+        # Declared handlers need host registrations; the generic CLI has none.
+        raise _compilation_failure(failure) from None
     finally:
         await _close_logging(logging_runtime)
     if result.execution.status not in {"completed", "needs_review"}:
@@ -542,13 +623,13 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, object], int]:
     return cast(dict[str, object], result.model_dump(mode="json")), 0
 
 
-def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object], int]:
+def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object] | str, int]:
     if args.command == "init":
         return _init(args.destination), 0
     if args.command == "validate":
-        return _validate(args.config), 0
+        return _validate(args.config, strict=args.strict), 0
     if args.command == "explain":
-        return _explain(args.config, args.workflow), 0
+        return _explain(args)
     if args.command == "doctor":
         return _doctor(args.config), 0
     if args.command == "evaluate":
@@ -563,10 +644,14 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object], int]:
                 or args.max_concurrency is not None
                 or args.timeout is not None
                 or args.repeat is not None
+                or args.checkpoint is not None
+                or args.progress
             ):
                 raise _CliFailure("invalid_arguments", _EXIT_INPUT)
             return compare_report_files(args.compare, args.baseline, output=args.output)
-        if args.baseline is not None:
+        if args.baseline is not None or (
+            args.checkpoint is not None and (args.check or args.replay is not None)
+        ):
             raise _CliFailure("invalid_arguments", _EXIT_INPUT)
         return asyncio.run(
             evaluate_configuration(
@@ -575,46 +660,58 @@ def _dispatch(args: argparse.Namespace) -> tuple[dict[str, object], int]:
                 replay=args.replay,
                 output=args.output,
                 max_concurrency=1 if args.max_concurrency is None else args.max_concurrency,
-                timeout=300.0 if args.timeout is None else args.timeout,
+                timeout=args.timeout,
                 repeat=args.repeat,
+                checkpoint=args.checkpoint,
+                progress=args.progress,
             )
         )
     return asyncio.run(_run(args))
 
 
+def _report(failure: _CliFailure) -> int:
+    """Failure status as one JSON object on stdout; the readable text on stderr."""
+    _json_line(_failure_payload(failure))
+    sys.stderr.write(_failure_text(failure))
+    return failure.exit_code
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    """Execute one command with a single JSON success or safe failure object."""
+    """Execute one command: one JSON status object (or rendering) on stdout.
+
+    Failures print the same JSON failure object on stdout and readable text on
+    stderr: ``<file>:<line>:<column>: <code> at <field>: <message> (hint: ...)``
+    for every configuration problem. Exit codes: ``0`` success, ``1`` stale
+    ``explain --check`` output or gold mismatch, ``2`` invalid arguments, input
+    or configuration, ``3`` missing optional dependency, ``4`` runtime failure,
+    ``5`` temporary (retryable) runtime failure, ``130`` interruption.
+    """
     try:
         args = _parser().parse_args(argv)
         payload, exit_code = _dispatch(args)
-        _json_line(payload)
+        if isinstance(payload, str):
+            # Graph renderings are plain text for direct use in diagram tools.
+            sys.stdout.write(payload)
+        else:
+            _json_line(payload)
         return exit_code
     except _CliFailure as failure:
-        _json_line(_failure_payload(failure), stream=sys.stderr)
-        return failure.exit_code
+        return _report(failure)
+    except CompilationError as error:
+        return _report(_compilation_failure(error))
     except ServiceError as error:
-        service_failure = _CliFailure(
-            error.code.value, _exit_for_service_error(error), retryable=error.retryable
+        return _report(
+            _CliFailure(error.code.value, _exit_for_service_error(error), retryable=error.retryable)
         )
-        _json_line(_failure_payload(service_failure), stream=sys.stderr)
-        return service_failure.exit_code
     except (ImportError, ModuleNotFoundError):
-        dependency_failure = _CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_DEPENDENCY)
-        _json_line(_failure_payload(dependency_failure), stream=sys.stderr)
-        return dependency_failure.exit_code
+        return _report(_CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_DEPENDENCY))
     except KeyboardInterrupt:
-        cancelled_failure = _CliFailure(ErrorCode.CANCELLED.value, _EXIT_CANCELLED)
-        _json_line(_failure_payload(cancelled_failure), stream=sys.stderr)
-        return cancelled_failure.exit_code
+        return _report(_CliFailure(ErrorCode.CANCELLED.value, _EXIT_CANCELLED))
     except (OSError, TypeError, ValueError):
-        runtime_failure = _CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME)
-        _json_line(_failure_payload(runtime_failure), stream=sys.stderr)
-        return runtime_failure.exit_code
+        return _report(_CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME))
     except Exception:
         # No exception text or traceback may cross this public boundary.
-        internal_failure = _CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME)
-        _json_line(_failure_payload(internal_failure), stream=sys.stderr)
-        return internal_failure.exit_code
+        return _report(_CliFailure(ErrorCode.DEPENDENCY_FAILURE.value, _EXIT_RUNTIME))
 
 
 __all__ = ["main"]

@@ -73,6 +73,13 @@ from a message. Validate the shape before the next operation uses it.
 or [run a Python function](steps/handler.md). Keep tool access explicit.
 </div>
 <div class="docs-card" markdown>
+<span class="docs-step">CONTROL</span>
+### Keep control flow in configuration
+[Route on conditions](configuration/conditions.md), skip steps with `when`,
+and [retry a lookup](configuration/repeat.md) a bounded number of times.
+Routes are checked against your schemas before any request runs.
+</div>
+<div class="docs-card" markdown>
 <span class="docs-step">DELIVER</span>
 ### Put the result in your application
 [Embed in Python](integration/index.md), [serve an HTTP endpoint](integration/http.md),

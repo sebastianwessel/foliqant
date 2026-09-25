@@ -21,7 +21,18 @@ class ModelTools:
 
     def _tool(self, name: str) -> Tool[None]:
         async def call(**arguments: Any) -> object:
-            result = await self.session.call(name, cast(FrozenObject, freeze_json(arguments)))
+            # The model wrote these arguments: a schema violation is the model's
+            # invalid tool call, not invalid workflow input.
+            try:
+                frozen = freeze_json(arguments)
+            except ServiceError:
+                raise ServiceError(ErrorCode.INVALID_TOOL_CALL) from None
+            try:
+                result = await self.session.call(name, cast(FrozenObject, frozen))
+            except ServiceError as error:
+                if error.code is ErrorCode.INVALID_INPUT:
+                    raise ServiceError(ErrorCode.INVALID_TOOL_CALL) from None
+                raise
             return thaw_json(result)
 
         schema = self.session.input_schema(name)

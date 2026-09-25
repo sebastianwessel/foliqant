@@ -12,16 +12,22 @@ if TYPE_CHECKING:
         prepare_application,
     )
     from .contracts.envelope import Envelope
-    from .contracts.execution import ExecutionResult
+    from .contracts.execution import ExecutionInfo, ExecutionResult, ModelUsage, Usage
     from .core.identity import Identity
+    from .graph import WorkflowGraph, explain
 
 __all__ = [
     "Envelope",
+    "ExecutionInfo",
     "ExecutionResult",
     "Identity",
+    "ModelUsage",
     "PreparedApplication",
     "RuntimePlugins",
+    "Usage",
     "WorkflowApplication",
+    "WorkflowGraph",
+    "explain",
     "load_environment",
     "open_application",
     "prepare_application",
@@ -46,12 +52,16 @@ def __getattr__(name: str) -> object:
         from .contracts.envelope import Envelope
 
         return Envelope
-    if name == "ExecutionResult":
-        from .contracts.execution import ExecutionResult
+    if name in {"ExecutionInfo", "ExecutionResult", "ModelUsage", "Usage"}:
+        from .contracts import execution
 
-        return ExecutionResult
+        return cast(object, getattr(execution, name))
     if name == "Identity":
         from .core.identity import Identity
 
         return Identity
+    if name in {"explain", "WorkflowGraph"}:
+        from . import graph
+
+        return cast(object, getattr(graph, name))
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

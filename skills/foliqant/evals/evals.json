@@ -39,7 +39,7 @@
     {
       "id": 8,
       "prompt": "Register an async normalize function as a workflow operation and validate its input and output.",
-      "expected_output": "Creates a read HandlerRegistration with async callable and explicit input/output schemas, passes it to prepare_application, and selects only its registered name from YAML. Does not import code from configuration, permit a write handler, or leak raw exceptions."
+      "expected_output": "Declares the handler contract (input_schema, output_schema, effect: read) under handlers in settings.yaml, registers the async callable with HandlerRegistration and prepare_application, and selects only its declared name from YAML. Optional registration schemas must match the declaration. Does not import code from configuration, permit a write handler, or leak raw exceptions."
     },
     {
       "id": 9,
@@ -84,7 +84,7 @@
     {
       "id": 17,
       "prompt": "Configure provider retries so a slow or disconnected model call is retried three times, and ensure evaluation never opens gold at startup.",
-      "expected_output": "Keeps gold lookup exclusive to explicit evaluation. Explains that max_attempts includes the initial attempt and retries only safely observed completed transient HTTP responses under one absolute deadline. It does not retry timeout, disconnect, cancellation, authentication, schema/output, or whole-workflow failures; therefore it refuses the requested slow/disconnect retries and shows the closest valid explicit retry policy."
+      "expected_output": "Keeps gold lookup exclusive to explicit evaluation. Explains that max_attempts includes the initial attempt and that the default max_attempts 4 already allows three retries under one absolute deadline, of completed transient HTTP responses (408, 429, 500, 502, 503, 504, 529) and, for models, a connection failure without a response. It does not retry a client-side timeout of a slow request, cancellation, authentication, invalid requests, output limits or whole-workflow failures; for a slow model it raises request_timeout/model_timeout instead of adding retries, and notes that invalid output is corrected by output_retries rather than by retry."
     },
     {
       "id": 18,
@@ -149,7 +149,7 @@
     {
       "id": 30,
       "prompt": "Use only actual Foliqant defaults. What are the execution limits, max iterations, token/sampling defaults and environment precedence?",
-      "expected_output": "Reports execution concurrency 4, queue_limit 16, run_timeout 300, model_timeout 60, tool_timeout 30, max_steps 32, model_requests_per_step 4, tool_calls_per_step 3; LLM max_iterations 4; model max_tokens 4096 and unset sampling/reasoning. Distinguishes examples from defaults, requires provider/model/output_mode, and explains caller environment mapping over adjacent .env and no environment interpolation of prompt/customer data."
+      "expected_output": "Reports execution concurrency 4, queue_limit 16, run_timeout 900, model_timeout 300, tool_timeout 30, max_steps 128, model_requests_per_step 16, tool_calls_per_step 16; LLM max_iterations 8; model max_tokens 32768, request_timeout 300, retry max_attempts 4 (initial delay 1 s, max delay 30 s), output_retries 1 and unset sampling/reasoning. Distinguishes examples from defaults, requires provider/model/output_mode, and explains caller environment mapping over adjacent .env and no environment interpolation of prompt/customer data."
     },
     {
       "id": 31,
@@ -170,6 +170,26 @@
       "id": 34,
       "prompt": "Our Foliqant CLI validate reports unknown_handler for the custom planning function. How can the agent validate and evaluate this app without removing the function?",
       "expected_output": "Uses prepare_application(config_path, handlers=registered_handlers) from host composition, inspects prepared.plans, and calls load_dataset(prepared) for offline gold/target checks. Runs scripted tests and Python evaluate against the same application. Does not invent CLI registration flags or config imports, remove business logic, or claim generic CLI checks passed."
+    },
+    {
+      "id": 35,
+      "prompt": "After extraction, run a repair step only when a check reports invalid fields, then recheck; route invalid results to review without writing a routing handler.",
+      "expected_output": "Keeps check, repair and recheck in one flow with step when conditions on /steps/check/result/status and /steps/repair/result, binds conditional results with defaults, projects an object output with first_of over recheck and check, and routes with a transition route (equals invalid -> review flow, otherwise next flow). Does not add a handler whose only output is a routing key."
+    },
+    {
+      "id": 36,
+      "prompt": "If a fund lookup finds nothing, let a model propose a corrected identifier and look it up once more.",
+      "expected_output": "Uses repeat on the lookup flow with max_attempts 2, an until condition on the lookup status, a callable retry flow with retry.input, optional continue_when, and retry_input overriding the identifier. Routes on the last attempt's result because exhaustion is not a review, and reads the retry flow's result elsewhere only with a default. Does not unroll lookup/relookup flow copies."
+    },
+    {
+      "id": 37,
+      "prompt": "Two alternative branches both produce a reply object; return whichever ran as the workflow payload and make every flow send reviews to one manual review flow.",
+      "expected_output": "Uses a workflow output first_of over both branch results with a default, and defaults.on_unresolved targeting the review flow, which declares its own review route to avoid cycles. Does not add a join flow or select handler, and does not use the removed optional flag."
+    },
+    {
+      "id": 38,
+      "prompt": "Check our workflow for route typos and dead ends before release and give reviewers a diagram.",
+      "expected_output": "Runs foliqant validate --strict and reads diagnostics (unmatched_case, uncovered_value with default_covers, route_unreachable_entry, review_ends_run, condition_type_mismatch), then renders foliqant explain --format mermaid for review. Works with declared handlers without Python registrations and fixes warnings instead of suppressing them."
     }
   ]
 }

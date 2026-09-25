@@ -36,7 +36,7 @@ Workflow-boundary pointers can read the original `/payload`, accepted
 `/metadata`, and results of previously completed routed flows under
 `/flows/{flow}/result`.
 
-## Set the default model and starting flow
+## Set defaults and the starting flow
 
 The top-level workflow fields are:
 
@@ -45,11 +45,13 @@ The top-level workflow fields are:
 | `name` | No | Workflow directory name; if present, it must match the deployment registry key |
 | `input_schema` | No | No workflow-level payload schema |
 | `defaults.model` | No | No model; every `decision` or `llm` step must otherwise select one |
+| `defaults.on_unresolved` | No | Review route inherited by every routed flow without its own `on_unresolved` |
 | `start` | Sometimes | Inferred only when exactly one non-callable flow exists |
 | `output` | No | Return the accepted workflow input payload |
 | `flows` | Yes | Nonempty map of routed instances and callable flows |
 
-Model-backed steps can inherit a deployment profile:
+Model-backed steps can inherit a deployment profile. A flow definition may set
+its own `defaults.model`, which takes precedence for that flow's steps:
 
 ```yaml
 defaults:
@@ -57,9 +59,27 @@ defaults:
 start: classify
 ```
 
+### Choose the first flow
+
 Declare `start` whenever two or more routed flows exist. A callable flow cannot
-be the start. The compiler rejects cycles and any flow that cannot be reached
-from the start through a route or a collection call.
+be the start. `start` names one flow, or selects it from the envelope with an
+ordered `route`:
+
+```yaml
+start:
+  route:
+    - when:
+        binding:
+          pointer: /payload/form/report_type
+        present: true
+      flow: extract_fields
+    - flow: classify_report_type
+```
+
+Start conditions read only `/payload` and `/metadata`; every entry targets a
+flow, never an outcome, so a run always executes at least one flow. The
+compiler rejects cycles and any flow that cannot be reached from a start
+candidate through a route, a collection call or a repeat retry.
 
 ## Declare flow instances
 
@@ -93,9 +113,13 @@ flows:
 ```
 
 It resolves `lookup_status/flow.yaml` by convention. Callable flows have no
-workflow-boundary `input`, `transition`, or `on_unresolved`; only an allowlisted
-`flow_collection` step can invoke one with a complete child input. See
+workflow-boundary `input`, `transition`, or `on_unresolved`; an allowlisted
+`flow_collection` step invokes one with a complete child input, and a
+[`repeat`](repeat.md) may run one as its retry flow. See
 [Flow collection steps](../steps/flow-collection.md).
+
+A routed flow may also declare [`repeat`](repeat.md) to run a bounded number
+of attempts, optionally with a callable retry flow between them.
 
 ## Project the workflow output
 
@@ -116,12 +140,12 @@ output:
 ```
 
 When a referenced flow does not run on every terminal path, make absence
-explicit:
+explicit with a `default`. A binding with `default` is optional; one without is
+required:
 
 ```yaml
 output:
   pointer: /flows/respond/result
-  optional: true
   default:
     disposition: review
 ```
@@ -129,10 +153,38 @@ output:
 Defaults apply only when the pointer is missing. An explicit JSON `null` is a
 present value and remains `null`.
 
-## Define transitions and review handling
+After alternative branches, `first_of` returns the result of whichever branch
+ran, without a join flow or handler:
 
-Every routed flow requires a `transition`. A direct transition selects another
-flow or ends the workflow:
+```yaml
+output:
+  first_of:
+    - pointer: /flows/billing/result
+    - pointer: /flows/cancellation/result
+  default:
+    disposition: needs_review
+```
+
+`first_of` selects the first member that resolves to a non-null value. An
+object output assembles several values into one payload with exactly these
+keys; each field is any binding:
+
+```yaml
+output:
+  fields:
+    queue:
+      pointer: /flows/classify/result
+    reply:
+      pointer: /flows/respond/result/reply
+      default: null
+```
+
+See [context](context.md#combine-candidates-and-build-objects) for the rules.
+
+## Define transitions
+
+Every routed flow requires a `transition`, used after the flow completes. A
+direct transition selects another flow or ends the workflow:
 
 ```yaml
 transition:
@@ -149,7 +201,9 @@ transition:
   outcome: needs_review
 ```
 
-For deterministic branching, match an exact string flow result:
+### Match an exact value with `cases`
+
+For branching on one enumerated string, match it exactly:
 
 ```yaml
 transition:
@@ -164,22 +218,97 @@ transition:
     outcome: needs_review
 ```
 
-Case keys compare exactly. A missing optional binding, `null`, or unmatched
-string uses `default`; other JSON types are invalid. The model never invents a
-route, and there is no expression evaluator or coercion.
+Case keys compare exactly. A missing binding with a default, `null`, or an
+unmatched string uses `default`; other JSON types are invalid. The model never
+invents a route, and there is no expression evaluator or coercion.
 
-Steps execute sequentially. A completed flow uses `transition`. If a step
-produces a valid unresolved result, the flow stops and uses `on_unresolved`.
-Without that field, the workflow ends with `needs_review`.
+The compiler derives the **allowed values** of the routed field from its static
+schema: `enum` and `const` (also inside `anyOf`/`oneOf` with `null`), decision
+selections (catalog IDs plus the fallback category), predicate answers, and the
+declared output schemas of handlers, MCP tools and LLM steps, through object
+outputs. Then:
 
-Use one unresolved target when all uncertainty follows the same path:
+| Code | Level | When |
+| --- | --- | --- |
+| `unmatched_case` | error | a case key is not an allowed value, so the case can never be taken |
+| `uncovered_value` | warning | an allowed value has no case and silently falls to `default` |
+| `default_covers_mismatch` | error | `default_covers` does not list exactly the uncovered values |
+| `case_on_unknown_type` | info | the field's values are unknown, so cases cannot be checked |
+
+State deliberately uncovered values to silence the warning:
+
+```yaml
+transition:
+  binding:
+    pointer: /flows/lookup_fund/result/status
+  cases:
+    found:
+      flow: enrich
+  default:
+    flow: request_details
+  default_covers:
+    - not_found
+    - ambiguous
+```
+
+### Route on conditions
+
+Use an ordered `route` when the decision is not one exact value: presence,
+several fields, patterns, counts. Each entry but the last has a
+[condition](conditions.md) in `when`; the first true entry wins; the last entry
+has no `when` and is the mandatory otherwise target:
+
+```yaml
+transition:
+  route:
+    - when:
+        binding:
+          pointer: /flows/extract_fields/result/status
+        equals: invalid
+      flow: repair_extraction
+    - when:
+        all:
+          - binding:
+              pointer: /payload/form/report_type
+            present: true
+          - binding:
+              pointer: /payload/form/report_type
+            not_equals: custom_report
+      flow: extract_fields
+    - flow: classify_report_type
+```
+
+Route conditions read `/payload`, `/metadata` and `/flows/{id}/result` of any
+flow that may have run before this point; absence is tolerated. Targets are
+flows or outcomes, as in `cases`. A `route` whose last entry has `when` fails
+with `route_without_otherwise`; an entry without `when` before the last fails
+with `misplaced_otherwise`. Entries that can never be selected report
+`route_unreachable_entry`.
+
+Prefer `cases` for one enumerated value (it gets coverage checks) and `route`
+for everything else. Neither needs a handler whose only job is to compute a
+routing key.
+
+## Handle review
+
+Steps execute sequentially. If a step produces a valid unresolved result, the
+flow stops and uses `on_unresolved` instead of `transition`. Without a review
+route the workflow ends with `needs_review`; validation reports each such flow
+with `review_ends_run`, naming what the host then receives. It is a warning
+(fatal under `--strict`) when the host would receive the workflow output's
+default, the accepted input or other flows' results instead of the reviewing
+flow's projected result, and an info when the reviewing flow is the one the
+workflow output returns. Declaring `on_unresolved: {outcome: needs_review}`
+states that ending the run is intended.
+
+Use one target when all uncertainty follows the same path:
 
 ```yaml
 on_unresolved:
   flow: manual_review
 ```
 
-Or route supported decision issue codes explicitly:
+Or route supported review issue codes explicitly:
 
 ```yaml
 on_unresolved:
@@ -192,28 +321,75 @@ on_unresolved:
 ```
 
 The supported keys are `no_supported_answer`, `conflicting_information`, and
-`multiple_valid_options`. When several issues select different targets, the
-required `default` wins. Missing issues and non-decision review also use the
-default. An unresolved route cannot go directly to `outcome: completed`, but it
-may enter an explicit review-handling flow that later completes. Earlier review
-records remain visible in the final result. Technical failure does not follow
+`multiple_valid_options`. Decision steps and trusted handlers report issues;
+when several issues select different targets, the required `default` wins, and
+a review without issues also uses the default.
+
+### Route review
+
+`on_unresolved` accepts the same ordered `route` form as `transition`:
+
+```yaml
+on_unresolved:
+  route:
+    - when:
+        binding:
+          pointer: /payload/channel
+        equals: portal
+      flow: portal_review
+    - outcome: needs_review
+```
+
+### Inherit a workflow review default
+
+Set `defaults.on_unresolved` once instead of repeating it on every flow. A flow
+with its own `on_unresolved` keeps it:
+
+```yaml
+defaults:
+  model: local
+  on_unresolved:
+    flow: manual_review
+flows:
+  manual_review:
+    input: {}
+    transition:
+      outcome: needs_review
+    on_unresolved:
+      outcome: needs_review
+```
+
+The target flow must be reachable from every inheriting flow without creating
+a cycle, so it normally declares its own review route; otherwise compilation
+fails with `invalid_default_review_route`. A review route cannot target its own
+flow (`review_route_to_self`) or go directly to `outcome: completed`, but it may
+enter an explicit review-handling flow that later completes. Earlier review
+records remain visible in the final result. Technical failure never follows
 `on_unresolved`.
 
 All route targets must exist, routed flows cannot target callable flows, and the
-complete graph must be acyclic.
+complete graph must be acyclic. To retry a flow a bounded number of times, use
+[`repeat`](repeat.md) instead of unrolling copies of it.
 
 ## Validate the graph offline
 
 ```sh
 foliqant validate --config config/settings.yaml
-foliqant explain --config config/settings.yaml --workflow support_intake
+foliqant validate --strict --config config/settings.yaml
+foliqant explain --config config/settings.yaml --workflow support_intake --format mermaid
 ```
 
-Validation checks start selection, reachability, cycles, transitions, known
-binding paths, and provable schema compatibility without calling a model or
-tool. It does not prove that business categories, route cases, or review policy
-are correct. Exercise those with reviewed cases from the
-[evaluation guides](../evaluation/index.md).
+Validation checks start selection, reachability, cycles, transitions, route
+coverage, conditions, known binding paths, budgets and provable schema
+compatibility without calling a model or tool; [what the compiler
+guarantees](validation.md) lists every check with an example and its fix.
+Problems print as `<file>:<line>:<column>: <code> at <field>: <message> (hint:
+...)` on standard error. Warnings and infos are listed in the `diagnostics` of
+the output; `--strict` fails on any warning. `explain` renders the graph as
+JSON, Mermaid or Graphviz, and `explain --format mermaid --all --output
+docs/workflows.md` writes a document with every workflow. None of this proves
+that business categories, route cases, or review policy are correct. Exercise
+those with reviewed cases from the [evaluation guides](../evaluation/index.md).
 
 Continue with [Flows](flows.md) to define each sequential boundary or
 [Context](context.md) to understand exactly which values its bindings can see.

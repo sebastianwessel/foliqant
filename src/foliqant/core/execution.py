@@ -1,10 +1,11 @@
 """Immutable execution values shared by the engine and adapter ports."""
 
 from dataclasses import dataclass, fields
+from decimal import ROUND_HALF_EVEN, Decimal
 from types import MappingProxyType
 from typing import Literal, cast
 
-from .errors import ErrorCode, ServiceError
+from .errors import ErrorCode, FailureReason, ServiceError, safe_constraint, safe_location
 from .identity import Identity
 from .json import FrozenJson, FrozenObject, freeze_json
 from .plan import CategoryPlan, DecisionIssue
@@ -57,28 +58,148 @@ class TokenUsage:
 
 
 @dataclass(frozen=True, slots=True)
+class Cost:
+    """An estimated cost; ``amount`` is None when a needed count or price was unavailable."""
+
+    currency: str
+    amount: Decimal | None = None
+    reference_model: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.currency) is not str or not self.currency:
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+        amount = self.amount
+        if amount is not None and (
+            type(amount) is not Decimal or not amount.is_finite() or amount < 0
+        ):
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+
+    @staticmethod
+    def combine(left: "Cost | None", right: "Cost | None") -> "Cost | None":
+        """Sum two estimates; unpriced requests (None) make a priced total incomplete."""
+        if left is None or right is None:
+            priced = left or right
+            return None if priced is None else Cost(priced.currency, None, priced.reference_model)
+        if left.currency != right.currency:
+            # One currency per total; a mixed sum has no meaningful amount.
+            return Cost(left.currency, None)
+        amount = (
+            left.amount + right.amount
+            if left.amount is not None and right.amount is not None
+            else None
+        )
+        reference = left.reference_model if left.reference_model == right.reference_model else None
+        return Cost(left.currency, amount, reference)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelUsage:
+    """Requests sent to one provider model ID.
+
+    ``cost`` is None when no request was priced; combining priced and unpriced
+    requests keeps the currency but loses the amount.
+    """
+
+    requests: int
+    tokens: TokenUsage = TokenUsage()
+    cost: Cost | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.requests) is not int or self.requests < 1:
+            raise ServiceError(ErrorCode.INVALID_OUTPUT)
+
+    def plus(self, other: "ModelUsage") -> "ModelUsage":
+        return ModelUsage(
+            self.requests + other.requests,
+            self.tokens.plus(other.tokens),
+            Cost.combine(self.cost, other.cost),
+        )
+
+
+def _merge_models(
+    left: tuple[tuple[str, ModelUsage], ...], right: tuple[tuple[str, ModelUsage], ...]
+) -> tuple[tuple[str, ModelUsage], ...]:
+    if not right:
+        return left
+    merged = dict(left)
+    for model, usage in right:
+        previous = merged.get(model)
+        merged[model] = usage if previous is None else previous.plus(usage)
+    return tuple(sorted(merged.items()))
+
+
+@dataclass(frozen=True, slots=True)
 class Usage:
+    """Measured totals; ``by_model`` splits model requests by provider model ID.
+
+    ``output_retries`` counts model requests that asked the model to correct an
+    invalid output; they are included in ``model_requests``.
+    """
+
     model_requests: int = 0
     tool_calls: int = 0
     tokens: TokenUsage = TokenUsage(0, 0, 0, 0, 0)
+    by_model: tuple[tuple[str, ModelUsage], ...] = ()
+    output_retries: int = 0
 
     def plus(self, other: "Usage") -> "Usage":
         return Usage(
             self.model_requests + other.model_requests,
             self.tool_calls + other.tool_calls,
             self.tokens.plus(other.tokens),
+            _merge_models(self.by_model, other.by_model),
+            self.output_retries + other.output_retries,
         )
+
+    @property
+    def cost(self) -> Cost | None:
+        """The estimate across models: None unless at least one model is priced."""
+        if not self.by_model:
+            return None
+        total = self.by_model[0][1].cost
+        for _, usage in self.by_model[1:]:
+            total = Cost.combine(total, usage.cost)
+        return total
 
 
 @dataclass(frozen=True, slots=True)
 class Failure:
+    """A canonical failure; ``reason``, ``location`` and ``constraint`` explain it safely."""
+
     code: ErrorCode
     retryable: bool = False
+    reason: FailureReason | None = None
+    location: str | None = None
+    constraint: str | None = None
+
+    def __post_init__(self) -> None:
+        if safe_location(self.location) != self.location:
+            object.__setattr__(self, "location", None)
+        if safe_constraint(self.constraint) != self.constraint:
+            object.__setattr__(self, "constraint", None)
+
+    @classmethod
+    def of(cls, error: ServiceError) -> "Failure":
+        """Copy a raised failure, including its safe explanation."""
+        return cls(error.code, error.retryable, error.reason, error.location, error.constraint)
 
     @property
     def message(self) -> str:
         """Return only the canonical safe text, never an adapter exception."""
         return str(ServiceError(self.code))
+
+    def as_json(self) -> dict[str, FrozenJson]:
+        """The public ``SafeError`` projection; absent explanations are omitted."""
+        value: dict[str, FrozenJson] = {
+            "code": self.code.value,
+            "message": self.message,
+            "retryable": self.retryable,
+        }
+        for key in ("reason", "location", "constraint"):
+            item = getattr(self, key)
+            if item is not None:
+                value[key] = item
+        return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,18 +231,30 @@ class StepRecord:
 
 @dataclass(frozen=True, slots=True)
 class StepOutcome:
-    """Validated adapter output with explicit business review/routing facts."""
+    """Validated adapter output with explicit business review facts.
+
+    ``unresolved_issues`` select issue-specific review routes; they require
+    ``needs_review``. ``selection`` is an effective classification whose origin
+    is ``fallback`` exactly when the step needs review.
+    """
 
     result: FrozenJson
     needs_review: bool = False
-    route_key: str | None = None
     selection: Selection | None = None
     unresolved_issues: tuple[DecisionIssue, ...] = ()
 
 
+type RepeatStop = Literal["until", "exhausted", "continue_when", "review", "failure"]
+
+
 @dataclass(frozen=True, slots=True)
 class FlowRecord:
-    """One sequential flow, including unvisited steps and an explicit result presence."""
+    """One sequential flow, including unvisited steps and an explicit result presence.
+
+    For a repeated or retry flow, the top-level fields describe the last run and
+    ``attempts`` retains every run in order; ``stopped_by`` explains why a
+    repeated flow stopped.
+    """
 
     status: StepStatus
     steps: tuple[tuple[str, StepRecord], ...]
@@ -130,16 +263,65 @@ class FlowRecord:
     usage: Usage | None = None
     elapsed_seconds: float | None = None
     error: Failure | None = None
+    attempts: tuple["FlowRecord", ...] = ()
+    stopped_by: RepeatStop | None = None
+
+    @property
+    def attempt_count(self) -> int:
+        """Number of executions: zero for a skipped flow."""
+        if self.attempts:
+            return len(self.attempts)
+        return 0 if self.status == "skipped" else 1
+
+    @property
+    def total_usage(self) -> Usage | None:
+        """Usage of every run, counted once."""
+        if not self.attempts:
+            return self.usage
+        total = Usage()
+        for attempt in self.attempts:
+            if attempt.usage is not None:
+                total = total.plus(attempt.usage)
+        return total
+
+    @property
+    def total_elapsed_seconds(self) -> float | None:
+        if not self.attempts:
+            return self.elapsed_seconds
+        return sum(attempt.elapsed_seconds or 0.0 for attempt in self.attempts)
+
+
+type RouteKind = Literal["direct", "cases", "route", "review"]
 
 
 @dataclass(frozen=True, slots=True)
 class TransitionRecord:
-    """An authored boundary selected after a completed or unresolved flow."""
+    """An authored boundary selected after a completed or unresolved flow.
+
+    ``route_kind`` names the configuration form that selected the target;
+    ``route_index`` is the ``route`` entry index and ``route_case`` the matched
+    case key or review issue.
+    """
 
     source: str
     reason: Literal["completed", "needs_review"]
     flow: str | None = None
     outcome: Literal["completed", "needs_review"] | None = None
+    route_kind: RouteKind = "direct"
+    route_index: int | None = None
+    route_case: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StartRecord:
+    """The first flow of a run and the ``start`` form that selected it.
+
+    ``route_index`` is the selected entry of a routed ``start``.
+    """
+
+    flow: str
+    route_kind: Literal["direct", "route"] = "direct"
+    route_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +336,8 @@ class RunResult:
     usage: Usage
     error: Failure | None = None
     transitions: tuple[TransitionRecord, ...] = ()
+    trace: tuple[str, str] | None = None
+    start: StartRecord | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,15 +348,54 @@ class CallerContext:
     metadata: FrozenObject
 
 
+_COST_QUANTUM = Decimal("0.000001")
+
+
+def cost_value(cost: Cost) -> dict[str, FrozenJson]:
+    """Project an estimate rounded to six decimals; an unknown amount is null."""
+    value: dict[str, FrozenJson] = {
+        "cost": (
+            float(cost.amount.quantize(_COST_QUANTUM, rounding=ROUND_HALF_EVEN))
+            if cost.amount is not None
+            else None
+        ),
+        "cost_complete": cost.amount is not None,
+        "currency": cost.currency,
+    }
+    if cost.reference_model is not None:
+        value["reference_model"] = cost.reference_model
+    return value
+
+
+def _model_usage_value(value: ModelUsage) -> FrozenObject:
+    item: dict[str, FrozenJson] = {
+        "requests": value.requests,
+        "input_tokens": value.tokens.input_tokens,
+        "cached_input_tokens": value.tokens.cache_read_input_tokens,
+        "output_tokens": value.tokens.output_tokens,
+        "reasoning_tokens": value.tokens.reasoning_output_tokens,
+    }
+    if value.cost is not None:
+        item.update(cost_value(value.cost))
+    return MappingProxyType(item)
+
+
 def usage_value(value: Usage) -> FrozenObject:
     """Project measured usage once, without adding parent and child totals."""
-    return MappingProxyType(
-        {
-            "model_requests": value.model_requests,
-            "tool_calls": value.tool_calls,
-            **{field.name: getattr(value.tokens, field.name) for field in fields(value.tokens)},
-        }
-    )
+    projected: dict[str, FrozenJson] = {
+        "model_requests": value.model_requests,
+        "tool_calls": value.tool_calls,
+        "output_retries": value.output_retries,
+        **{field.name: getattr(value.tokens, field.name) for field in fields(value.tokens)},
+    }
+    cost = value.cost
+    if cost is not None:
+        projected.update(cost_value(cost))
+    if value.by_model:
+        projected["by_model"] = MappingProxyType(
+            {model: _model_usage_value(usage) for model, usage in value.by_model}
+        )
+    return MappingProxyType(projected)
 
 
 def step_record_value(record: StepRecord) -> FrozenObject:
@@ -189,6 +412,25 @@ def step_record_value(record: StepRecord) -> FrozenObject:
 
 def flow_record_value(record: FlowRecord) -> FrozenObject:
     """Include every local step exactly once in a flow's public ledger record."""
+    value = _flow_value(record)
+    value["attempt_count"] = record.attempt_count
+    if record.attempts:
+        value["attempts"] = tuple(
+            MappingProxyType({"attempt": index, **_flow_value(attempt)})
+            for index, attempt in enumerate(record.attempts, start=1)
+        )
+        total = record.total_usage
+        if total is not None:
+            value["attempts_usage"] = usage_value(total)
+        elapsed = record.total_elapsed_seconds
+        if elapsed is not None:
+            value["attempts_elapsed_seconds"] = elapsed
+    if record.stopped_by is not None:
+        value["repeat"] = MappingProxyType({"stopped_by": record.stopped_by})
+    return MappingProxyType(value)
+
+
+def _flow_value(record: FlowRecord) -> dict[str, FrozenJson]:
     value = _record_value(record)
     steps: dict[str, FrozenJson] = {}
     for name, step in record.steps:
@@ -196,7 +438,7 @@ def flow_record_value(record: FlowRecord) -> FrozenObject:
             raise ServiceError(ErrorCode.INVALID_OUTPUT)
         steps[name] = step_record_value(step)
     value["steps"] = MappingProxyType(steps)
-    return MappingProxyType(value)
+    return value
 
 
 def _record_value(record: StepRecord | FlowRecord) -> dict[str, FrozenJson]:
@@ -212,11 +454,5 @@ def _record_value(record: StepRecord | FlowRecord) -> dict[str, FrozenJson]:
     if record.error is not None:
         if not isinstance(record.error.code, ErrorCode) or type(record.error.retryable) is not bool:
             raise ServiceError(ErrorCode.INVALID_OUTPUT)
-        value["error"] = MappingProxyType(
-            {
-                "code": record.error.code.value,
-                "message": record.error.message,
-                "retryable": record.error.retryable,
-            }
-        )
+        value["error"] = MappingProxyType(record.error.as_json())
     return value

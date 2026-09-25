@@ -92,7 +92,7 @@
           "type": "string"
         },
         "reason": {
-          "maxLength": 400,
+          "maxLength": 2000,
           "minLength": 1,
           "pattern": "\\S",
           "title": "Reason",
@@ -248,7 +248,7 @@
           "type": "string"
         },
         "reason": {
-          "maxLength": 400,
+          "maxLength": 2000,
           "minLength": 1,
           "pattern": "\\S",
           "title": "Reason",
@@ -352,7 +352,7 @@
           "type": "string"
         },
         "reason": {
-          "maxLength": 400,
+          "maxLength": 2000,
           "minLength": 1,
           "pattern": "\\S",
           "title": "Reason",
@@ -473,7 +473,7 @@
               "type": "string"
             },
             "reason": {
-              "maxLength": 400,
+              "maxLength": 2000,
               "minLength": 1,
               "pattern": "\\S",
               "title": "Reason",
@@ -562,7 +562,7 @@
               "type": "string"
             },
             "reason": {
-              "maxLength": 400,
+              "maxLength": 2000,
               "minLength": 1,
               "pattern": "\\S",
               "title": "Reason",
@@ -739,7 +739,7 @@
           "type": "string"
         },
         "reason": {
-          "maxLength": 400,
+          "maxLength": 2000,
           "minLength": 1,
           "pattern": "\\S",
           "title": "Reason",

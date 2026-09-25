@@ -21,7 +21,7 @@ from foliqant import (
     open_application,
     prepare_application,
 )
-from foliqant.core.errors import ErrorCode, ServiceError
+from foliqant.core.errors import TIMEOUT_CODES, ErrorCode, ServiceError
 from foliqant.core.json import JsonValue
 from foliqant.evaluation import EvaluationVariant, evaluate
 from foliqant.evaluation.dataset import EvaluationDataset, metric_specs, validate_targets
@@ -86,7 +86,7 @@ async def run_evaluations(
                     else:
                         result = await app.run_step("prompt_security", flow, step, envelope)
                 except ServiceError as error:
-                    if error.code == ErrorCode.TIMEOUT:
+                    if error.code in TIMEOUT_CODES:
                         halted = True
                     raise
                 except asyncio.CancelledError:
@@ -94,7 +94,7 @@ async def run_evaluations(
                     raise
                 if (
                     result.execution.error is not None
-                    and result.execution.error.code == ErrorCode.TIMEOUT
+                    and result.execution.error.code in TIMEOUT_CODES
                 ):
                     halted = True
                 return result

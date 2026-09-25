@@ -2,7 +2,6 @@ start: extract
 input_schema: input.schema.json
 output:
   pointer: /flows/lookup/result
-  optional: true
   default:
     status: needs_review
 flows:
@@ -14,6 +13,8 @@ flows:
         pointer: /payload/language
     transition:
       flow: lookup
+    on_unresolved:
+      outcome: needs_review
   lookup:
     input:
       reference:

@@ -8,15 +8,15 @@ from dataclasses import dataclass
 
 import httpx2
 
-from foliqant.adapters.execution.retry import transient_response
-from foliqant.core.retry import TransientFailure
+from foliqant.adapters.execution.retry import http_failure
+from foliqant.core.errors import ServiceError
 
 
 @dataclass(slots=True)
 class HttpAttempt:
     active: bool = True
     status: int | None = None
-    transient: TransientFailure | None = None
+    failure: ServiceError | None = None
 
 
 _HTTP_ATTEMPT: ContextVar[HttpAttempt | None] = ContextVar(
@@ -52,4 +52,8 @@ async def record_http_response(response: httpx2.Response) -> None:
     if not isinstance(request, dict) or request.get("method") != "tools/call":
         return
     observation.status = response.status_code
-    observation.transient = transient_response(response.status_code, response.headers)
+    observation.failure = (
+        http_failure(response.status_code, response.headers)
+        if response.status_code >= 400
+        else None
+    )

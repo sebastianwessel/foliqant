@@ -70,7 +70,7 @@ class BlockingExecutor:
         if self._closed:
             raise ServiceError(ErrorCode.DEPENDENCY_FAILURE)
         if not math.isfinite(deadline) or deadline <= self._loop.time():
-            raise ServiceError(ErrorCode.TIMEOUT)
+            raise ServiceError(ErrorCode.REQUEST_TIMEOUT)
         # Reserve before task creation, not one event-loop turn later inside
         # _execute. A burst must not retain an unbounded set of caller contexts.
         if len(self._jobs) >= self._maximum:
@@ -86,7 +86,7 @@ class BlockingExecutor:
         except TimeoutError:
             if not job.started:
                 task.cancel()
-            raise ServiceError(ErrorCode.TIMEOUT) from None
+            raise ServiceError(ErrorCode.REQUEST_TIMEOUT) from None
         except asyncio.CancelledError:
             if not job.started:
                 task.cancel()
@@ -96,7 +96,7 @@ class BlockingExecutor:
         async with self._limiter.slot(deadline=deadline):
             if self._closed or self._loop.time() >= deadline:
                 raise ServiceError(
-                    ErrorCode.DEPENDENCY_FAILURE if self._closed else ErrorCode.TIMEOUT
+                    ErrorCode.DEPENDENCY_FAILURE if self._closed else ErrorCode.REQUEST_TIMEOUT
                 )
             context = contextvars.copy_context()
             job.started = True
